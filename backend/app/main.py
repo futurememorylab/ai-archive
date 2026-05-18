@@ -45,3 +45,6 @@ app.include_router(catdv_router)
 
 from backend.app.routes.jobs import router as jobs_router
 app.include_router(jobs_router)
+
+from backend.app.routes.review import router as review_router
+app.include_router(review_router)
