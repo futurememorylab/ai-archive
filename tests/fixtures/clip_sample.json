@@ -1,0 +1,31 @@
+{
+  "ID": 12345,
+  "name": "Sample_Clip_01",
+  "notes": "Some notes",
+  "bigNotes": "",
+  "format": "ProRes 422 HQ",
+  "fps": 25,
+  "in":  {"frm": 0,    "fmt": 25, "secs": 0.0,  "txt": "00:00:00:00"},
+  "out": {"frm": 1500, "fmt": 25, "secs": 60.0, "txt": "00:01:00:00"},
+  "duration": {"frm": 1500, "fmt": 25, "secs": 60.0, "txt": "00:01:00:00"},
+  "markers": [
+    {
+      "name": "Scene A",
+      "category": "Event",
+      "in":  {"frm": 250, "fmt": 25, "secs": 10.0, "txt": "00:00:10:00"},
+      "out": {"frm": 500, "fmt": 25, "secs": 20.0, "txt": "00:00:20:00"},
+      "description": "first scene",
+      "color": "white"
+    }
+  ],
+  "thumbnailIDs": [98, 99],
+  "posterID": 100,
+  "media": {"sourceMediaID": 555},
+  "importSource": {},
+  "history": [],
+  "fields": {
+    "pragafilm.rok.natočení": ["1933"],
+    "pragafilm.dekáda.natočení": "30.léta",
+    "pragafilm.popis.materialu": "Rodinné záběry."
+  }
+}
