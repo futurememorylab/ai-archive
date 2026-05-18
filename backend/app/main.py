@@ -39,3 +39,6 @@ async def health() -> dict[str, str]:
 
 from backend.app.routes.templates import router as templates_router
 app.include_router(templates_router)
+
+from backend.app.routes.catdv import router as catdv_router
+app.include_router(catdv_router)
