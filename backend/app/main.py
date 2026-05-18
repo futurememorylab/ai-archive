@@ -35,3 +35,7 @@ app = FastAPI(title="CatDV Annotator", lifespan=lifespan)
 @app.get("/api/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+from backend.app.routes.templates import router as templates_router
+app.include_router(templates_router)
