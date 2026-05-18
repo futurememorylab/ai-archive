@@ -35,6 +35,8 @@ class AppContext:
     gcs_files_repo: GcsFilesRepo = field(default_factory=GcsFilesRepo)
     event_bus: EventBus = field(default_factory=EventBus)
 
+    _running_jobs: dict[int, "object"] = field(default_factory=dict)
+
     catdv = None
     gcs = None
     gemini = None
