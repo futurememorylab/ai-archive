@@ -51,3 +51,6 @@ app.include_router(review_router)
 
 from backend.app.routes.media import router as media_router
 app.include_router(media_router)
+
+from backend.app.routes.events import router as events_router
+app.include_router(events_router)
