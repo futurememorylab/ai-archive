@@ -66,6 +66,28 @@ class CatdvClient:
             raise CatdvError(env.error_message or "CatDV ERROR")
         return env
 
+    async def list_clips(self, catalog_id: int, *, offset: int = 0,
+                          limit: int = 100, q: str | None = None) -> dict[str, Any]:
+        params: dict[str, str] = {"offset": str(offset), "limit": str(limit)}
+        if q:
+            params["q"] = q
+        url = f"/catdv/api/9/catalogs/{catalog_id}/clips"
+        env = await self._call_json_with_params("GET", url, params=params)
+        return env.data
+
+    async def _call_json_with_params(self, method: str, path: str, *,
+                                      params: dict[str, str] | None = None) -> Envelope:
+        url = f"{self._base}{path}"
+        resp = await self.http.request(method, url, params=params)
+        env = Envelope.model_validate(resp.json())
+        if env.requires_reauth:
+            await self.login()
+            resp = await self.http.request(method, url, params=params)
+            env = Envelope.model_validate(resp.json())
+        if not env.is_ok:
+            raise CatdvError(env.error_message or "CatDV ERROR")
+        return env
+
     async def get_clip(self, clip_id: int) -> dict[str, Any]:
         env = await self._call_json("GET", f"/catdv/api/9/clips/{clip_id}")
         return env.data

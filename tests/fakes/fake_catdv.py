@@ -61,6 +61,24 @@ class FakeCatdv:
             self.clips[clip_id] = existing
             return self._envelope("OK", data={"ID": clip_id, "modifyDate": "2026-05-18"})
 
+        @self.app.get("/catdv/api/9/catalogs/{catalog_id}/clips")
+        async def list_clips(catalog_id: int, request: Request):
+            if request.cookies.get("JSESSIONID") != "fake-session":
+                return self._envelope("AUTH")
+            q = request.query_params.get("q", "").lower()
+            offset = int(request.query_params.get("offset", "0"))
+            limit = int(request.query_params.get("limit", "100"))
+            all_clips = list(self.clips.values())
+            if q:
+                all_clips = [c for c in all_clips if q in c.get("name", "").lower()]
+            return self._envelope(
+                "OK",
+                data={
+                    "total": len(all_clips),
+                    "clips": all_clips[offset:offset + limit],
+                },
+            )
+
         @self.app.get("/catdv/api/9/clips/{clip_id}/media")
         async def get_media(clip_id: int, request: Request):
             if request.cookies.get("JSESSIONID") != "fake-session":
