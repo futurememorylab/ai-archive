@@ -25,6 +25,7 @@ class FakeCatdv:
         self.proxies: dict[int, bytes] = {}
         self.force_auth_until: float = 0.0
         self.put_log: list[tuple[int, dict]] = []
+        self.logout_count: int = 0
         self._register_routes()
 
     def _envelope(self, status: str, data=None, msg: str | None = None) -> dict:
@@ -42,6 +43,11 @@ class FakeCatdv:
                 response.set_cookie("JSESSIONID", "fake-session")
                 return response
             return self._envelope("ERROR", msg="Invalid user name or password")
+
+        @self.app.delete("/catdv/api/9/session")
+        async def logout(request: Request):
+            self.logout_count += 1
+            return self._envelope("OK")
 
         @self.app.get("/catdv/api/9/clips/{clip_id}")
         async def get_clip(clip_id: int, request: Request):

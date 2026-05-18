@@ -23,7 +23,12 @@ if [ -n "${CATDV_HEALTH_CHECK:-}" ]; then
   fi
 fi
 
+UVICORN_ARGS=()
+if [ "${DEV_RELOAD:-0}" = "1" ]; then
+  UVICORN_ARGS+=(--reload --reload-dir backend)
+fi
+
 exec .venv/bin/uvicorn backend.app.main:app \
   --host "$(grep -E '^BIND_HOST=' .env | cut -d= -f2)" \
   --port "$(grep -E '^BIND_PORT=' .env | cut -d= -f2)" \
-  --reload
+  "${UVICORN_ARGS[@]}"

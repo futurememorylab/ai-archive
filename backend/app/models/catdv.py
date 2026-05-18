@@ -45,7 +45,7 @@ class Clip(BaseModel):
 
 
 class Envelope(BaseModel):
-    status: Literal["OK", "AUTH", "ERROR"]
+    status: Literal["OK", "AUTH", "ERROR", "BUSY"]
     error_message: str | None = Field(default=None, alias="errorMessage")
     data: Any = None
 
@@ -58,3 +58,7 @@ class Envelope(BaseModel):
     @property
     def requires_reauth(self) -> bool:
         return self.status == "AUTH"
+
+    @property
+    def is_busy(self) -> bool:
+        return self.status == "BUSY"

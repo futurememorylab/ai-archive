@@ -31,7 +31,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_proxy(self) -> "Settings":
-        if self.proxy_source == "filesystem" and self.proxy_fs_root is None:
+        fs_root_empty = self.proxy_fs_root is None or str(self.proxy_fs_root) in ("", ".")
+        if self.proxy_source == "filesystem" and fs_root_empty:
             raise ValueError("PROXY_FS_ROOT is required when PROXY_SOURCE=filesystem")
         return self
 

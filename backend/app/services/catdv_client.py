@@ -15,6 +15,10 @@ class CatdvError(RuntimeError):
     """Raised for non-AUTH ERROR envelopes."""
 
 
+class CatdvBusyError(RuntimeError):
+    """Raised when the CatDV server is at its concurrent-session limit."""
+
+
 class CatdvClient:
     """Thin async wrapper around CatDV REST. One client per app process.
 
@@ -30,6 +34,7 @@ class CatdvClient:
         self._client: httpx.AsyncClient | None = None
         self._login_lock = asyncio.Lock()
         self._timeout = timeout_secs
+        self._logged_in = False
 
     async def __aenter__(self) -> Self:
         self._client = httpx.AsyncClient(timeout=self._timeout)
@@ -37,6 +42,11 @@ class CatdvClient:
 
     async def __aexit__(self, *exc_info) -> None:
         if self._client is not None:
+            if self._logged_in:
+                try:
+                    await self.logout()
+                except Exception:
+                    pass
             await self._client.aclose()
             self._client = None
 
@@ -52,8 +62,20 @@ class CatdvClient:
                 json={"username": self._username, "password": self._password},
             )
             env = Envelope.model_validate(resp.json())
+            if env.is_busy:
+                raise CatdvBusyError(env.error_message or "CatDV session limit reached")
             if not env.is_ok:
                 raise CatdvAuthError(env.error_message or "login rejected")
+            self._logged_in = True
+
+    async def logout(self) -> None:
+        """Best-effort DELETE /session so we don't orphan a server-side slot."""
+        if self._client is None or not self._logged_in:
+            return
+        try:
+            await self.http.delete(f"{self._base}/catdv/api/9/session")
+        finally:
+            self._logged_in = False
 
     async def _call_json(self, method: str, path: str, *, json: Any = None) -> Envelope:
         """Issue a JSON request. Re-login once on AUTH; raise on ERROR."""
@@ -64,6 +86,8 @@ class CatdvClient:
             await self.login()
             resp = await self.http.request(method, url, json=json)
             env = Envelope.model_validate(resp.json())
+        if env.is_busy:
+            raise CatdvBusyError(env.error_message or "CatDV session limit reached")
         if not env.is_ok:
             raise CatdvError(env.error_message or "CatDV ERROR")
         return env
@@ -88,6 +112,8 @@ class CatdvClient:
             await self.login()
             resp = await self.http.request(method, url, params=params)
             env = Envelope.model_validate(resp.json())
+        if env.is_busy:
+            raise CatdvBusyError(env.error_message or "CatDV session limit reached")
         if not env.is_ok:
             raise CatdvError(env.error_message or "CatDV ERROR")
         return env
