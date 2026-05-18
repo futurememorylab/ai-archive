@@ -1,10 +1,14 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 
 from backend.app.context import AppContext
 from backend.app.logging_setup import configure_logging
+from backend.app.seed import seed_default_template
 from backend.app.settings import Settings
+
+SEEDS = Path(__file__).resolve().parents[1] / "seeds"
 
 
 @asynccontextmanager
@@ -14,6 +18,9 @@ async def lifespan(app: FastAPI):
     init_external = settings.app_env == "prod" or _real_external_enabled(settings)
     ctx = await AppContext.build(settings, init_external=init_external)
     app.state.ctx = ctx
+    seed_path = SEEDS / "default_template.json"
+    if seed_path.exists():
+        await seed_default_template(ctx.db, seed_path=seed_path)
     try:
         yield
     finally:

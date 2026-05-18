@@ -1,0 +1,52 @@
+{
+  "name": "Scene markers + Czech summary + era",
+  "description": "Detects scenes, writes a Czech summary, and classifies the era. Default seeded template for the Pragafilm archive.",
+  "prompt": "You are annotating archival home-movie footage from a Czech private archive. The video is silent monochrome film from the 1920s–1940s, digitised. Identify distinct scenes (continuous action without a cut), summarise the entire clip in 2–4 Czech sentences, and classify the era based on visual cues (clothing, vehicles, technology). Return JSON matching the schema.",
+  "output_schema": {
+    "type": "object",
+    "required": ["scenes", "summary_cz", "decade", "years"],
+    "properties": {
+      "scenes": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["name", "in", "out"],
+          "properties": {
+            "name": {"type": "string"},
+            "description": {"type": "string"},
+            "in":  {"type": "object", "properties": {"secs": {"type": "number"}}, "required": ["secs"]},
+            "out": {"type": "object", "properties": {"secs": {"type": "number"}}, "required": ["secs"]},
+            "category": {"type": "string"}
+          }
+        }
+      },
+      "summary_cz": {
+        "type": "object",
+        "required": ["value"],
+        "properties": {
+          "value": {"type": "string"},
+          "evidence_secs": {"type": "array", "items": {"type": "number"}}
+        }
+      },
+      "decade": {
+        "type": "object",
+        "required": ["value"],
+        "properties": {
+          "value": {"type": "string", "enum": ["20.léta", "30.léta", "40.léta", "50.léta", "60.léta"]},
+          "evidence_secs": {"type": "array", "items": {"type": "number"}}
+        }
+      },
+      "years": {
+        "type": "array",
+        "items": {"type": "string"}
+      }
+    }
+  },
+  "target_map": {
+    "scenes":     {"kind": "markers"},
+    "summary_cz": {"kind": "note",  "target": "pragafilm.popis.materialu", "mode": "append"},
+    "decade":     {"kind": "field", "identifier": "pragafilm.dekáda.natočení"},
+    "years":      {"kind": "field", "identifier": "pragafilm.rok.natočení"}
+  },
+  "model": "gemini-2.5-pro"
+}

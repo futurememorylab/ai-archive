@@ -21,7 +21,7 @@ def test_templates_crud_lifecycle(monkeypatch, tmp_path):
     with TestClient(app) as client:
         r = client.get("/api/templates")
         assert r.status_code == 200
-        assert r.json() == []
+        initial_count = len(r.json())  # may include seeded template
 
         r = client.post("/api/templates", json={
             "name": "scene-markers",
@@ -38,11 +38,14 @@ def test_templates_crud_lifecycle(monkeypatch, tmp_path):
         assert r.status_code == 200
         assert r.json()["name"] == "scene-markers"
 
+        # List
         r = client.get("/api/templates")
-        assert len(r.json()) == 1
+        assert len(r.json()) == initial_count + 1
 
+        # Archive
         r = client.delete(f"/api/templates/{new_id}")
         assert r.status_code == 204
 
+        # List again — archived not shown
         r = client.get("/api/templates")
-        assert r.json() == []
+        assert len(r.json()) == initial_count
