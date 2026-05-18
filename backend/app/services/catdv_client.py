@@ -119,6 +119,10 @@ class CatdvClient:
             async for chunk in resp.aiter_bytes(chunk_size):
                 f.write(chunk)
 
+    async def put_clip(self, clip_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        env = await self._call_json("PUT", f"/catdv/api/9/clips/{clip_id}", json=payload)
+        return env.data
+
     async def get_clip(self, clip_id: int) -> dict[str, Any]:
         env = await self._call_json("GET", f"/catdv/api/9/clips/{clip_id}")
         return env.data
