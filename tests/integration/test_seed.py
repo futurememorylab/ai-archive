@@ -1,10 +1,9 @@
 from pathlib import Path
 
-import pytest
+import pytest  # noqa: F401
 
 from backend.app.repositories.templates import TemplatesRepo
 from backend.app.seed import seed_default_template
-
 
 SEED = Path(__file__).resolve().parents[2] / "backend" / "seeds" / "default_template.json"
 
