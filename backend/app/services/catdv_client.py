@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 from typing import Any, Self
 
 import httpx
@@ -87,6 +88,36 @@ class CatdvClient:
         if not env.is_ok:
             raise CatdvError(env.error_message or "CatDV ERROR")
         return env
+
+    async def download_proxy(self, clip_id: int, dest: Path,
+                              chunk_size: int = 1024 * 1024) -> None:
+        """Stream the proxy for a clip to `dest`. Resumes from existing partial file."""
+        url = f"{self._base}/catdv/api/9/clips/{clip_id}/media"
+        existing_size = dest.stat().st_size if dest.exists() else 0
+        headers: dict[str, str] = {}
+        if existing_size > 0:
+            headers["Range"] = f"bytes={existing_size}-"
+
+        async with self.http.stream("GET", url, headers=headers) as resp:
+            if resp.status_code == 401:
+                await self.login()
+                async with self.http.stream("GET", url, headers=headers) as resp2:
+                    resp2.raise_for_status()
+                    await self._stream_to_file(resp2, dest, append=existing_size > 0,
+                                               chunk_size=chunk_size)
+                    return
+            resp.raise_for_status()
+            await self._stream_to_file(
+                resp, dest, append=existing_size > 0, chunk_size=chunk_size
+            )
+
+    async def _stream_to_file(self, resp: httpx.Response, dest: Path, *,
+                              append: bool, chunk_size: int) -> None:
+        mode = "ab" if append else "wb"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        with open(dest, mode) as f:
+            async for chunk in resp.aiter_bytes(chunk_size):
+                f.write(chunk)
 
     async def get_clip(self, clip_id: int) -> dict[str, Any]:
         env = await self._call_json("GET", f"/catdv/api/9/clips/{clip_id}")
