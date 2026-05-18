@@ -18,7 +18,9 @@ class JobCreate(BaseModel):
 async def create_job(request: Request, body: JobCreate, background: BackgroundTasks):
     ctx = request.app.state.ctx
     job_id = await ctx.jobs_repo.create_job(
-        ctx.db, template_id=body.template_id, clip_ids=body.clip_ids,
+        ctx.db,
+        template_id=body.template_id,
+        clip_ids=body.clip_ids,
     )
     if body.auto_start and ctx.catdv and ctx.gcs and ctx.gemini and ctx.proxy_resolver:
         task = asyncio.create_task(_run_in_bg(ctx, job_id))
@@ -29,11 +31,18 @@ async def create_job(request: Request, body: JobCreate, background: BackgroundTa
 async def _run_in_bg(ctx, job_id: int) -> None:
     try:
         await run_job(
-            db=ctx.db, job_id=job_id, catdv=ctx.catdv,
-            proxy_resolver=ctx.proxy_resolver, gcs=ctx.gcs, gemini=ctx.gemini,
-            event_bus=ctx.event_bus, gcs_files_repo=ctx.gcs_files_repo,
-            annotations_repo=ctx.annotations_repo, review_items_repo=ctx.review_items_repo,
-            jobs_repo=ctx.jobs_repo, templates_repo=ctx.templates_repo,
+            db=ctx.db,
+            job_id=job_id,
+            catdv=ctx.catdv,
+            proxy_resolver=ctx.proxy_resolver,
+            gcs=ctx.gcs,
+            gemini=ctx.gemini,
+            event_bus=ctx.event_bus,
+            gcs_files_repo=ctx.gcs_files_repo,
+            annotations_repo=ctx.annotations_repo,
+            review_items_repo=ctx.review_items_repo,
+            jobs_repo=ctx.jobs_repo,
+            templates_repo=ctx.templates_repo,
         )
     finally:
         ctx._running_jobs.pop(job_id, None)

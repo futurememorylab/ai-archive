@@ -26,7 +26,10 @@ async def set_decision(request: Request, item_id: int, body: Decision):
     if body.decision not in ("accepted", "rejected", "pending"):
         raise HTTPException(400, "decision must be accepted|rejected|pending")
     await ctx.review_items_repo.set_decision(
-        ctx.db, item_id, body.decision, edited_value=body.edited_value,
+        ctx.db,
+        item_id,
+        body.decision,
+        edited_value=body.edited_value,
     )
     return {"id": item_id, "decision": body.decision}
 
@@ -50,7 +53,9 @@ async def apply_clip(request: Request, clip_id: int):
     template = await ctx.templates_repo.get(ctx.db, annotation.template_id)
 
     payload = build_put_payload(
-        current=current, accepted_items=accepted, target_map=template.target_map,
+        current=current,
+        accepted_items=accepted,
+        target_map=template.target_map,
     )
 
     if not payload:
@@ -60,16 +65,25 @@ async def apply_clip(request: Request, clip_id: int):
         response = await ctx.catdv.put_clip(clip_id, payload)
     except Exception as exc:
         await ctx.write_log_repo.record(
-            ctx.db, catdv_clip_id=clip_id, annotation_id=annotation.id,
-            payload=payload, response={"error": str(exc)}, status="error",
+            ctx.db,
+            catdv_clip_id=clip_id,
+            annotation_id=annotation.id,
+            payload=payload,
+            response={"error": str(exc)},
+            status="error",
         )
         raise HTTPException(502, f"CatDV put_clip failed: {exc}")
 
     await ctx.write_log_repo.record(
-        ctx.db, catdv_clip_id=clip_id, annotation_id=annotation.id,
-        payload=payload, response=response, status="ok",
+        ctx.db,
+        catdv_clip_id=clip_id,
+        annotation_id=annotation.id,
+        payload=payload,
+        response=response,
+        status="ok",
     )
     await ctx.review_items_repo.mark_applied(
-        ctx.db, [it.id for it in accepted if it.id is not None],
+        ctx.db,
+        [it.id for it in accepted if it.id is not None],
     )
     return {"applied": len(accepted), "payload": payload}

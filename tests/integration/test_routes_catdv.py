@@ -15,17 +15,24 @@ def test_list_clips_proxies_to_catdv(monkeypatch, tmp_path):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
 
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     app = main_mod.app
 
     with TestClient(app) as client:
         ctx = client.app.state.ctx
-        async def _aexit(self, exc_type, exc, tb): pass
+
+        async def _aexit(self, exc_type, exc, tb):
+            pass
+
         ctx.catdv = type("FakeC", (), {"__aexit__": _aexit})()
+
         async def list_clips(*, catalog_id, offset=0, limit=50, q=None):
             return {"total": 1, "clips": [{"ID": 1, "name": "x"}]}
+
         async def get_clip(clip_id):
             return {"ID": clip_id, "name": "x"}
+
         ctx.catdv.list_clips = list_clips
         ctx.catdv.get_clip = get_clip
 

@@ -21,8 +21,9 @@ def expand(
     return items
 
 
-def _expand_one(entry: TargetEntry, value: Any,
-                annotation_id: int, catdv_clip_id: int) -> list[ReviewItem]:
+def _expand_one(
+    entry: TargetEntry, value: Any, annotation_id: int, catdv_clip_id: int
+) -> list[ReviewItem]:
     if entry.kind == "markers":
         if not isinstance(value, list):
             return []
@@ -36,19 +37,23 @@ def _expand_one(entry: TargetEntry, value: Any,
             for m in value
         ]
     if entry.kind == "field":
-        return [ReviewItem(
-            annotation_id=annotation_id,
-            catdv_clip_id=catdv_clip_id,
-            kind="field",
-            target_identifier=entry.identifier,
-            proposed_value=value,
-        )]
+        return [
+            ReviewItem(
+                annotation_id=annotation_id,
+                catdv_clip_id=catdv_clip_id,
+                kind="field",
+                target_identifier=entry.identifier,
+                proposed_value=value,
+            )
+        ]
     if entry.kind == "note":
-        return [ReviewItem(
-            annotation_id=annotation_id,
-            catdv_clip_id=catdv_clip_id,
-            kind="note",
-            target_identifier=entry.target,
-            proposed_value=value,
-        )]
+        return [
+            ReviewItem(
+                annotation_id=annotation_id,
+                catdv_clip_id=catdv_clip_id,
+                kind="note",
+                target_identifier=entry.target,
+                proposed_value=value,
+            )
+        ]
     return []

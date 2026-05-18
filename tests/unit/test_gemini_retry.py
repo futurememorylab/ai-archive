@@ -23,9 +23,14 @@ class FlakySvc:
 async def test_retries_quota_then_succeeds():
     svc = FlakySvc(calls_before_success=2)
     result = await annotate_with_retry(
-        svc, gcs_uri="gs://b/1.mov", mime="video/quicktime",
-        prompt="p", schema={}, model="m",
-        max_attempts=4, base_delay_secs=0.01,
+        svc,
+        gcs_uri="gs://b/1.mov",
+        mime="video/quicktime",
+        prompt="p",
+        schema={},
+        model="m",
+        max_attempts=4,
+        base_delay_secs=0.01,
     )
     assert result["text"] == "ok"
     assert svc.calls == 3
@@ -36,7 +41,12 @@ async def test_gives_up_after_max_attempts():
     svc = FlakySvc(calls_before_success=10)
     with pytest.raises(GeminiQuotaError):
         await annotate_with_retry(
-            svc, gcs_uri="gs://b/1.mov", mime="video/quicktime",
-            prompt="p", schema={}, model="m",
-            max_attempts=3, base_delay_secs=0.01,
+            svc,
+            gcs_uri="gs://b/1.mov",
+            mime="video/quicktime",
+            prompt="p",
+            schema={},
+            model="m",
+            max_attempts=3,
+            base_delay_secs=0.01,
         )

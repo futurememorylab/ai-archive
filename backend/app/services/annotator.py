@@ -53,20 +53,31 @@ async def run_job(
 
         try:
             await _process_item(
-                db=db, item=item, template=template, catdv=catdv,
-                proxy_resolver=proxy_resolver, gcs=gcs, gemini=gemini,
-                gcs_files_repo=gcs_files_repo, annotations_repo=annotations_repo,
-                review_items_repo=review_items_repo, jobs_repo=jobs_repo,
-                event_bus=event_bus, topic=topic,
+                db=db,
+                item=item,
+                template=template,
+                catdv=catdv,
+                proxy_resolver=proxy_resolver,
+                gcs=gcs,
+                gemini=gemini,
+                gcs_files_repo=gcs_files_repo,
+                annotations_repo=annotations_repo,
+                review_items_repo=review_items_repo,
+                jobs_repo=jobs_repo,
+                event_bus=event_bus,
+                topic=topic,
             )
         except Exception as exc:  # noqa: BLE001
-            log.exception("job %s clip %s failed", job_id, item.catdv_clip_id,
-                          extra={"job_id": job_id, "clip_id": item.catdv_clip_id})
-            await jobs_repo.update_item_status(
-                db, item.id, "error", error=str(exc)
+            log.exception(
+                "job %s clip %s failed",
+                job_id,
+                item.catdv_clip_id,
+                extra={"job_id": job_id, "clip_id": item.catdv_clip_id},
             )
-            await event_bus.publish(topic, {"item_id": item.id, "status": "error",
-                                              "error": str(exc)})
+            await jobs_repo.update_item_status(db, item.id, "error", error=str(exc))
+            await event_bus.publish(
+                topic, {"item_id": item.id, "status": "error", "error": str(exc)}
+            )
 
     refreshed = await jobs_repo.list_items(db, job_id)
     final_status = "completed"
@@ -78,9 +89,20 @@ async def run_job(
 
 
 async def _process_item(
-    *, db, item, template, catdv, proxy_resolver, gcs, gemini,
-    gcs_files_repo, annotations_repo, review_items_repo, jobs_repo,
-    event_bus, topic,
+    *,
+    db,
+    item,
+    template,
+    catdv,
+    proxy_resolver,
+    gcs,
+    gemini,
+    gcs_files_repo,
+    annotations_repo,
+    review_items_repo,
+    jobs_repo,
+    event_bus,
+    topic,
 ) -> None:
     await jobs_repo.update_item_status(db, item.id, "resolving")
     await event_bus.publish(topic, {"item_id": item.id, "status": "resolving"})
@@ -97,11 +119,17 @@ async def _process_item(
     else:
         mime = mimetypes.guess_type(str(local_path))[0] or "video/quicktime"
         gcs_uri = gcs.upload_if_absent(
-            clip_id=item.catdv_clip_id, local_path=local_path, mime=mime,
+            clip_id=item.catdv_clip_id,
+            local_path=local_path,
+            mime=mime,
         )
         await gcs_files_repo.upsert(
-            db, clip_id=item.catdv_clip_id, gcs_uri=gcs_uri,
-            mime_type=mime, size_bytes=local_path.stat().st_size, sha256=sha,
+            db,
+            clip_id=item.catdv_clip_id,
+            gcs_uri=gcs_uri,
+            mime_type=mime,
+            size_bytes=local_path.stat().st_size,
+            sha256=sha,
         )
 
     clip_snapshot: dict[str, Any] = await catdv.get_clip(item.catdv_clip_id)
@@ -110,8 +138,11 @@ async def _process_item(
     await event_bus.publish(topic, {"item_id": item.id, "status": "prompting"})
     mime = mimetypes.guess_type(str(local_path))[0] or "video/quicktime"
     result = gemini.annotate(
-        gcs_uri=gcs_uri, mime=mime, prompt=template.prompt,
-        schema=template.output_schema, model=template.model,
+        gcs_uri=gcs_uri,
+        mime=mime,
+        prompt=template.prompt,
+        schema=template.output_schema,
+        model=template.model,
     )
 
     structured: dict[str, Any] | None
@@ -138,15 +169,18 @@ async def _process_item(
 
     if structured:
         review = expand(
-            structured, template.target_map,
-            annotation_id=annotation_id, catdv_clip_id=item.catdv_clip_id,
+            structured,
+            template.target_map,
+            annotation_id=annotation_id,
+            catdv_clip_id=item.catdv_clip_id,
         )
         if review:
             await review_items_repo.bulk_insert(db, review)
 
     await jobs_repo.update_item_status(db, item.id, "review_ready")
-    await event_bus.publish(topic, {"item_id": item.id, "status": "review_ready",
-                                      "annotation_id": annotation_id})
+    await event_bus.publish(
+        topic, {"item_id": item.id, "status": "review_ready", "annotation_id": annotation_id}
+    )
 
 
 def _sha256(path: Path) -> str:

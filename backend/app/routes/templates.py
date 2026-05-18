@@ -26,8 +26,12 @@ async def list_templates(request: Request):
 async def create_template(request: Request, body: TemplateCreate):
     ctx = request.app.state.ctx
     tpl = Template(
-        name=body.name, description=body.description, prompt=body.prompt,
-        output_schema=body.output_schema, target_map=body.target_map, model=body.model,
+        name=body.name,
+        description=body.description,
+        prompt=body.prompt,
+        output_schema=body.output_schema,
+        target_map=body.target_map,
+        model=body.model,
     )
     new_id = await ctx.templates_repo.create(ctx.db, tpl)
     return {"id": new_id}
@@ -47,8 +51,12 @@ async def get_template(request: Request, template_id: int):
 async def update_template(request: Request, template_id: int, body: TemplateCreate):
     ctx = request.app.state.ctx
     tpl = Template(
-        name=body.name, description=body.description, prompt=body.prompt,
-        output_schema=body.output_schema, target_map=body.target_map, model=body.model,
+        name=body.name,
+        description=body.description,
+        prompt=body.prompt,
+        output_schema=body.output_schema,
+        target_map=body.target_map,
+        model=body.model,
     )
     await ctx.templates_repo.update(ctx.db, template_id, tpl)
     return {"id": template_id}

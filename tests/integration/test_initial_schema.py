@@ -8,9 +8,18 @@ from backend.app.migrations_runner import apply_migrations
 MIGRATIONS = Path(__file__).resolve().parents[2] / "backend" / "migrations"
 
 EXPECTED_TABLES = {
-    "templates", "jobs", "job_items", "proxy_cache", "gcs_files",
-    "annotations", "annotations_fts", "review_items", "write_log",
-    "embeddings", "tags", "schema_migrations",
+    "templates",
+    "jobs",
+    "job_items",
+    "proxy_cache",
+    "gcs_files",
+    "annotations",
+    "annotations_fts",
+    "review_items",
+    "write_log",
+    "embeddings",
+    "tags",
+    "schema_migrations",
 }
 
 
@@ -30,9 +39,7 @@ async def test_initial_migration_creates_all_tables(tmp_path):
     db = tmp_path / "test.db"
     async with open_db(db) as conn:
         await apply_migrations(conn, MIGRATIONS)
-        cur = await conn.execute(
-            "SELECT name FROM sqlite_master WHERE type IN ('table','virtual')"
-        )
+        cur = await conn.execute("SELECT name FROM sqlite_master WHERE type IN ('table','virtual')")
         names = {row[0] for row in await cur.fetchall()}
     assert EXPECTED_TABLES.issubset(names), f"missing: {EXPECTED_TABLES - names}"
 

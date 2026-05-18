@@ -17,6 +17,7 @@ def test_health_returns_ok(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
 
     import backend.app.main as main_mod
+
     importlib.reload(main_mod)
     app = main_mod.app
 

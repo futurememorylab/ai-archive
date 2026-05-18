@@ -35,8 +35,9 @@ class GeminiService:
     def __init__(self, project: str, location: str) -> None:
         self._client = genai.Client(vertexai=True, project=project, location=location)
 
-    def annotate(self, *, gcs_uri: str, mime: str, prompt: str,
-                 schema: dict[str, Any], model: str) -> dict[str, Any]:
+    def annotate(
+        self, *, gcs_uri: str, mime: str, prompt: str, schema: dict[str, Any], model: str
+    ) -> dict[str, Any]:
         try:
             response = self._client.models.generate_content(
                 model=model,
@@ -73,7 +74,11 @@ async def annotate_with_retry(
     for attempt in range(1, max_attempts + 1):
         try:
             return service.annotate(
-                gcs_uri=gcs_uri, mime=mime, prompt=prompt, schema=schema, model=model,
+                gcs_uri=gcs_uri,
+                mime=mime,
+                prompt=prompt,
+                schema=schema,
+                model=model,
             )
         except GeminiQuotaError:
             if attempt >= max_attempts:

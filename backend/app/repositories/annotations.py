@@ -27,7 +27,9 @@ class AnnotationsRepo:
                 ann.model,
                 ann.prompt_used,
                 json.dumps(ann.raw_response, ensure_ascii=False),
-                json.dumps(ann.structured_output, ensure_ascii=False) if ann.structured_output is not None else "null",
+                json.dumps(ann.structured_output, ensure_ascii=False)
+                if ann.structured_output is not None
+                else "null",
                 json.dumps(ann.clip_snapshot, ensure_ascii=False),
                 _now_iso(),
             ),

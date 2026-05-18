@@ -34,21 +34,24 @@ def test_quota_error_is_classified():
     svc, fake = _service_with_fake_client()
     fake.models.error = RuntimeError("Resource exhausted: quota exceeded")
     with pytest.raises(GeminiQuotaError):
-        svc.annotate(gcs_uri="gs://b/x.mov", mime="video/quicktime",
-                     prompt="p", schema={}, model="m")
+        svc.annotate(
+            gcs_uri="gs://b/x.mov", mime="video/quicktime", prompt="p", schema={}, model="m"
+        )
 
 
 def test_safety_error_is_classified():
     svc, fake = _service_with_fake_client()
     fake.models.error = RuntimeError("SAFETY: content policy violation")
     with pytest.raises(GeminiSafetyError):
-        svc.annotate(gcs_uri="gs://b/x.mov", mime="video/quicktime",
-                     prompt="p", schema={}, model="m")
+        svc.annotate(
+            gcs_uri="gs://b/x.mov", mime="video/quicktime", prompt="p", schema={}, model="m"
+        )
 
 
 def test_permission_error_is_classified():
     svc, fake = _service_with_fake_client()
     fake.models.error = RuntimeError("permission denied on resource")
     with pytest.raises(GeminiPermissionError):
-        svc.annotate(gcs_uri="gs://b/x.mov", mime="video/quicktime",
-                     prompt="p", schema={}, model="m")
+        svc.annotate(
+            gcs_uri="gs://b/x.mov", mime="video/quicktime", prompt="p", schema={}, model="m"
+        )

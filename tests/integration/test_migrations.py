@@ -19,9 +19,7 @@ async def test_apply_migrations_creates_meta_table(tmp_path: Path):
         await apply_migrations(conn, migrations_dir)
 
     async with open_db(db_path) as conn:
-        cur = await conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-        )
+        cur = await conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
         names = [row[0] for row in await cur.fetchall()]
     assert "schema_migrations" in names
     assert "thing" in names
@@ -32,9 +30,7 @@ async def test_apply_migrations_is_idempotent(tmp_path: Path):
     db_path = tmp_path / "test.db"
     migrations_dir = tmp_path / "migs"
     migrations_dir.mkdir()
-    (migrations_dir / "0001_init.sql").write_text(
-        "CREATE TABLE thing (id INTEGER PRIMARY KEY);"
-    )
+    (migrations_dir / "0001_init.sql").write_text("CREATE TABLE thing (id INTEGER PRIMARY KEY);")
 
     async with open_db(db_path) as conn:
         await apply_migrations(conn, migrations_dir)

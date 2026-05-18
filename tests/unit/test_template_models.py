@@ -45,7 +45,5 @@ def test_target_map_note_requires_target():
 
 
 def test_target_map_note_defaults_to_append():
-    tm = TargetMap.model_validate(
-        {"summary": {"kind": "note", "target": "notes"}}
-    )
+    tm = TargetMap.model_validate({"summary": {"kind": "note", "target": "notes"}})
     assert tm.fields["summary"].mode == "append"

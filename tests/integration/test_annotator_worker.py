@@ -50,16 +50,19 @@ class FakeCatdv:
 @pytest.mark.asyncio
 async def test_run_job_processes_two_clips_end_to_end(db, tmp_path):
     templates = TemplatesRepo()
-    template_id = await templates.create(db, Template(
-        name="t",
-        prompt="describe scenes",
-        output_schema={"type": "object"},
-        target_map={
-            "scenes": {"kind": "markers"},
-            "decade": {"kind": "field", "identifier": "pragafilm.dekáda.natočení"},
-        },
-        model="gemini-2.5-pro",
-    ))
+    template_id = await templates.create(
+        db,
+        Template(
+            name="t",
+            prompt="describe scenes",
+            output_schema={"type": "object"},
+            target_map={
+                "scenes": {"kind": "markers"},
+                "decade": {"kind": "field", "identifier": "pragafilm.dekáda.natočení"},
+            },
+            model="gemini-2.5-pro",
+        ),
+    )
 
     jobs_repo = JobsRepo()
     job_id = await jobs_repo.create_job(db, template_id=template_id, clip_ids=[101, 102])
@@ -70,21 +73,29 @@ async def test_run_job_processes_two_clips_end_to_end(db, tmp_path):
         p.write_bytes(b"X" * 100)
         files[clip_id] = p
 
-    catdv = FakeCatdv({
-        101: {"ID": 101, "name": "Clip_101", "markers": []},
-        102: {"ID": 102, "name": "Clip_102", "markers": []},
-    })
+    catdv = FakeCatdv(
+        {
+            101: {"ID": 101, "name": "Clip_101", "markers": []},
+            102: {"ID": 102, "name": "Clip_102", "markers": []},
+        }
+    )
     resolver = FakeResolver(files)
     gcs = FakeGcs("bucket")
     structured = {
-        "scenes": [{"name": "scene-1", "in": {"frm": 0, "secs": 0.0}, "out": {"frm": 25, "secs": 1.0}}],
+        "scenes": [
+            {"name": "scene-1", "in": {"frm": 0, "secs": 0.0}, "out": {"frm": 25, "secs": 1.0}}
+        ],
         "decade": "30.léta",
     }
 
     class FakeGeminiStructured:
         def annotate(self, *, gcs_uri, mime, prompt, schema, model):
             import json
-            return {"text": json.dumps(structured), "raw": {"candidates": [{"text": json.dumps(structured)}]}}
+
+            return {
+                "text": json.dumps(structured),
+                "raw": {"candidates": [{"text": json.dumps(structured)}]},
+            }
 
     bus = EventBus()
     sub_101 = bus.subscribe(f"job:{job_id}")
@@ -122,10 +133,16 @@ async def test_run_job_marks_item_error_when_gemini_raises(db, tmp_path):
     from backend.app.services.gemini import GeminiSafetyError
 
     templates = TemplatesRepo()
-    template_id = await templates.create(db, Template(
-        name="t", prompt="p", output_schema={}, target_map={"scenes": {"kind": "markers"}},
-        model="m",
-    ))
+    template_id = await templates.create(
+        db,
+        Template(
+            name="t",
+            prompt="p",
+            output_schema={},
+            target_map={"scenes": {"kind": "markers"}},
+            model="m",
+        ),
+    )
     jobs_repo = JobsRepo()
     job_id = await jobs_repo.create_job(db, template_id=template_id, clip_ids=[1])
 

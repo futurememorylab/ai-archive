@@ -19,6 +19,7 @@ def _setenv(monkeypatch, tmp_path):
 def _app(monkeypatch, tmp_path):
     _setenv(monkeypatch, tmp_path)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     return main_mod.app
 
@@ -33,6 +34,7 @@ def test_media_streams_full_file(monkeypatch, tmp_path):
         async def path_for_clip_id(clip_id):
             assert clip_id == 42
             return proxy
+
         ctx.proxy_resolver = MagicMock(path_for_clip_id=path_for_clip_id)
 
         r = client.get("/api/media/42")
@@ -50,6 +52,7 @@ def test_media_serves_range(monkeypatch, tmp_path):
 
         async def path_for_clip_id(clip_id):
             return proxy
+
         ctx.proxy_resolver = MagicMock(path_for_clip_id=path_for_clip_id)
 
         r = client.get("/api/media/42", headers={"Range": "bytes=100-199"})

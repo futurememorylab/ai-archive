@@ -28,8 +28,18 @@ async def test_create_and_get(db, repo):
 
 @pytest.mark.asyncio
 async def test_list_excludes_archived(db, repo):
-    a = await repo.create(db, Template(name="a", prompt="p", output_schema={}, target_map={"x": {"kind": "markers"}}, model="m"))
-    b = await repo.create(db, Template(name="b", prompt="p", output_schema={}, target_map={"x": {"kind": "markers"}}, model="m"))
+    a = await repo.create(
+        db,
+        Template(
+            name="a", prompt="p", output_schema={}, target_map={"x": {"kind": "markers"}}, model="m"
+        ),
+    )
+    b = await repo.create(
+        db,
+        Template(
+            name="b", prompt="p", output_schema={}, target_map={"x": {"kind": "markers"}}, model="m"
+        ),
+    )
     await repo.archive(db, b)
     ids = [t.id for t in await repo.list_active(db)]
     assert ids == [a]
@@ -37,7 +47,9 @@ async def test_list_excludes_archived(db, repo):
 
 @pytest.mark.asyncio
 async def test_unique_name(db, repo):
-    tpl = Template(name="dup", prompt="p", output_schema={}, target_map={"x": {"kind": "markers"}}, model="m")
+    tpl = Template(
+        name="dup", prompt="p", output_schema={}, target_map={"x": {"kind": "markers"}}, model="m"
+    )
     await repo.create(db, tpl)
     with pytest.raises(Exception):
         await repo.create(db, tpl)

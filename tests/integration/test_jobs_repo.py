@@ -9,9 +9,12 @@ from backend.app.repositories.templates import TemplatesRepo
 @pytest.mark.asyncio
 async def test_create_job_with_items_and_progress(db):
     templates = TemplatesRepo()
-    template_id = await templates.create(db, Template(
-        name="t", prompt="p", output_schema={}, target_map={"x": {"kind": "markers"}}, model="m"
-    ))
+    template_id = await templates.create(
+        db,
+        Template(
+            name="t", prompt="p", output_schema={}, target_map={"x": {"kind": "markers"}}, model="m"
+        ),
+    )
 
     jobs = JobsRepo()
     clip_ids = [101, 102, 103]
@@ -29,9 +32,12 @@ async def test_create_job_with_items_and_progress(db):
 @pytest.mark.asyncio
 async def test_update_item_status(db):
     templates = TemplatesRepo()
-    t = await templates.create(db, Template(
-        name="t", prompt="p", output_schema={}, target_map={"x": {"kind": "markers"}}, model="m"
-    ))
+    t = await templates.create(
+        db,
+        Template(
+            name="t", prompt="p", output_schema={}, target_map={"x": {"kind": "markers"}}, model="m"
+        ),
+    )
     jobs = JobsRepo()
     job_id = await jobs.create_job(db, template_id=t, clip_ids=[1, 2])
     items = await jobs.list_items(db, job_id)
@@ -44,9 +50,12 @@ async def test_update_item_status(db):
 @pytest.mark.asyncio
 async def test_reset_transient_statuses_on_recovery(db):
     templates = TemplatesRepo()
-    t = await templates.create(db, Template(
-        name="t", prompt="p", output_schema={}, target_map={"x": {"kind": "markers"}}, model="m"
-    ))
+    t = await templates.create(
+        db,
+        Template(
+            name="t", prompt="p", output_schema={}, target_map={"x": {"kind": "markers"}}, model="m"
+        ),
+    )
     jobs = JobsRepo()
     job_id = await jobs.create_job(db, template_id=t, clip_ids=[1, 2, 3])
     items = await jobs.list_items(db, job_id)

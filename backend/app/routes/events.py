@@ -9,8 +9,9 @@ from backend.app.services.events import EventBus
 router = APIRouter(tags=["events"])
 
 
-async def _event_generator(bus: EventBus, *, topic: str,
-                            close_after: int | None = None) -> AsyncIterator[str]:
+async def _event_generator(
+    bus: EventBus, *, topic: str, close_after: int | None = None
+) -> AsyncIterator[str]:
     q = bus.subscribe(topic)
     try:
         emitted = 0

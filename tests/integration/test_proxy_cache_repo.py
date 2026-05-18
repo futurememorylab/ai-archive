@@ -20,6 +20,7 @@ async def test_record_get_and_touch(db):
 async def test_pick_lru_for_eviction(db):
     repo = ProxyCacheRepo()
     import asyncio
+
     for i in range(3):
         await repo.record(db, clip_id=i, file_path=f"cache/{i}.mov", size_bytes=1000, etag=None)
         await asyncio.sleep(0.01)

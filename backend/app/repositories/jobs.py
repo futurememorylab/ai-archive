@@ -13,8 +13,9 @@ TRANSIENT_STATUSES = ("resolving", "uploading", "prompting")
 
 
 class JobsRepo:
-    async def create_job(self, conn: aiosqlite.Connection, *, template_id: int,
-                          clip_ids: list[int]) -> int:
+    async def create_job(
+        self, conn: aiosqlite.Connection, *, template_id: int, clip_ids: list[int]
+    ) -> int:
         cur = await conn.execute(
             """
             INSERT INTO jobs (template_id, status, created_at, total_clips)
@@ -47,11 +48,14 @@ class JobsRepo:
             "SELECT id, template_id, status, total_clips, notes FROM jobs ORDER BY id DESC LIMIT ?",
             (limit,),
         )
-        return [Job(id=r[0], template_id=r[1], status=r[2], total_clips=r[3], notes=r[4])
-                for r in await cur.fetchall()]
+        return [
+            Job(id=r[0], template_id=r[1], status=r[2], total_clips=r[3], notes=r[4])
+            for r in await cur.fetchall()
+        ]
 
-    async def update_status(self, conn: aiosqlite.Connection, job_id: int,
-                             status: JobStatus) -> None:
+    async def update_status(
+        self, conn: aiosqlite.Connection, job_id: int, status: JobStatus
+    ) -> None:
         if status == "running":
             await conn.execute(
                 "UPDATE jobs SET status = ?, started_at = COALESCE(started_at, ?) WHERE id = ?",
@@ -75,21 +79,34 @@ class JobsRepo:
             (job_id,),
         )
         return [
-            JobItem(id=r[0], job_id=r[1], catdv_clip_id=r[2], status=r[3],
-                    error_message=r[4], annotation_id=r[5])
+            JobItem(
+                id=r[0],
+                job_id=r[1],
+                catdv_clip_id=r[2],
+                status=r[3],
+                error_message=r[4],
+                annotation_id=r[5],
+            )
             for r in await cur.fetchall()
         ]
 
-    async def update_item_status(self, conn: aiosqlite.Connection, item_id: int,
-                                  status: ItemStatus, *, error: str | None = None) -> None:
+    async def update_item_status(
+        self,
+        conn: aiosqlite.Connection,
+        item_id: int,
+        status: ItemStatus,
+        *,
+        error: str | None = None,
+    ) -> None:
         await conn.execute(
             "UPDATE job_items SET status = ?, error_message = ? WHERE id = ?",
             (status, error, item_id),
         )
         await conn.commit()
 
-    async def attach_annotation(self, conn: aiosqlite.Connection, item_id: int,
-                                 annotation_id: int) -> None:
+    async def attach_annotation(
+        self, conn: aiosqlite.Connection, item_id: int, annotation_id: int
+    ) -> None:
         await conn.execute(
             "UPDATE job_items SET annotation_id = ? WHERE id = ?",
             (annotation_id, item_id),

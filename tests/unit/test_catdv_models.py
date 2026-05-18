@@ -28,10 +28,12 @@ def test_clip_round_trips_through_json():
 
 
 def test_marker_optional_out():
-    m = Marker.model_validate({
-        "name": "Point",
-        "in": {"frm": 100, "fmt": 25, "secs": 4.0, "txt": "00:00:04:00"},
-    })
+    m = Marker.model_validate(
+        {
+            "name": "Point",
+            "in": {"frm": 100, "fmt": 25, "secs": 4.0, "txt": "00:00:04:00"},
+        }
+    )
     assert m.out is None
 
 

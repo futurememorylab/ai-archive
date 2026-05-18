@@ -9,9 +9,16 @@ def _now_iso() -> str:
 
 
 class GcsFilesRepo:
-    async def upsert(self, conn: aiosqlite.Connection, *,
-                     clip_id: int, gcs_uri: str, mime_type: str,
-                     size_bytes: int, sha256: str) -> None:
+    async def upsert(
+        self,
+        conn: aiosqlite.Connection,
+        *,
+        clip_id: int,
+        gcs_uri: str,
+        mime_type: str,
+        size_bytes: int,
+        sha256: str,
+    ) -> None:
         now = _now_iso()
         await conn.execute(
             """
@@ -42,11 +49,20 @@ class GcsFilesRepo:
         row = await cur.fetchone()
         if row is None:
             return None
-        return dict(zip(
-            ("catdv_clip_id", "gcs_uri", "mime_type", "size_bytes", "sha256",
-             "uploaded_at", "last_used_at"),
-            row,
-        ))
+        return dict(
+            zip(
+                (
+                    "catdv_clip_id",
+                    "gcs_uri",
+                    "mime_type",
+                    "size_bytes",
+                    "sha256",
+                    "uploaded_at",
+                    "last_used_at",
+                ),
+                row,
+            )
+        )
 
     async def touch(self, conn: aiosqlite.Connection, clip_id: int) -> None:
         await conn.execute(

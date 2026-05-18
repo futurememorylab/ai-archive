@@ -15,6 +15,7 @@ def test_settings_loads_from_env(monkeypatch):
     monkeypatch.setenv("DATA_DIR", "/tmp/cdv")
 
     from backend.app.settings import Settings
+
     s = Settings()
     assert s.app_env == "dev"
     assert s.catdv_base_url == "http://example.test:8080"
@@ -36,5 +37,6 @@ def test_settings_rejects_filesystem_without_root(monkeypatch):
     monkeypatch.setenv("DATA_DIR", "/tmp/cdv")
 
     from backend.app.settings import Settings
+
     with pytest.raises(ValueError, match="PROXY_FS_ROOT"):
         Settings()

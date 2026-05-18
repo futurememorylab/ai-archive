@@ -66,7 +66,8 @@ class AppContext:
             await ctx.catdv.__aenter__()
             ctx.gcs = GcsService(settings.gcs_bucket_name)
             ctx.gemini = GeminiService(
-                project=settings.gcp_project_id, location=settings.gcp_location,
+                project=settings.gcp_project_id,
+                location=settings.gcp_location,
             )
             ctx.proxy_resolver = build_resolver(
                 source=settings.proxy_source,

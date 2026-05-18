@@ -12,8 +12,9 @@ def _now_iso() -> str:
 
 
 class ReviewItemsRepo:
-    async def bulk_insert(self, conn: aiosqlite.Connection,
-                           items: list[ReviewItem]) -> list[ReviewItem]:
+    async def bulk_insert(
+        self, conn: aiosqlite.Connection, items: list[ReviewItem]
+    ) -> list[ReviewItem]:
         inserted: list[ReviewItem] = []
         for it in items:
             cur = await conn.execute(
@@ -24,7 +25,10 @@ class ReviewItemsRepo:
                 VALUES (?, ?, ?, ?, ?, NULL, 'pending')
                 """,
                 (
-                    it.annotation_id, it.catdv_clip_id, it.kind, it.target_identifier,
+                    it.annotation_id,
+                    it.catdv_clip_id,
+                    it.kind,
+                    it.target_identifier,
                     json.dumps(it.proposed_value, ensure_ascii=False),
                 ),
             )
@@ -48,8 +52,9 @@ class ReviewItemsRepo:
             raise LookupError(f"review_item {item_id} not found")
         return self._row(row)
 
-    async def list_by_clip(self, conn: aiosqlite.Connection, clip_id: int,
-                            *, decision: str | None = None) -> list[ReviewItem]:
+    async def list_by_clip(
+        self, conn: aiosqlite.Connection, clip_id: int, *, decision: str | None = None
+    ) -> list[ReviewItem]:
         if decision is not None:
             cur = await conn.execute(
                 """
@@ -72,10 +77,17 @@ class ReviewItemsRepo:
             )
         return [self._row(r) for r in await cur.fetchall()]
 
-    async def set_decision(self, conn: aiosqlite.Connection, item_id: int,
-                            decision: Literal["pending", "accepted", "rejected"],
-                            *, edited_value=None) -> None:
-        edited_json = json.dumps(edited_value, ensure_ascii=False) if edited_value is not None else None
+    async def set_decision(
+        self,
+        conn: aiosqlite.Connection,
+        item_id: int,
+        decision: Literal["pending", "accepted", "rejected"],
+        *,
+        edited_value=None,
+    ) -> None:
+        edited_json = (
+            json.dumps(edited_value, ensure_ascii=False) if edited_value is not None else None
+        )
         await conn.execute(
             """
             UPDATE review_items

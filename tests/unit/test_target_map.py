@@ -42,10 +42,12 @@ def test_expand_note():
 
 
 def test_expand_skips_missing_schema_keys():
-    tm = _tm({
-        "scenes": {"kind": "markers"},
-        "decade": {"kind": "field", "identifier": "pragafilm.dekáda.natočení"},
-    })
+    tm = _tm(
+        {
+            "scenes": {"kind": "markers"},
+            "decade": {"kind": "field", "identifier": "pragafilm.dekáda.natočení"},
+        }
+    )
     items = expand({"scenes": []}, tm, annotation_id=1, catdv_clip_id=42)
     assert items == []
 
@@ -61,6 +63,8 @@ def test_expand_unwraps_value_evidence_pattern():
     tm = _tm({"decade": {"kind": "field", "identifier": "pragafilm.dekáda.natočení"}})
     items = expand(
         {"decade": {"value": "30.léta", "evidence_secs": [4.0, 12.0]}},
-        tm, annotation_id=1, catdv_clip_id=42,
+        tm,
+        annotation_id=1,
+        catdv_clip_id=42,
     )
     assert items[0].proposed_value == {"value": "30.léta", "evidence_secs": [4.0, 12.0]}

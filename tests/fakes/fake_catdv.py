@@ -35,15 +35,20 @@ class FakeCatdv:
         async def login(req: Request):
             body = await req.json()
             if self.valid_creds.get(body.get("username")) == body.get("password"):
-                response = Response(content='{"status":"OK","errorMessage":null,"data":null}',
-                                    media_type="application/json")
+                response = Response(
+                    content='{"status":"OK","errorMessage":null,"data":null}',
+                    media_type="application/json",
+                )
                 response.set_cookie("JSESSIONID", "fake-session")
                 return response
             return self._envelope("ERROR", msg="Invalid user name or password")
 
         @self.app.get("/catdv/api/9/clips/{clip_id}")
         async def get_clip(clip_id: int, request: Request):
-            if time.time() < self.force_auth_until or request.cookies.get("JSESSIONID") != "fake-session":
+            if (
+                time.time() < self.force_auth_until
+                or request.cookies.get("JSESSIONID") != "fake-session"
+            ):
                 return self._envelope("AUTH")
             clip = self.clips.get(clip_id)
             if not clip:
@@ -75,7 +80,7 @@ class FakeCatdv:
                 "OK",
                 data={
                     "total": len(all_clips),
-                    "clips": all_clips[offset:offset + limit],
+                    "clips": all_clips[offset : offset + limit],
                 },
             )
 
@@ -91,7 +96,7 @@ class FakeCatdv:
                 start_s, _, end_s = range_header[6:].partition("-")
                 start = int(start_s)
                 end = int(end_s) if end_s else len(blob) - 1
-                chunk = blob[start:end + 1]
+                chunk = blob[start : end + 1]
                 return Response(
                     content=chunk,
                     status_code=206,

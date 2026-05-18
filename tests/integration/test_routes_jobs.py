@@ -18,17 +18,26 @@ def _setenv(monkeypatch, tmp_path):
 def test_create_job_lists_and_cancels(monkeypatch, tmp_path):
     _setenv(monkeypatch, tmp_path)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     app = main_mod.app
 
     with TestClient(app) as client:
-        r = client.post("/api/templates", json={
-            "name": "t", "prompt": "p", "output_schema": {},
-            "target_map": {"scenes": {"kind": "markers"}}, "model": "m",
-        })
+        r = client.post(
+            "/api/templates",
+            json={
+                "name": "t",
+                "prompt": "p",
+                "output_schema": {},
+                "target_map": {"scenes": {"kind": "markers"}},
+                "model": "m",
+            },
+        )
         tid = r.json()["id"]
 
-        r = client.post("/api/jobs", json={"template_id": tid, "clip_ids": [1, 2, 3], "auto_start": False})
+        r = client.post(
+            "/api/jobs", json={"template_id": tid, "clip_ids": [1, 2, 3], "auto_start": False}
+        )
         assert r.status_code == 201
         job_id = r.json()["id"]
 

@@ -36,6 +36,9 @@ def test_factory_returns_filesystem_resolver(tmp_path: Path):
 def test_factory_rejects_filesystem_without_root():
     with pytest.raises(ValueError, match="fs_root"):
         build_resolver(
-            source="filesystem", catdv_client=None,
-            cache_dir=None, fs_root=None, path_template=None,
+            source="filesystem",
+            catdv_client=None,
+            cache_dir=None,
+            fs_root=None,
+            path_template=None,
         )

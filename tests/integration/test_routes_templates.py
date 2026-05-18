@@ -15,6 +15,7 @@ def test_templates_crud_lifecycle(monkeypatch, tmp_path):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
 
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     app = main_mod.app
 
@@ -23,13 +24,16 @@ def test_templates_crud_lifecycle(monkeypatch, tmp_path):
         assert r.status_code == 200
         initial_count = len(r.json())  # may include seeded template
 
-        r = client.post("/api/templates", json={
-            "name": "scene-markers",
-            "prompt": "describe scenes",
-            "output_schema": {"type": "object"},
-            "target_map": {"scenes": {"kind": "markers"}},
-            "model": "gemini-2.5-pro",
-        })
+        r = client.post(
+            "/api/templates",
+            json={
+                "name": "scene-markers",
+                "prompt": "describe scenes",
+                "output_schema": {"type": "object"},
+                "target_map": {"scenes": {"kind": "markers"}},
+                "model": "gemini-2.5-pro",
+            },
+        )
         assert r.status_code == 201
         new_id = r.json()["id"]
         assert new_id > 0

@@ -4,8 +4,15 @@ from pydantic import BaseModel
 
 JobStatus = Literal["pending", "running", "completed", "failed", "cancelled"]
 ItemStatus = Literal[
-    "pending", "resolving", "uploading", "prompting",
-    "annotated", "review_ready", "applied", "rejected", "error",
+    "pending",
+    "resolving",
+    "uploading",
+    "prompting",
+    "annotated",
+    "review_ready",
+    "applied",
+    "rejected",
+    "error",
 ]
 
 

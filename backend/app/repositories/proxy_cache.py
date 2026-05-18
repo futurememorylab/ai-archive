@@ -9,9 +9,15 @@ def _now_iso() -> str:
 
 
 class ProxyCacheRepo:
-    async def record(self, conn: aiosqlite.Connection, *,
-                     clip_id: int, file_path: str, size_bytes: int,
-                     etag: str | None) -> None:
+    async def record(
+        self,
+        conn: aiosqlite.Connection,
+        *,
+        clip_id: int,
+        file_path: str,
+        size_bytes: int,
+        etag: str | None,
+    ) -> None:
         now = _now_iso()
         await conn.execute(
             """
@@ -40,10 +46,19 @@ class ProxyCacheRepo:
         row = await cur.fetchone()
         if row is None:
             return None
-        return dict(zip(
-            ("catdv_clip_id", "file_path", "size_bytes", "etag", "downloaded_at", "last_used_at"),
-            row,
-        ))
+        return dict(
+            zip(
+                (
+                    "catdv_clip_id",
+                    "file_path",
+                    "size_bytes",
+                    "etag",
+                    "downloaded_at",
+                    "last_used_at",
+                ),
+                row,
+            )
+        )
 
     async def touch(self, conn: aiosqlite.Connection, clip_id: int) -> None:
         await conn.execute(
@@ -56,8 +71,9 @@ class ProxyCacheRepo:
         cur = await conn.execute("SELECT COALESCE(SUM(size_bytes), 0) FROM proxy_cache")
         return int((await cur.fetchone())[0])
 
-    async def lru_candidates(self, conn: aiosqlite.Connection,
-                              max_bytes: int) -> list[dict[str, Any]]:
+    async def lru_candidates(
+        self, conn: aiosqlite.Connection, max_bytes: int
+    ) -> list[dict[str, Any]]:
         """Return rows ordered oldest-first totalling at least max_bytes."""
         cur = await conn.execute(
             """
@@ -69,7 +85,9 @@ class ProxyCacheRepo:
         victims: list[dict[str, Any]] = []
         accum = 0
         for row in await cur.fetchall():
-            victims.append(dict(zip(("catdv_clip_id", "file_path", "size_bytes", "last_used_at"), row)))
+            victims.append(
+                dict(zip(("catdv_clip_id", "file_path", "size_bytes", "last_used_at"), row))
+            )
             accum += row[2]
             if accum >= max_bytes:
                 break

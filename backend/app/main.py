@@ -30,10 +30,15 @@ async def lifespan(app: FastAPI):
 def _real_external_enabled(s: Settings) -> bool:
     """In dev tests we bypass external services. In real dev usage, set
     APP_ENV=dev and ensure CATDV_* / GCP_* env vars point at real systems."""
-    return all([
-        s.catdv_base_url, s.catdv_username, s.catdv_password,
-        s.gcp_project_id, s.gcs_bucket_name,
-    ])
+    return all(
+        [
+            s.catdv_base_url,
+            s.catdv_username,
+            s.catdv_password,
+            s.gcp_project_id,
+            s.gcs_bucket_name,
+        ]
+    )
 
 
 app = FastAPI(title="CatDV Annotator", lifespan=lifespan)
@@ -45,19 +50,25 @@ async def health() -> dict[str, str]:
 
 
 from backend.app.routes.templates import router as templates_router
+
 app.include_router(templates_router)
 
 from backend.app.routes.catdv import router as catdv_router
+
 app.include_router(catdv_router)
 
 from backend.app.routes.jobs import router as jobs_router
+
 app.include_router(jobs_router)
 
 from backend.app.routes.review import router as review_router
+
 app.include_router(review_router)
 
 from backend.app.routes.media import router as media_router
+
 app.include_router(media_router)
 
 from backend.app.routes.events import router as events_router
+
 app.include_router(events_router)

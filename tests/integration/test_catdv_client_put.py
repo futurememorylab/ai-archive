@@ -24,12 +24,14 @@ async def test_put_clip_raises_catdv_error_on_error_envelope(monkeypatch):
 
     class FakeResp:
         status_code = 200
+
         def json(self):
             return {"status": "ERROR", "errorMessage": "boom", "data": None}
 
     class FakeClient:
         async def request(self, *a, **kw):
             return FakeResp()
+
         async def aclose(self):
             pass
 
