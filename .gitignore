@@ -1,0 +1,36 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# App data (local cache, sqlite, etc.)
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Secrets / credentials
+.env
+.env.local
+*.key
+*.pem
+sa.json
+*-key.json
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Build artifacts
+dist/
+build/
+frontend/dist/
+backend/app/static/dist/
