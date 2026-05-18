@@ -48,3 +48,6 @@ app.include_router(jobs_router)
 
 from backend.app.routes.review import router as review_router
 app.include_router(review_router)
+
+from backend.app.routes.media import router as media_router
+app.include_router(media_router)
