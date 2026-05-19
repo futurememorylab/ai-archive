@@ -21,6 +21,11 @@ async def lifespan(app: FastAPI):
     seed_path = SEEDS / "default_template.json"
     if seed_path.exists():
         await seed_default_template(ctx.db, seed_path=seed_path)
+    if init_external:
+        if ctx.connection_monitor is not None:
+            await ctx.connection_monitor.start()
+        if ctx.sync_engine is not None:
+            await ctx.sync_engine.start()
     try:
         yield
     finally:
@@ -72,3 +77,7 @@ app.include_router(media_router)
 from backend.app.routes.events import router as events_router
 
 app.include_router(events_router)
+
+from backend.app.routes.connection import router as connection_router
+
+app.include_router(connection_router)

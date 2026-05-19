@@ -14,10 +14,11 @@ from backend.app.archive.model import (
     ChangeSet,
     ClipPage,
     ClipQuery,
+    ConflictDetail,
     FieldDef,
     WriteResult,
 )
-from backend.app.archive.provider import ProviderCapabilities
+from backend.app.archive.provider import ProviderCapabilities, ProviderHealth
 from backend.app.archive.providers.catdv.mapping import (
     field_def_from_catdv,
     from_catdv_clip,
@@ -59,6 +60,22 @@ class CatdvArchiveAdapter:
         self._ttl = timedelta(hours=clip_cache_ttl_hours)
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._default_catalog_id = default_catalog_id
+
+    # --- health -------------------------------------------------------
+
+    async def health(self) -> ProviderHealth:
+        from time import perf_counter
+        t0 = perf_counter()
+        try:
+            await self._client.health()
+        except CatdvAuthError as exc:
+            return ProviderHealth(ok=False, detail=f"auth: {exc}")
+        except CatdvBusyError as exc:
+            return ProviderHealth(ok=False, detail=f"busy: {exc}")
+        except CatdvError as exc:
+            return ProviderHealth(ok=False, detail=str(exc))
+        latency_ms = (perf_counter() - t0) * 1000.0
+        return ProviderHealth(ok=True, latency_ms=latency_ms)
 
     # --- read API -----------------------------------------------------
 
@@ -142,9 +159,28 @@ class CatdvArchiveAdapter:
         except CatdvError as exc:
             raise FatalProviderError(str(exc)) from exc
 
+        live_etag = self._etag_from_raw(current)
+        if (
+            change_set.expected_etag is not None
+            and live_etag is not None
+            and live_etag != change_set.expected_etag
+        ):
+            return WriteResult(
+                status="conflict",
+                upstream_response={},
+                new_etag=live_etag,
+                conflict_detail=ConflictDetail(
+                    kind="modified",
+                    expected_etag=change_set.expected_etag,
+                    actual_etag=live_etag,
+                ),
+            )
+
         payload = build_put_payload(current=current, ops=list(change_set.ops))
         if not payload:
-            return WriteResult(status="ok", upstream_response={}, detail="no-op")
+            return WriteResult(
+                status="ok", upstream_response={}, new_etag=live_etag
+            )
 
         try:
             response = await self._client.put_clip(int(clip_id_str), payload)
@@ -155,7 +191,17 @@ class CatdvArchiveAdapter:
         except CatdvError as exc:
             raise FatalProviderError(str(exc)) from exc
 
-        return WriteResult(status="ok", upstream_response=response)
+        new_etag = self._etag_from_raw(response) or live_etag
+        return WriteResult(
+            status="ok", upstream_response=response, new_etag=new_etag
+        )
+
+    @staticmethod
+    def _etag_from_raw(raw: dict[str, Any] | None) -> str | None:
+        if not isinstance(raw, dict):
+            return None
+        v = raw.get("modifyDate")
+        return str(v) if v is not None else None
 
     # --- cache helpers -----------------------------------------------
 

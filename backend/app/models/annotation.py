@@ -28,3 +28,4 @@ class ReviewItem(BaseModel):
     proposed_value: dict[str, Any] | list[Any] | str | int | float | bool | None
     edited_value: dict[str, Any] | list[Any] | str | int | float | bool | None = None
     decision: Literal["pending", "accepted", "rejected"] = "pending"
+    applied_at: str | None = None

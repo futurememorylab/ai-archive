@@ -103,11 +103,19 @@ class ChangeSet:
 
 
 @dataclass(frozen=True)
+class ConflictDetail:
+    kind: Literal["modified", "deleted", "marker-overlap"]
+    expected_etag: str | None = None
+    actual_etag: str | None = None
+    fields: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class WriteResult:
     status: Literal["ok", "conflict", "retryable", "fatal"]
     upstream_response: dict[str, Any]
     new_etag: str | None = None
-    detail: str | None = None
+    conflict_detail: ConflictDetail | None = None
 
 
 @dataclass(frozen=True)

@@ -50,6 +50,10 @@ class FakeCatdv:
             self.logout_count += 1
             return self._envelope("OK")
 
+        @self.app.get("/catdv/api/info")
+        async def server_info(request: Request):
+            return self._envelope("OK", data={"name": "fake-catdv", "version": "9"})
+
         @self.app.get("/catdv/api/9/fields")
         async def list_fields(request: Request):
             if request.cookies.get("JSESSIONID") != "fake-session":
