@@ -1502,7 +1502,7 @@ git commit -m "feat(archive): registry + settings.archive_provider knob"
 - Modify: `backend/app/context.py`
 - Test: extend `tests/integration/test_context.py` (or add new test)
 
-- [ ] **Step 1: Add failing test**
+- [x] **Step 1: Add failing test**
 
 Append to `tests/integration/test_context.py` (read it first to match existing style):
 
@@ -1537,14 +1537,14 @@ async def test_context_exposes_archive_provider_when_external_initialized(tmp_pa
 
 (If the existing `test_context.py` doesn't import the things this test needs, add them. Don't break existing tests.)
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 .venv/bin/pytest tests/integration/test_context.py -v
 ```
 Expected: FAIL — `ctx.archive` is `None` or missing.
 
-- [ ] **Step 3: Add `archive` field + wiring in `context.py`**
+- [x] **Step 3: Add `archive` field + wiring in `context.py`**
 
 In `backend/app/context.py`:
 
@@ -1562,21 +1562,21 @@ In `backend/app/context.py`:
    ctx.archive = build_archive_provider(settings, catdv_client=ctx.catdv)
    ```
 
-- [ ] **Step 4: Run tests, verify pass**
+- [x] **Step 4: Run tests, verify pass**
 
 ```bash
 .venv/bin/pytest tests/integration/test_context.py -v
 ```
 Expected: pass.
 
-- [ ] **Step 5: Run full test suite to catch regressions**
+- [x] **Step 5: Run full test suite to catch regressions**
 
 ```bash
 .venv/bin/pytest -q
 ```
 Expected: all green.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/context.py tests/integration/test_context.py
