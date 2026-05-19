@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-2.5-pro"
 
     archive_provider: str = "catdv"
+    ai_input_store: str = "gcs"
 
     @model_validator(mode="after")
     def _validate_proxy(self) -> "Settings":
