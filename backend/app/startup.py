@@ -13,7 +13,7 @@ class StartupCheckResult:
 async def run_checks(
     *,
     catdv,
-    gcs,
+    ai_store,
     proxy_resolver,
     catalog_id: int,
     sample_clip_id: int | None = None,
@@ -29,10 +29,12 @@ async def run_checks(
         result.failures.append(f"CatDV unreachable or sample clip missing: {exc}")
 
     try:
-        if not gcs._bucket.exists():
-            result.failures.append(f"GCS bucket not found: {getattr(gcs, 'bucket_name', '?')}")
+        health = await ai_store.health()
+        if not health.ok:
+            detail = health.detail or "unknown reason"
+            result.failures.append(f"AI input store not healthy: {detail}")
     except Exception as exc:  # noqa: BLE001
-        result.failures.append(f"GCS check failed: {exc}")
+        result.failures.append(f"AI input store check failed: {exc}")
 
     if verify_proxy and sample_clip_id is not None:
         try:

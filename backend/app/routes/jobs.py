@@ -22,7 +22,7 @@ async def create_job(request: Request, body: JobCreate, background: BackgroundTa
         template_id=body.template_id,
         clip_ids=body.clip_ids,
     )
-    if body.auto_start and ctx.archive and ctx.gcs and ctx.gemini and ctx.proxy_resolver:
+    if body.auto_start and ctx.archive and ctx.ai_store and ctx.gemini and ctx.proxy_resolver:
         task = asyncio.create_task(_run_in_bg(ctx, job_id))
         ctx._running_jobs[job_id] = task
     return {"id": job_id}
@@ -35,10 +35,9 @@ async def _run_in_bg(ctx, job_id: int) -> None:
             job_id=job_id,
             archive=ctx.archive,
             proxy_resolver=ctx.proxy_resolver,
-            gcs=ctx.gcs,
+            ai_store=ctx.ai_store,
             gemini=ctx.gemini,
             event_bus=ctx.event_bus,
-            gcs_files_repo=ctx.gcs_files_repo,
             annotations_repo=ctx.annotations_repo,
             review_items_repo=ctx.review_items_repo,
             jobs_repo=ctx.jobs_repo,
