@@ -533,7 +533,7 @@ git commit -m "feat(archive): ArchiveProvider Protocol + error hierarchy"
 
 This fixture is small enough to embed inline — it captures the shape that `from_catdv_clip` must round-trip.
 
-- [ ] **Step 1: Create the fixture**
+- [x] **Step 1: Create the fixture**
 
 Create `tests/fixtures/catdv_clip_sample.json`:
 
@@ -573,7 +573,7 @@ Create `tests/fixtures/catdv_clip_sample.json`:
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add tests/fixtures/catdv_clip_sample.json

@@ -1,0 +1,33 @@
+{
+  "ID": 12345,
+  "name": "Abramcukova_Anna_09",
+  "notes": "Czech home movie, 9.5mm",
+  "bigNotes": "Longer description here.",
+  "format": "video/quicktime",
+  "fps": 25.0,
+  "in":       {"frm": 0,    "fmt": 25.0, "secs": 0.0,  "txt": "0:00:00:00"},
+  "out":      {"frm": 8250, "fmt": 25.0, "secs": 330.0,"txt": "0:05:30:00"},
+  "duration": {"frm": 8250, "fmt": 25.0, "secs": 330.0,"txt": "0:05:30:00"},
+  "markers": [
+    {
+      "name": "Anna na zahradě",
+      "category": "Event",
+      "in":  {"frm": 1500, "fmt": 25.0, "secs": 60.0, "txt": "0:01:00:00"},
+      "out": {"frm": 1750, "fmt": 25.0, "secs": 70.0, "txt": "0:01:10:00"},
+      "description": "rodinný portrét",
+      "color": "white"
+    }
+  ],
+  "thumbnailIDs": [9001, 9002, 9003],
+  "posterID": 9000,
+  "media": {"sourceMediaID": 555},
+  "importSource": {"path": "/Volumes/ARECA/ARCHIV/Abramcukova_Anna_09.mov"},
+  "history": [],
+  "fields": {
+    "pragafilm.dekáda.natočení": "30.léta",
+    "pragafilm.rok.natočení": ["1932", "1933"],
+    "pragafilm.barva": "false",
+    "pragafilm.popis.materialu": "rodinné záběry"
+  },
+  "modifyDate": "2026-05-18T10:00:00Z"
+}
