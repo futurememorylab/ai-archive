@@ -1672,7 +1672,7 @@ git commit -m "refactor(routes/catdv): consume ArchiveProvider via ctx.archive"
 - Modify: `backend/app/routes/review.py`
 - Verify: `tests/integration/test_routes_review.py` still passes.
 
-- [ ] **Step 1: Read existing review route tests**
+- [x] **Step 1: Read existing review route tests**
 
 ```bash
 .venv/bin/pytest tests/integration/test_routes_review.py -v
@@ -1680,7 +1680,7 @@ git commit -m "refactor(routes/catdv): consume ArchiveProvider via ctx.archive"
 
 Confirm baseline; note which assertions touch `write_log` payload shape (those must stay identical).
 
-- [ ] **Step 2: Modify `routes/review.py`**
+- [x] **Step 2: Modify `routes/review.py`**
 
 Replace `apply_clip` with a version that converts `ReviewItem`s to `ChangeOp`s and calls `archive.apply_changes`:
 
@@ -1850,7 +1850,7 @@ def _note_mode(target_map: TargetMap, identifier: str) -> str:
     return "append"
 ```
 
-- [ ] **Step 3: Run review route tests; fix breakage if any**
+- [x] **Step 3: Run review route tests; fix breakage if any**
 
 ```bash
 .venv/bin/pytest tests/integration/test_routes_review.py -v
@@ -1858,14 +1858,14 @@ def _note_mode(target_map: TargetMap, identifier: str) -> str:
 
 If a test stubbed `ctx.catdv`, change it to stub `ctx.archive` with a fake that returns a `WriteResult(status="ok", upstream_response={...})`. The `write_log` payload field shape changed from "raw CatDV PUT body" to `{"ops": [...]}` — update assertions accordingly.
 
-- [ ] **Step 4: Run full suite**
+- [x] **Step 4: Run full suite**
 
 ```bash
 .venv/bin/pytest -q
 ```
 Expected: all green.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/routes/review.py tests/integration/test_routes_review.py

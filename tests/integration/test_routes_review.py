@@ -112,38 +112,35 @@ def test_set_decision_accept(monkeypatch, tmp_path):
 
 
 def test_apply_clip_writes_to_catdv_and_logs(monkeypatch, tmp_path):
+    from backend.app.archive.model import AddMarkers, ChangeSet, SetField, WriteResult
+
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         ctx = client.app.state.ctx
         _, _, items = _run(_seed(ctx))
 
-        async def get_clip(self, clip_id):
-            return {"ID": clip_id, "name": "Clip_1", "markers": [], "fields": {}}
+        class FakeArchive:
+            id = "catdv"
+            last_change_set: ChangeSet | None = None
 
-        async def put_clip(self, clip_id, payload):
-            put_clip.last_payload = payload
-            return {"ID": clip_id, "modifyDate": "2026-05-18"}
+            async def apply_changes(self, change_set: ChangeSet) -> WriteResult:
+                FakeArchive.last_change_set = change_set
+                return WriteResult(
+                    status="ok",
+                    upstream_response={"ID": int(change_set.clip_key[1]), "modifyDate": "2026-05-18"},
+                )
 
-        put_clip.last_payload = None
-
-        async def _aexit(self, exc_type, exc, tb):
-            pass
-
-        ctx.catdv = type(
-            "FakeC",
-            (),
-            {
-                "get_clip": get_clip,
-                "put_clip": put_clip,
-                "__aexit__": _aexit,
-            },
-        )()
+        ctx.archive = FakeArchive()
 
         for it in items:
             client.post(f"/api/review/items/{it.id}/decision", json={"decision": "accepted"})
 
         r = client.post("/api/review/clips/1/apply")
         assert r.status_code == 200
-        assert put_clip.last_payload is not None
-        assert "markers" in put_clip.last_payload
-        assert put_clip.last_payload["fields"]["pragafilm.dekáda.natočení"] == "30.léta"
+        cs = FakeArchive.last_change_set
+        assert cs is not None
+        assert cs.clip_key == ("catdv", "1")
+        op_types = {type(o).__name__ for o in cs.ops}
+        assert "AddMarkers" in op_types
+        assert any(isinstance(o, SetField) and o.identifier == "pragafilm.dekáda.natočení"
+                   and o.value == "30.léta" for o in cs.ops)
