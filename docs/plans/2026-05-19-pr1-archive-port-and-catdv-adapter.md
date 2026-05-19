@@ -2046,7 +2046,7 @@ git commit -m "refactor(annotator): consume CanonicalClip via archive.get_clip"
 - Delete: `backend/app/services/payload_builder.py`
 - Delete: `tests/unit/test_payload_builder.py`
 
-- [ ] **Step 1: Verify no remaining imports**
+- [x] **Step 1: Verify no remaining imports**
 
 ```bash
 grep -RIn "from backend.app.services.payload_builder" backend tests
@@ -2057,27 +2057,27 @@ Expected: no output.
 
 If anything remains, that import must be migrated to `backend.app.archive.providers.catdv.payload` (different signature) before deletion.
 
-- [ ] **Step 2: Delete the files**
+- [x] **Step 2: Delete the files**
 
 ```bash
 rm backend/app/services/payload_builder.py tests/unit/test_payload_builder.py
 ```
 
-- [ ] **Step 3: Run full suite**
+- [x] **Step 3: Run full suite**
 
 ```bash
 .venv/bin/pytest -q
 ```
 Expected: all green.
 
-- [ ] **Step 4: Run ruff**
+- [x] **Step 4: Run ruff**
 
 ```bash
 .venv/bin/ruff check backend tests
 ```
 Expected: no errors.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A backend/app/services/payload_builder.py tests/unit/test_payload_builder.py
