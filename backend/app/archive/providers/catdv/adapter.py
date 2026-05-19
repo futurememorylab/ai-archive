@@ -75,4 +75,33 @@ class CatdvArchiveAdapter:
         return from_catdv_clip(raw, fetched_at=datetime.now(timezone.utc))
 
     async def apply_changes(self, change_set: ChangeSet) -> WriteResult:
-        raise NotImplementedError  # implemented in Task 7
+        provider_id, clip_id_str = change_set.clip_key
+        if provider_id != self.id:
+            raise FatalProviderError(
+                f"ChangeSet for provider {provider_id!r} sent to catdv adapter"
+            )
+        from backend.app.archive.providers.catdv.payload import build_put_payload
+
+        try:
+            current = await self._client.get_clip(int(clip_id_str))
+        except CatdvAuthError as exc:
+            raise AuthError(str(exc)) from exc
+        except CatdvBusyError as exc:
+            raise RetryableError(str(exc)) from exc
+        except CatdvError as exc:
+            raise FatalProviderError(str(exc)) from exc
+
+        payload = build_put_payload(current=current, ops=list(change_set.ops))
+        if not payload:
+            return WriteResult(status="ok", upstream_response={}, detail="no-op")
+
+        try:
+            response = await self._client.put_clip(int(clip_id_str), payload)
+        except CatdvAuthError as exc:
+            raise AuthError(str(exc)) from exc
+        except CatdvBusyError as exc:
+            raise RetryableError(str(exc)) from exc
+        except CatdvError as exc:
+            raise FatalProviderError(str(exc)) from exc
+
+        return WriteResult(status="ok", upstream_response=response)

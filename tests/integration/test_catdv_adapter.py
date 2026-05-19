@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from backend.app.archive.errors import FatalProviderError
 from backend.app.archive.model import (
     AddMarkers,
     ChangeSet,
@@ -57,3 +58,61 @@ async def test_adapter_capabilities_reflect_catdv():
         assert caps.write_atomicity == "per-clip"
         assert "notes" in caps.supports_notes
         assert "bigNotes" in caps.supports_notes
+
+
+@pytest.mark.asyncio
+async def test_apply_changes_adds_marker_via_put():
+    with running_fake_catdv() as (base_url, fake):
+        fake.clips[7] = {"ID": 7, "name": "c", "fps": 25.0, "markers": [], "fields": {}}
+        async with CatdvClient(base_url, "klientAI", "secret") as client:
+            adapter = CatdvArchiveAdapter(client=client)
+            cs = ChangeSet(
+                clip_key=("catdv", "7"),
+                ops=[
+                    AddMarkers(
+                        markers=[
+                            Marker(
+                                name="m",
+                                in_=Timecode(secs=4.0, fps=25.0),
+                                out=Timecode(secs=6.0, fps=25.0),
+                            )
+                        ]
+                    )
+                ],
+            )
+            result = await adapter.apply_changes(cs)
+        assert result.status == "ok"
+        assert len(fake.put_log) == 1
+        clip_id, body = fake.put_log[0]
+        assert clip_id == 7
+        assert len(body["markers"]) == 1
+        assert body["markers"][0]["in"]["frm"] == 100
+
+
+@pytest.mark.asyncio
+async def test_apply_changes_setfield_writes_minimal_payload():
+    with running_fake_catdv() as (base_url, fake):
+        fake.clips[8] = {"ID": 8, "name": "c", "fps": 25.0, "markers": [], "fields": {}}
+        async with CatdvClient(base_url, "klientAI", "secret") as client:
+            adapter = CatdvArchiveAdapter(client=client)
+            cs = ChangeSet(
+                clip_key=("catdv", "8"),
+                ops=[SetField(identifier="pragafilm.barva", value="true")],
+            )
+            result = await adapter.apply_changes(cs)
+        assert result.status == "ok"
+        _, body = fake.put_log[0]
+        assert body == {"fields": {"pragafilm.barva": "true"}}
+
+
+@pytest.mark.asyncio
+async def test_apply_changes_returns_fatal_on_catdv_error():
+    with running_fake_catdv() as (base_url, fake):
+        async with CatdvClient(base_url, "klientAI", "secret") as client:
+            adapter = CatdvArchiveAdapter(client=client)
+            cs = ChangeSet(
+                clip_key=("catdv", "99"),
+                ops=[SetField(identifier="x", value=1)],
+            )
+            with pytest.raises(FatalProviderError):
+                await adapter.apply_changes(cs)

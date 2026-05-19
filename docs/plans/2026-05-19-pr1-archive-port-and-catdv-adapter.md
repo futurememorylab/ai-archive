@@ -1254,7 +1254,7 @@ git commit -m "feat(archive/catdv): adapter list_clips + get_clip + capabilities
 - Modify: `backend/app/archive/providers/catdv/adapter.py`
 - Modify: `tests/integration/test_catdv_adapter.py`
 
-- [ ] **Step 1: Add failing tests**
+- [x] **Step 1: Add failing tests**
 
 Append to `tests/integration/test_catdv_adapter.py`:
 
@@ -1325,14 +1325,14 @@ Add to the test file's imports:
 from backend.app.archive.errors import FatalProviderError
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 ```bash
 .venv/bin/pytest tests/integration/test_catdv_adapter.py -v
 ```
 Expected: 3 new tests FAIL with `NotImplementedError` (or `FatalProviderError` not raised).
 
-- [ ] **Step 3: Implement `apply_changes` in adapter**
+- [x] **Step 3: Implement `apply_changes` in adapter**
 
 In `backend/app/archive/providers/catdv/adapter.py`, replace the `apply_changes` stub with:
 
@@ -1370,14 +1370,14 @@ In `backend/app/archive/providers/catdv/adapter.py`, replace the `apply_changes`
         return WriteResult(status="ok", upstream_response=response)
 ```
 
-- [ ] **Step 4: Run all adapter tests, verify pass**
+- [x] **Step 4: Run all adapter tests, verify pass**
 
 ```bash
 .venv/bin/pytest tests/integration/test_catdv_adapter.py -v
 ```
 Expected: 6 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/archive/providers/catdv/adapter.py tests/integration/test_catdv_adapter.py
