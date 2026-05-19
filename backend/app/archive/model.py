@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, Union
@@ -127,3 +127,21 @@ class ClipPage:
     def __post_init__(self) -> None:
         if isinstance(self.items, list):
             object.__setattr__(self, "items", tuple(self.items))
+
+
+@dataclass(frozen=True)
+class FieldDef:
+    identifier: str
+    name: str
+    type: Literal[
+        "text", "integer", "decimal", "date",
+        "picklist", "multi-picklist", "bool",
+    ]
+    is_multi: bool
+    is_editable: bool
+    picklist_values: tuple[str, ...] | None = None
+    provider_data: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if isinstance(self.picklist_values, list):
+            object.__setattr__(self, "picklist_values", tuple(self.picklist_values))
