@@ -1591,7 +1591,7 @@ git commit -m "feat(context): build and expose ctx.archive at startup"
 - Modify: `backend/app/routes/catdv.py`
 - Verify: `tests/integration/test_routes_catdv.py` still passes (and adjust if it stubbed `ctx.catdv`).
 
-- [ ] **Step 1: Read the existing route test**
+- [x] **Step 1: Read the existing route test**
 
 ```bash
 .venv/bin/pytest tests/integration/test_routes_catdv.py -v
@@ -1599,7 +1599,7 @@ git commit -m "feat(context): build and expose ctx.archive at startup"
 
 Run before changing anything; confirm baseline pass count.
 
-- [ ] **Step 2: Modify `routes/catdv.py`**
+- [x] **Step 2: Modify `routes/catdv.py`**
 
 Replace the file contents with:
 
@@ -1642,7 +1642,7 @@ async def get_clip(request: Request, clip_id: int):
     return clip.provider_data
 ```
 
-- [ ] **Step 3: Run route tests, fix breakage if any**
+- [x] **Step 3: Run route tests, fix breakage if any**
 
 ```bash
 .venv/bin/pytest tests/integration/test_routes_catdv.py -v
@@ -1650,14 +1650,14 @@ async def get_clip(request: Request, clip_id: int):
 
 If a test was stubbing `ctx.catdv`, change it to stub `ctx.archive` with a small fake that implements `list_clips`/`get_clip`. The route-level response shape is unchanged.
 
-- [ ] **Step 4: Run full suite**
+- [x] **Step 4: Run full suite**
 
 ```bash
 .venv/bin/pytest -q
 ```
 Expected: all green.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/routes/catdv.py tests/integration/test_routes_catdv.py

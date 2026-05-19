@@ -1,27 +1,36 @@
 from fastapi import APIRouter, HTTPException, Request
 
+from backend.app.archive.errors import ProviderError
+from backend.app.archive.model import ClipQuery
+
 router = APIRouter(prefix="/api/catdv", tags=["catdv"])
 
 
 @router.get("/clips")
 async def list_clips(request: Request, q: str | None = None, offset: int = 0, limit: int = 50):
     ctx = request.app.state.ctx
-    if ctx.catdv is None:
-        raise HTTPException(503, "CatDV client not initialized")
-    return await ctx.catdv.list_clips(
-        catalog_id=ctx.settings.catdv_catalog_id,
-        offset=offset,
-        limit=limit,
-        q=q,
-    )
+    if ctx.archive is None:
+        raise HTTPException(503, "archive provider not initialized")
+    try:
+        page = await ctx.archive.list_clips(
+            str(ctx.settings.catdv_catalog_id),
+            ClipQuery(text=q, offset=offset, limit=limit),
+        )
+    except ProviderError as exc:
+        raise HTTPException(502, f"archive error: {exc}")
+    return {
+        "total": page.total,
+        "clips": [c.provider_data for c in page.items],
+    }
 
 
 @router.get("/clips/{clip_id}")
 async def get_clip(request: Request, clip_id: int):
     ctx = request.app.state.ctx
-    if ctx.catdv is None:
-        raise HTTPException(503, "CatDV client not initialized")
+    if ctx.archive is None:
+        raise HTTPException(503, "archive provider not initialized")
     try:
-        return await ctx.catdv.get_clip(clip_id)
-    except Exception as exc:
-        raise HTTPException(502, f"upstream CatDV error: {exc}")
+        clip = await ctx.archive.get_clip(str(clip_id))
+    except ProviderError as exc:
+        raise HTTPException(502, f"archive error: {exc}")
+    return clip.provider_data

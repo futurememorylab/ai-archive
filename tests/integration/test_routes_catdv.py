@@ -1,6 +1,29 @@
 import importlib
+from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
+
+from backend.app.archive.model import CanonicalClip, ClipPage, MediaRef
+
+
+def _canonical(clip_id: int, name: str) -> CanonicalClip:
+    return CanonicalClip(
+        key=("catdv", str(clip_id)),
+        name=name,
+        duration_secs=0.0,
+        fps=25.0,
+        markers=tuple(),
+        fields={},
+        notes={},
+        media=MediaRef(
+            mime_type="video/quicktime",
+            size_bytes=None,
+            cached_path=None,
+            upstream_handle=str(clip_id),
+        ),
+        provider_data={"ID": clip_id, "name": name},
+        fetched_at=datetime.now(timezone.utc),
+    )
 
 
 def test_list_clips_proxies_to_catdv(monkeypatch, tmp_path):
@@ -22,19 +45,19 @@ def test_list_clips_proxies_to_catdv(monkeypatch, tmp_path):
     with TestClient(app) as client:
         ctx = client.app.state.ctx
 
-        async def _aexit(self, exc_type, exc, tb):
-            pass
+        class FakeArchive:
+            async def list_clips(self, catalog, query):
+                return ClipPage(
+                    items=(_canonical(1, "x"),),
+                    total=1,
+                    offset=query.offset,
+                    limit=query.limit,
+                )
 
-        ctx.catdv = type("FakeC", (), {"__aexit__": _aexit})()
+            async def get_clip(self, clip_id_str):
+                return _canonical(int(clip_id_str), "x")
 
-        async def list_clips(*, catalog_id, offset=0, limit=50, q=None):
-            return {"total": 1, "clips": [{"ID": 1, "name": "x"}]}
-
-        async def get_clip(clip_id):
-            return {"ID": clip_id, "name": "x"}
-
-        ctx.catdv.list_clips = list_clips
-        ctx.catdv.get_clip = get_clip
+        ctx.archive = FakeArchive()
 
         r = client.get("/api/catdv/clips?limit=10")
         assert r.status_code == 200
