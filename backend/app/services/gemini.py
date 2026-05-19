@@ -36,14 +36,19 @@ class GeminiService:
         self._client = genai.Client(vertexai=True, project=project, location=location)
 
     def annotate(
-        self, *, gcs_uri: str, mime: str, prompt: str, schema: dict[str, Any], model: str
+        self,
+        *,
+        file_ref: dict[str, Any],
+        prompt: str,
+        schema: dict[str, Any],
+        model: str,
     ) -> dict[str, Any]:
         try:
             response = self._client.models.generate_content(
                 model=model,
                 contents=[
                     {"text": prompt},
-                    {"file_data": {"file_uri": gcs_uri, "mime_type": mime}},
+                    file_ref,
                 ],
                 config={
                     "response_mime_type": "application/json",
@@ -61,8 +66,7 @@ class GeminiService:
 async def annotate_with_retry(
     service: "GeminiService",
     *,
-    gcs_uri: str,
-    mime: str,
+    file_ref: dict[str, Any],
     prompt: str,
     schema: dict[str, Any],
     model: str,
@@ -74,8 +78,7 @@ async def annotate_with_retry(
     for attempt in range(1, max_attempts + 1):
         try:
             return service.annotate(
-                gcs_uri=gcs_uri,
-                mime=mime,
+                file_ref=file_ref,
                 prompt=prompt,
                 schema=schema,
                 model=model,
