@@ -116,3 +116,74 @@ async def test_apply_changes_returns_fatal_on_catdv_error():
             )
             with pytest.raises(FatalProviderError):
                 await adapter.apply_changes(cs)
+
+
+@pytest.mark.asyncio
+async def test_adapter_health_returns_ok_on_live_fake():
+    with running_fake_catdv() as (base_url, _):
+        async with CatdvClient(base_url, "klientAI", "secret") as client:
+            adapter = CatdvArchiveAdapter(client=client)
+            health = await adapter.health()
+    assert health.ok is True
+    assert health.latency_ms is not None
+    assert health.latency_ms >= 0.0
+
+
+@pytest.mark.asyncio
+async def test_apply_changes_returns_ok_with_new_etag_on_success():
+    with running_fake_catdv() as (base_url, fake):
+        fake.clips[11] = {
+            "ID": 11, "name": "c", "fps": 25.0, "markers": [], "fields": {},
+            "modifyDate": "2026-05-19",
+        }
+        async with CatdvClient(base_url, "klientAI", "secret") as client:
+            adapter = CatdvArchiveAdapter(client=client)
+            cs = ChangeSet(
+                clip_key=("catdv", "11"),
+                ops=[SetField(identifier="x", value=1)],
+            )
+            result = await adapter.apply_changes(cs)
+    assert result.status == "ok"
+    # the fake responds with modifyDate="2026-05-18" on PUT.
+    assert result.new_etag is not None
+
+
+@pytest.mark.asyncio
+async def test_apply_changes_returns_conflict_when_expected_etag_mismatches():
+    with running_fake_catdv() as (base_url, fake):
+        fake.clips[12] = {
+            "ID": 12, "name": "c", "fps": 25.0, "markers": [], "fields": {},
+            "modifyDate": "2026-05-19T12:00:00",
+        }
+        async with CatdvClient(base_url, "klientAI", "secret") as client:
+            adapter = CatdvArchiveAdapter(client=client)
+            cs = ChangeSet(
+                clip_key=("catdv", "12"),
+                ops=[SetField(identifier="x", value=1)],
+                expected_etag="2026-01-01T00:00:00",
+            )
+            result = await adapter.apply_changes(cs)
+    assert result.status == "conflict"
+    assert result.conflict_detail is not None
+    assert result.conflict_detail.expected_etag == "2026-01-01T00:00:00"
+    assert result.conflict_detail.actual_etag == "2026-05-19T12:00:00"
+    assert fake.put_log == []   # no PUT issued on conflict
+
+
+@pytest.mark.asyncio
+async def test_apply_changes_proceeds_when_expected_etag_is_none():
+    with running_fake_catdv() as (base_url, fake):
+        fake.clips[13] = {
+            "ID": 13, "name": "c", "fps": 25.0, "markers": [], "fields": {},
+            "modifyDate": "v-anything",
+        }
+        async with CatdvClient(base_url, "klientAI", "secret") as client:
+            adapter = CatdvArchiveAdapter(client=client)
+            cs = ChangeSet(
+                clip_key=("catdv", "13"),
+                ops=[SetField(identifier="x", value=1)],
+                expected_etag=None,
+            )
+            result = await adapter.apply_changes(cs)
+    assert result.status == "ok"
+    assert len(fake.put_log) == 1

@@ -157,6 +157,17 @@ class CatdvClient:
         env = await self._call_json("GET", f"/catdv/api/9/clips/{clip_id}")
         return env.data
 
+    async def health(self) -> dict[str, Any]:
+        """Cheap reachability probe. Returns the envelope `data` payload
+        (which may be {}) on OK; raises CatdvError/CatdvAuthError otherwise.
+
+        The endpoint `GET /catdv/api/info` is documented as anonymous and
+        cheap; some installs require auth, so we re-login on AUTH via the
+        shared `_call_json` helper.
+        """
+        env = await self._call_json("GET", "/catdv/api/info")
+        return env.data or {}
+
     async def list_fields(self) -> list[dict[str, Any]]:
         env = await self._call_json("GET", "/catdv/api/9/fields")
         data = env.data

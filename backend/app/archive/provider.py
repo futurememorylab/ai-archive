@@ -25,11 +25,19 @@ class ProviderCapabilities:
     write_atomicity: Literal["per-clip", "per-op"]
 
 
+@dataclass(frozen=True)
+class ProviderHealth:
+    ok: bool
+    latency_ms: float | None = None
+    detail: str | None = None
+
+
 @runtime_checkable
 class ArchiveProvider(Protocol):
     id: ProviderId = ""
     capabilities: ProviderCapabilities = None  # type: ignore[assignment]
 
+    async def health(self) -> ProviderHealth: ...
     async def list_clips(self, catalog: str, query: ClipQuery) -> ClipPage: ...
     async def get_clip(self, clip: ProviderClipId) -> CanonicalClip: ...
     async def list_field_definitions(self) -> list[FieldDef]: ...
