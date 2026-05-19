@@ -1073,7 +1073,7 @@ git commit -m "feat(archive/catdv): build_put_payload from ChangeOps"
 - Create: `backend/app/archive/providers/catdv/adapter.py`
 - Test: `tests/integration/test_catdv_adapter.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/integration/test_catdv_adapter.py`:
 
@@ -1139,14 +1139,14 @@ async def test_adapter_capabilities_reflect_catdv():
         assert "bigNotes" in caps.supports_notes
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 .venv/bin/pytest tests/integration/test_catdv_adapter.py -v
 ```
 Expected: FAIL — `ModuleNotFoundError`.
 
-- [ ] **Step 3: Implement `adapter.py` (partial — list + get only)**
+- [x] **Step 3: Implement `adapter.py` (partial — list + get only)**
 
 Create `backend/app/archive/providers/catdv/adapter.py`:
 
@@ -1232,14 +1232,14 @@ class CatdvArchiveAdapter:
         raise NotImplementedError  # implemented in Task 7
 ```
 
-- [ ] **Step 4: Run tests, verify pass**
+- [x] **Step 4: Run tests, verify pass**
 
 ```bash
 .venv/bin/pytest tests/integration/test_catdv_adapter.py -v
 ```
 Expected: 3 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/archive/providers/catdv/adapter.py tests/integration/test_catdv_adapter.py
