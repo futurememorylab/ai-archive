@@ -832,7 +832,7 @@ git commit -m "feat(archive/catdv): CanonicalClip <-> CatDV JSON mapping"
 - Create: `tests/unit/test_catdv_payload.py`
 - (Will delete `backend/app/services/payload_builder.py` and `tests/unit/test_payload_builder.py` in Task 11 once callers migrate.)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_catdv_payload.py`:
 
@@ -940,14 +940,14 @@ def test_multiple_ops_combined_in_one_payload():
     assert payload["fields"]["notes"] == "x"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 .venv/bin/pytest tests/unit/test_catdv_payload.py -v
 ```
 Expected: FAIL — `ModuleNotFoundError`.
 
-- [ ] **Step 3: Implement `payload.py`**
+- [x] **Step 3: Implement `payload.py`**
 
 Create `backend/app/archive/providers/catdv/payload.py`:
 
@@ -1051,14 +1051,14 @@ def _existing_text(current: dict[str, Any], identifier: str) -> str | None:
     return v if isinstance(v, str) else None
 ```
 
-- [ ] **Step 4: Run tests, verify pass**
+- [x] **Step 4: Run tests, verify pass**
 
 ```bash
 .venv/bin/pytest tests/unit/test_catdv_payload.py -v
 ```
 Expected: 8 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/archive/providers/catdv/payload.py tests/unit/test_catdv_payload.py
