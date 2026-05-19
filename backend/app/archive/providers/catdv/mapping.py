@@ -5,6 +5,7 @@ from typing import Any
 
 from backend.app.archive.model import (
     CanonicalClip,
+    FieldDef,
     FieldValue,
     Marker,
     MediaRef,
@@ -104,3 +105,43 @@ def _timecode_to_catdv(tc: Timecode, default_fps: float) -> dict[str, Any]:
     frm = tc.frm if tc.frm is not None else round(secs * fps)
     txt = tc.txt if tc.txt is not None else secs_to_smpte(secs, fps)
     return {"frm": frm, "fmt": float(fps), "secs": secs, "txt": txt}
+
+
+_CATDV_TYPE_MAP: dict[str, str] = {
+    "TEXT": "text",
+    "STRING": "text",
+    "INTEGER": "integer",
+    "INT": "integer",
+    "DECIMAL": "decimal",
+    "FLOAT": "decimal",
+    "DATE": "date",
+    "PICKLIST": "picklist",
+    "MULTI_PICKLIST": "multi-picklist",
+    "BOOLEAN": "bool",
+    "BOOL": "bool",
+}
+
+
+def field_def_from_catdv(raw: dict[str, Any]) -> FieldDef:
+    identifier = str(raw.get("identifier") or raw.get("id") or raw.get("name") or "")
+    name = str(raw.get("name") or identifier)
+    raw_type = str(raw.get("type") or "TEXT").upper()
+    is_multi_raw = raw.get("multi") or raw.get("isMulti") or False
+    mapped_type = _CATDV_TYPE_MAP.get(raw_type, "text")
+    if mapped_type == "picklist" and bool(is_multi_raw):
+        mapped_type = "multi-picklist"
+    pv = raw.get("picklistValues") or raw.get("values") or None
+    pv_tuple: tuple[str, ...] | None
+    if isinstance(pv, list):
+        pv_tuple = tuple(str(v) for v in pv)
+    else:
+        pv_tuple = None
+    return FieldDef(
+        identifier=identifier,
+        name=name,
+        type=mapped_type,  # type: ignore[arg-type]
+        is_multi=bool(is_multi_raw) or mapped_type == "multi-picklist",
+        is_editable=bool(raw.get("editable", True)),
+        picklist_values=pv_tuple,
+        provider_data=raw,
+    )

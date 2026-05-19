@@ -26,6 +26,7 @@ class FakeCatdv:
         self.force_auth_until: float = 0.0
         self.put_log: list[tuple[int, dict]] = []
         self.logout_count: int = 0
+        self.field_defs: list[dict] = []
         self._register_routes()
 
     def _envelope(self, status: str, data=None, msg: str | None = None) -> dict:
@@ -48,6 +49,12 @@ class FakeCatdv:
         async def logout(request: Request):
             self.logout_count += 1
             return self._envelope("OK")
+
+        @self.app.get("/catdv/api/9/fields")
+        async def list_fields(request: Request):
+            if request.cookies.get("JSESSIONID") != "fake-session":
+                return self._envelope("AUTH")
+            return self._envelope("OK", data={"fields": self.field_defs})
 
         @self.app.get("/catdv/api/9/clips/{clip_id}")
         async def get_clip(clip_id: int, request: Request):
