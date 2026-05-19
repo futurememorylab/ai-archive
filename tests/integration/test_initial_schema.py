@@ -26,6 +26,7 @@ EXPECTED_TABLES = {
     "connection_events",
     "workspaces",
     "workspace_clips",
+    "cache_actions_log",
 }
 
 
