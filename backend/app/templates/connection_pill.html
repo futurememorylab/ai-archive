@@ -1,0 +1,32 @@
+{# Connection pill (top-right). HTMX polls /ui/connection-pill every 5s.
+   Clicking expands the menu (handled by the parent HTMX target). #}
+<div id="connection-pill"
+     class="connection-pill state-{{ state }}"
+     hx-get="/ui/connection-pill"
+     hx-trigger="every 5s"
+     hx-swap="outerHTML">
+  {% if state == "online" %}
+    <span class="dot">●</span> online
+  {% elif state == "degraded" %}
+    <span class="dot">◐</span> degraded
+  {% elif state == "offline" %}
+    <span class="dot">○</span> offline
+  {% else %}
+    <span class="dot">↻</span> syncing
+  {% endif %}
+
+  <div class="menu">
+    {% if state == "offline" %}
+      <button hx-post="/api/connection/online"
+              hx-target="#connection-pill"
+              hx-swap="outerHTML">Work online</button>
+    {% else %}
+      <button hx-post="/api/connection/offline"
+              hx-target="#connection-pill"
+              hx-swap="outerHTML">Work offline</button>
+    {% endif %}
+    <button hx-post="/api/sync/run"
+            hx-target="#sync-drawer"
+            hx-swap="outerHTML">Sync now ({{ pending_count }})</button>
+  </div>
+</div>

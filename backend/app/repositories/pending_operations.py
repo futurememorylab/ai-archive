@@ -249,3 +249,98 @@ class PendingOperationsRepo:
         )
         await conn.commit()
         return cur.rowcount or 0
+
+    async def delete(self, conn: aiosqlite.Connection, op_id: int) -> int:
+        """Discard a pending_operations row outright.
+
+        Sync drawer "discard" action: the user gives up on this write.
+        The originating `review_items.applied_at` is intentionally left
+        as-is — re-applying the same items would no-op via the WriteQueue
+        dedup.
+        """
+        cur = await conn.execute(
+            "DELETE FROM pending_operations WHERE id = ?", (op_id,)
+        )
+        await conn.commit()
+        return cur.rowcount or 0
+
+    async def reset_for_retry(
+        self, conn: aiosqlite.Connection, op_id: int
+    ) -> int:
+        """Reset a row back to a fresh `pending` state for the sync drawer.
+
+        Zeros attempts, clears last_error and attempted_at, regardless of
+        the current status (including conflict / failed). Returns the
+        number of rows updated (0 or 1).
+        """
+        cur = await conn.execute(
+            """
+            UPDATE pending_operations
+               SET status = 'pending', attempts = 0,
+                   last_error = NULL, attempted_at = NULL
+             WHERE id = ?
+            """,
+            (op_id,),
+        )
+        await conn.commit()
+        return cur.rowcount or 0
+
+    async def count_pending_by_clip(
+        self,
+        conn: aiosqlite.Connection,
+        *,
+        provider_id: str,
+    ) -> dict[str, dict[str, int]]:
+        """Per-clip queued / conflict counts for the badge.
+
+        Returns `{provider_clip_id: {"pending": N, "conflict": M}}`. Only
+        clips with at least one non-terminal row appear.
+        """
+        cur = await conn.execute(
+            """
+            SELECT provider_clip_id, status, COUNT(*)
+              FROM pending_operations
+             WHERE provider_id = ?
+               AND status IN ('pending', 'in_flight', 'conflict')
+             GROUP BY provider_clip_id, status
+            """,
+            (provider_id,),
+        )
+        out: dict[str, dict[str, int]] = {}
+        for clip_id, status, n in await cur.fetchall():
+            bucket = out.setdefault(clip_id, {"pending": 0, "conflict": 0})
+            if status == "conflict":
+                bucket["conflict"] += n
+            else:  # pending + in_flight both count as "queued"
+                bucket["pending"] += n
+        return out
+
+    async def list_with_clip_names(
+        self,
+        conn: aiosqlite.Connection,
+        *,
+        statuses: tuple[str, ...] = ("pending", "in_flight", "conflict", "failed"),
+    ) -> list[dict[str, Any]]:
+        """Sync drawer rows: pending_operations joined with clip name."""
+        placeholders = ",".join("?" for _ in statuses)
+        cur = await conn.execute(
+            f"""
+            SELECT po.id, po.provider_id, po.provider_clip_id, po.op_kind,
+                   po.status, po.attempts, po.last_error,
+                   po.enqueued_at, po.attempted_at, po.applied_at,
+                   cc.name
+              FROM pending_operations po
+              LEFT JOIN clip_cache cc
+                ON cc.provider_id = po.provider_id
+               AND cc.provider_clip_id = po.provider_clip_id
+             WHERE po.status IN ({placeholders})
+             ORDER BY po.enqueued_at, po.id
+            """,
+            statuses,
+        )
+        cols = (
+            "id", "provider_id", "provider_clip_id", "op_kind", "status",
+            "attempts", "last_error", "enqueued_at", "attempted_at",
+            "applied_at", "clip_name",
+        )
+        return [dict(zip(cols, r, strict=True)) for r in await cur.fetchall()]

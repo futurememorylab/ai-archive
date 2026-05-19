@@ -81,3 +81,15 @@ app.include_router(events_router)
 from backend.app.routes.connection import router as connection_router
 
 app.include_router(connection_router)
+
+from backend.app.routes.workspaces import router as workspaces_router  # noqa: E402
+
+app.include_router(workspaces_router)
+
+from backend.app.routes.sync import router as sync_router  # noqa: E402
+
+app.include_router(sync_router)
+
+from backend.app.routes.ui import router as ui_router  # noqa: E402
+
+app.include_router(ui_router)

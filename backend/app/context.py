@@ -20,10 +20,12 @@ from backend.app.repositories.pending_operations import PendingOperationsRepo
 from backend.app.repositories.proxy_cache import ProxyCacheRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.templates import TemplatesRepo
+from backend.app.repositories.workspaces import WorkspacesRepo
 from backend.app.repositories.write_log import WriteLogRepo
 from backend.app.services.connection_monitor import ConnectionMonitor
 from backend.app.services.events import EventBus
 from backend.app.services.sync_engine import SyncEngine
+from backend.app.services.workspace_manager import WorkspaceManager
 from backend.app.services.write_queue import WriteQueue
 from backend.app.settings import Settings
 
@@ -46,6 +48,7 @@ class AppContext:
     clip_cache_repo: ClipCacheRepo = field(default_factory=ClipCacheRepo)
     field_def_cache_repo: FieldDefCacheRepo = field(default_factory=FieldDefCacheRepo)
     pending_ops_repo: PendingOperationsRepo = field(default_factory=PendingOperationsRepo)
+    workspaces_repo: WorkspacesRepo = field(default_factory=WorkspacesRepo)
     event_bus: EventBus = field(default_factory=EventBus)
 
     _running_jobs: dict[int, "object"] = field(default_factory=dict)
@@ -59,6 +62,7 @@ class AppContext:
     write_queue: WriteQueue | None = None
     sync_engine: SyncEngine | None = None
     connection_monitor: ConnectionMonitor | None = None
+    workspace_manager: WorkspaceManager | None = None
 
     @classmethod
     async def build(cls, settings: Settings, *, init_external: bool = True) -> "AppContext":
@@ -138,6 +142,12 @@ class AppContext:
                 tick_interval_s=float(settings.sync_tick_interval_s),
                 retry_base_s=float(settings.sync_retry_base_s),
                 retry_max_s=float(settings.sync_retry_max_s),
+            )
+            ctx.workspace_manager = WorkspaceManager(
+                workspaces_repo=ctx.workspaces_repo,
+                provider=ctx.archive,
+                proxy_resolver=ctx.proxy_resolver,
+                db_provider=lambda c=ctx: c.db,
             )
         return ctx
 

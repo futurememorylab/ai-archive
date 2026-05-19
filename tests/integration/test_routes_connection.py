@@ -29,3 +29,36 @@ def test_get_connection_state_returns_default_when_external_disabled(monkeypatch
         r = client.get("/api/connection/state")
     assert r.status_code == 200
     assert r.json()["state"] in {"online", "offline", "degraded", "syncing"}
+
+
+def test_post_offline_then_online_toggles_via_manager(monkeypatch, tmp_path):
+    # With init_external=False the monitor is None; the routes return the
+    # static default. To exercise the toggle we install a real monitor
+    # manually after app boot.
+    from backend.app.services.connection_monitor import ConnectionMonitor
+
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+
+        class FakeProvider:
+            async def health(self):
+                return None
+
+        ctx.connection_monitor = ConnectionMonitor(
+            provider=FakeProvider(),
+            db_provider=lambda: ctx.db,
+            interval_s=99999.0,
+            event_bus=ctx.event_bus,
+        )
+
+        r = client.post("/api/connection/offline")
+        assert r.status_code == 200
+        assert r.json()["state"] == "offline"
+
+        r = client.get("/api/connection/state")
+        assert r.json()["state"] == "offline"
+
+        r = client.post("/api/connection/online")
+        assert r.status_code == 200
+        assert r.json()["state"] == "online"
