@@ -1,4 +1,3 @@
-import hashlib
 import json
 import logging
 import mimetypes
@@ -7,9 +6,9 @@ from typing import Any
 
 import aiosqlite
 
+from backend.app.archive.ai_store import AIInputStore
 from backend.app.models.annotation import Annotation
 from backend.app.repositories.annotations import AnnotationsRepo
-from backend.app.repositories.gcs_files import GcsFilesRepo
 from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.templates import TemplatesRepo
@@ -23,12 +22,11 @@ async def run_job(
     *,
     db: aiosqlite.Connection,
     job_id: int,
-    catdv,
+    archive,
     proxy_resolver,
-    gcs,
+    ai_store: AIInputStore,
     gemini,
     event_bus: EventBus,
-    gcs_files_repo: GcsFilesRepo,
     annotations_repo: AnnotationsRepo,
     review_items_repo: ReviewItemsRepo,
     jobs_repo: JobsRepo,
@@ -56,11 +54,10 @@ async def run_job(
                 db=db,
                 item=item,
                 template=template,
-                catdv=catdv,
+                archive=archive,
                 proxy_resolver=proxy_resolver,
-                gcs=gcs,
+                ai_store=ai_store,
                 gemini=gemini,
-                gcs_files_repo=gcs_files_repo,
                 annotations_repo=annotations_repo,
                 review_items_repo=review_items_repo,
                 jobs_repo=jobs_repo,
@@ -93,11 +90,10 @@ async def _process_item(
     db,
     item,
     template,
-    catdv,
+    archive,
     proxy_resolver,
-    gcs,
+    ai_store,
     gemini,
-    gcs_files_repo,
     annotations_repo,
     review_items_repo,
     jobs_repo,
@@ -111,35 +107,18 @@ async def _process_item(
     await jobs_repo.update_item_status(db, item.id, "uploading")
     await event_bus.publish(topic, {"item_id": item.id, "status": "uploading"})
 
-    sha = _sha256(local_path)
-    existing = await gcs_files_repo.get(db, item.catdv_clip_id)
-    if existing and existing["sha256"] == sha:
-        gcs_uri = existing["gcs_uri"]
-        await gcs_files_repo.touch(db, item.catdv_clip_id)
-    else:
-        mime = mimetypes.guess_type(str(local_path))[0] or "video/quicktime"
-        gcs_uri = gcs.upload_if_absent(
-            clip_id=item.catdv_clip_id,
-            local_path=local_path,
-            mime=mime,
-        )
-        await gcs_files_repo.upsert(
-            db,
-            clip_id=item.catdv_clip_id,
-            gcs_uri=gcs_uri,
-            mime_type=mime,
-            size_bytes=local_path.stat().st_size,
-            sha256=sha,
-        )
+    mime = mimetypes.guess_type(str(local_path))[0] or "video/quicktime"
+    clip_key = ("catdv", str(item.catdv_clip_id))
+    upload = await ai_store.ensure_uploaded(clip_key, local_path, mime)
+    file_ref = await ai_store.reference_for_gemini(upload)
 
-    clip_snapshot: dict[str, Any] = await catdv.get_clip(item.catdv_clip_id)
+    canonical = await archive.get_clip(str(item.catdv_clip_id))
+    clip_snapshot: dict[str, Any] = dict(canonical.provider_data)
 
     await jobs_repo.update_item_status(db, item.id, "prompting")
     await event_bus.publish(topic, {"item_id": item.id, "status": "prompting"})
-    mime = mimetypes.guess_type(str(local_path))[0] or "video/quicktime"
     result = gemini.annotate(
-        gcs_uri=gcs_uri,
-        mime=mime,
+        file_ref=file_ref,
         prompt=template.prompt,
         schema=template.output_schema,
         model=template.model,
@@ -181,11 +160,3 @@ async def _process_item(
     await event_bus.publish(
         topic, {"item_id": item.id, "status": "review_ready", "annotation_id": annotation_id}
     )
-
-
-def _sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()

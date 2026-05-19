@@ -1,0 +1,1 @@
+"""AI input store adapters."""

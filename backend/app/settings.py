@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     google_application_credentials: Path | None = None
     gemini_model: str = "gemini-2.5-pro"
 
+    archive_provider: str = "catdv"
+    ai_input_store: str = "gcs"
+    clip_cache_ttl_hours: int = 168
+
     @model_validator(mode="after")
     def _validate_proxy(self) -> "Settings":
         fs_root_empty = self.proxy_fs_root is None or str(self.proxy_fs_root) in ("", ".")

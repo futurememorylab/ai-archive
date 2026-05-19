@@ -15,3 +15,52 @@ The UI is forms + one video screen; React is overkill.
 
 **Why:** One language top to bottom, no npm/Node, no build step beyond Tailwind
 CLI, smaller cognitive surface for future single-maintainer work.
+
+## 2026-05-19: AIInputStore port distinct from ArchiveProvider
+
+**Context:** Vertex AI Gemini needs media bytes available at a URI it can
+read (today: GCS). The same clip's bytes can live on a CatDV server
+(archive), on the annotator host's disk (proxy cache), and in a GCS bucket
+(AI input). Conflating "where the archive is" and "where Gemini reads from"
+would force a CatDV install and a filesystem-archive install to share the
+same upload code, and would make adding the Gemini Files API a rewrite of
+the annotator rather than a new adapter.
+
+**Alternatives:** Merge AI upload into ArchiveProvider; rename
+`GcsService` to a more abstract `MediaCdn` without a Protocol.
+
+**Choice:** Introduce `AIInputStore` Protocol parallel to `ArchiveProvider`,
+with adapter packages under `backend/app/archive/ai_stores/`. The GCS
+adapter ships today; a Gemini Files API stub proves the Protocol shape.
+
+**Why:** Two ports with one responsibility each beats one port with two
+responsibilities. Switching the AI store is one adapter swap; switching
+the archive is another; neither cascades into the worker.
+
+## 2026-05-19: PR 3 — single migration file, clip TTL keyed off CanonicalClip.fetched_at
+
+**Context:** PR 3 adds `provider_id`/`provider_clip_id` to six clip-keyed
+tables and creates two new mirror tables (`clip_cache`, `field_def_cache`).
+Two design calls had to be made: (a) whether to split into two migration
+files (one for ALTER TABLEs, one for new tables) or keep them together; and
+(b) whose "now" wins when stamping `clip_cache.fetched_at` — the repo's
+own `datetime.now()` at write time, or the `CanonicalClip.fetched_at` the
+adapter computed via its injected clock.
+
+**Alternatives:** (a) Split migrations 0003 (provider columns) and 0004
+(cache tables); use the repo's own clock for `fetched_at`. (b) Use the
+adapter's clock end-to-end so tests can advance time deterministically.
+
+**Choice:** (a) Single file `0003_provider_id_and_caches.sql` — the changes
+are conceptually one ("provider-aware identity") and the rollback boundary
+should stay tight. (b) The repo writes `clip.fetched_at` (already computed
+by the adapter from its own clock) into the row, rather than calling
+`datetime.now()` again. Field-def cache uses `replace_all_for_provider`
+with `_now_iso()` internally because there is no per-row "fetched_at" on
+the canonical `FieldDef`; tests of TTL expiry there would need a different
+fixture.
+
+**Why:** Two migrations doubled the test surface without buying anything.
+Using the adapter's clock for `clip_cache.fetched_at` makes TTL expiry
+testable with an injected clock — important for the offline-mode work in
+later PRs where time-based behaviour must be deterministically exercised.

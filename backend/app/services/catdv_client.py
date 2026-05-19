@@ -157,6 +157,17 @@ class CatdvClient:
         env = await self._call_json("GET", f"/catdv/api/9/clips/{clip_id}")
         return env.data
 
+    async def list_fields(self) -> list[dict[str, Any]]:
+        env = await self._call_json("GET", "/catdv/api/9/fields")
+        data = env.data
+        if isinstance(data, dict):
+            items = data.get("fields") or []
+        elif isinstance(data, list):
+            items = data
+        else:
+            items = []
+        return list(items)
+
 
 def _is_auth_envelope(resp: "httpx.Response") -> bool:
     """Detect CatDV's 'HTTP 200 + AUTH envelope' anti-pattern on the media endpoint.
