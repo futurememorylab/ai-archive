@@ -2090,7 +2090,7 @@ git commit -m "chore(archive): remove old services/payload_builder; superseded b
 
 This task verifies the app boots and the read-only CatDV routes work end-to-end after the refactor. The user runs this; no code change.
 
-- [ ] **Step 1: Bring up the dev server**
+- [SKIPPED] **Step 1: Bring up the dev server**
 
 ```bash
 ./run.sh
@@ -2098,7 +2098,7 @@ This task verifies the app boots and the read-only CatDV routes work end-to-end 
 
 Expected: server starts at `localhost:8765`, no traceback referring to `payload_builder` or `ctx.catdv`.
 
-- [ ] **Step 2: Sanity-check endpoints**
+- [SKIPPED] **Step 2: Sanity-check endpoints**
 
 In a second shell:
 
@@ -2111,11 +2111,11 @@ Expected: `{"status":"ok"}`, then a JSON list/page of clips (assuming VPN up and
 
 If the second curl returns a 503 "archive provider not initialized" — that means `init_external` didn't fire; check `.env`.
 
-- [ ] **Step 3: Tear down**
+- [SKIPPED] **Step 3: Tear down**
 
 Ctrl-C the server.
 
-- [ ] **Step 4: Commit nothing**
+- [SKIPPED] **Step 4: Commit nothing**
 
 This step is verification only. No commit.
 
