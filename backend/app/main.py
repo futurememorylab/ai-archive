@@ -77,3 +77,7 @@ app.include_router(media_router)
 from backend.app.routes.events import router as events_router
 
 app.include_router(events_router)
+
+from backend.app.routes.connection import router as connection_router
+
+app.include_router(connection_router)
