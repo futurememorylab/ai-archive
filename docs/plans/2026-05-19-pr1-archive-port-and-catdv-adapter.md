@@ -67,7 +67,7 @@
 - Create: `backend/app/archive/model.py`
 - Test: `tests/unit/test_archive_model.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_archive_model.py`:
 
@@ -160,7 +160,7 @@ def test_field_value_defaults_to_single_value():
     assert fv.is_multi is False
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run:
 ```bash
@@ -168,7 +168,7 @@ Run:
 ```
 Expected: FAIL — `ModuleNotFoundError: No module named 'backend.app.archive'`.
 
-- [ ] **Step 3: Create empty package**
+- [x] **Step 3: Create empty package**
 
 Create `backend/app/archive/__init__.py` with one line:
 
@@ -176,7 +176,7 @@ Create `backend/app/archive/__init__.py` with one line:
 """Archive abstraction: providers, canonical model, write path."""
 ```
 
-- [ ] **Step 4: Implement `model.py`**
+- [x] **Step 4: Implement `model.py`**
 
 Create `backend/app/archive/model.py`:
 
@@ -313,7 +313,7 @@ class ClipPage:
             object.__setattr__(self, "items", tuple(self.items))
 ```
 
-- [ ] **Step 5: Update `__init__.py` to re-export**
+- [x] **Step 5: Update `__init__.py` to re-export**
 
 Replace `backend/app/archive/__init__.py` contents:
 
@@ -361,7 +361,7 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 6: Run tests, verify pass**
+- [x] **Step 6: Run tests, verify pass**
 
 Run:
 ```bash
@@ -369,7 +369,7 @@ Run:
 ```
 Expected: 7 passed.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/app/archive/__init__.py backend/app/archive/model.py tests/unit/test_archive_model.py
@@ -385,7 +385,7 @@ git commit -m "feat(archive): canonical domain model (Clip, Marker, ChangeSet)"
 - Create: `backend/app/archive/provider.py`
 - Test: `tests/unit/test_archive_protocol.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_archive_protocol.py`:
 
@@ -437,14 +437,14 @@ def test_archive_provider_is_a_protocol():
     assert expected.issubset(set(dir(ArchiveProvider)))
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 .venv/bin/pytest tests/unit/test_archive_protocol.py -v
 ```
 Expected: FAIL — `ModuleNotFoundError`.
 
-- [ ] **Step 3: Implement `errors.py`**
+- [x] **Step 3: Implement `errors.py`**
 
 Create `backend/app/archive/errors.py`:
 
@@ -469,7 +469,7 @@ class FatalProviderError(ProviderError):
     """Non-retryable failure that requires operator attention."""
 ```
 
-- [ ] **Step 4: Implement `provider.py`**
+- [x] **Step 4: Implement `provider.py`**
 
 Create `backend/app/archive/provider.py`:
 
@@ -510,14 +510,14 @@ class ArchiveProvider(Protocol):
     async def apply_changes(self, change_set: ChangeSet) -> WriteResult: ...
 ```
 
-- [ ] **Step 5: Run tests, verify pass**
+- [x] **Step 5: Run tests, verify pass**
 
 ```bash
 .venv/bin/pytest tests/unit/test_archive_protocol.py -v
 ```
 Expected: 3 passed.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/archive/errors.py backend/app/archive/provider.py tests/unit/test_archive_protocol.py
@@ -533,7 +533,7 @@ git commit -m "feat(archive): ArchiveProvider Protocol + error hierarchy"
 
 This fixture is small enough to embed inline — it captures the shape that `from_catdv_clip` must round-trip.
 
-- [ ] **Step 1: Create the fixture**
+- [x] **Step 1: Create the fixture**
 
 Create `tests/fixtures/catdv_clip_sample.json`:
 
@@ -573,7 +573,7 @@ Create `tests/fixtures/catdv_clip_sample.json`:
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add tests/fixtures/catdv_clip_sample.json
@@ -590,7 +590,7 @@ git commit -m "test(archive): record CatDV clip sample fixture"
 - Create: `backend/app/archive/providers/catdv/mapping.py`
 - Test: `tests/unit/test_catdv_mapping.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_catdv_mapping.py`:
 
@@ -675,14 +675,14 @@ def test_marker_to_catdv_expands_partial_timecode():
     assert raw["out"]["frm"] == 150
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 .venv/bin/pytest tests/unit/test_catdv_mapping.py -v
 ```
 Expected: FAIL — `ModuleNotFoundError`.
 
-- [ ] **Step 3: Create empty provider packages**
+- [x] **Step 3: Create empty provider packages**
 
 Create `backend/app/archive/providers/__init__.py`:
 
@@ -696,7 +696,7 @@ Create `backend/app/archive/providers/catdv/__init__.py`:
 """CatDV archive provider."""
 ```
 
-- [ ] **Step 4: Implement `mapping.py`**
+- [x] **Step 4: Implement `mapping.py`**
 
 Create `backend/app/archive/providers/catdv/mapping.py`:
 
@@ -809,14 +809,14 @@ def _timecode_to_catdv(tc: Timecode, default_fps: float) -> dict[str, Any]:
     return {"frm": frm, "fmt": float(fps), "secs": secs, "txt": txt}
 ```
 
-- [ ] **Step 5: Run tests, verify pass**
+- [x] **Step 5: Run tests, verify pass**
 
 ```bash
 .venv/bin/pytest tests/unit/test_catdv_mapping.py -v
 ```
 Expected: 7 passed.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/archive/providers tests/unit/test_catdv_mapping.py
@@ -832,7 +832,7 @@ git commit -m "feat(archive/catdv): CanonicalClip <-> CatDV JSON mapping"
 - Create: `tests/unit/test_catdv_payload.py`
 - (Will delete `backend/app/services/payload_builder.py` and `tests/unit/test_payload_builder.py` in Task 11 once callers migrate.)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_catdv_payload.py`:
 
@@ -940,14 +940,14 @@ def test_multiple_ops_combined_in_one_payload():
     assert payload["fields"]["notes"] == "x"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 .venv/bin/pytest tests/unit/test_catdv_payload.py -v
 ```
 Expected: FAIL — `ModuleNotFoundError`.
 
-- [ ] **Step 3: Implement `payload.py`**
+- [x] **Step 3: Implement `payload.py`**
 
 Create `backend/app/archive/providers/catdv/payload.py`:
 
@@ -1051,14 +1051,14 @@ def _existing_text(current: dict[str, Any], identifier: str) -> str | None:
     return v if isinstance(v, str) else None
 ```
 
-- [ ] **Step 4: Run tests, verify pass**
+- [x] **Step 4: Run tests, verify pass**
 
 ```bash
 .venv/bin/pytest tests/unit/test_catdv_payload.py -v
 ```
 Expected: 8 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/archive/providers/catdv/payload.py tests/unit/test_catdv_payload.py
@@ -1073,7 +1073,7 @@ git commit -m "feat(archive/catdv): build_put_payload from ChangeOps"
 - Create: `backend/app/archive/providers/catdv/adapter.py`
 - Test: `tests/integration/test_catdv_adapter.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/integration/test_catdv_adapter.py`:
 
@@ -1139,14 +1139,14 @@ async def test_adapter_capabilities_reflect_catdv():
         assert "bigNotes" in caps.supports_notes
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 .venv/bin/pytest tests/integration/test_catdv_adapter.py -v
 ```
 Expected: FAIL — `ModuleNotFoundError`.
 
-- [ ] **Step 3: Implement `adapter.py` (partial — list + get only)**
+- [x] **Step 3: Implement `adapter.py` (partial — list + get only)**
 
 Create `backend/app/archive/providers/catdv/adapter.py`:
 
@@ -1232,14 +1232,14 @@ class CatdvArchiveAdapter:
         raise NotImplementedError  # implemented in Task 7
 ```
 
-- [ ] **Step 4: Run tests, verify pass**
+- [x] **Step 4: Run tests, verify pass**
 
 ```bash
 .venv/bin/pytest tests/integration/test_catdv_adapter.py -v
 ```
 Expected: 3 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/archive/providers/catdv/adapter.py tests/integration/test_catdv_adapter.py
@@ -1254,7 +1254,7 @@ git commit -m "feat(archive/catdv): adapter list_clips + get_clip + capabilities
 - Modify: `backend/app/archive/providers/catdv/adapter.py`
 - Modify: `tests/integration/test_catdv_adapter.py`
 
-- [ ] **Step 1: Add failing tests**
+- [x] **Step 1: Add failing tests**
 
 Append to `tests/integration/test_catdv_adapter.py`:
 
@@ -1325,14 +1325,14 @@ Add to the test file's imports:
 from backend.app.archive.errors import FatalProviderError
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 ```bash
 .venv/bin/pytest tests/integration/test_catdv_adapter.py -v
 ```
 Expected: 3 new tests FAIL with `NotImplementedError` (or `FatalProviderError` not raised).
 
-- [ ] **Step 3: Implement `apply_changes` in adapter**
+- [x] **Step 3: Implement `apply_changes` in adapter**
 
 In `backend/app/archive/providers/catdv/adapter.py`, replace the `apply_changes` stub with:
 
@@ -1370,14 +1370,14 @@ In `backend/app/archive/providers/catdv/adapter.py`, replace the `apply_changes`
         return WriteResult(status="ok", upstream_response=response)
 ```
 
-- [ ] **Step 4: Run all adapter tests, verify pass**
+- [x] **Step 4: Run all adapter tests, verify pass**
 
 ```bash
 .venv/bin/pytest tests/integration/test_catdv_adapter.py -v
 ```
 Expected: 6 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/archive/providers/catdv/adapter.py tests/integration/test_catdv_adapter.py
@@ -1393,11 +1393,11 @@ git commit -m "feat(archive/catdv): adapter.apply_changes wraps get+merge+PUT"
 - Modify: `backend/app/settings.py`
 - Test: `tests/unit/test_archive_registry.py`
 
-- [ ] **Step 1: Inspect current settings**
+- [x] **Step 1: Inspect current settings**
 
 Read `backend/app/settings.py` (don't modify yet) — confirm it's a `pydantic-settings` `BaseSettings` subclass.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `tests/unit/test_archive_registry.py`:
 
@@ -1436,14 +1436,14 @@ def test_build_raises_when_catdv_client_missing_for_catdv():
         build_archive_provider(S(), catdv_client=None)
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 ```bash
 .venv/bin/pytest tests/unit/test_archive_registry.py -v
 ```
 Expected: FAIL — `ModuleNotFoundError`.
 
-- [ ] **Step 4: Implement `registry.py`**
+- [x] **Step 4: Implement `registry.py`**
 
 Create `backend/app/archive/registry.py`:
 
@@ -1470,7 +1470,7 @@ def build_archive_provider(settings: Any, *, catdv_client: Any) -> ArchiveProvid
     raise ValueError(f"unknown archive_provider: {name!r}")
 ```
 
-- [ ] **Step 5: Add `archive_provider` to Settings**
+- [x] **Step 5: Add `archive_provider` to Settings**
 
 In `backend/app/settings.py`, add a field. Find the existing `class Settings(BaseSettings):` block and add:
 
@@ -1480,14 +1480,14 @@ In `backend/app/settings.py`, add a field. Find the existing `class Settings(Bas
 
 (Use `str` rather than `Literal["catdv"]` so future PRs can add values without breaking validation right away.)
 
-- [ ] **Step 6: Run all unit tests, verify pass**
+- [x] **Step 6: Run all unit tests, verify pass**
 
 ```bash
 .venv/bin/pytest tests/unit -v
 ```
 Expected: all green, including the new 3 registry tests.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/app/archive/registry.py backend/app/settings.py tests/unit/test_archive_registry.py
@@ -1502,7 +1502,7 @@ git commit -m "feat(archive): registry + settings.archive_provider knob"
 - Modify: `backend/app/context.py`
 - Test: extend `tests/integration/test_context.py` (or add new test)
 
-- [ ] **Step 1: Add failing test**
+- [x] **Step 1: Add failing test**
 
 Append to `tests/integration/test_context.py` (read it first to match existing style):
 
@@ -1537,14 +1537,14 @@ async def test_context_exposes_archive_provider_when_external_initialized(tmp_pa
 
 (If the existing `test_context.py` doesn't import the things this test needs, add them. Don't break existing tests.)
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 .venv/bin/pytest tests/integration/test_context.py -v
 ```
 Expected: FAIL — `ctx.archive` is `None` or missing.
 
-- [ ] **Step 3: Add `archive` field + wiring in `context.py`**
+- [x] **Step 3: Add `archive` field + wiring in `context.py`**
 
 In `backend/app/context.py`:
 
@@ -1562,21 +1562,21 @@ In `backend/app/context.py`:
    ctx.archive = build_archive_provider(settings, catdv_client=ctx.catdv)
    ```
 
-- [ ] **Step 4: Run tests, verify pass**
+- [x] **Step 4: Run tests, verify pass**
 
 ```bash
 .venv/bin/pytest tests/integration/test_context.py -v
 ```
 Expected: pass.
 
-- [ ] **Step 5: Run full test suite to catch regressions**
+- [x] **Step 5: Run full test suite to catch regressions**
 
 ```bash
 .venv/bin/pytest -q
 ```
 Expected: all green.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/context.py tests/integration/test_context.py
@@ -1591,7 +1591,7 @@ git commit -m "feat(context): build and expose ctx.archive at startup"
 - Modify: `backend/app/routes/catdv.py`
 - Verify: `tests/integration/test_routes_catdv.py` still passes (and adjust if it stubbed `ctx.catdv`).
 
-- [ ] **Step 1: Read the existing route test**
+- [x] **Step 1: Read the existing route test**
 
 ```bash
 .venv/bin/pytest tests/integration/test_routes_catdv.py -v
@@ -1599,7 +1599,7 @@ git commit -m "feat(context): build and expose ctx.archive at startup"
 
 Run before changing anything; confirm baseline pass count.
 
-- [ ] **Step 2: Modify `routes/catdv.py`**
+- [x] **Step 2: Modify `routes/catdv.py`**
 
 Replace the file contents with:
 
@@ -1642,7 +1642,7 @@ async def get_clip(request: Request, clip_id: int):
     return clip.provider_data
 ```
 
-- [ ] **Step 3: Run route tests, fix breakage if any**
+- [x] **Step 3: Run route tests, fix breakage if any**
 
 ```bash
 .venv/bin/pytest tests/integration/test_routes_catdv.py -v
@@ -1650,14 +1650,14 @@ async def get_clip(request: Request, clip_id: int):
 
 If a test was stubbing `ctx.catdv`, change it to stub `ctx.archive` with a small fake that implements `list_clips`/`get_clip`. The route-level response shape is unchanged.
 
-- [ ] **Step 4: Run full suite**
+- [x] **Step 4: Run full suite**
 
 ```bash
 .venv/bin/pytest -q
 ```
 Expected: all green.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/routes/catdv.py tests/integration/test_routes_catdv.py
@@ -1672,7 +1672,7 @@ git commit -m "refactor(routes/catdv): consume ArchiveProvider via ctx.archive"
 - Modify: `backend/app/routes/review.py`
 - Verify: `tests/integration/test_routes_review.py` still passes.
 
-- [ ] **Step 1: Read existing review route tests**
+- [x] **Step 1: Read existing review route tests**
 
 ```bash
 .venv/bin/pytest tests/integration/test_routes_review.py -v
@@ -1680,7 +1680,7 @@ git commit -m "refactor(routes/catdv): consume ArchiveProvider via ctx.archive"
 
 Confirm baseline; note which assertions touch `write_log` payload shape (those must stay identical).
 
-- [ ] **Step 2: Modify `routes/review.py`**
+- [x] **Step 2: Modify `routes/review.py`**
 
 Replace `apply_clip` with a version that converts `ReviewItem`s to `ChangeOp`s and calls `archive.apply_changes`:
 
@@ -1850,7 +1850,7 @@ def _note_mode(target_map: TargetMap, identifier: str) -> str:
     return "append"
 ```
 
-- [ ] **Step 3: Run review route tests; fix breakage if any**
+- [x] **Step 3: Run review route tests; fix breakage if any**
 
 ```bash
 .venv/bin/pytest tests/integration/test_routes_review.py -v
@@ -1858,14 +1858,14 @@ def _note_mode(target_map: TargetMap, identifier: str) -> str:
 
 If a test stubbed `ctx.catdv`, change it to stub `ctx.archive` with a fake that returns a `WriteResult(status="ok", upstream_response={...})`. The `write_log` payload field shape changed from "raw CatDV PUT body" to `{"ops": [...]}` — update assertions accordingly.
 
-- [ ] **Step 4: Run full suite**
+- [x] **Step 4: Run full suite**
 
 ```bash
 .venv/bin/pytest -q
 ```
 Expected: all green.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/routes/review.py tests/integration/test_routes_review.py
@@ -1881,7 +1881,7 @@ git commit -m "refactor(routes/review): apply via archive.apply_changes + Change
 - Modify: `backend/app/routes/jobs.py`
 - Modify: `tests/integration/test_annotator_worker.py`
 
-- [ ] **Step 1: Read the existing annotator + jobs test**
+- [x] **Step 1: Read the existing annotator + jobs test**
 
 ```bash
 .venv/bin/pytest tests/integration/test_annotator_worker.py tests/integration/test_routes_jobs.py -v
@@ -1889,7 +1889,7 @@ git commit -m "refactor(routes/review): apply via archive.apply_changes + Change
 
 Note the current pass count.
 
-- [ ] **Step 2: Modify `services/annotator.py`**
+- [x] **Step 2: Modify `services/annotator.py`**
 
 Change `run_job` signature: drop `catdv` param, add `archive` param.
 
@@ -1924,7 +1924,7 @@ await _process_item(
 )
 ```
 
-- [ ] **Step 3: Modify `routes/jobs.py`**
+- [x] **Step 3: Modify `routes/jobs.py`**
 
 In `_run_in_bg`:
 
@@ -1955,7 +1955,7 @@ In the readiness gate in `create_job`, replace `ctx.catdv` with `ctx.archive`:
 if body.auto_start and ctx.archive and ctx.gcs and ctx.gemini and ctx.proxy_resolver:
 ```
 
-- [ ] **Step 4: Update `tests/integration/test_annotator_worker.py`**
+- [x] **Step 4: Update `tests/integration/test_annotator_worker.py`**
 
 Replace the existing `FakeCatdv` helper class with a fake archive that returns `CanonicalClip`:
 
@@ -2017,21 +2017,21 @@ await run_job(
 )
 ```
 
-- [ ] **Step 5: Run tests, verify pass**
+- [x] **Step 5: Run tests, verify pass**
 
 ```bash
 .venv/bin/pytest tests/integration/test_annotator_worker.py tests/integration/test_routes_jobs.py -v
 ```
 Expected: all green.
 
-- [ ] **Step 6: Run full suite**
+- [x] **Step 6: Run full suite**
 
 ```bash
 .venv/bin/pytest -q
 ```
 Expected: all green.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/app/services/annotator.py backend/app/routes/jobs.py tests/integration/test_annotator_worker.py
@@ -2046,7 +2046,7 @@ git commit -m "refactor(annotator): consume CanonicalClip via archive.get_clip"
 - Delete: `backend/app/services/payload_builder.py`
 - Delete: `tests/unit/test_payload_builder.py`
 
-- [ ] **Step 1: Verify no remaining imports**
+- [x] **Step 1: Verify no remaining imports**
 
 ```bash
 grep -RIn "from backend.app.services.payload_builder" backend tests
@@ -2057,27 +2057,27 @@ Expected: no output.
 
 If anything remains, that import must be migrated to `backend.app.archive.providers.catdv.payload` (different signature) before deletion.
 
-- [ ] **Step 2: Delete the files**
+- [x] **Step 2: Delete the files**
 
 ```bash
 rm backend/app/services/payload_builder.py tests/unit/test_payload_builder.py
 ```
 
-- [ ] **Step 3: Run full suite**
+- [x] **Step 3: Run full suite**
 
 ```bash
 .venv/bin/pytest -q
 ```
 Expected: all green.
 
-- [ ] **Step 4: Run ruff**
+- [x] **Step 4: Run ruff**
 
 ```bash
 .venv/bin/ruff check backend tests
 ```
 Expected: no errors.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A backend/app/services/payload_builder.py tests/unit/test_payload_builder.py
@@ -2090,7 +2090,7 @@ git commit -m "chore(archive): remove old services/payload_builder; superseded b
 
 This task verifies the app boots and the read-only CatDV routes work end-to-end after the refactor. The user runs this; no code change.
 
-- [ ] **Step 1: Bring up the dev server**
+- [SKIPPED] **Step 1: Bring up the dev server**
 
 ```bash
 ./run.sh
@@ -2098,7 +2098,7 @@ This task verifies the app boots and the read-only CatDV routes work end-to-end 
 
 Expected: server starts at `localhost:8765`, no traceback referring to `payload_builder` or `ctx.catdv`.
 
-- [ ] **Step 2: Sanity-check endpoints**
+- [SKIPPED] **Step 2: Sanity-check endpoints**
 
 In a second shell:
 
@@ -2111,11 +2111,11 @@ Expected: `{"status":"ok"}`, then a JSON list/page of clips (assuming VPN up and
 
 If the second curl returns a 503 "archive provider not initialized" — that means `init_external` didn't fire; check `.env`.
 
-- [ ] **Step 3: Tear down**
+- [SKIPPED] **Step 3: Tear down**
 
 Ctrl-C the server.
 
-- [ ] **Step 4: Commit nothing**
+- [SKIPPED] **Step 4: Commit nothing**
 
 This step is verification only. No commit.
 

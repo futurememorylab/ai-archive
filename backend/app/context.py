@@ -5,6 +5,8 @@ from pathlib import Path
 
 import aiosqlite
 
+from backend.app.archive.provider import ArchiveProvider
+from backend.app.archive.registry import build_archive_provider
 from backend.app.db import open_db
 from backend.app.migrations_runner import apply_migrations
 from backend.app.repositories.annotations import AnnotationsRepo
@@ -38,6 +40,7 @@ class AppContext:
     _running_jobs: dict[int, "object"] = field(default_factory=dict)
 
     catdv = None
+    archive: ArchiveProvider | None = None
     gcs = None
     gemini = None
     proxy_resolver = None
@@ -64,6 +67,7 @@ class AppContext:
                 password=settings.catdv_password or "",
             )
             await ctx.catdv.__aenter__()
+            ctx.archive = build_archive_provider(settings, catdv_client=ctx.catdv)
             ctx.gcs = GcsService(settings.gcs_bucket_name)
             ctx.gemini = GeminiService(
                 project=settings.gcp_project_id,
