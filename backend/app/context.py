@@ -13,6 +13,8 @@ from backend.app.archive.ai_store import AIInputStore
 from backend.app.archive.ai_stores.registry import build_ai_input_store
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.ai_store_files import AIStoreFilesRepo
+from backend.app.repositories.clip_cache import ClipCacheRepo
+from backend.app.repositories.field_def_cache import FieldDefCacheRepo
 from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.proxy_cache import ProxyCacheRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
@@ -37,6 +39,8 @@ class AppContext:
     write_log_repo: WriteLogRepo = field(default_factory=WriteLogRepo)
     proxy_cache_repo: ProxyCacheRepo = field(default_factory=ProxyCacheRepo)
     ai_store_files_repo: AIStoreFilesRepo = field(default_factory=AIStoreFilesRepo)
+    clip_cache_repo: ClipCacheRepo = field(default_factory=ClipCacheRepo)
+    field_def_cache_repo: FieldDefCacheRepo = field(default_factory=FieldDefCacheRepo)
     event_bus: EventBus = field(default_factory=EventBus)
 
     _running_jobs: dict[int, "object"] = field(default_factory=dict)
@@ -70,7 +74,13 @@ class AppContext:
                 password=settings.catdv_password or "",
             )
             await ctx.catdv.__aenter__()
-            ctx.archive = build_archive_provider(settings, catdv_client=ctx.catdv)
+            ctx.archive = build_archive_provider(
+                settings,
+                catdv_client=ctx.catdv,
+                clip_cache_repo=ctx.clip_cache_repo,
+                field_def_cache_repo=ctx.field_def_cache_repo,
+                db_provider=lambda c=ctx: c.db,
+            )
             ctx._gcs_service = GcsService(settings.gcs_bucket_name)
             ctx.ai_store = build_ai_input_store(
                 settings,

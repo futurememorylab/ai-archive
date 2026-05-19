@@ -31,6 +31,7 @@ class Settings(BaseSettings):
 
     archive_provider: str = "catdv"
     ai_input_store: str = "gcs"
+    clip_cache_ttl_hours: int = 168
 
     @model_validator(mode="after")
     def _validate_proxy(self) -> "Settings":
