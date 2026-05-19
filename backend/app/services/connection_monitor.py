@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -23,7 +23,7 @@ class ConnectionState(StrEnum):
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class ConnectionMonitor:
@@ -42,7 +42,7 @@ class ConnectionMonitor:
         self._interval_s = interval_s
         self._timeout_s = timeout_s
         self._event_bus = event_bus
-        self._clock = clock or (lambda: datetime.now(timezone.utc))
+        self._clock = clock or (lambda: datetime.now(UTC))
         self._state: ConnectionState = ConnectionState.online
         self._manual_offline: bool = False
         self._task: asyncio.Task | None = None
@@ -77,7 +77,7 @@ class ConnectionMonitor:
         try:
             await asyncio.wait_for(self._provider.health(), timeout=self._timeout_s)
             new_state = ConnectionState.online
-        except asyncio.TimeoutError:
+        except TimeoutError:
             new_state = ConnectionState.offline
             detail = "health probe timeout"
         except Exception as exc:  # noqa: BLE001 — provider error surface
@@ -116,7 +116,7 @@ class ConnectionMonitor:
         self._stop_evt.set()
         try:
             await asyncio.wait_for(self._task, timeout=2.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._task.cancel()
         finally:
             self._task = None
@@ -131,5 +131,5 @@ class ConnectionMonitor:
                 await asyncio.wait_for(
                     self._stop_evt.wait(), timeout=self._interval_s
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass

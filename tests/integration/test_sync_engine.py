@@ -1,6 +1,5 @@
-import asyncio
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -13,10 +12,7 @@ from backend.app.archive.model import (
 )
 from backend.app.repositories.pending_operations import PendingOperationsRepo
 from backend.app.repositories.write_log import WriteLogRepo
-from backend.app.services.connection_monitor import (
-    ConnectionMonitor,
-    ConnectionState,
-)
+from backend.app.services.connection_monitor import ConnectionState
 from backend.app.services.sync_engine import SyncEngine
 
 
@@ -67,12 +63,12 @@ async def _enqueue_one(db, *, clip_id: str = "1", attempts: int = 0):
     return ids
 
 
-def _make_engine(db, *, provider, monitor=AlwaysOnlineMonitor(), **kwargs):
+def _make_engine(db, *, provider, monitor=None, **kwargs):
     return SyncEngine(
         provider=provider,
         pending_ops_repo=PendingOperationsRepo(),
         write_log_repo=WriteLogRepo(),
-        connection_monitor=monitor,
+        connection_monitor=monitor or AlwaysOnlineMonitor(),
         db_provider=lambda: db,
         **kwargs,
     )
@@ -211,7 +207,7 @@ async def test_drain_processes_when_backoff_elapsed(db):
     ids = await _enqueue_one(db)
     repo = PendingOperationsRepo()
     # stamp attempted_at far in the past
-    past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    past = (datetime.now(tz=UTC) - timedelta(hours=1)).isoformat()
     await repo.mark_retryable(db, ids, error="x", attempted_at=past)
     provider = FakeProvider()
     engine = _make_engine(

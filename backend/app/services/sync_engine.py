@@ -31,7 +31,7 @@ import json
 import logging
 from collections import OrderedDict
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import aiosqlite
@@ -53,7 +53,7 @@ log = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _parse_iso(s: str | None) -> datetime | None:
@@ -64,7 +64,7 @@ def _parse_iso(s: str | None) -> datetime | None:
     except (TypeError, ValueError):
         return None
     if ts.tzinfo is None:
-        ts = ts.replace(tzinfo=timezone.utc)
+        ts = ts.replace(tzinfo=UTC)
     return ts
 
 
@@ -115,7 +115,7 @@ class SyncEngine:
         self._notify_evt.set()
         try:
             await asyncio.wait_for(self._task, timeout=2.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._task.cancel()
         finally:
             self._task = None
@@ -136,7 +136,7 @@ class SyncEngine:
                 await asyncio.wait_for(
                     self._notify_evt.wait(), timeout=self._tick_interval_s
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
             self._notify_evt.clear()
 

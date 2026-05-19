@@ -9,7 +9,7 @@ grouping logic that previously lived in `routes/review.py`.
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import aiosqlite
@@ -41,7 +41,7 @@ class WriteQueue:
     ) -> None:
         self._pending = pending_ops_repo
         self._review_items = review_items_repo
-        self._clock = clock or (lambda: datetime.now(timezone.utc))
+        self._clock = clock or (lambda: datetime.now(UTC))
 
     async def enqueue_apply(
         self,

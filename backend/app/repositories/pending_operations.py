@@ -10,14 +10,15 @@ enqueue order (with attempts-aware backoff) and transitions them through
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-from typing import Any, Iterable
+from collections.abc import Iterable
+from datetime import UTC, datetime
+from typing import Any
 
 import aiosqlite
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 _ROW_COLS = (
@@ -39,7 +40,7 @@ _ROW_COLS = (
 
 
 def _row_to_dict(row: Iterable[Any]) -> dict[str, Any]:
-    return dict(zip(_ROW_COLS, row))
+    return dict(zip(_ROW_COLS, row, strict=False))
 
 
 class PendingOperationsRepo:
