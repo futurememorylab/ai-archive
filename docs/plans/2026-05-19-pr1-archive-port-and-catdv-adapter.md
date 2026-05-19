@@ -67,7 +67,7 @@
 - Create: `backend/app/archive/model.py`
 - Test: `tests/unit/test_archive_model.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_archive_model.py`:
 
@@ -160,7 +160,7 @@ def test_field_value_defaults_to_single_value():
     assert fv.is_multi is False
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run:
 ```bash
@@ -168,7 +168,7 @@ Run:
 ```
 Expected: FAIL — `ModuleNotFoundError: No module named 'backend.app.archive'`.
 
-- [ ] **Step 3: Create empty package**
+- [x] **Step 3: Create empty package**
 
 Create `backend/app/archive/__init__.py` with one line:
 
@@ -176,7 +176,7 @@ Create `backend/app/archive/__init__.py` with one line:
 """Archive abstraction: providers, canonical model, write path."""
 ```
 
-- [ ] **Step 4: Implement `model.py`**
+- [x] **Step 4: Implement `model.py`**
 
 Create `backend/app/archive/model.py`:
 
@@ -313,7 +313,7 @@ class ClipPage:
             object.__setattr__(self, "items", tuple(self.items))
 ```
 
-- [ ] **Step 5: Update `__init__.py` to re-export**
+- [x] **Step 5: Update `__init__.py` to re-export**
 
 Replace `backend/app/archive/__init__.py` contents:
 
@@ -361,7 +361,7 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 6: Run tests, verify pass**
+- [x] **Step 6: Run tests, verify pass**
 
 Run:
 ```bash
@@ -369,7 +369,7 @@ Run:
 ```
 Expected: 7 passed.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/app/archive/__init__.py backend/app/archive/model.py tests/unit/test_archive_model.py
