@@ -33,6 +33,15 @@ class Settings(BaseSettings):
     ai_input_store: str = "gcs"
     clip_cache_ttl_hours: int = 168
 
+    # connection monitor
+    health_probe_interval_s: int = 30
+    health_probe_timeout_s: int = 5
+
+    # sync engine
+    sync_retry_base_s: int = 2
+    sync_retry_max_s: int = 300
+    sync_tick_interval_s: int = 5
+
     @model_validator(mode="after")
     def _validate_proxy(self) -> "Settings":
         fs_root_empty = self.proxy_fs_root is None or str(self.proxy_fs_root) in ("", ".")
