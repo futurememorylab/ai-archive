@@ -1393,11 +1393,11 @@ git commit -m "feat(archive/catdv): adapter.apply_changes wraps get+merge+PUT"
 - Modify: `backend/app/settings.py`
 - Test: `tests/unit/test_archive_registry.py`
 
-- [ ] **Step 1: Inspect current settings**
+- [x] **Step 1: Inspect current settings**
 
 Read `backend/app/settings.py` (don't modify yet) — confirm it's a `pydantic-settings` `BaseSettings` subclass.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `tests/unit/test_archive_registry.py`:
 
@@ -1436,14 +1436,14 @@ def test_build_raises_when_catdv_client_missing_for_catdv():
         build_archive_provider(S(), catdv_client=None)
 ```
 
-- [ ] **Step 3: Run test to verify it fails**
+- [x] **Step 3: Run test to verify it fails**
 
 ```bash
 .venv/bin/pytest tests/unit/test_archive_registry.py -v
 ```
 Expected: FAIL — `ModuleNotFoundError`.
 
-- [ ] **Step 4: Implement `registry.py`**
+- [x] **Step 4: Implement `registry.py`**
 
 Create `backend/app/archive/registry.py`:
 
@@ -1470,7 +1470,7 @@ def build_archive_provider(settings: Any, *, catdv_client: Any) -> ArchiveProvid
     raise ValueError(f"unknown archive_provider: {name!r}")
 ```
 
-- [ ] **Step 5: Add `archive_provider` to Settings**
+- [x] **Step 5: Add `archive_provider` to Settings**
 
 In `backend/app/settings.py`, add a field. Find the existing `class Settings(BaseSettings):` block and add:
 
@@ -1480,14 +1480,14 @@ In `backend/app/settings.py`, add a field. Find the existing `class Settings(Bas
 
 (Use `str` rather than `Literal["catdv"]` so future PRs can add values without breaking validation right away.)
 
-- [ ] **Step 6: Run all unit tests, verify pass**
+- [x] **Step 6: Run all unit tests, verify pass**
 
 ```bash
 .venv/bin/pytest tests/unit -v
 ```
 Expected: all green, including the new 3 registry tests.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/app/archive/registry.py backend/app/settings.py tests/unit/test_archive_registry.py
