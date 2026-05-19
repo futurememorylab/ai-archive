@@ -1,0 +1,151 @@
+"""Sync drawer routes: list pending, run drain, retry, discard."""
+
+import importlib
+import json
+from pathlib import Path
+
+from fastapi.testclient import TestClient
+
+from backend.app.archive.change_set_json import change_op_to_json
+from backend.app.archive.model import SetField, WriteResult
+from backend.app.repositories.pending_operations import PendingOperationsRepo
+from backend.app.repositories.write_log import WriteLogRepo
+from backend.app.services.connection_monitor import ConnectionState
+from backend.app.services.sync_engine import SyncEngine
+
+
+def _setenv(monkeypatch, tmp_path):
+    monkeypatch.setenv("APP_ENV", "dev")
+    monkeypatch.setenv("CATDV_BASE_URL", "http://localhost:0")
+    monkeypatch.setenv("CATDV_USERNAME", "")
+    monkeypatch.setenv("CATDV_PASSWORD", "p")
+    monkeypatch.setenv("CATDV_CATALOG_ID", "881507")
+    monkeypatch.setenv("GCP_PROJECT_ID", "p")
+    monkeypatch.setenv("GCS_BUCKET_NAME", "b")
+    monkeypatch.setenv("PROXY_SOURCE", "rest")
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+
+
+def _make_app(monkeypatch, tmp_path):
+    _setenv(monkeypatch, tmp_path)
+    from backend.app import main as main_mod
+    importlib.reload(main_mod)
+    return main_mod.app
+
+
+def _enqueue_one(client, *, clip_id="1"):
+    """Insert a single pending op directly via the repo."""
+    ctx = client.app.state.ctx
+    repo = ctx.pending_ops_repo
+    op = SetField(identifier="x", value=1)
+    rows = [
+        {
+            "provider_id": "catdv",
+            "provider_clip_id": clip_id,
+            "op_kind": "SetField",
+            "op_json": change_op_to_json(op),
+            "origin_annotation_id": None,
+            "origin_review_item_ids": None,
+            "expected_etag": None,
+        }
+    ]
+    import asyncio
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(repo.insert_many(ctx.db, rows=rows))
+    finally:
+        loop.close()
+
+
+def test_get_pending_lists_rows(monkeypatch, tmp_path: Path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        _enqueue_one(client, clip_id="42")
+        r = client.get("/api/sync/pending")
+        assert r.status_code == 200
+        rows = r.json()
+        assert len(rows) == 1
+        assert rows[0]["op_kind"] == "SetField"
+        assert rows[0]["provider_clip_id"] == "42"
+
+
+def test_post_discard_removes_row(monkeypatch, tmp_path: Path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        [op_id] = _enqueue_one(client)
+        r = client.post(f"/api/sync/pending/{op_id}/discard")
+        assert r.status_code == 200
+        r = client.get("/api/sync/pending")
+        assert r.json() == []
+
+
+def test_post_retry_resets_row(monkeypatch, tmp_path: Path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        [op_id] = _enqueue_one(client)
+        ctx = client.app.state.ctx
+        # mark a couple of retries first
+        import asyncio
+        async def _bump():
+            await ctx.pending_ops_repo.mark_retryable(
+                ctx.db, [op_id], error="x"
+            )
+            await ctx.pending_ops_repo.mark_retryable(
+                ctx.db, [op_id], error="x"
+            )
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(_bump())
+        finally:
+            loop.close()
+        r = client.post(f"/api/sync/pending/{op_id}/retry")
+        assert r.status_code == 200
+        r = client.get("/api/sync/pending")
+        assert r.json()[0]["attempts"] == 0
+        assert r.json()[0]["last_error"] is None
+
+
+def test_run_drain_invokes_engine(monkeypatch, tmp_path: Path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        _enqueue_one(client)
+        ctx = client.app.state.ctx
+
+        class FakeArchive:
+            id = "catdv"
+            async def apply_changes(self, change_set):
+                return WriteResult(
+                    status="ok",
+                    upstream_response={"ID": 1, "modifyDate": "x"},
+                )
+
+        class AlwaysOnline:
+            def current_state(self):
+                return ConnectionState.online
+
+        ctx.archive = FakeArchive()
+        ctx.sync_engine = SyncEngine(
+            provider=ctx.archive,
+            pending_ops_repo=PendingOperationsRepo(),
+            write_log_repo=WriteLogRepo(),
+            connection_monitor=AlwaysOnline(),
+            db_provider=lambda: ctx.db,
+        )
+        r = client.post("/api/sync/run")
+        assert r.status_code == 200
+        assert r.json()["processed"] == 1
+        r = client.get("/api/sync/pending")
+        # row should now be applied (terminal status) — list_with_clip_names
+        # only returns non-applied; expect empty
+        assert r.json() == []
+
+
+def test_retry_404_when_missing(monkeypatch, tmp_path: Path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        r = client.post("/api/sync/pending/999999/retry")
+        assert r.status_code == 404
+
+
+# guard against import-unused warning
+_ = json

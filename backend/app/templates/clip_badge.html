@@ -1,0 +1,15 @@
+{# Per-clip queued/conflict badge in the CatDV list.
+
+   pending: number of pending or in_flight ops for this clip.
+   conflict: number of conflict ops.
+#}
+<span class="clip-badge"
+      data-provider-id="{{ provider_id }}"
+      data-clip-id="{{ provider_clip_id }}">
+  {% if pending > 0 %}
+    <span class="badge-queued" title="{{ pending }} queued">↑{{ pending }}</span>
+  {% endif %}
+  {% if conflict > 0 %}
+    <span class="badge-conflict" title="{{ conflict }} conflict">!</span>
+  {% endif %}
+</span>

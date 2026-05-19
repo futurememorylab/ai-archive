@@ -113,3 +113,64 @@ async def test_reset_in_flight_to_pending(db):
     assert len(rows) == 2
     for r in rows:
         assert r["attempted_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_delete_removes_row(db):
+    repo = PendingOperationsRepo()
+    [op_id] = await repo.insert_many(db, rows=[_row()])
+    n = await repo.delete(db, op_id)
+    assert n == 1
+    assert await repo.get(db, op_id) is None
+
+
+@pytest.mark.asyncio
+async def test_reset_for_retry_clears_attempts_and_error(db):
+    repo = PendingOperationsRepo()
+    [op_id] = await repo.insert_many(db, rows=[_row()])
+    await repo.mark_retryable(db, [op_id], error="boom")
+    await repo.mark_retryable(db, [op_id], error="boom2")
+    n = await repo.reset_for_retry(db, op_id)
+    assert n == 1
+    row = await repo.get(db, op_id)
+    assert row["status"] == "pending"
+    assert row["attempts"] == 0
+    assert row["last_error"] is None
+    assert row["attempted_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_count_pending_by_clip(db):
+    repo = PendingOperationsRepo()
+    a = {**_row(), "provider_clip_id": "1"}
+    b = {**_row(), "provider_clip_id": "1"}
+    c = {**_row(), "provider_clip_id": "2"}
+    ids = await repo.insert_many(db, rows=[a, b, c])
+    # mark one as conflict
+    await repo.mark_conflict(db, [ids[0]])
+    counts = await repo.count_pending_by_clip(db, provider_id="catdv")
+    assert counts["1"]["conflict"] == 1
+    assert counts["1"]["pending"] == 1
+    assert counts["2"]["pending"] == 1
+
+
+@pytest.mark.asyncio
+async def test_list_with_clip_names_joins_clip_cache(db):
+    from datetime import UTC, datetime
+    # seed a clip_cache row so we can join
+    await db.execute(
+        """
+        INSERT INTO clip_cache (provider_id, provider_clip_id, name, catalog_id,
+                                duration_secs, fps, canonical_json, fetched_at)
+        VALUES ('catdv', '1', 'Polčakovi', '1', 1.0, 25.0, '{}', ?)
+        """,
+        (datetime.now(UTC).isoformat(),),
+    )
+    await db.commit()
+
+    repo = PendingOperationsRepo()
+    await repo.insert_many(db, rows=[_row()])
+    rows = await repo.list_with_clip_names(db)
+    assert len(rows) == 1
+    assert rows[0]["clip_name"] == "Polčakovi"
+    assert rows[0]["op_kind"] == "SetField"

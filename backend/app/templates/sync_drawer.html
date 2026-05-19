@@ -1,0 +1,46 @@
+{# Sync drawer: pending_operations with retry/discard/view-conflict. #}
+<div id="sync-drawer" class="sync-drawer"
+     hx-get="/ui/sync-drawer"
+     hx-trigger="every 10s"
+     hx-swap="outerHTML">
+  <h3>Pending writes</h3>
+  {% if not rows %}
+    <p class="empty">No pending writes.</p>
+  {% else %}
+    <table class="sync-table">
+      <thead>
+        <tr>
+          <th>Clip</th><th>Op</th><th>Status</th><th>Age</th>
+          <th>Attempts</th><th>Last error</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        <tr class="row-{{ r.status }}">
+          <td>{{ r.clip_name or r.provider_clip_id }}</td>
+          <td>{{ r.op_kind }}</td>
+          <td>{{ r.status }}</td>
+          <td>{{ r.enqueued_at }}</td>
+          <td>{{ r.attempts }}</td>
+          <td class="last-error">{{ r.last_error or "" }}</td>
+          <td>
+            <button hx-post="/api/sync/pending/{{ r.id }}/retry"
+                    hx-target="#sync-drawer"
+                    hx-swap="outerHTML">Retry</button>
+            <button hx-post="/api/sync/pending/{{ r.id }}/discard"
+                    hx-confirm="Discard this write?"
+                    hx-target="#sync-drawer"
+                    hx-swap="outerHTML">Discard</button>
+            {% if r.status == "conflict" %}
+              <button class="view-conflict"
+                      data-detail="{{ r.last_error|e }}">
+                View conflict
+              </button>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+</div>

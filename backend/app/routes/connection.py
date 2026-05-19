@@ -26,6 +26,26 @@ async def get_state(request: Request) -> dict:
     return {"state": str(ctx.connection_monitor.current_state().value)}
 
 
+@router.post("/offline")
+async def set_offline(request: Request) -> dict:
+    """Manual override: pin state to offline until cleared."""
+    ctx = request.app.state.ctx
+    if getattr(ctx, "connection_monitor", None) is None:
+        return {"state": "offline"}
+    ctx.connection_monitor.set_manual_offline(True)
+    return {"state": str(ctx.connection_monitor.current_state().value)}
+
+
+@router.post("/online")
+async def set_online(request: Request) -> dict:
+    """Clear the manual-offline override; state reverts to last probe."""
+    ctx = request.app.state.ctx
+    if getattr(ctx, "connection_monitor", None) is None:
+        return {"state": "online"}
+    ctx.connection_monitor.set_manual_offline(False)
+    return {"state": str(ctx.connection_monitor.current_state().value)}
+
+
 @router.get("/events")
 async def stream_events(request: Request) -> StreamingResponse:
     ctx = request.app.state.ctx

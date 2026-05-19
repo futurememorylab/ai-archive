@@ -1,0 +1,36 @@
+{# Workspace switcher (CatDV pane header). #}
+<div id="workspace-switcher" class="workspace-switcher">
+  <label for="ws-select">Workspace:</label>
+  <select id="ws-select"
+          name="ws_id"
+          hx-get="/ui/workspace-switcher"
+          hx-trigger="change"
+          hx-target="#workspace-switcher"
+          hx-swap="outerHTML">
+    <option value="">All clips</option>
+    {% for ws in workspaces %}
+      <option value="{{ ws.id }}"
+              {% if active_ws_id == ws.id %}selected{% endif %}>
+        {{ ws.name }}
+      </option>
+    {% endfor %}
+  </select>
+  <button hx-post="/api/workspaces"
+          hx-prompt="Workspace name"
+          hx-vals='js:{name: event.detail.prompt, catalog_id: "{{ catalog_id }}"}'
+          hx-target="#workspace-switcher"
+          hx-swap="outerHTML">+ New workspace…</button>
+
+  {% if active_ws %}
+    <span class="ws-summary">
+      {{ active_ws.clips|length }} clips,
+      {% set ready = active_ws.clips | selectattr('cache_state', 'equalto', 'ready') | list | length %}
+      {{ ready }} ready
+    </span>
+    <button hx-post="/api/workspaces/{{ active_ws.id }}/prepare"
+            hx-swap="none">Prepare</button>
+    <button hx-post="/api/workspaces/{{ active_ws.id }}/release"
+            hx-target="#workspace-switcher"
+            hx-swap="outerHTML">Release</button>
+  {% endif %}
+</div>
