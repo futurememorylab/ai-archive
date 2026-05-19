@@ -1,9 +1,11 @@
 import hashlib
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
+from backend.app.archive.model import CanonicalClip, MediaRef
 from backend.app.models.template import Template
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.gcs_files import GcsFilesRepo
@@ -39,12 +41,29 @@ class FakeGcs:
         return self.gs_uri(clip_id)
 
 
-class FakeCatdv:
+class FakeArchive:
     def __init__(self, clips: dict[int, dict]):
         self.clips = clips
 
-    async def get_clip(self, clip_id: int) -> dict:
-        return self.clips[clip_id]
+    async def get_clip(self, clip_id_str: str) -> CanonicalClip:
+        clip = self.clips[int(clip_id_str)]
+        return CanonicalClip(
+            key=("catdv", clip_id_str),
+            name=clip.get("name", ""),
+            duration_secs=0.0,
+            fps=float(clip.get("fps") or 25.0),
+            markers=tuple(),
+            fields={},
+            notes={},
+            media=MediaRef(
+                mime_type="video/quicktime",
+                size_bytes=None,
+                cached_path=None,
+                upstream_handle=clip_id_str,
+            ),
+            provider_data=clip,
+            fetched_at=datetime.now(timezone.utc),
+        )
 
 
 @pytest.mark.asyncio
@@ -73,7 +92,7 @@ async def test_run_job_processes_two_clips_end_to_end(db, tmp_path):
         p.write_bytes(b"X" * 100)
         files[clip_id] = p
 
-    catdv = FakeCatdv(
+    archive = FakeArchive(
         {
             101: {"ID": 101, "name": "Clip_101", "markers": []},
             102: {"ID": 102, "name": "Clip_102", "markers": []},
@@ -103,7 +122,7 @@ async def test_run_job_processes_two_clips_end_to_end(db, tmp_path):
     await run_job(
         db=db,
         job_id=job_id,
-        catdv=catdv,
+        archive=archive,
         proxy_resolver=resolver,
         gcs=gcs,
         gemini=FakeGeminiStructured(),
@@ -149,7 +168,7 @@ async def test_run_job_marks_item_error_when_gemini_raises(db, tmp_path):
     p = tmp_path / "1.mov"
     p.write_bytes(b"x")
     resolver = FakeResolver({1: p})
-    catdv = FakeCatdv({1: {"ID": 1, "name": "c", "markers": []}})
+    archive = FakeArchive({1: {"ID": 1, "name": "c", "markers": []}})
 
     class FailingGemini:
         def annotate(self, **kwargs):
@@ -158,7 +177,7 @@ async def test_run_job_marks_item_error_when_gemini_raises(db, tmp_path):
     await run_job(
         db=db,
         job_id=job_id,
-        catdv=catdv,
+        archive=archive,
         proxy_resolver=resolver,
         gcs=FakeGcs("b"),
         gemini=FailingGemini(),

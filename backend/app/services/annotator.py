@@ -23,7 +23,7 @@ async def run_job(
     *,
     db: aiosqlite.Connection,
     job_id: int,
-    catdv,
+    archive,
     proxy_resolver,
     gcs,
     gemini,
@@ -56,7 +56,7 @@ async def run_job(
                 db=db,
                 item=item,
                 template=template,
-                catdv=catdv,
+                archive=archive,
                 proxy_resolver=proxy_resolver,
                 gcs=gcs,
                 gemini=gemini,
@@ -93,7 +93,7 @@ async def _process_item(
     db,
     item,
     template,
-    catdv,
+    archive,
     proxy_resolver,
     gcs,
     gemini,
@@ -132,7 +132,8 @@ async def _process_item(
             sha256=sha,
         )
 
-    clip_snapshot: dict[str, Any] = await catdv.get_clip(item.catdv_clip_id)
+    canonical = await archive.get_clip(str(item.catdv_clip_id))
+    clip_snapshot: dict[str, Any] = dict(canonical.provider_data)
 
     await jobs_repo.update_item_status(db, item.id, "prompting")
     await event_bus.publish(topic, {"item_id": item.id, "status": "prompting"})

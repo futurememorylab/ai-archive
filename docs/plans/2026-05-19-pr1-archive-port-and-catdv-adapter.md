@@ -1881,7 +1881,7 @@ git commit -m "refactor(routes/review): apply via archive.apply_changes + Change
 - Modify: `backend/app/routes/jobs.py`
 - Modify: `tests/integration/test_annotator_worker.py`
 
-- [ ] **Step 1: Read the existing annotator + jobs test**
+- [x] **Step 1: Read the existing annotator + jobs test**
 
 ```bash
 .venv/bin/pytest tests/integration/test_annotator_worker.py tests/integration/test_routes_jobs.py -v
@@ -1889,7 +1889,7 @@ git commit -m "refactor(routes/review): apply via archive.apply_changes + Change
 
 Note the current pass count.
 
-- [ ] **Step 2: Modify `services/annotator.py`**
+- [x] **Step 2: Modify `services/annotator.py`**
 
 Change `run_job` signature: drop `catdv` param, add `archive` param.
 
@@ -1924,7 +1924,7 @@ await _process_item(
 )
 ```
 
-- [ ] **Step 3: Modify `routes/jobs.py`**
+- [x] **Step 3: Modify `routes/jobs.py`**
 
 In `_run_in_bg`:
 
@@ -1955,7 +1955,7 @@ In the readiness gate in `create_job`, replace `ctx.catdv` with `ctx.archive`:
 if body.auto_start and ctx.archive and ctx.gcs and ctx.gemini and ctx.proxy_resolver:
 ```
 
-- [ ] **Step 4: Update `tests/integration/test_annotator_worker.py`**
+- [x] **Step 4: Update `tests/integration/test_annotator_worker.py`**
 
 Replace the existing `FakeCatdv` helper class with a fake archive that returns `CanonicalClip`:
 
@@ -2017,21 +2017,21 @@ await run_job(
 )
 ```
 
-- [ ] **Step 5: Run tests, verify pass**
+- [x] **Step 5: Run tests, verify pass**
 
 ```bash
 .venv/bin/pytest tests/integration/test_annotator_worker.py tests/integration/test_routes_jobs.py -v
 ```
 Expected: all green.
 
-- [ ] **Step 6: Run full suite**
+- [x] **Step 6: Run full suite**
 
 ```bash
 .venv/bin/pytest -q
 ```
 Expected: all green.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/app/services/annotator.py backend/app/routes/jobs.py tests/integration/test_annotator_worker.py
