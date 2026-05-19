@@ -8,6 +8,7 @@ from backend.app.archive.model import (
     ChangeSet,
     ClipPage,
     ClipQuery,
+    FieldDef,
     ProviderClipId,
     ProviderId,
     WriteResult,
@@ -31,4 +32,5 @@ class ArchiveProvider(Protocol):
 
     async def list_clips(self, catalog: str, query: ClipQuery) -> ClipPage: ...
     async def get_clip(self, clip: ProviderClipId) -> CanonicalClip: ...
+    async def list_field_definitions(self) -> list[FieldDef]: ...
     async def apply_changes(self, change_set: ChangeSet) -> WriteResult: ...

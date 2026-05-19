@@ -164,7 +164,7 @@ class ClipCacheRepo:
                 clip.fps,
                 _clip_to_json(clip),
                 provider_etag,
-                _now_iso(),
+                clip.fetched_at.isoformat(),
             ),
         )
         await conn.commit()
