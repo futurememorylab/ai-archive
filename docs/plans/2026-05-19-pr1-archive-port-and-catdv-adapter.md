@@ -385,7 +385,7 @@ git commit -m "feat(archive): canonical domain model (Clip, Marker, ChangeSet)"
 - Create: `backend/app/archive/provider.py`
 - Test: `tests/unit/test_archive_protocol.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_archive_protocol.py`:
 
@@ -437,14 +437,14 @@ def test_archive_provider_is_a_protocol():
     assert expected.issubset(set(dir(ArchiveProvider)))
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 .venv/bin/pytest tests/unit/test_archive_protocol.py -v
 ```
 Expected: FAIL — `ModuleNotFoundError`.
 
-- [ ] **Step 3: Implement `errors.py`**
+- [x] **Step 3: Implement `errors.py`**
 
 Create `backend/app/archive/errors.py`:
 
@@ -469,7 +469,7 @@ class FatalProviderError(ProviderError):
     """Non-retryable failure that requires operator attention."""
 ```
 
-- [ ] **Step 4: Implement `provider.py`**
+- [x] **Step 4: Implement `provider.py`**
 
 Create `backend/app/archive/provider.py`:
 
@@ -510,14 +510,14 @@ class ArchiveProvider(Protocol):
     async def apply_changes(self, change_set: ChangeSet) -> WriteResult: ...
 ```
 
-- [ ] **Step 5: Run tests, verify pass**
+- [x] **Step 5: Run tests, verify pass**
 
 ```bash
 .venv/bin/pytest tests/unit/test_archive_protocol.py -v
 ```
 Expected: 3 passed.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/archive/errors.py backend/app/archive/provider.py tests/unit/test_archive_protocol.py
