@@ -42,7 +42,7 @@ class ReviewItemsRepo:
         cur = await conn.execute(
             """
             SELECT id, annotation_id, catdv_clip_id, kind, target_identifier,
-                   proposed_value, edited_value, decision
+                   proposed_value, edited_value, decision, applied_at
             FROM review_items WHERE id = ?
             """,
             (item_id,),
@@ -59,7 +59,7 @@ class ReviewItemsRepo:
             cur = await conn.execute(
                 """
                 SELECT id, annotation_id, catdv_clip_id, kind, target_identifier,
-                       proposed_value, edited_value, decision
+                       proposed_value, edited_value, decision, applied_at
                 FROM review_items WHERE catdv_clip_id = ? AND decision = ?
                 ORDER BY id
                 """,
@@ -69,7 +69,7 @@ class ReviewItemsRepo:
             cur = await conn.execute(
                 """
                 SELECT id, annotation_id, catdv_clip_id, kind, target_identifier,
-                       proposed_value, edited_value, decision
+                       proposed_value, edited_value, decision, applied_at
                 FROM review_items WHERE catdv_clip_id = ?
                 ORDER BY id
                 """,
@@ -99,12 +99,21 @@ class ReviewItemsRepo:
         )
         await conn.commit()
 
-    async def mark_applied(self, conn: aiosqlite.Connection, item_ids: list[int]) -> None:
+    async def mark_applied(
+        self,
+        conn: aiosqlite.Connection,
+        item_ids: list[int],
+        *,
+        commit: bool = True,
+    ) -> None:
+        if not item_ids:
+            return
         await conn.executemany(
             "UPDATE review_items SET applied_at = ? WHERE id = ?",
             [(_now_iso(), i) for i in item_ids],
         )
-        await conn.commit()
+        if commit:
+            await conn.commit()
 
     @staticmethod
     def _row(row) -> ReviewItem:
@@ -117,4 +126,5 @@ class ReviewItemsRepo:
             proposed_value=json.loads(row[5]),
             edited_value=json.loads(row[6]) if row[6] is not None else None,
             decision=row[7],
+            applied_at=row[8] if len(row) > 8 else None,
         )
