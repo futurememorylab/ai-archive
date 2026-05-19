@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from backend.app.archive.ai_store_model import StoreHealth
 from backend.app.startup import StartupCheckResult, run_checks
 
 
@@ -16,24 +17,20 @@ class FakeCatdv:
         return {"ID": clip_id, "name": "x"}
 
 
-class FakeBucket:
-    def __init__(self, ok: bool):
+class FakeAIStore:
+    def __init__(self, ok: bool, detail: str | None = None):
         self._ok = ok
+        self._detail = detail
 
-    def exists(self):
-        return self._ok
-
-
-class FakeGcs:
-    def __init__(self, ok: bool):
-        self._bucket = FakeBucket(ok)
+    async def health(self) -> StoreHealth:
+        return StoreHealth(ok=self._ok, detail=self._detail)
 
 
 @pytest.mark.asyncio
 async def test_all_checks_pass():
     result = await run_checks(
         catdv=FakeCatdv(True),
-        gcs=FakeGcs(True),
+        ai_store=FakeAIStore(True),
         proxy_resolver=MagicMock(path_for_clip_id=MagicMock()),
         catalog_id=881507,
         sample_clip_id=1,
@@ -47,7 +44,7 @@ async def test_all_checks_pass():
 async def test_catdv_failure_is_reported():
     result = await run_checks(
         catdv=FakeCatdv(False),
-        gcs=FakeGcs(True),
+        ai_store=FakeAIStore(True),
         proxy_resolver=MagicMock(),
         catalog_id=881507,
         sample_clip_id=1,
@@ -58,14 +55,14 @@ async def test_catdv_failure_is_reported():
 
 
 @pytest.mark.asyncio
-async def test_gcs_bucket_missing_is_reported():
+async def test_ai_store_failure_is_reported():
     result = await run_checks(
         catdv=FakeCatdv(True),
-        gcs=FakeGcs(False),
+        ai_store=FakeAIStore(False, detail="bucket not found: b"),
         proxy_resolver=MagicMock(),
         catalog_id=881507,
         sample_clip_id=1,
         verify_proxy=False,
     )
     assert not result.ok
-    assert any("GCS" in f for f in result.failures)
+    assert any("AI input store" in f for f in result.failures)

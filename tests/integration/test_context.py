@@ -42,7 +42,8 @@ async def test_context_exposes_archive_provider_when_external_initialized(tmp_pa
 
     class _StubGcs:
         def __init__(self, *args, **kwargs):
-            pass
+            self.bucket_name = "b"
+            self._bucket = type("FakeBucket", (), {"exists": staticmethod(lambda: True)})()
 
     class _StubGemini:
         def __init__(self, *args, **kwargs):
@@ -66,5 +67,12 @@ async def test_context_exposes_archive_provider_when_external_initialized(tmp_pa
             from backend.app.archive.providers.catdv.adapter import CatdvArchiveAdapter
 
             assert isinstance(ctx.archive, CatdvArchiveAdapter)
+
+            from backend.app.archive.ai_stores.gcs.adapter import GcsInputStore
+
+            assert isinstance(ctx.ai_store, GcsInputStore)
+            assert ctx.ai_store.id == "gcs:b"
+            # The old `ctx.gcs` attribute is gone.
+            assert not hasattr(ctx, "gcs") or ctx.gcs is None
         finally:
             await ctx.aclose()

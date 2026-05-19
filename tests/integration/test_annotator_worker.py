@@ -1,20 +1,16 @@
-import hashlib
-from datetime import datetime, timezone
+import datetime as dt
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
 from backend.app.archive.model import CanonicalClip, MediaRef
 from backend.app.models.template import Template
 from backend.app.repositories.annotations import AnnotationsRepo
-from backend.app.repositories.gcs_files import GcsFilesRepo
 from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.templates import TemplatesRepo
 from backend.app.services.annotator import run_job
 from backend.app.services.events import EventBus
-from tests.fakes.fake_gemini import FakeResponse
 
 
 class FakeResolver:
@@ -28,17 +24,40 @@ class FakeResolver:
         return True
 
 
-class FakeGcs:
-    def __init__(self, bucket: str):
-        self.bucket_name = bucket
+class FakeAIStore:
+    """Implements just enough of AIInputStore for the worker test."""
+
+    id = "gcs:bucket"
+
+    def __init__(self) -> None:
         self.uploads: list[tuple[int, Path]] = []
 
-    def gs_uri(self, clip_id: int) -> str:
-        return f"gs://{self.bucket_name}/clips/{clip_id}.mov"
+    async def ensure_uploaded(self, clip_key, local_path, mime):
+        from backend.app.archive.ai_store_model import UploadedRef
 
-    def upload_if_absent(self, *, clip_id: int, local_path: Path, mime: str) -> str:
-        self.uploads.append((clip_id, local_path))
-        return self.gs_uri(clip_id)
+        self.uploads.append((int(clip_key[1]), local_path))
+        return UploadedRef(
+            handle=f"gs://bucket/clips/{clip_key[1]}.mov",
+            mime_type=mime,
+            size_bytes=local_path.stat().st_size,
+            sha256="fakesha",
+            uploaded_at=dt.datetime.now(dt.UTC),
+            expires_at=None,
+        )
+
+    async def reference_for_gemini(self, ref):
+        return {"file_data": {"file_uri": ref.handle, "mime_type": ref.mime_type}}
+
+    async def status(self, clip_key):
+        return None
+
+    async def evict(self, clip_key):
+        return None
+
+    async def health(self):
+        from backend.app.archive.ai_store_model import StoreHealth
+
+        return StoreHealth(ok=True)
 
 
 class FakeArchive:
@@ -62,7 +81,7 @@ class FakeArchive:
                 upstream_handle=clip_id_str,
             ),
             provider_data=clip,
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=dt.datetime.now(dt.UTC),
         )
 
 
@@ -99,7 +118,7 @@ async def test_run_job_processes_two_clips_end_to_end(db, tmp_path):
         }
     )
     resolver = FakeResolver(files)
-    gcs = FakeGcs("bucket")
+    ai_store = FakeAIStore()
     structured = {
         "scenes": [
             {"name": "scene-1", "in": {"frm": 0, "secs": 0.0}, "out": {"frm": 25, "secs": 1.0}}
@@ -108,7 +127,7 @@ async def test_run_job_processes_two_clips_end_to_end(db, tmp_path):
     }
 
     class FakeGeminiStructured:
-        def annotate(self, *, gcs_uri, mime, prompt, schema, model):
+        def annotate(self, *, file_ref, prompt, schema, model):
             import json
 
             return {
@@ -124,10 +143,9 @@ async def test_run_job_processes_two_clips_end_to_end(db, tmp_path):
         job_id=job_id,
         archive=archive,
         proxy_resolver=resolver,
-        gcs=gcs,
+        ai_store=ai_store,
         gemini=FakeGeminiStructured(),
         event_bus=bus,
-        gcs_files_repo=GcsFilesRepo(),
         annotations_repo=AnnotationsRepo(),
         review_items_repo=ReviewItemsRepo(),
         jobs_repo=jobs_repo,
@@ -179,10 +197,9 @@ async def test_run_job_marks_item_error_when_gemini_raises(db, tmp_path):
         job_id=job_id,
         archive=archive,
         proxy_resolver=resolver,
-        gcs=FakeGcs("b"),
+        ai_store=FakeAIStore(),
         gemini=FailingGemini(),
         event_bus=EventBus(),
-        gcs_files_repo=GcsFilesRepo(),
         annotations_repo=AnnotationsRepo(),
         review_items_repo=ReviewItemsRepo(),
         jobs_repo=jobs_repo,
