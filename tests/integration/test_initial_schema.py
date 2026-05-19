@@ -12,7 +12,7 @@ EXPECTED_TABLES = {
     "jobs",
     "job_items",
     "proxy_cache",
-    "gcs_files",
+    "ai_store_files",   # was: "gcs_files"
     "annotations",
     "annotations_fts",
     "review_items",
