@@ -20,6 +20,8 @@ EXPECTED_TABLES = {
     "embeddings",
     "tags",
     "schema_migrations",
+    "clip_cache",
+    "field_def_cache",
 }
 
 
