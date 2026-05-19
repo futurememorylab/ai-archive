@@ -22,6 +22,8 @@ EXPECTED_TABLES = {
     "schema_migrations",
     "clip_cache",
     "field_def_cache",
+    "pending_operations",
+    "connection_events",
 }
 
 
