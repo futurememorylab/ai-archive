@@ -1,0 +1,47 @@
+{# Cache popover for a single clip — three layer rows + per-layer Evict buttons.
+
+   Each Evict button is disabled when `evictable` is false; the disabled
+   title carries the reason.
+
+   POST /api/cache/clip/{provider}/{clip_id}/evict with body
+     {"layers": ["media-local"], "force": false}
+   The HTMX response is the refreshed badge HTML for the same clip; the
+   parent badge re-renders to reflect the new state.
+#}
+<div class="cache-popover" role="dialog">
+  <h4>{{ status.name }} ({{ status.clip_key[0] }}/{{ status.clip_key[1] }})</h4>
+  <table class="cache-layers">
+    <thead>
+      <tr><th>Layer</th><th>Size</th><th>Location</th>
+          <th>Fetched</th><th>Used</th><th>Pinned by</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for layer in status.layers %}
+        <tr class="layer-row layer-{{ layer.layer }}">
+          <td>{{ layer.layer }}</td>
+          <td>{{ layer.size_bytes if layer.present else "—" }}</td>
+          <td class="loc">{{ layer.location or "—" }}</td>
+          <td>{{ layer.fetched_at or "—" }}</td>
+          <td>{{ layer.last_used_at or "—" }}</td>
+          <td>{{ layer.pinned_by_workspaces|join(", ") or "—" }}</td>
+          <td>
+            <button
+              hx-post="/api/cache/clip/{{ status.clip_key[0] }}/{{ status.clip_key[1] }}/evict"
+              hx-vals='{"layers": ["{{ layer.layer }}"], "force": false}'
+              hx-ext="json-enc"
+              hx-target="closest .cache-popover"
+              hx-swap="outerHTML"
+              {% if not layer.evictable %}disabled
+                 title="Not evictable: {% if layer.pinned_by_workspaces %}pinned by {{ layer.pinned_by_workspaces|length }} workspace(s){% elif not layer.present %}absent{% else %}pending ops or other invariant{% endif %}"{% endif %}>
+              Evict
+            </button>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="totals">
+    Local: {{ status.total_local_bytes }} bytes —
+    AI: {{ status.total_ai_bytes }} bytes
+  </p>
+</div>
