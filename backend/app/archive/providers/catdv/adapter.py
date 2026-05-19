@@ -144,7 +144,7 @@ class CatdvArchiveAdapter:
 
         payload = build_put_payload(current=current, ops=list(change_set.ops))
         if not payload:
-            return WriteResult(status="ok", upstream_response={}, detail="no-op")
+            return WriteResult(status="ok", upstream_response={})
 
         try:
             response = await self._client.put_clip(int(clip_id_str), payload)
