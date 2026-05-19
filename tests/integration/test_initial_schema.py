@@ -24,6 +24,8 @@ EXPECTED_TABLES = {
     "field_def_cache",
     "pending_operations",
     "connection_events",
+    "workspaces",
+    "workspace_clips",
 }
 
 
