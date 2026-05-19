@@ -1,0 +1,105 @@
+{# Cache management page — server-rendered, plain HTMX.
+
+   Querystring filters:
+     ?store=gcs:b
+     ?workspace=3
+     ?orphans=1
+     ?evictable=1
+
+   No client-side state beyond row checkboxes (the form serialises them
+   on submit).
+#}
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Cache management</title>
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 1.5rem; }
+    .summary { background: #f4f4f8; padding: 1rem; border-radius: 6px;
+               margin-bottom: 1.5rem; }
+    table.cache-rows { border-collapse: collapse; width: 100%; }
+    table.cache-rows th, table.cache-rows td {
+      padding: 0.4rem 0.6rem; border-bottom: 1px solid #eee;
+      text-align: left; vertical-align: top;
+    }
+    .glyph { display: inline-block; padding: 0 2px; }
+    .glyph.present-fresh { color: #2d8f5e; }
+    .glyph.present-pinned { color: #b86b00; }
+    .glyph.absent { color: #bbb; }
+  </style>
+</head>
+<body>
+  <h1>Cache management</h1>
+
+  <div class="summary">
+    <h2>Summary</h2>
+    <p>Local cache: <b>{{ summary.total_local_bytes }}</b> bytes
+       / <b>{{ summary.media_cache_cap_bytes }}</b> bytes cap
+       ({{ summary.metadata_clip_count }} metadata,
+        {{ summary.media_local_clip_count }} media)</p>
+    <p>AI store: <b>{{ summary.total_ai_bytes }}</b> bytes
+       ({% for store, n in summary.counts_by_store.items() %}
+          {{ store }}={{ n }}
+          {% if not loop.last %}, {% endif %}
+        {% endfor %})</p>
+    <p>Pending ops: <b>{{ summary.pending_ops_count }}</b>
+       — <a href="/ui/sync-drawer">Open sync drawer</a></p>
+    <form method="post" action="/api/cache/bulk-evict" style="display: inline">
+      <button type="submit"
+              name="all_orphans" value="1"
+              hx-confirm="Evict all orphans?"
+              hx-post="/api/cache/orphans/evict"
+              hx-target="#cache-rows" hx-swap="innerHTML">
+        Evict orphans
+      </button>
+    </form>
+  </div>
+
+  <form action="" method="get" class="filters">
+    <label>Store: <input name="store" value="{{ filters.store or '' }}"></label>
+    <label>Workspace: <input name="workspace" value="{{ filters.workspace or '' }}"></label>
+    <label><input type="checkbox" name="orphans" value="1"
+                  {% if filters.orphans %}checked{% endif %}> orphans only</label>
+    <label><input type="checkbox" name="evictable" value="1"
+                  {% if filters.evictable %}checked{% endif %}> evictable only</label>
+    <button type="submit">Apply</button>
+  </form>
+
+  <form id="bulk-form" hx-post="/api/cache/bulk-evict"
+        hx-ext="json-enc" hx-target="#cache-rows" hx-swap="innerHTML">
+    <p>
+      Selected layers:
+      <label><input type="checkbox" name="layers" value="metadata"> metadata</label>
+      <label><input type="checkbox" name="layers" value="media-local" checked> media-local</label>
+      <label><input type="checkbox" name="layers" value="media-ai"> media-ai</label>
+      <label><input type="checkbox" name="force" value="true"> force</label>
+      <button type="submit">Evict selected</button>
+    </p>
+
+    <table class="cache-rows" id="cache-rows">
+      <thead>
+        <tr>
+          <th></th><th>Clip</th><th>Layers</th>
+          <th>Total local</th><th>Total AI</th>
+          <th>Pinned by</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for status in rows %}
+          <tr>
+            <td><input type="checkbox" name="clip_keys"
+                       value="{{ status.clip_key[0] }}/{{ status.clip_key[1] }}"></td>
+            <td>{{ status.name }} ({{ status.clip_key[0] }}/{{ status.clip_key[1] }})</td>
+            <td>{% include "cache_badge.html" %}</td>
+            <td>{{ status.total_local_bytes }}</td>
+            <td>{{ status.total_ai_bytes }}</td>
+            <td>{{ status.layers[0].pinned_by_workspaces|join(", ") }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </form>
+</body>
+</html>

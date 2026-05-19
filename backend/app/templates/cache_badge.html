@@ -1,0 +1,28 @@
+{# Per-clip cache badge: three glyphs [● ▣ ▲] for metadata / media-local / media-ai.
+
+   `status` is a ClipCacheStatus.to_dict() shape. Each layer is a dict
+   with `present`, `size_bytes`, `evictable`, `pinned_by_workspaces`.
+
+   Colour classes: `present-fresh` (present + evictable), `present-pinned`
+   (present but not evictable), `absent`. The whole badge is an HTMX
+   trigger that loads the popover into #cache-popover-{provider}-{clip_id}.
+#}
+{% set md = status.layers[0] %}
+{% set ml = status.layers[1] %}
+{% set ai = status.layers[2] %}
+<span class="cache-badge"
+      data-provider-id="{{ status.clip_key[0] }}"
+      data-clip-id="{{ status.clip_key[1] }}"
+      hx-get="/ui/cache-popover/{{ status.clip_key[0] }}/{{ status.clip_key[1] }}"
+      hx-target="#cache-popover-{{ status.clip_key[0] }}-{{ status.clip_key[1] }}"
+      hx-swap="innerHTML"
+      hx-trigger="click">
+  <span class="glyph metadata {% if md.present %}{% if md.evictable %}present-fresh{% else %}present-pinned{% endif %}{% else %}absent{% endif %}"
+        title="metadata: {% if md.present %}{{ md.size_bytes }} bytes{% if md.pinned_by_workspaces %} pinned by {{ md.pinned_by_workspaces|length }} workspace(s){% endif %}{% else %}absent{% endif %}">●</span>
+  <span class="glyph media-local {% if ml.present %}{% if ml.evictable %}present-fresh{% else %}present-pinned{% endif %}{% else %}absent{% endif %}"
+        title="media-local: {% if ml.present %}{{ ml.size_bytes }} bytes{% if ml.pinned_by_workspaces %} pinned by {{ ml.pinned_by_workspaces|length }} workspace(s){% endif %}{% else %}absent{% endif %}">▣</span>
+  <span class="glyph media-ai {% if ai.present %}{% if ai.evictable %}present-fresh{% else %}present-pinned{% endif %}{% else %}absent{% endif %}"
+        title="media-ai: {% if ai.present %}{{ ai.size_bytes }} bytes{% else %}absent{% endif %}">▲</span>
+</span>
+<span id="cache-popover-{{ status.clip_key[0] }}-{{ status.clip_key[1] }}"
+      class="cache-popover-anchor"></span>
