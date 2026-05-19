@@ -72,3 +72,29 @@ sudo -u catdv git pull
 sudo -u catdv .venv/bin/pip install -e .
 sudo systemctl restart catdv-annotator
 ```
+
+## Filesystem archive provider
+
+To run against a plain directory of media files instead of CatDV, set:
+
+```bash
+ARCHIVE_PROVIDER=fs
+FS_ROOT=/path/to/archive/root
+# Optional; comma-separated; default covers the common video extensions
+FS_MEDIA_EXTS=.mov,.mp4,.mkv,.mxf,.m4v,.avi
+```
+
+When `ARCHIVE_PROVIDER=fs`:
+
+- `CATDV_BASE_URL`, `CATDV_USERNAME`, `CATDV_PASSWORD` are ignored
+  (no CatDV client is constructed).
+- `PROXY_*` settings are also ignored — `media_is_local=True` so no
+  proxies are copied; the workspace manager skips the media leg.
+- `GCP_*` / `GCS_BUCKET_NAME` / `GOOGLE_APPLICATION_CREDENTIALS` are
+  still required for AI annotation (Gemini still needs an upload).
+- Field definitions live in `FS_ROOT/.archive/fields.json` (optional).
+- Per-clip annotations are persisted as `<clip>.annot.json` sidecars
+  next to the media. Writes are POSIX-atomic.
+
+See `docs/fs-archive-format.md` for the directory layout, sidecar JSON
+schema, and etag semantics.
