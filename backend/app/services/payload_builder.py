@@ -2,9 +2,11 @@ from typing import Any
 
 from backend.app.models.annotation import ReviewItem
 from backend.app.models.template import TargetMap
+from backend.app.timecode import secs_to_smpte
 
 
 NOTE_SEPARATOR = "\n\n---\n\n"
+DEFAULT_FPS = 25.0
 
 
 def build_put_payload(
@@ -30,11 +32,13 @@ def build_put_payload(
     if marker_items:
         existing = current.get("markers", [])
         existing_in_frms = {_in_frm(m) for m in existing if _in_frm(m) is not None}
+        fps = _clip_fps(current, existing)
         new_markers = []
         for it in marker_items:
             value = it.edited_value if it.edited_value is not None else it.proposed_value
             if not isinstance(value, dict):
                 continue
+            value = _normalize_marker(value, fps)
             if _in_frm(value) in existing_in_frms:
                 continue
             new_markers.append(value)
@@ -78,6 +82,48 @@ def _in_frm(marker: dict[str, Any]) -> int | None:
         if isinstance(v, int):
             return v
     return None
+
+
+def _clip_fps(current: dict[str, Any], existing_markers: list[dict[str, Any]]) -> float:
+    """Determine fps from the clip's metadata (fps field), an existing marker's
+    timecode 'fmt', or DEFAULT_FPS."""
+    fps = current.get("fps")
+    if isinstance(fps, (int, float)) and fps > 0:
+        return float(fps)
+    for m in existing_markers:
+        in_obj = m.get("in") if isinstance(m, dict) else None
+        if isinstance(in_obj, dict):
+            f = in_obj.get("fmt")
+            if isinstance(f, (int, float)) and f > 0:
+                return float(f)
+    return DEFAULT_FPS
+
+
+def _normalize_marker(marker: dict[str, Any], fps: float) -> dict[str, Any]:
+    """Ensure marker 'in' and 'out' are full {frm, fmt, secs, txt} quads.
+
+    The Gemini schema returns just {secs}; CatDV's PUT rejects partial timecodes
+    with 'Bad timecode format 0'.
+    """
+    out = dict(marker)
+    if isinstance(out.get("in"), dict):
+        out["in"] = _expand_timecode(out["in"], fps)
+    if isinstance(out.get("out"), dict):
+        out["out"] = _expand_timecode(out["out"], fps)
+    return out
+
+
+def _expand_timecode(tc: dict[str, Any], fps: float) -> dict[str, Any]:
+    expanded = dict(tc)
+    secs = expanded.get("secs")
+    if not isinstance(secs, (int, float)):
+        return expanded
+    secs = float(secs)
+    expanded.setdefault("fmt", float(fps))
+    expanded.setdefault("frm", round(secs * fps))
+    expanded.setdefault("secs", secs)
+    expanded.setdefault("txt", secs_to_smpte(secs, fps))
+    return expanded
 
 
 def _unwrap_value(value: Any) -> Any:

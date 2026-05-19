@@ -120,6 +120,8 @@ class CatdvClient:
 
     async def download_proxy(self, clip_id: int, dest: Path, chunk_size: int = 1024 * 1024) -> None:
         """Stream the proxy for a clip to `dest`. Resumes from existing partial file."""
+        if not self._logged_in:
+            await self.login()
         url = f"{self._base}/catdv/api/9/clips/{clip_id}/media"
         existing_size = dest.stat().st_size if dest.exists() else 0
         headers: dict[str, str] = {}
@@ -127,7 +129,7 @@ class CatdvClient:
             headers["Range"] = f"bytes={existing_size}-"
 
         async with self.http.stream("GET", url, headers=headers) as resp:
-            if resp.status_code == 401:
+            if resp.status_code == 401 or _is_auth_envelope(resp):
                 await self.login()
                 async with self.http.stream("GET", url, headers=headers) as resp2:
                     resp2.raise_for_status()
@@ -154,3 +156,14 @@ class CatdvClient:
     async def get_clip(self, clip_id: int) -> dict[str, Any]:
         env = await self._call_json("GET", f"/catdv/api/9/clips/{clip_id}")
         return env.data
+
+
+def _is_auth_envelope(resp: "httpx.Response") -> bool:
+    """Detect CatDV's 'HTTP 200 + AUTH envelope' anti-pattern on the media endpoint.
+
+    The proxy stream endpoint serves video bytes (Content-Type: video/quicktime).
+    When the session is missing, the server returns an HTTP 200 JSON envelope
+    instead — we must catch that before writing JSON bytes into a .mov file.
+    """
+    ct = resp.headers.get("content-type", "")
+    return "json" in ct.lower()

@@ -16,6 +16,14 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
+# Export .env into the process environment so the Google SDK (and any other
+# lib that reads OS env directly) can pick up GOOGLE_APPLICATION_CREDENTIALS etc.
+# pydantic-settings reads .env on its own; this is purely for OS-env-only libs.
+set -a
+# shellcheck disable=SC1091
+. ./.env
+set +a
+
 if [ -n "${CATDV_HEALTH_CHECK:-}" ]; then
   HOST=$(grep -E '^CATDV_BASE_URL=' .env | cut -d= -f2 | sed 's|http://||' | cut -d: -f1)
   if ! ping -c1 -W1 "$HOST" >/dev/null 2>&1; then
@@ -23,12 +31,12 @@ if [ -n "${CATDV_HEALTH_CHECK:-}" ]; then
   fi
 fi
 
-UVICORN_ARGS=()
+RELOAD_ARGS=""
 if [ "${DEV_RELOAD:-0}" = "1" ]; then
-  UVICORN_ARGS+=(--reload --reload-dir backend)
+  RELOAD_ARGS="--reload --reload-dir backend"
 fi
 
 exec .venv/bin/uvicorn backend.app.main:app \
   --host "$(grep -E '^BIND_HOST=' .env | cut -d= -f2)" \
   --port "$(grep -E '^BIND_PORT=' .env | cut -d= -f2)" \
-  "${UVICORN_ARGS[@]}"
+  $RELOAD_ARGS

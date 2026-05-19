@@ -10,6 +10,12 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _json_default(obj):
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+
 class AnnotationsRepo:
     async def insert(self, conn: aiosqlite.Connection, ann: Annotation) -> int:
         cur = await conn.execute(
@@ -26,11 +32,11 @@ class AnnotationsRepo:
                 ann.job_id,
                 ann.model,
                 ann.prompt_used,
-                json.dumps(ann.raw_response, ensure_ascii=False),
-                json.dumps(ann.structured_output, ensure_ascii=False)
+                json.dumps(ann.raw_response, ensure_ascii=False, default=_json_default),
+                json.dumps(ann.structured_output, ensure_ascii=False, default=_json_default)
                 if ann.structured_output is not None
                 else "null",
-                json.dumps(ann.clip_snapshot, ensure_ascii=False),
+                json.dumps(ann.clip_snapshot, ensure_ascii=False, default=_json_default),
                 _now_iso(),
             ),
         )
