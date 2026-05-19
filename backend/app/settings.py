@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     ai_input_store: str = "gcs"
     clip_cache_ttl_hours: int = 168
 
+    # Filesystem archive provider (when ARCHIVE_PROVIDER=fs)
+    fs_root: Path | None = None
+    fs_media_exts: str = ".mov,.mp4,.mkv,.mxf,.m4v,.avi"
+
     # connection monitor
     health_probe_interval_s: int = 30
     health_probe_timeout_s: int = 5
@@ -51,6 +55,14 @@ class Settings(BaseSettings):
         fs_root_empty = self.proxy_fs_root is None or str(self.proxy_fs_root) in ("", ".")
         if self.proxy_source == "filesystem" and fs_root_empty:
             raise ValueError("PROXY_FS_ROOT is required when PROXY_SOURCE=filesystem")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_fs_archive(self) -> "Settings":
+        if self.archive_provider == "fs":
+            empty = self.fs_root is None or str(self.fs_root) in ("", ".")
+            if empty:
+                raise ValueError("FS_ROOT is required when ARCHIVE_PROVIDER=fs")
         return self
 
 

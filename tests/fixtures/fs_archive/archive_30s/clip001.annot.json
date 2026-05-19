@@ -1,0 +1,22 @@
+{
+  "fields": {
+    "pragafilm.dekáda.natočení": {
+      "value": "30.léta",
+      "is_multi": false
+    }
+  },
+  "markers": [
+    {
+      "name": "intro",
+      "in": {"secs": 0.0, "frm": 0, "fps": 25.0},
+      "out": {"secs": 2.0, "frm": 50, "fps": 25.0},
+      "description": "Opening title card",
+      "category": null,
+      "color": null
+    }
+  ],
+  "notes": {
+    "notes": "Test clip"
+  },
+  "provider_data": {}
+}

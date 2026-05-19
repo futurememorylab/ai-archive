@@ -115,12 +115,14 @@ class AppContext:
             from backend.app.services.gemini import GeminiService
             from backend.app.services.proxy_resolver import build_resolver
 
-            ctx.catdv = CatdvClient(
-                base_url=settings.catdv_base_url,
-                username=settings.catdv_username or "",
-                password=settings.catdv_password or "",
-            )
-            await ctx.catdv.__aenter__()
+            use_catdv = settings.archive_provider == "catdv"
+            if use_catdv:
+                ctx.catdv = CatdvClient(
+                    base_url=settings.catdv_base_url,
+                    username=settings.catdv_username or "",
+                    password=settings.catdv_password or "",
+                )
+                await ctx.catdv.__aenter__()
             ctx.archive = build_archive_provider(
                 settings,
                 catdv_client=ctx.catdv,
@@ -139,13 +141,18 @@ class AppContext:
                 project=settings.gcp_project_id,
                 location=settings.gcp_location,
             )
-            ctx.proxy_resolver = build_resolver(
-                source=settings.proxy_source,
-                catdv_client=ctx.catdv,
-                cache_dir=settings.data_dir / "cache" / "proxies",
-                fs_root=settings.proxy_fs_root,
-                path_template=settings.proxy_path_template,
-            )
+            if use_catdv:
+                ctx.proxy_resolver = build_resolver(
+                    source=settings.proxy_source,
+                    catdv_client=ctx.catdv,
+                    cache_dir=settings.data_dir / "cache" / "proxies",
+                    fs_root=settings.proxy_fs_root,
+                    path_template=settings.proxy_path_template,
+                )
+            else:
+                # FS adapter has media_is_local=True; the workspace
+                # manager skips the proxy-resolver step entirely.
+                ctx.proxy_resolver = None
             ctx.connection_monitor = ConnectionMonitor(
                 provider=ctx.archive,
                 db_provider=lambda c=ctx: c.db,

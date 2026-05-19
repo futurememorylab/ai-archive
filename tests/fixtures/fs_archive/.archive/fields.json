@@ -1,0 +1,24 @@
+[
+  {
+    "identifier": "pragafilm.dekáda.natočení",
+    "name": "Decade filmed",
+    "type": "picklist",
+    "is_multi": false,
+    "is_editable": true,
+    "picklist_values": ["20.léta", "30.léta", "40.léta"]
+  },
+  {
+    "identifier": "pragafilm.barva",
+    "name": "Colour",
+    "type": "bool",
+    "is_multi": false,
+    "is_editable": true
+  },
+  {
+    "identifier": "notes",
+    "name": "Notes",
+    "type": "text",
+    "is_multi": false,
+    "is_editable": true
+  }
+]
