@@ -267,8 +267,10 @@ async def test_evict_everywhere_without_force_short_circuits(db, tmp_path):
 @pytest.mark.asyncio
 async def test_bulk_evict_mixed(db, tmp_path):
     a, b = ("catdv", "1"), ("catdv", "2")
-    pa = tmp_path / "1.mov"; pa.write_bytes(b"a" * 10)
-    pb = tmp_path / "2.mov"; pb.write_bytes(b"b" * 20)
+    pa = tmp_path / "1.mov"
+    pa.write_bytes(b"a" * 10)
+    pb = tmp_path / "2.mov"
+    pb.write_bytes(b"b" * 20)
     await _seed_clip_cache(db, a)
     await _seed_clip_cache(db, b)
     await _seed_proxy_cache(db, a, file_path=str(pa), size_bytes=10)
@@ -286,8 +288,10 @@ async def test_bulk_evict_mixed(db, tmp_path):
 @pytest.mark.asyncio
 async def test_evict_orphans_drops_only_orphans(db, tmp_path):
     """proxy_cache row with no clip_cache → evicted; one with metadata stays."""
-    proxy_orphan = tmp_path / "33.mov"; proxy_orphan.write_bytes(b"o")
-    proxy_real = tmp_path / "1.mov"; proxy_real.write_bytes(b"r")
+    proxy_orphan = tmp_path / "33.mov"
+    proxy_orphan.write_bytes(b"o")
+    proxy_real = tmp_path / "1.mov"
+    proxy_real.write_bytes(b"r")
     await _seed_proxy_cache(db, ("catdv", "33"),
                             file_path=str(proxy_orphan), size_bytes=1)
     await _seed_clip_cache(db, ("catdv", "1"))
@@ -303,7 +307,8 @@ async def test_evict_orphans_drops_only_orphans(db, tmp_path):
 @pytest.mark.asyncio
 async def test_log_row_written_for_skips(db, tmp_path):
     key = ("catdv", "1")
-    proxy = tmp_path / "1.mov"; proxy.write_bytes(b"x")
+    proxy = tmp_path / "1.mov"
+    proxy.write_bytes(b"x")
     await _seed_clip_cache(db, key)
     await _seed_proxy_cache(db, key, file_path=str(proxy), size_bytes=1)
     await _seed_workspace_pin(db, ws_id=1, key=key)
@@ -320,7 +325,8 @@ async def test_log_row_written_for_skips(db, tmp_path):
 @pytest.mark.asyncio
 async def test_who_provider_used(db, tmp_path):
     key = ("catdv", "1")
-    proxy = tmp_path / "1.mov"; proxy.write_bytes(b"x")
+    proxy = tmp_path / "1.mov"
+    proxy.write_bytes(b"x")
     await _seed_clip_cache(db, key)
     await _seed_proxy_cache(db, key, file_path=str(proxy), size_bytes=1)
     insp = CacheInspector(db_provider=lambda: db)

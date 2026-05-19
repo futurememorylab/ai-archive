@@ -13,6 +13,7 @@ from backend.app.archive.ai_store import AIInputStore
 from backend.app.archive.ai_stores.registry import build_ai_input_store
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.ai_store_files import AIStoreFilesRepo
+from backend.app.repositories.cache_actions_log import CacheActionsLogRepo
 from backend.app.repositories.clip_cache import ClipCacheRepo
 from backend.app.repositories.field_def_cache import FieldDefCacheRepo
 from backend.app.repositories.jobs import JobsRepo
@@ -22,8 +23,11 @@ from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.templates import TemplatesRepo
 from backend.app.repositories.workspaces import WorkspacesRepo
 from backend.app.repositories.write_log import WriteLogRepo
+from backend.app.services.cache_actions import CacheActions
+from backend.app.services.cache_inspector import CacheInspector
 from backend.app.services.connection_monitor import ConnectionMonitor
 from backend.app.services.events import EventBus
+from backend.app.services.lru_eviction import LruEviction
 from backend.app.services.sync_engine import SyncEngine
 from backend.app.services.workspace_manager import WorkspaceManager
 from backend.app.services.write_queue import WriteQueue
@@ -49,6 +53,7 @@ class AppContext:
     field_def_cache_repo: FieldDefCacheRepo = field(default_factory=FieldDefCacheRepo)
     pending_ops_repo: PendingOperationsRepo = field(default_factory=PendingOperationsRepo)
     workspaces_repo: WorkspacesRepo = field(default_factory=WorkspacesRepo)
+    cache_actions_log_repo: CacheActionsLogRepo = field(default_factory=CacheActionsLogRepo)
     event_bus: EventBus = field(default_factory=EventBus)
 
     _running_jobs: dict[int, "object"] = field(default_factory=dict)
@@ -63,6 +68,9 @@ class AppContext:
     sync_engine: SyncEngine | None = None
     connection_monitor: ConnectionMonitor | None = None
     workspace_manager: WorkspaceManager | None = None
+    cache_inspector: CacheInspector | None = None
+    cache_actions: CacheActions | None = None
+    lru_eviction: LruEviction | None = None
 
     @classmethod
     async def build(cls, settings: Settings, *, init_external: bool = True) -> "AppContext":
@@ -86,6 +94,19 @@ class AppContext:
         ctx.write_queue = WriteQueue(
             pending_ops_repo=ctx.pending_ops_repo,
             review_items_repo=ctx.review_items_repo,
+        )
+
+        # CacheInspector + CacheActions are pure-DB; always wire them.
+        cap_bytes = int(settings.media_cache_cap_gb) * 1024 ** 3
+        ctx.cache_inspector = CacheInspector(
+            db_provider=lambda c=ctx: c.db,
+            media_cache_cap_bytes=cap_bytes,
+        )
+        ctx.cache_actions = CacheActions(
+            db_provider=lambda c=ctx: c.db,
+            inspector=ctx.cache_inspector,
+            log_repo=ctx.cache_actions_log_repo,
+            ai_store=None,  # filled in when init_external runs
         )
 
         if init_external:
@@ -149,9 +170,31 @@ class AppContext:
                 proxy_resolver=ctx.proxy_resolver,
                 db_provider=lambda c=ctx: c.db,
             )
+            # Inspector picks up the provider for deep-orphan checks;
+            # actions pick up the AI store for bucket-side evictions.
+            ctx.cache_inspector = CacheInspector(
+                db_provider=lambda c=ctx: c.db,
+                media_cache_cap_bytes=cap_bytes,
+                provider=ctx.archive,
+            )
+            ctx.cache_actions = CacheActions(
+                db_provider=lambda c=ctx: c.db,
+                inspector=ctx.cache_inspector,
+                log_repo=ctx.cache_actions_log_repo,
+                ai_store=ctx.ai_store,
+            )
+            ctx.lru_eviction = LruEviction(
+                actions=ctx.cache_actions,
+                log_repo=ctx.cache_actions_log_repo,
+                db_provider=lambda c=ctx: c.db,
+                media_cache_cap_bytes=cap_bytes,
+                tick_interval_s=float(settings.lru_tick_interval_s),
+            )
         return ctx
 
     async def aclose(self) -> None:
+        if self.lru_eviction is not None:
+            await self.lru_eviction.stop()
         if self.sync_engine is not None:
             await self.sync_engine.stop()
         if self.connection_monitor is not None:

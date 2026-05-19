@@ -26,6 +26,8 @@ async def lifespan(app: FastAPI):
             await ctx.connection_monitor.start()
         if ctx.sync_engine is not None:
             await ctx.sync_engine.start()
+        if ctx.lru_eviction is not None:
+            await ctx.lru_eviction.start()
     try:
         yield
     finally:
@@ -93,3 +95,13 @@ app.include_router(sync_router)
 from backend.app.routes.ui import router as ui_router  # noqa: E402
 
 app.include_router(ui_router)
+
+from backend.app.routes.cache import (  # noqa: E402
+    api_router as cache_api_router,
+    page_router as cache_page_router,
+    ui_router as cache_ui_router,
+)
+
+app.include_router(cache_api_router)
+app.include_router(cache_page_router)
+app.include_router(cache_ui_router)
