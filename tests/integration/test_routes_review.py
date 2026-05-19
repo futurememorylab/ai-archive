@@ -111,8 +111,12 @@ def test_set_decision_accept(monkeypatch, tmp_path):
         assert len(accepted) == 1
 
 
-def test_apply_clip_writes_to_catdv_and_logs(monkeypatch, tmp_path):
-    from backend.app.archive.model import AddMarkers, ChangeSet, SetField, WriteResult
+def test_apply_clip_enqueues_and_drains_via_sync_engine(monkeypatch, tmp_path):
+    from backend.app.archive.model import ChangeSet, SetField, WriteResult
+    from backend.app.repositories.pending_operations import PendingOperationsRepo
+    from backend.app.repositories.write_log import WriteLogRepo
+    from backend.app.services.connection_monitor import ConnectionState
+    from backend.app.services.sync_engine import SyncEngine
 
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
@@ -127,20 +131,48 @@ def test_apply_clip_writes_to_catdv_and_logs(monkeypatch, tmp_path):
                 FakeArchive.last_change_set = change_set
                 return WriteResult(
                     status="ok",
-                    upstream_response={"ID": int(change_set.clip_key[1]), "modifyDate": "2026-05-18"},
+                    upstream_response={
+                        "ID": int(change_set.clip_key[1]),
+                        "modifyDate": "2026-05-18",
+                    },
                 )
 
+        class AlwaysOnline:
+            def current_state(self):
+                return ConnectionState.online
+
         ctx.archive = FakeArchive()
+        ctx.sync_engine = SyncEngine(
+            provider=ctx.archive,
+            pending_ops_repo=PendingOperationsRepo(),
+            write_log_repo=WriteLogRepo(),
+            connection_monitor=AlwaysOnline(),
+            db_provider=lambda: ctx.db,
+        )
 
         for it in items:
-            client.post(f"/api/review/items/{it.id}/decision", json={"decision": "accepted"})
+            client.post(
+                f"/api/review/items/{it.id}/decision",
+                json={"decision": "accepted"},
+            )
 
         r = client.post("/api/review/clips/1/apply")
         assert r.status_code == 200
+        body = r.json()
+        assert body["queued"] >= 1
+
+        # Drain explicitly (the route only notifies; the lifespan-managed
+        # background loop is not started here because init_external=False).
+        n = _run(ctx.sync_engine.drain_once())
+        assert n == 1
         cs = FakeArchive.last_change_set
         assert cs is not None
         assert cs.clip_key == ("catdv", "1")
         op_types = {type(o).__name__ for o in cs.ops}
         assert "AddMarkers" in op_types
-        assert any(isinstance(o, SetField) and o.identifier == "pragafilm.dekáda.natočení"
-                   and o.value == "30.léta" for o in cs.ops)
+        assert any(
+            isinstance(o, SetField)
+            and o.identifier == "pragafilm.dekáda.natočení"
+            and o.value == "30.léta"
+            for o in cs.ops
+        )

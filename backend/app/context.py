@@ -16,11 +16,15 @@ from backend.app.repositories.ai_store_files import AIStoreFilesRepo
 from backend.app.repositories.clip_cache import ClipCacheRepo
 from backend.app.repositories.field_def_cache import FieldDefCacheRepo
 from backend.app.repositories.jobs import JobsRepo
+from backend.app.repositories.pending_operations import PendingOperationsRepo
 from backend.app.repositories.proxy_cache import ProxyCacheRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.templates import TemplatesRepo
 from backend.app.repositories.write_log import WriteLogRepo
+from backend.app.services.connection_monitor import ConnectionMonitor
 from backend.app.services.events import EventBus
+from backend.app.services.sync_engine import SyncEngine
+from backend.app.services.write_queue import WriteQueue
 from backend.app.settings import Settings
 
 MIGRATIONS = Path(__file__).resolve().parents[1] / "migrations"
@@ -41,6 +45,7 @@ class AppContext:
     ai_store_files_repo: AIStoreFilesRepo = field(default_factory=AIStoreFilesRepo)
     clip_cache_repo: ClipCacheRepo = field(default_factory=ClipCacheRepo)
     field_def_cache_repo: FieldDefCacheRepo = field(default_factory=FieldDefCacheRepo)
+    pending_ops_repo: PendingOperationsRepo = field(default_factory=PendingOperationsRepo)
     event_bus: EventBus = field(default_factory=EventBus)
 
     _running_jobs: dict[int, "object"] = field(default_factory=dict)
@@ -51,6 +56,9 @@ class AppContext:
     gemini = None
     proxy_resolver = None
     _gcs_service = None   # low-level GcsService kept only as a wiring detail
+    write_queue: WriteQueue | None = None
+    sync_engine: SyncEngine | None = None
+    connection_monitor: ConnectionMonitor | None = None
 
     @classmethod
     async def build(cls, settings: Settings, *, init_external: bool = True) -> "AppContext":
@@ -59,8 +67,22 @@ class AppContext:
         cm = open_db(db_path)
         conn = await cm.__aenter__()
         await apply_migrations(conn, MIGRATIONS)
+        # Crash recovery: any rows left mid-flight from a previous process
+        # become pending again. Idempotent; runs every startup.
+        await conn.execute(
+            "UPDATE pending_operations "
+            "SET status='pending', attempted_at=NULL "
+            "WHERE status='in_flight'"
+        )
+        await conn.commit()
 
         ctx = cls(settings=settings, db=conn, db_cm=cm)
+
+        # WriteQueue has no external deps; always available.
+        ctx.write_queue = WriteQueue(
+            pending_ops_repo=ctx.pending_ops_repo,
+            review_items_repo=ctx.review_items_repo,
+        )
 
         if init_external:
             from backend.app.services.catdv_client import CatdvClient
@@ -99,9 +121,31 @@ class AppContext:
                 fs_root=settings.proxy_fs_root,
                 path_template=settings.proxy_path_template,
             )
+            ctx.connection_monitor = ConnectionMonitor(
+                provider=ctx.archive,
+                db_provider=lambda c=ctx: c.db,
+                interval_s=float(settings.health_probe_interval_s),
+                timeout_s=float(settings.health_probe_timeout_s),
+                event_bus=ctx.event_bus,
+            )
+            ctx.sync_engine = SyncEngine(
+                provider=ctx.archive,
+                pending_ops_repo=ctx.pending_ops_repo,
+                write_log_repo=ctx.write_log_repo,
+                connection_monitor=ctx.connection_monitor,
+                db_provider=lambda c=ctx: c.db,
+                event_bus=ctx.event_bus,
+                tick_interval_s=float(settings.sync_tick_interval_s),
+                retry_base_s=float(settings.sync_retry_base_s),
+                retry_max_s=float(settings.sync_retry_max_s),
+            )
         return ctx
 
     async def aclose(self) -> None:
+        if self.sync_engine is not None:
+            await self.sync_engine.stop()
+        if self.connection_monitor is not None:
+            await self.connection_monitor.stop()
         if self.catdv is not None:
             await self.catdv.__aexit__(None, None, None)
         await self.db_cm.__aexit__(None, None, None)
