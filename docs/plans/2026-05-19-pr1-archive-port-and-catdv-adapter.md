@@ -590,7 +590,7 @@ git commit -m "test(archive): record CatDV clip sample fixture"
 - Create: `backend/app/archive/providers/catdv/mapping.py`
 - Test: `tests/unit/test_catdv_mapping.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/unit/test_catdv_mapping.py`:
 
@@ -675,14 +675,14 @@ def test_marker_to_catdv_expands_partial_timecode():
     assert raw["out"]["frm"] == 150
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 .venv/bin/pytest tests/unit/test_catdv_mapping.py -v
 ```
 Expected: FAIL — `ModuleNotFoundError`.
 
-- [ ] **Step 3: Create empty provider packages**
+- [x] **Step 3: Create empty provider packages**
 
 Create `backend/app/archive/providers/__init__.py`:
 
@@ -696,7 +696,7 @@ Create `backend/app/archive/providers/catdv/__init__.py`:
 """CatDV archive provider."""
 ```
 
-- [ ] **Step 4: Implement `mapping.py`**
+- [x] **Step 4: Implement `mapping.py`**
 
 Create `backend/app/archive/providers/catdv/mapping.py`:
 
@@ -809,14 +809,14 @@ def _timecode_to_catdv(tc: Timecode, default_fps: float) -> dict[str, Any]:
     return {"frm": frm, "fmt": float(fps), "secs": secs, "txt": txt}
 ```
 
-- [ ] **Step 5: Run tests, verify pass**
+- [x] **Step 5: Run tests, verify pass**
 
 ```bash
 .venv/bin/pytest tests/unit/test_catdv_mapping.py -v
 ```
 Expected: 7 passed.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/archive/providers tests/unit/test_catdv_mapping.py
