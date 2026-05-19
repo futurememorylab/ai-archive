@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     sync_retry_max_s: int = 300
     sync_tick_interval_s: int = 5
 
+    # cache management + LRU eviction
+    media_cache_cap_gb: int = 50
+    lru_tick_interval_s: int = 300
+
     @model_validator(mode="after")
     def _validate_proxy(self) -> "Settings":
         fs_root_empty = self.proxy_fs_root is None or str(self.proxy_fs_root) in ("", ".")
