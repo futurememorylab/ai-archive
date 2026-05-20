@@ -22,6 +22,23 @@ def _row_to_dict(row) -> dict[str, Any]:
     return dict(zip(keys, row, strict=False))
 
 
+def _row_to_dict_with_name(row) -> dict[str, Any]:
+    keys = (
+        "id", "provider_id", "provider_clip_id", "status",
+        "requested_by", "requested_at", "started_at", "finished_at",
+        "error", "bytes_downloaded", "clip_name",
+    )
+    return dict(zip(keys, row, strict=False))
+
+
+_LIST_COLUMNS_WITH_NAME = """
+    q.id, q.provider_id, q.provider_clip_id, q.status,
+    q.requested_by, q.requested_at, q.started_at, q.finished_at,
+    q.error, q.bytes_downloaded,
+    cc.name AS clip_name
+"""
+
+
 class PrefetchQueueRepo:
     async def enqueue(
         self,
@@ -159,16 +176,17 @@ class PrefetchQueueRepo:
         self, conn: aiosqlite.Connection
     ) -> list[dict[str, Any]]:
         cur = await conn.execute(
-            """
-            SELECT id, provider_id, provider_clip_id, status,
-                   requested_by, requested_at, started_at, finished_at,
-                   error, bytes_downloaded
-              FROM prefetch_queue
-             WHERE status IN ('queued', 'downloading')
-             ORDER BY requested_at ASC
+            f"""
+            SELECT {_LIST_COLUMNS_WITH_NAME}
+              FROM prefetch_queue q
+              LEFT JOIN clip_cache cc
+                ON cc.provider_id = q.provider_id
+               AND cc.provider_clip_id = q.provider_clip_id
+             WHERE q.status IN ('queued', 'downloading')
+             ORDER BY q.requested_at ASC
             """
         )
-        return [_row_to_dict(r) for r in await cur.fetchall()]
+        return [_row_to_dict_with_name(r) for r in await cur.fetchall()]
 
     async def list_recent(
         self,
@@ -177,17 +195,18 @@ class PrefetchQueueRepo:
         limit: int = 50,
     ) -> list[dict[str, Any]]:
         cur = await conn.execute(
-            """
-            SELECT id, provider_id, provider_clip_id, status,
-                   requested_by, requested_at, started_at, finished_at,
-                   error, bytes_downloaded
-              FROM prefetch_queue
-             ORDER BY requested_at DESC
+            f"""
+            SELECT {_LIST_COLUMNS_WITH_NAME}
+              FROM prefetch_queue q
+              LEFT JOIN clip_cache cc
+                ON cc.provider_id = q.provider_id
+               AND cc.provider_clip_id = q.provider_clip_id
+             ORDER BY q.requested_at DESC
              LIMIT ?
             """,
             (limit,),
         )
-        return [_row_to_dict(r) for r in await cur.fetchall()]
+        return [_row_to_dict_with_name(r) for r in await cur.fetchall()]
 
     async def count_by_status(
         self, conn: aiosqlite.Connection

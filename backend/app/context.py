@@ -31,6 +31,7 @@ from backend.app.services.connection_monitor import ConnectionMonitor
 from backend.app.services.events import EventBus
 from backend.app.services.lru_eviction import LruEviction
 from backend.app.services.media_prefetcher import MediaPrefetcher
+from backend.app.services.proxy_cache_reconciler import ProxyCacheReconciler
 from backend.app.services.sync_engine import SyncEngine
 from backend.app.services.workspace_manager import WorkspaceManager
 from backend.app.services.write_queue import WriteQueue
@@ -95,6 +96,18 @@ class AppContext:
         await conn.commit()
 
         ctx = cls(settings=settings, db=conn, db_cm=cm)
+
+        # Reconcile the proxy cache against on-disk files. Cheap, idempotent,
+        # touches local disk + SQLite only — safe to run before init_external.
+        # Keeps the cache view honest about what's actually on disk on every
+        # restart (handles files left from older builds or manual downloads).
+        cache_dir = settings.data_dir / "cache" / "proxies"
+        reconciler = ProxyCacheReconciler(
+            cache_dir=cache_dir,
+            proxy_cache_repo=ctx.proxy_cache_repo,
+            db_provider=lambda c=ctx: c.db,
+        )
+        await reconciler.reconcile()
 
         # WriteQueue has no external deps; always available.
         ctx.write_queue = WriteQueue(
