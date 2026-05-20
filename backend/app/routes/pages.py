@@ -9,7 +9,7 @@ from backend.app.archive.model import ClipQuery
 from backend.app.ui.view_models import clip_detail, clip_summary
 
 TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "templates"
-from backend.app.timecode import secs_to_smpte
+from backend.app.timecode import secs_to_smpte  # noqa: E402
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 templates.env.globals["smpte"] = secs_to_smpte
@@ -33,7 +33,7 @@ async def clips_list(
             ClipQuery(text=q, offset=offset, limit=limit),
         )
     except ProviderError as exc:
-        raise HTTPException(502, f"archive error: {exc}")
+        raise HTTPException(502, f"archive error: {exc}") from exc
 
     ctx_dict = {
         "q": q or "",
@@ -65,7 +65,7 @@ async def clip_detail_page(request: Request, clip_id: int):
     try:
         clip = await ctx.archive.get_clip(str(clip_id))
     except ProviderError as exc:
-        raise HTTPException(404, f"clip not found: {exc}")
+        raise HTTPException(404, f"clip not found: {exc}") from exc
 
     ctx_dict = clip_detail(clip)
     ctx_dict["duration_smpte"] = secs_to_smpte(

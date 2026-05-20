@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from backend.app.archive.model import (
     CanonicalClip,
@@ -35,7 +35,7 @@ def _canonical(
             upstream_handle=str(clip_id),
         ),
         provider_data=provider_data or {"ID": clip_id, "name": name},
-        fetched_at=datetime.now(timezone.utc),
+        fetched_at=datetime.now(UTC),
     )
 
 

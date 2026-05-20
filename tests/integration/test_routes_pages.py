@@ -1,5 +1,5 @@
 import importlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 
@@ -48,7 +48,7 @@ def _canonical(clip_id: int = 12041, name: str = "Abramcukova_Anna_09") -> Canon
             "name": name,
             "notes": "krátká poznámka",
         },
-        fetched_at=datetime.now(timezone.utc),
+        fetched_at=datetime.now(UTC),
     )
 
 
