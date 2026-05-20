@@ -1,0 +1,87 @@
+{% extends "pages/layout.html" %}
+{% block title %}{{ clip.name }} · CatDV Annotator{% endblock %}
+{% block crumb %}
+  <a class="crumb" href="/">‹ All clips</a>
+  <span class="crumb">{{ clip.name }}</span>
+{% endblock %}
+{% block body %}
+<div class="detail"
+     x-data="player({{ clip.fps }}, {{ clip.duration_secs }})">
+  <header class="detail-hdr">
+    <span class="clip-title">{{ clip.name }}</span>
+    <span class="meta mono">{{ clip.format or "" }}</span>
+    <span class="grow"></span>
+    <span class="tc-readout mono">
+      <span class="cur" x-text="tc(current)">00:00:00:00</span>
+      <span class="slash">/</span>
+      <span class="end" x-text="tc(duration)">{{ duration_smpte }}</span>
+    </span>
+  </header>
+
+  <section class="player-wrap">
+    <video x-ref="video"
+           class="video"
+           src="{{ clip.media_url }}"
+           controls
+           preload="metadata"></video>
+    {% if clip.duration_secs %}
+    <div class="timeline">
+      <div class="ranges">
+        {% for m in clip.markers %}
+          {% set w = (((m.out_secs or m.in_secs + 1) - m.in_secs) / clip.duration_secs) * 100 %}
+          <div class="range"
+               style="left: {{ (m.in_secs / clip.duration_secs) * 100 }}%; width: {{ w }}%"
+               title="{{ m.name }}"
+               @click="seek({{ m.in_secs }})"></div>
+        {% endfor %}
+      </div>
+      <div class="playhead"
+           :style="`left: ${pct(current)}%`"></div>
+    </div>
+    {% endif %}
+  </section>
+
+  <aside class="anno-col">
+    <div class="anno-section">
+      <h2 class="anno-h">Markers <span class="count">{{ clip.markers|length }}</span></h2>
+      {% for m in clip.markers %}
+        <article class="marker"
+                 @click="seek({{ m.in_secs }})">
+          <header>
+            <span class="kind marker-kind">MARKER</span>
+            {% if m.category %}<span class="cat">{{ m.category }}</span>{% endif %}
+            <span class="tc mono">
+              {{ smpte(m.in_secs, clip.fps) }}{% if m.out_secs is not none %} – {{ smpte(m.out_secs, clip.fps) }}{% endif %}
+            </span>
+          </header>
+          <h3 class="m-name">{{ m.name }}</h3>
+          {% if m.description %}<p class="m-desc">{{ m.description }}</p>{% endif %}
+        </article>
+      {% else %}
+        <p class="muted">No markers.</p>
+      {% endfor %}
+    </div>
+
+    <div class="anno-section">
+      <h2 class="anno-h">Fields <span class="count">{{ clip.fields|length }}</span></h2>
+      {% for f in clip.fields %}
+        <div class="field-row">
+          <span class="ident mono">{{ f.identifier }}</span>
+          <span class="arrow">→</span>
+          <span class="val">{{ f.value }}</span>
+        </div>
+      {% else %}
+        <p class="muted">No custom fields.</p>
+      {% endfor %}
+    </div>
+
+    {% if clip.notes or clip.big_notes %}
+    <div class="anno-section">
+      <h2 class="anno-h">Notes</h2>
+      {% if clip.notes %}<p class="note">{{ clip.notes }}</p>{% endif %}
+      {% if clip.big_notes %}<p class="note big">{{ clip.big_notes }}</p>{% endif %}
+    </div>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

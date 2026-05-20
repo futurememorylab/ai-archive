@@ -1,0 +1,44 @@
+<div id="clips-region" class="clips-region">
+  <div class="tbl-scroll">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th class="col-name">Clip</th>
+          <th class="col-year">Year</th>
+          <th class="col-decade">Decade</th>
+          <th class="col-dur">Duration</th>
+          <th class="col-mk">Markers</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in clips %}
+        <tr class="row" onclick="location.href='/clips/{{ c.id }}'">
+          <td class="clip-name">
+            <span class="thumb"></span>
+            <span class="name">{{ c.name }}</span>
+          </td>
+          <td class="mono">{{ c.year or "—" }}</td>
+          <td>{{ c.decade or "—" }}</td>
+          <td class="mono">{{ "%d:%02d"|format((c.duration_secs|int)//60, (c.duration_secs|int)%60) }}</td>
+          <td class="mono">{{ c.marker_count }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="empty">No clips match.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <nav class="pager">
+    {% if prev_offset is not none %}
+      <a class="pg-btn" href="/?q={{ q|urlencode }}&offset={{ prev_offset }}&limit={{ limit }}">‹ Prev</a>
+    {% else %}
+      <span class="pg-btn disabled">‹ Prev</span>
+    {% endif %}
+    <span class="pg-meta mono">{{ offset + 1 }}–{{ offset + clips|length }} of {{ total }}</span>
+    {% if next_offset is not none %}
+      <a class="pg-btn" href="/?q={{ q|urlencode }}&offset={{ next_offset }}&limit={{ limit }}">Next ›</a>
+    {% else %}
+      <span class="pg-btn disabled">Next ›</span>
+    {% endif %}
+  </nav>
+</div>

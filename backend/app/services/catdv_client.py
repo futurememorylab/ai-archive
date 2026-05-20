@@ -95,10 +95,24 @@ class CatdvClient:
     async def list_clips(
         self, catalog_id: int, *, offset: int = 0, limit: int = 100, q: str | None = None
     ) -> dict[str, Any]:
-        params: dict[str, str] = {"offset": str(offset), "limit": str(limit)}
+        # CatDV's GET /api/9/clips ignores `query` when `catalogID` is also
+        # passed as a URL parameter, so the catalogue filter has to live
+        # inside the query expression. Paging uses `skip`/`take` (the
+        # documented names); `offset`/`limit` are accepted but corrupt the
+        # response's `totalItems` field (it ends up reporting the page size
+        # instead of the full result-set size). The query language is
+        # parenthesised triples joined with `and`/`or`; see
+        # https://docs.squarebox.com/catdv-server/rest-api/REST-API-Reference.html
+        clauses = [f"((catalog.ID)eq({catalog_id}))"]
         if q:
-            params["q"] = q
-        url = f"/catdv/api/9/catalogs/{catalog_id}/clips"
+            sanitised = q.replace("(", "").replace(")", "")
+            clauses.append(f"((clip.name)contains({sanitised}))")
+        params: dict[str, str] = {
+            "query": "and".join(clauses),
+            "skip": str(offset),
+            "take": str(limit),
+        }
+        url = "/catdv/api/9/clips"
         env = await self._call_json_with_params("GET", url, params=params)
         return env.data
 

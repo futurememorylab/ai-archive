@@ -19,8 +19,9 @@ Then:
 
 ```bash
 curl -s http://localhost:8765/api/health
-curl -s http://localhost:8765/api/templates
 ```
+
+Open the UI at `http://localhost:8765/` (clips list) — first user-facing surface.
 
 ## Tests
 
@@ -42,4 +43,4 @@ curl -s http://localhost:8765/api/templates
 ## Status
 
 - Backend plan: see `docs/plans/2026-05-18-catdv-annotator-backend.md`
-- UI plan: pending
+- UI MVP: `docs/plans/2026-05-20-ui-mvp.md` (clips list + clip detail, read-only)

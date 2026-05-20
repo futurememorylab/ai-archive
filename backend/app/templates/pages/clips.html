@@ -1,0 +1,20 @@
+{% extends "pages/layout.html" %}
+{% block crumb %}
+  <span class="crumb">{{ catalog.name }} · #{{ catalog.id }}</span>
+{% endblock %}
+{% block body %}
+<div class="page page-clips">
+  <div class="toolbar">
+    <div class="search">
+      <input type="search" name="q" value="{{ q }}"
+             placeholder="search name…"
+             hx-get="/" hx-trigger="input changed delay:300ms, keyup[key=='Enter']"
+             hx-target="#clips-region" hx-swap="outerHTML"
+             hx-include="this">
+    </div>
+    <span class="grow"></span>
+    <span class="meta mono">catalog {{ catalog.id }}</span>
+  </div>
+  {% include "pages/_clips_tbody.html" %}
+</div>
+{% endblock %}
