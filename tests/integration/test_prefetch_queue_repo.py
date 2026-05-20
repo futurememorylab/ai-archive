@@ -92,3 +92,32 @@ async def test_list_active_excludes_terminal(db):
     await repo.mark_done(db, a, bytes_downloaded=1)
     rows = await repo.list_active(db)
     assert [r["id"] for r in rows] == [b]
+
+
+@pytest.mark.asyncio
+async def test_list_active_includes_clip_name_via_join(db):
+    repo = PrefetchQueueRepo()
+    await db.execute(
+        "INSERT INTO clip_cache "
+        "(provider_id, provider_clip_id, name, catalog_id, "
+        " duration_secs, fps, canonical_json, fetched_at) "
+        "VALUES ('catdv', '888839', 'ARNOLD Bogdan Sis 09.mov', '881507', "
+        "        300.0, 25.0, '{}', '2026-05-20T07:26:27+00:00')"
+    )
+    await db.commit()
+    await repo.enqueue(db, key=("catdv", "888839"), who="request")
+
+    active = await repo.list_active(db)
+    assert len(active) == 1
+    assert active[0]["clip_name"] == "ARNOLD Bogdan Sis 09.mov"
+    assert active[0]["provider_clip_id"] == "888839"
+
+
+@pytest.mark.asyncio
+async def test_list_recent_clip_name_null_when_metadata_absent(db):
+    repo = PrefetchQueueRepo()
+    await repo.enqueue(db, key=("catdv", "999999"), who="request")
+
+    recent = await repo.list_recent(db, limit=10)
+    assert len(recent) == 1
+    assert recent[0]["clip_name"] is None
