@@ -2,16 +2,23 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}CatDV Annotator{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/app.css">
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
   <script defer src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <script defer src="/static/player.js"></script>
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="/"><span class="dot"></span> CatDV Annotator</a>
+    <a class="brand" href="/"><span class="brand-dot"></span> CatDV Annotator</a>
     {% block crumb %}{% endblock %}
+    <span class="grow"></span>
+    <span class="env-pill"><span class="led"></span> READ-ONLY</span>
   </header>
-  <main>{% block body %}{% endblock %}</main>
+  <main class="main">{% block body %}{% endblock %}</main>
 </body>
 </html>

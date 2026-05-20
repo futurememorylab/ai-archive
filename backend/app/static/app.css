@@ -1,1 +1,86 @@
-/* MVP styles — see Task 4 */
+/* ─── tokens ─────────────────────────────────────────────────────────── */
+:root {
+  --bg:        #0b0d10;
+  --bg-2:      #0f1216;
+  --panel:     #14181d;
+  --panel-2:   #181d23;
+  --surface:   #1d232a;
+  --surface-2: #232a32;
+  --hover:     rgba(255,255,255,0.04);
+  --line:      rgba(255,255,255,0.07);
+  --line-2:    rgba(255,255,255,0.12);
+  --line-3:    rgba(255,255,255,0.20);
+  --text:      #e6e9ee;
+  --text-2:    #b6bcc6;
+  --text-3:    #7e8693;
+  --text-4:    #545b66;
+  --accent:    #f5a623;
+  --accent-2:  color-mix(in oklab, var(--accent) 30%, transparent);
+  --accent-fg: #14181d;
+  --good:      #3ddc84;
+  --bad:       #ff5d5d;
+  --info:      #5ac8fa;
+
+  --f-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --r-1: 4px; --r-2: 6px; --r-3: 10px;
+}
+
+/* ─── base ───────────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--f-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+/* ─── topbar ─────────────────────────────────────────────────────────── */
+.topbar {
+  display: flex; align-items: center;
+  height: 40px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  padding: 0 12px 0 0;
+}
+.brand {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 0 14px 0 16px; height: 100%;
+  border-right: 1px solid var(--line);
+  font-weight: 600; font-size: 12.5px; letter-spacing: 0.02em;
+}
+.brand-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-2);
+}
+.crumb {
+  display: inline-flex; align-items: center;
+  padding: 0 12px; height: 100%;
+  border-right: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: 11.5px;
+}
+.grow { flex: 1; }
+.env-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 22px; padding: 0 8px; border-radius: 11px;
+  border: 1px solid var(--line-2);
+  font-family: var(--f-mono);
+  font-size: 10.5px; letter-spacing: 0.04em;
+  color: var(--text-2);
+  text-transform: uppercase;
+}
+.env-pill .led {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--good);
+  box-shadow: 0 0 6px var(--good);
+}
+
+.main { height: calc(100vh - 40px); overflow: hidden; }
