@@ -8,7 +8,7 @@
 {% block body %}
 <script>localStorage.setItem("catdv:lastClipId", "{{ clip.id }}");</script>
 <div class="detail"
-     x-data="player({{ clip.fps }}, {{ clip.duration_secs }})">
+     x-data='player({{ clip.fps }}, {{ clip.duration_secs }}, {{ clip.markers|tojson }})'>
   <header class="detail-hdr">
     <span class="clip-title">{{ clip.name }}</span>
     <span class="meta mono">{{ clip.format or "" }}</span>
@@ -35,26 +35,109 @@
   </header>
 
   <section class="player-wrap">
-    <video x-ref="video"
-           class="video"
-           src="{{ clip.media_url }}"
-           controls
-           preload="metadata"></video>
-    {% if clip.duration_secs %}
-    <div class="timeline">
-      <div class="ranges">
-        {% for m in clip.markers %}
-          {% set w = (((m.out_secs or m.in_secs + 1) - m.in_secs) / clip.duration_secs) * 100 %}
-          <div class="range"
-               style="left: {{ (m.in_secs / clip.duration_secs) * 100 }}%; width: {{ w }}%"
-               title="{{ m.name }}"
-               @click="seek({{ m.in_secs }})"></div>
-        {% endfor %}
+    <div class="viewer">
+      <video x-ref="video"
+             class="video"
+             src="{{ clip.media_url }}"
+             preload="metadata"
+             @dblclick="$refs.video.requestFullscreen && $refs.video.requestFullscreen()"></video>
+      <div class="hud hud-tl">
+        <div class="hud-lbl">timecode · <span x-text="Math.round(fps) + 'p'">25p</span></div>
+        <div class="hud-tc" x-text="tc(current)">00:00:00:00</div>
+        <div class="hud-val">
+          frame <span x-text="frameStr(current)">0</span>
+          / <span x-text="frameStr(duration)">0</span>
+        </div>
       </div>
-      <div class="playhead"
-           :style="`left: ${pct(current)}%`"></div>
+    </div>
+
+    {% if clip.duration_secs %}
+    <div class="transport">
+      <div class="timeline">
+        <div class="ticks"></div>
+        <div class="ranges">
+          {% for m in clip.markers %}
+            {# Jinja loop order matches the Alpine `markers` array — both come
+               from the same view-model field, sorted ascending by in_secs. #}
+            <div class="range"
+                 :class="{ active: isMarkerActive(markers[{{ loop.index0 }}]) }"
+                 style="left: {{ (m.in_secs / clip.duration_secs) * 100 }}%; width: {{ (((m.out_secs or m.in_secs + 1) - m.in_secs) / clip.duration_secs) * 100 }}%"
+                 title="{{ m.name }}"
+                 @click="seek({{ m.in_secs }})"></div>
+          {% endfor %}
+        </div>
+        <div class="playhead" :style="`left: ${pct(current)}%`"></div>
+        <div class="tc-labels">
+          <span x-text="quintileTc(0)">00:00:00:00</span>
+          <span x-text="quintileTc(1)"></span>
+          <span x-text="quintileTc(2)"></span>
+          <span x-text="quintileTc(3)"></span>
+          <span x-text="quintileTc(4)">{{ duration_smpte }}</span>
+        </div>
+      </div>
+
+      <div class="transport-row">
+        <div class="transport-btns">
+          <button type="button" class="tbtn"
+                  :disabled="!hasMarkers()"
+                  @click="prevMarker()"
+                  title="prev marker (↑)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 4 8 12 19 20 19 4"/><line x1="5" y1="4" x2="5" y2="20"/></svg>
+          </button>
+          <button type="button" class="tbtn"
+                  @click="stepFrame(-1)"
+                  title="step back 1 frame (,)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="4" x2="6" y2="20"/><polygon points="20 4 10 12 20 20 20 4"/></svg>
+          </button>
+          <button type="button" class="tbtn play"
+                  @click="togglePlay()"
+                  title="play/pause (Space)">
+            <svg x-show="!playing" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+            <svg x-show="playing"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+          </button>
+          <button type="button" class="tbtn"
+                  @click="stepFrame(1)"
+                  title="step fwd 1 frame (.)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="4" x2="18" y2="20"/><polygon points="4 4 14 12 4 20 4 4"/></svg>
+          </button>
+          <button type="button" class="tbtn"
+                  :disabled="!hasMarkers()"
+                  @click="nextMarker()"
+                  title="next marker (↓)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 16 12 5 20 5 4"/><line x1="19" y1="4" x2="19" y2="20"/></svg>
+          </button>
+        </div>
+
+        <div class="tc-readout mono">
+          <span class="cur" x-text="tc(current)">00:00:00:00</span>
+          <span class="slash">/</span>
+          <span class="end" x-text="tc(duration)">{{ duration_smpte }}</span>
+        </div>
+
+        <div class="grow"></div>
+
+        <div class="transport-meta mono">
+          <span>SHUTTLE</span>
+          <span class="tag">1×</span>
+          <span class="dot-sep">·</span>
+          <span>AUDIO</span>
+          <span class="tag">—</span>
+        </div>
+      </div>
     </div>
     {% endif %}
+
+    <div class="kbdbar mono">
+      <span class="group"><span class="kbd">Space</span><span>play/pause</span></span>
+      <span class="sep"></span>
+      <span class="group"><span class="kbd">,</span><span class="kbd">.</span><span>step 1f</span></span>
+      <span class="sep"></span>
+      <span class="group"><span class="kbd">↑</span><span class="kbd">↓</span><span>prev/next marker</span></span>
+      <span class="sep"></span>
+      <span class="group"><span class="kbd">J</span><span class="kbd">K</span><span class="kbd">L</span><span>shuttle</span></span>
+      <span class="sep"></span>
+      <span class="group"><span class="kbd">Home</span><span class="kbd">End</span><span>start/end</span></span>
+    </div>
   </section>
 
   <aside class="anno-col">
