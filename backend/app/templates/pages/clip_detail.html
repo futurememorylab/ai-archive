@@ -24,6 +24,19 @@
            src="{{ clip.media_url }}"
            controls
            preload="metadata"></video>
+    <div class="timeline">
+      <div class="ranges">
+        {% for m in clip.markers %}
+          {% set w = (((m.out_secs or m.in_secs + 1) - m.in_secs) / clip.duration_secs) * 100 %}
+          <div class="range"
+               style="left: {{ (m.in_secs / clip.duration_secs) * 100 }}%; width: {{ w }}%"
+               title="{{ m.name }}"
+               @click="seek({{ m.in_secs }})"></div>
+        {% endfor %}
+      </div>
+      <div class="playhead"
+           :style="`left: ${pct(current)}%`"></div>
+    </div>
   </section>
 
   <aside class="anno-col">

@@ -263,3 +263,34 @@ a { color: inherit; text-decoration: none; }
 .note { color: var(--text-2); font-size: 12.5px; line-height: 1.55; margin: 4px 0; }
 .note.big { white-space: pre-wrap; }
 .muted { color: var(--text-3); font-size: 12px; }
+
+/* ─── timeline ───────────────────────────────────────────────────────── */
+.player-wrap { flex-direction: column; gap: 8px; }
+.timeline {
+  position: relative;
+  height: 28px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  overflow: hidden;
+  flex: none;
+}
+.timeline .ranges { position: absolute; inset: 4px 0; }
+.timeline .range {
+  position: absolute; top: 0; bottom: 0;
+  background: color-mix(in oklab, var(--accent) 35%, transparent);
+  border-left: 2px solid var(--accent);
+  border-right: 2px solid var(--accent);
+  border-radius: 2px;
+  min-width: 4px;
+  cursor: pointer;
+}
+.timeline .range:hover {
+  background: color-mix(in oklab, var(--accent) 55%, transparent);
+}
+.timeline .playhead {
+  position: absolute; top: -2px; bottom: -2px;
+  width: 2px; background: #fff;
+  box-shadow: 0 0 6px rgba(255,255,255,0.5);
+  pointer-events: none;
+}
