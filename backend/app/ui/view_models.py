@@ -7,11 +7,42 @@ from __future__ import annotations
 
 from typing import Any
 
+import ftfy
+
 from backend.app.archive.model import CanonicalClip, FieldValue, Marker
 
 _YEAR_FIELD = "pragafilm.rok.natočení"
 _DECADE_FIELD = "pragafilm.dekáda.natočení"
 _PRAGAFILM_PREFIX = "pragafilm."
+
+
+def _fix(s: str | None) -> str | None:
+    """Repair Czech mojibake that lives in CatDV's legacy marker payloads.
+
+    Some clips were imported via one or two rounds of UTF-8-as-Latin-1
+    re-encoding. ftfy's `fix_text` handles the single-round case cleanly
+    and never touches strings that already look fine. For the deeper
+    cases (e.g. `koÃÂÃÂ¡rkem` → `kočárkem`) ftfy stops at half-fixed
+    output, so we then peel additional `latin-1 → utf-8` rounds for as
+    long as the round-trip is well-formed and keeps shrinking the
+    string (a real fix always removes bytes — mojibake re-encodes one
+    byte as two).
+    """
+    if not s:
+        return s
+    # Peel raw double/triple mojibake first while the string is still
+    # entirely in the Latin-1 range; ftfy can only undo one round on its
+    # own. A real fix always shortens the string (one mangled byte was
+    # re-encoded as two), so progress is the stop condition.
+    for _ in range(3):
+        try:
+            peeled = s.encode("latin-1").decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            break
+        if peeled == s or len(peeled) >= len(s):
+            break
+        s = peeled
+    return ftfy.fix_text(s)
 
 
 def _first_value(fv: FieldValue | None) -> str | None:
@@ -27,7 +58,7 @@ def clip_summary(clip: CanonicalClip) -> dict[str, Any]:
     """One row in the clips-list table."""
     return {
         "id": int(clip.key[1]),
-        "name": clip.name,
+        "name": _fix(clip.name),
         "duration_secs": clip.duration_secs,
         "year": _first_value(clip.fields.get(_YEAR_FIELD)),
         "decade": _first_value(clip.fields.get(_DECADE_FIELD)),
@@ -37,10 +68,10 @@ def clip_summary(clip: CanonicalClip) -> dict[str, Any]:
 
 def _marker_view(m: Marker) -> dict[str, Any]:
     return {
-        "name": m.name,
+        "name": _fix(m.name),
         "in_secs": m.in_.secs,
         "out_secs": m.out.secs if m.out is not None else None,
-        "description": m.description,
+        "description": _fix(m.description),
         "category": m.category,
         "color": m.color,
     }
@@ -49,9 +80,11 @@ def _marker_view(m: Marker) -> dict[str, Any]:
 def _field_view(fv: FieldValue) -> dict[str, Any]:
     value = fv.value
     if isinstance(value, list):
-        value_str = ", ".join(str(v) for v in value)
+        value_str = ", ".join(_fix(str(v)) or "" for v in value)
+    elif value is None:
+        value_str = ""
     else:
-        value_str = "" if value is None else str(value)
+        value_str = _fix(str(value)) or ""
     return {
         "identifier": fv.identifier,
         "name": fv.identifier.split(".")[-1],
@@ -94,7 +127,7 @@ def clip_detail(clip: CanonicalClip) -> dict[str, Any]:
             "media_url": f"/api/media/{clip_id}",
             "markers": [_marker_view(m) for m in clip.markers],
             "fields": fields_view,
-            "notes": clip.provider_data.get("notes") or None,
-            "big_notes": clip.provider_data.get("bigNotes") or None,
+            "notes": _fix(clip.provider_data.get("notes")) or None,
+            "big_notes": _fix(clip.provider_data.get("bigNotes")) or None,
         },
     }
