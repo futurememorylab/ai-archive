@@ -132,7 +132,10 @@ def clip_detail(
             "fps": clip.fps or 25.0,
             "format": _format_summary(clip.provider_data),
             "media_url": f"/api/media/{clip_id}",
-            "markers": [_marker_view(m) for m in clip.markers],
+            "markers": [
+                _marker_view(m)
+                for m in sorted(clip.markers, key=lambda m: m.in_.secs)
+            ],
             "fields": fields_view,
             "notes": _fix(clip.provider_data.get("notes")) or None,
             "big_notes": _fix(clip.provider_data.get("bigNotes")) or None,
