@@ -1,0 +1,30 @@
+<div id="clips-region">
+  <table class="tbl">
+    <thead>
+      <tr>
+        <th>Name</th><th>Year</th><th>Decade</th>
+        <th>Duration</th><th>Markers</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in clips %}
+      <tr onclick="location.href='/clips/{{ c.id }}'">
+        <td>{{ c.name }}</td>
+        <td>{{ c.year or "—" }}</td>
+        <td>{{ c.decade or "—" }}</td>
+        <td class="mono">{{ c.duration_secs|int }}s</td>
+        <td>{{ c.marker_count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <nav class="pager">
+    {% if prev_offset is not none %}
+      <a href="/?q={{ q }}&offset={{ prev_offset }}&limit={{ limit }}">‹ Prev</a>
+    {% endif %}
+    <span>{{ offset + 1 }}–{{ offset + clips|length }} of {{ total }}</span>
+    {% if next_offset is not none %}
+      <a href="/?q={{ q }}&offset={{ next_offset }}&limit={{ limit }}">Next ›</a>
+    {% endif %}
+  </nav>
+</div>

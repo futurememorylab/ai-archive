@@ -50,6 +50,12 @@ def _real_external_enabled(s: Settings) -> bool:
 
 app = FastAPI(title="CatDV Annotator", lifespan=lifespan)
 
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+
+_STATIC_DIR = Path(__file__).resolve().parent / "static"
+_STATIC_DIR.mkdir(exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+
 
 @app.get("/api/health")
 async def health() -> dict[str, str]:
@@ -105,3 +111,7 @@ from backend.app.routes.cache import (  # noqa: E402
 app.include_router(cache_api_router)
 app.include_router(cache_page_router)
 app.include_router(cache_ui_router)
+
+from backend.app.routes.pages import router as pages_router  # noqa: E402
+
+app.include_router(pages_router)

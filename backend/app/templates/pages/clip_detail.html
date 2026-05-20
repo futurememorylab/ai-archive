@@ -1,0 +1,27 @@
+{% extends "pages/layout.html" %}
+{% block crumb %}
+  <a class="crumb" href="/">‹ All clips</a>
+  <span class="crumb">{{ clip.name }}</span>
+{% endblock %}
+{% block body %}
+<div class="detail">
+  <div class="player-col">
+    <video src="{{ clip.media_url }}" controls preload="metadata"></video>
+  </div>
+  <aside class="anno-col">
+    <h2>Markers ({{ clip.markers|length }})</h2>
+    {% for m in clip.markers %}
+      <article class="marker">
+        <h3>{{ m.name }}</h3>
+        {% if m.description %}<p>{{ m.description }}</p>{% endif %}
+      </article>
+    {% endfor %}
+    <h2>Fields ({{ clip.fields|length }})</h2>
+    {% for f in clip.fields %}
+      <p><b>{{ f.identifier }}</b> → {{ f.value }}</p>
+    {% endfor %}
+    {% if clip.notes %}<h2>Notes</h2><p>{{ clip.notes }}</p>{% endif %}
+    {% if clip.big_notes %}<h2>Long notes</h2><p>{{ clip.big_notes }}</p>{% endif %}
+  </aside>
+</div>
+{% endblock %}
