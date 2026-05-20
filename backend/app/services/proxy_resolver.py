@@ -41,14 +41,29 @@ class RestProxyResolver:
         if not dest.exists() or dest.stat().st_size == 0:
             await self._catdv.download_proxy(clip_id, dest)
             downloaded_now = True
-        if downloaded_now and self._repo is not None and self._db_provider is not None:
-            await self._repo.record(
-                self._db_provider(),
-                clip_id=clip_id,
-                file_path=str(dest),
-                size_bytes=dest.stat().st_size,
-                etag=None,
+        if self._repo is not None and self._db_provider is not None:
+            conn = self._db_provider()
+            # Backfill missing rows (file pre-existed this code path) and
+            # legacy rows with NULL provider_* columns (written by the
+            # initial PR 8 record() that didn't populate them).
+            existing = await self._repo.get(conn, clip_id)
+            needs_record = (
+                downloaded_now
+                or existing is None
+                or not existing.get("provider_id")
             )
+            if needs_record:
+                await self._repo.record(
+                    conn,
+                    clip_id=clip_id,
+                    file_path=str(dest),
+                    size_bytes=dest.stat().st_size,
+                    etag=None,
+                    provider_id="catdv",
+                    provider_clip_id=str(clip_id),
+                )
+            else:
+                await self._repo.touch(conn, clip_id)
         return dest
 
     def is_managed(self, path: Path) -> bool:

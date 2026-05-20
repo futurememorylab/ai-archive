@@ -17,28 +17,35 @@ class ProxyCacheRepo:
         file_path: str,
         size_bytes: int,
         etag: str | None,
+        provider_id: str = "catdv",
+        provider_clip_id: str | None = None,
     ) -> None:
         now = _now_iso()
+        pcid = provider_clip_id if provider_clip_id is not None else str(clip_id)
         await conn.execute(
             """
             INSERT INTO proxy_cache
-              (catdv_clip_id, file_path, size_bytes, etag, downloaded_at, last_used_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+              (catdv_clip_id, provider_id, provider_clip_id,
+               file_path, size_bytes, etag, downloaded_at, last_used_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(catdv_clip_id) DO UPDATE SET
+              provider_id = excluded.provider_id,
+              provider_clip_id = excluded.provider_clip_id,
               file_path = excluded.file_path,
               size_bytes = excluded.size_bytes,
               etag = excluded.etag,
               downloaded_at = excluded.downloaded_at,
               last_used_at = excluded.last_used_at
             """,
-            (clip_id, file_path, size_bytes, etag, now, now),
+            (clip_id, provider_id, pcid, file_path, size_bytes, etag, now, now),
         )
         await conn.commit()
 
     async def get(self, conn: aiosqlite.Connection, clip_id: int) -> dict[str, Any] | None:
         cur = await conn.execute(
             """
-            SELECT catdv_clip_id, file_path, size_bytes, etag, downloaded_at, last_used_at
+            SELECT catdv_clip_id, provider_id, provider_clip_id,
+                   file_path, size_bytes, etag, downloaded_at, last_used_at
             FROM proxy_cache WHERE catdv_clip_id = ?
             """,
             (clip_id,),
@@ -50,6 +57,8 @@ class ProxyCacheRepo:
             zip(
                 (
                     "catdv_clip_id",
+                    "provider_id",
+                    "provider_clip_id",
                     "file_path",
                     "size_bytes",
                     "etag",
