@@ -144,9 +144,32 @@
     </div>
   </section>
 
-  <aside class="anno-col">
-    <div class="anno-section">
-      <h2 class="anno-h">Markers <span class="count">{{ clip.markers|length }}</span></h2>
+  {% set has_notes = clip.notes or clip.big_notes %}
+  <aside class="anno-col" x-data="{ tab: 'markers' }">
+    <div class="anno-tabs" role="tablist">
+      <button type="button" class="anno-tab" role="tab"
+              :class="{ active: tab === 'markers' }"
+              :aria-selected="tab === 'markers'"
+              @click="tab = 'markers'">
+        Markers <span class="count">{{ clip.markers|length }}</span>
+      </button>
+      <button type="button" class="anno-tab" role="tab"
+              :class="{ active: tab === 'fields' }"
+              :aria-selected="tab === 'fields'"
+              @click="tab = 'fields'">
+        Fields <span class="count">{{ clip.fields|length }}</span>
+      </button>
+      {% if has_notes %}
+      <button type="button" class="anno-tab" role="tab"
+              :class="{ active: tab === 'notes' }"
+              :aria-selected="tab === 'notes'"
+              @click="tab = 'notes'">
+        Notes
+      </button>
+      {% endif %}
+    </div>
+
+    <div class="anno-section" role="tabpanel" x-show="tab === 'markers'">
       {% for m in clip.markers %}
         <article class="marker"
                  @click="seek({{ m.in_secs }})">
@@ -165,8 +188,7 @@
       {% endfor %}
     </div>
 
-    <div class="anno-section">
-      <h2 class="anno-h">Fields <span class="count">{{ clip.fields|length }}</span></h2>
+    <div class="anno-section" role="tabpanel" x-show="tab === 'fields'" x-cloak>
       {% for f in clip.fields %}
         <div class="field-row">
           <span class="ident mono">{{ f.identifier }}</span>
@@ -178,9 +200,8 @@
       {% endfor %}
     </div>
 
-    {% if clip.notes or clip.big_notes %}
-    <div class="anno-section">
-      <h2 class="anno-h">Notes</h2>
+    {% if has_notes %}
+    <div class="anno-section" role="tabpanel" x-show="tab === 'notes'" x-cloak>
       {% if clip.notes %}<p class="note">{{ clip.notes }}</p>{% endif %}
       {% if clip.big_notes %}<p class="note big">{{ clip.big_notes }}</p>{% endif %}
     </div>
