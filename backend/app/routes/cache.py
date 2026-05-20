@@ -164,13 +164,13 @@ async def cache_page(
     evictable: int | None = None,
 ) -> HTMLResponse:
     insp = _inspector(request)
+    ctx = request.app.state.ctx
     summary = await insp.summary()
     if orphans:
         statuses = await insp.list_orphans()
     else:
         # Default page: list every clip with at least one cache layer.
         # We pull from clip_cache + proxy_cache + ai_store_files keys.
-        ctx = request.app.state.ctx
         keys = await _all_cached_keys(ctx.db)
         statuses = await insp.status_for_clips(keys)
     # Filter pass
@@ -188,6 +188,9 @@ async def cache_page(
             if not any(layer.evictable for layer in status.layers):
                 continue
         rows.append(status)
+    active = await ctx.prefetch_queue_repo.list_active(ctx.db)
+    recent = await ctx.prefetch_queue_repo.list_recent(ctx.db, limit=20)
+    counts = await ctx.prefetch_queue_repo.count_by_status(ctx.db)
     return templates.TemplateResponse(
         request,
         "cache_page.html",
@@ -200,6 +203,9 @@ async def cache_page(
                 "orphans": bool(orphans),
                 "evictable": bool(evictable),
             },
+            "active": active,
+            "recent": recent,
+            "counts": counts,
         },
     )
 
@@ -229,6 +235,19 @@ async def cache_popover(
         request,
         "cache_popover.html",
         {"status": _status_for_template(status)},
+    )
+
+
+@ui_router.get("/cache/queue", response_class=HTMLResponse)
+async def cache_queue_panel(request: Request) -> HTMLResponse:
+    ctx = request.app.state.ctx
+    active = await ctx.prefetch_queue_repo.list_active(ctx.db)
+    recent = await ctx.prefetch_queue_repo.list_recent(ctx.db, limit=20)
+    counts = await ctx.prefetch_queue_repo.count_by_status(ctx.db)
+    return templates.TemplateResponse(
+        request,
+        "pages/_prefetch_panel.html",
+        {"active": active, "recent": recent, "counts": counts},
     )
 
 
