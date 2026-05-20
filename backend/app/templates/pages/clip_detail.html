@@ -24,6 +24,7 @@
            src="{{ clip.media_url }}"
            controls
            preload="metadata"></video>
+    {% if clip.duration_secs %}
     <div class="timeline">
       <div class="ranges">
         {% for m in clip.markers %}
@@ -37,6 +38,7 @@
       <div class="playhead"
            :style="`left: ${pct(current)}%`"></div>
     </div>
+    {% endif %}
   </section>
 
   <aside class="anno-col">

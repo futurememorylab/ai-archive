@@ -1,3 +1,4 @@
+import dataclasses
 import importlib
 from datetime import UTC, datetime
 
@@ -68,14 +69,16 @@ def _make_client(monkeypatch, tmp_path):
 
 
 class FakeArchive:
-    def __init__(self, clips: tuple[CanonicalClip, ...] = ()):
+    def __init__(self, clips: tuple[CanonicalClip, ...] = (), total: int | None = None):
         self._clips = clips
+        self._total = total
         self.last_query = None
 
     async def list_clips(self, catalog, query):
         self.last_query = query
         return ClipPage(
-            items=self._clips, total=len(self._clips),
+            items=self._clips,
+            total=self._total if self._total is not None else len(self._clips),
             offset=query.offset, limit=query.limit,
         )
 
@@ -140,3 +143,22 @@ def test_static_mount(monkeypatch, tmp_path):
         r = client.get("/static/app.css")
         assert r.status_code == 200
         assert "text/css" in r.headers["content-type"]
+
+
+def test_clip_detail_renders_without_timeline_when_duration_zero(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        zero_dur = dataclasses.replace(_canonical(), duration_secs=0.0)
+        client.app.state.ctx.archive = FakeArchive((zero_dur,))
+        r = client.get("/clips/12041")
+        assert r.status_code == 200
+        assert "Abramcukova_Anna_09" in r.text
+        assert 'class="timeline"' not in r.text
+
+
+def test_pager_url_encodes_search_query(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        client.app.state.ctx.archive = FakeArchive((_canonical(),), total=100)
+        r = client.get("/?q=hello+world%26x&offset=10&limit=10")
+        assert r.status_code == 200
+        assert "q=hello%20world%26x" in r.text
+        assert "q=hello world&x" not in r.text

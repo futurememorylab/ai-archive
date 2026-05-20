@@ -30,13 +30,13 @@
   </div>
   <nav class="pager">
     {% if prev_offset is not none %}
-      <a class="pg-btn" href="/?q={{ q }}&offset={{ prev_offset }}&limit={{ limit }}">‹ Prev</a>
+      <a class="pg-btn" href="/?q={{ q|urlencode }}&offset={{ prev_offset }}&limit={{ limit }}">‹ Prev</a>
     {% else %}
       <span class="pg-btn disabled">‹ Prev</span>
     {% endif %}
     <span class="pg-meta mono">{{ offset + 1 }}–{{ offset + clips|length }} of {{ total }}</span>
     {% if next_offset is not none %}
-      <a class="pg-btn" href="/?q={{ q }}&offset={{ next_offset }}&limit={{ limit }}">Next ›</a>
+      <a class="pg-btn" href="/?q={{ q|urlencode }}&offset={{ next_offset }}&limit={{ limit }}">Next ›</a>
     {% else %}
       <span class="pg-btn disabled">Next ›</span>
     {% endif %}
