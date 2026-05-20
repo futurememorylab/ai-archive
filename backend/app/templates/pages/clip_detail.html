@@ -82,12 +82,14 @@
                   :disabled="!hasMarkers()"
                   @click="prevMarker()"
                   title="prev marker (↑)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 4 8 12 19 20 19 4"/><line x1="5" y1="4" x2="5" y2="20"/></svg>
+            {# double chevron = skip to prev marker #}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="12 6 6 12 12 18"/><polyline points="19 6 13 12 19 18"/></svg>
           </button>
           <button type="button" class="tbtn"
                   @click="stepFrame(-1)"
                   title="step back 1 frame (,)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="4" x2="6" y2="20"/><polygon points="20 4 10 12 20 20 20 4"/></svg>
+            {# single chevron = step 1 frame #}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>
           </button>
           <button type="button" class="tbtn play"
                   @click="togglePlay()"
@@ -98,13 +100,15 @@
           <button type="button" class="tbtn"
                   @click="stepFrame(1)"
                   title="step fwd 1 frame (.)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="4" x2="18" y2="20"/><polygon points="4 4 14 12 4 20 4 4"/></svg>
+            {# single chevron = step 1 frame #}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
           </button>
           <button type="button" class="tbtn"
                   :disabled="!hasMarkers()"
                   @click="nextMarker()"
                   title="next marker (↓)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 16 12 5 20 5 4"/><line x1="19" y1="4" x2="19" y2="20"/></svg>
+            {# double chevron = skip to next marker #}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 6 11 12 5 18"/><polyline points="12 6 18 12 12 18"/></svg>
           </button>
         </div>
 
