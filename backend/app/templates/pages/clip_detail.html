@@ -58,12 +58,16 @@
         <div class="ranges">
           {% for m in clip.markers %}
             {# Jinja loop order matches the Alpine `markers` array — both come
-               from the same view-model field, sorted ascending by in_secs. #}
+               from the same view-model field, sorted ascending by in_secs.
+               No @click here: clicks bubble to .timeline so seekFromEvent
+               jumps to the exact clicked position within the marker, not
+               to the marker's start. The marker card in the right rail
+               still seeks to in_secs (that's the "select this marker"
+               affordance). #}
             <div class="range"
                  :class="{ active: isMarkerActive(markers[{{ loop.index0 }}]) }"
                  style="left: {{ (m.in_secs / clip.duration_secs) * 100 }}%; width: {{ (((m.out_secs or m.in_secs + 1) - m.in_secs) / clip.duration_secs) * 100 }}%"
-                 title="{{ m.name }}"
-                 @click.stop="seek({{ m.in_secs }})"></div>
+                 title="{{ m.name }}"></div>
           {% endfor %}
         </div>
         <div class="playhead" :style="`left: ${pct(current)}%`"></div>
