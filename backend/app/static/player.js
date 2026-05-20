@@ -72,6 +72,18 @@ document.addEventListener("alpine:init", () => {
       v.play().catch(() => {});
     },
 
+    seekFromEvent(e) {
+      // Use the bounding rect of the timeline itself, not e.target — clicks
+      // may land on .ticks / .ranges children, whose offsetX is relative to
+      // those, not the full timeline.
+      const tl = e.currentTarget;
+      const rect = tl.getBoundingClientRect();
+      if (!rect.width || !this.duration) return;
+      const x = e.clientX - rect.left;
+      const frac = Math.max(0, Math.min(1, x / rect.width));
+      this.seek(frac * this.duration);
+    },
+
     hasMarkers() {
       return this.markers.length > 0;
     },

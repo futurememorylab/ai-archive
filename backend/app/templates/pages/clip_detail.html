@@ -53,7 +53,7 @@
 
     {% if clip.duration_secs %}
     <div class="transport">
-      <div class="timeline">
+      <div class="timeline" @click="seekFromEvent($event)">
         <div class="ticks"></div>
         <div class="ranges">
           {% for m in clip.markers %}
@@ -63,7 +63,7 @@
                  :class="{ active: isMarkerActive(markers[{{ loop.index0 }}]) }"
                  style="left: {{ (m.in_secs / clip.duration_secs) * 100 }}%; width: {{ (((m.out_secs or m.in_secs + 1) - m.in_secs) / clip.duration_secs) * 100 }}%"
                  title="{{ m.name }}"
-                 @click="seek({{ m.in_secs }})"></div>
+                 @click.stop="seek({{ m.in_secs }})"></div>
           {% endfor %}
         </div>
         <div class="playhead" :style="`left: ${pct(current)}%`"></div>
