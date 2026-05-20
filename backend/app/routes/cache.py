@@ -111,6 +111,47 @@ async def evict_orphans(request: Request) -> dict[str, Any]:
     return (await actions.evict_orphans()).to_dict()
 
 
+class PrefetchBody(BaseModel):
+    clip_keys: list[tuple[str, str]] = []
+
+
+@api_router.post("/prefetch")
+async def prefetch_enqueue(
+    request: Request, body: PrefetchBody
+) -> dict[str, Any]:
+    ctx = request.app.state.ctx
+    ids: list[int] = []
+    for prov, clip_id in body.clip_keys:
+        rid = await ctx.prefetch_queue_repo.enqueue(
+            ctx.db, key=(prov, clip_id), who="request",
+        )
+        ids.append(rid)
+    return {"enqueued": len(body.clip_keys), "ids": ids}
+
+
+@api_router.get("/prefetch/queue")
+async def prefetch_queue_list(request: Request) -> dict[str, Any]:
+    ctx = request.app.state.ctx
+    active = await ctx.prefetch_queue_repo.list_active(ctx.db)
+    recent = await ctx.prefetch_queue_repo.list_recent(ctx.db, limit=50)
+    counts = await ctx.prefetch_queue_repo.count_by_status(ctx.db)
+    return {"active": active, "recent": recent, "counts": counts}
+
+
+@api_router.post("/prefetch/{rid}/cancel")
+async def prefetch_cancel(
+    request: Request, rid: int
+) -> dict[str, Any]:
+    ctx = request.app.state.ctx
+    ok = await ctx.prefetch_queue_repo.mark_cancelled(ctx.db, rid)
+    if not ok:
+        raise HTTPException(
+            409,
+            "row is not cancellable (downloading or already terminal)",
+        )
+    return {"cancelled": True}
+
+
 # --- HTML pages + HTMX partials ------------------------------------
 
 
@@ -123,13 +164,13 @@ async def cache_page(
     evictable: int | None = None,
 ) -> HTMLResponse:
     insp = _inspector(request)
+    ctx = request.app.state.ctx
     summary = await insp.summary()
     if orphans:
         statuses = await insp.list_orphans()
     else:
         # Default page: list every clip with at least one cache layer.
         # We pull from clip_cache + proxy_cache + ai_store_files keys.
-        ctx = request.app.state.ctx
         keys = await _all_cached_keys(ctx.db)
         statuses = await insp.status_for_clips(keys)
     # Filter pass
@@ -147,6 +188,9 @@ async def cache_page(
             if not any(layer.evictable for layer in status.layers):
                 continue
         rows.append(status)
+    active = await ctx.prefetch_queue_repo.list_active(ctx.db)
+    recent = await ctx.prefetch_queue_repo.list_recent(ctx.db, limit=20)
+    counts = await ctx.prefetch_queue_repo.count_by_status(ctx.db)
     return templates.TemplateResponse(
         request,
         "cache_page.html",
@@ -159,6 +203,9 @@ async def cache_page(
                 "orphans": bool(orphans),
                 "evictable": bool(evictable),
             },
+            "active": active,
+            "recent": recent,
+            "counts": counts,
         },
     )
 
@@ -188,6 +235,19 @@ async def cache_popover(
         request,
         "cache_popover.html",
         {"status": _status_for_template(status)},
+    )
+
+
+@ui_router.get("/cache/queue", response_class=HTMLResponse)
+async def cache_queue_panel(request: Request) -> HTMLResponse:
+    ctx = request.app.state.ctx
+    active = await ctx.prefetch_queue_repo.list_active(ctx.db)
+    recent = await ctx.prefetch_queue_repo.list_recent(ctx.db, limit=20)
+    counts = await ctx.prefetch_queue_repo.count_by_status(ctx.db)
+    return templates.TemplateResponse(
+        request,
+        "pages/_prefetch_panel.html",
+        {"active": active, "recent": recent, "counts": counts},
     )
 
 

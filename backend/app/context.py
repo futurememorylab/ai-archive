@@ -18,6 +18,7 @@ from backend.app.repositories.clip_cache import ClipCacheRepo
 from backend.app.repositories.field_def_cache import FieldDefCacheRepo
 from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.pending_operations import PendingOperationsRepo
+from backend.app.repositories.prefetch_queue import PrefetchQueueRepo
 from backend.app.repositories.proxy_cache import ProxyCacheRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.templates import TemplatesRepo
@@ -28,6 +29,7 @@ from backend.app.services.cache_inspector import CacheInspector
 from backend.app.services.connection_monitor import ConnectionMonitor
 from backend.app.services.events import EventBus
 from backend.app.services.lru_eviction import LruEviction
+from backend.app.services.media_prefetcher import MediaPrefetcher
 from backend.app.services.sync_engine import SyncEngine
 from backend.app.services.workspace_manager import WorkspaceManager
 from backend.app.services.write_queue import WriteQueue
@@ -54,6 +56,7 @@ class AppContext:
     pending_ops_repo: PendingOperationsRepo = field(default_factory=PendingOperationsRepo)
     workspaces_repo: WorkspacesRepo = field(default_factory=WorkspacesRepo)
     cache_actions_log_repo: CacheActionsLogRepo = field(default_factory=CacheActionsLogRepo)
+    prefetch_queue_repo: PrefetchQueueRepo = field(default_factory=PrefetchQueueRepo)
     event_bus: EventBus = field(default_factory=EventBus)
 
     _running_jobs: dict[int, "object"] = field(default_factory=dict)
@@ -71,6 +74,7 @@ class AppContext:
     cache_inspector: CacheInspector | None = None
     cache_actions: CacheActions | None = None
     lru_eviction: LruEviction | None = None
+    media_prefetcher: MediaPrefetcher | None = None
 
     @classmethod
     async def build(cls, settings: Settings, *, init_external: bool = True) -> "AppContext":
@@ -148,6 +152,8 @@ class AppContext:
                     cache_dir=settings.data_dir / "cache" / "proxies",
                     fs_root=settings.proxy_fs_root,
                     path_template=settings.proxy_path_template,
+                    proxy_cache_repo=ctx.proxy_cache_repo,
+                    db_provider=lambda c=ctx: c.db,
                 )
             else:
                 # FS adapter has media_is_local=True; the workspace
@@ -197,9 +203,18 @@ class AppContext:
                 media_cache_cap_bytes=cap_bytes,
                 tick_interval_s=float(settings.lru_tick_interval_s),
             )
+            if ctx.proxy_resolver is not None:
+                ctx.media_prefetcher = MediaPrefetcher(
+                    queue_repo=ctx.prefetch_queue_repo,
+                    resolver=ctx.proxy_resolver,
+                    db_provider=lambda c=ctx: c.db,
+                    tick_interval_s=float(settings.prefetch_tick_interval_s),
+                )
         return ctx
 
     async def aclose(self) -> None:
+        if self.media_prefetcher is not None:
+            await self.media_prefetcher.stop()
         if self.lru_eviction is not None:
             await self.lru_eviction.stop()
         if self.sync_engine is not None:

@@ -57,6 +57,10 @@
     </form>
   </div>
 
+  {# Prefetch queue lives here, server-rendered on first paint, then
+     self-refreshes every 2s via HTMX. #}
+  {% include "pages/_prefetch_panel.html" %}
+
   <form action="" method="get" class="filters">
     <label>Store: <input name="store" value="{{ filters.store or '' }}"></label>
     <label>Workspace: <input name="workspace" value="{{ filters.workspace or '' }}"></label>

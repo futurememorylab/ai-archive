@@ -54,7 +54,10 @@ def _first_value(fv: FieldValue | None) -> str | None:
     return str(v) if v is not None else None
 
 
-def clip_summary(clip: CanonicalClip) -> dict[str, Any]:
+def clip_summary(
+    clip: CanonicalClip,
+    cache_status: Any | None = None,
+) -> dict[str, Any]:
     """One row in the clips-list table."""
     return {
         "id": int(clip.key[1]),
@@ -63,6 +66,7 @@ def clip_summary(clip: CanonicalClip) -> dict[str, Any]:
         "year": _first_value(clip.fields.get(_YEAR_FIELD)),
         "decade": _first_value(clip.fields.get(_DECADE_FIELD)),
         "marker_count": len(clip.markers),
+        "cache": cache_status_view(cache_status) if cache_status else None,
     }
 
 
@@ -107,7 +111,10 @@ def _format_summary(provider_data: dict[str, Any]) -> str:
     return " · ".join(bits)
 
 
-def clip_detail(clip: CanonicalClip) -> dict[str, Any]:
+def clip_detail(
+    clip: CanonicalClip,
+    cache_status: Any | None = None,
+) -> dict[str, Any]:
     """Single-clip page view model."""
     clip_id = int(clip.key[1])
     fields_view = [
@@ -129,5 +136,29 @@ def clip_detail(clip: CanonicalClip) -> dict[str, Any]:
             "fields": fields_view,
             "notes": _fix(clip.provider_data.get("notes")) or None,
             "big_notes": _fix(clip.provider_data.get("bigNotes")) or None,
+            "cache": cache_status_view(cache_status) if cache_status else None,
         },
+    }
+
+
+def cache_status_view(status) -> dict[str, Any]:
+    """Render-ready cache hints for the badge + buttons."""
+    md, ml, ai = status.layers
+
+    def _shape(layer) -> dict[str, Any]:
+        size = int(layer.size_bytes or 0)
+        pinned = bool(layer.pinned_by_workspaces)
+        return {
+            "present": bool(layer.present),
+            "pinned": pinned,
+            "evictable": bool(layer.evictable),
+            "size_bytes": size,
+            "size_mb": size // (1024 * 1024),
+        }
+
+    return {
+        "clip_key": list(status.clip_key),
+        "metadata": _shape(md),
+        "media_local": _shape(ml),
+        "media_ai": _shape(ai),
     }

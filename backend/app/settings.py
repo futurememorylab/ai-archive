@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     media_cache_cap_gb: int = 50
     lru_tick_interval_s: int = 300
 
+    # media prefetch queue
+    prefetch_tick_interval_s: int = 2
+
     @model_validator(mode="after")
     def _validate_proxy(self) -> "Settings":
         fs_root_empty = self.proxy_fs_root is None or str(self.proxy_fs_root) in ("", ".")

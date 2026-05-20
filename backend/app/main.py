@@ -28,6 +28,8 @@ async def lifespan(app: FastAPI):
             await ctx.sync_engine.start()
         if ctx.lru_eviction is not None:
             await ctx.lru_eviction.start()
+        if ctx.media_prefetcher is not None:
+            await ctx.media_prefetcher.start()
     try:
         yield
     finally:

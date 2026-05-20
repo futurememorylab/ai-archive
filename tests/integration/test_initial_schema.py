@@ -27,6 +27,7 @@ EXPECTED_TABLES = {
     "workspaces",
     "workspace_clips",
     "cache_actions_log",
+    "prefetch_queue",
 }
 
 

@@ -3,7 +3,7 @@
   <span class="crumb">{{ catalog.name }} · #{{ catalog.id }}</span>
 {% endblock %}
 {% block body %}
-<div class="page page-clips">
+<div class="page page-clips" x-data="bulkSel()">
   <div class="toolbar">
     <div class="search">
       <input type="search" name="q" value="{{ q }}"
@@ -15,6 +15,71 @@
     <span class="grow"></span>
     <span class="meta mono">catalog {{ catalog.id }}</span>
   </div>
+
+  <div class="bulk-toolbar"
+       :class="{ 'bulk-toolbar-active': count > 0 }">
+    <span class="bulk-count" x-text="count + ' selected'">0 selected</span>
+    <span class="grow"></span>
+    <a class="bulk-btn" href="/cache">Cache view ›</a>
+    <button type="button" class="bulk-btn"
+            :disabled="count === 0"
+            @click="bulkPrefetch()">Cache selected</button>
+    <button type="button" class="bulk-btn bulk-btn-danger"
+            :disabled="count === 0"
+            @click="bulkEvict()">Evict selected</button>
+  </div>
+
   {% include "pages/_clips_tbody.html" %}
 </div>
+
+<script>
+  function bulkSel() {
+    return {
+      count: 0,
+      _selectedKeys() {
+        return Array.from(
+          document.querySelectorAll('.row-check:checked')
+        ).map(el => el.value.split('/'));
+      },
+      init() {
+        document.addEventListener('change', e => {
+          if (e.target.classList.contains('row-check')) {
+            this.count = this._selectedKeys().length;
+          }
+          if (e.target.id === 'row-select-all') {
+            document.querySelectorAll('.row-check').forEach(
+              cb => cb.checked = e.target.checked
+            );
+            this.count = this._selectedKeys().length;
+          }
+        });
+      },
+      async bulkPrefetch() {
+        const keys = this._selectedKeys();
+        if (keys.length === 0) return;
+        const r = await fetch('/api/cache/prefetch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clip_keys: keys }),
+        });
+        if (r.ok) htmx.ajax('GET', window.location.href, '#clips-region');
+      },
+      async bulkEvict() {
+        const keys = this._selectedKeys();
+        if (keys.length === 0) return;
+        if (!confirm(`Evict local media for ${keys.length} clip(s)?`)) return;
+        const r = await fetch('/api/cache/bulk-evict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            clip_keys: keys,
+            layers: ['media-local'],
+            force: false,
+          }),
+        });
+        if (r.ok) htmx.ajax('GET', window.location.href, '#clips-region');
+      },
+    }
+  }
+</script>
 {% endblock %}

@@ -10,6 +10,20 @@
   <header class="detail-hdr">
     <span class="clip-title">{{ clip.name }}</span>
     <span class="meta mono">{{ clip.format or "" }}</span>
+    <span class="cache-actions">
+      {% with cache = clip.cache %}
+        {% include "pages/_cache_badge.html" %}
+      {% endwith %}
+      {% if clip.cache and clip.cache.media_local.present %}
+        <button type="button"
+                class="ca-btn ca-btn-danger"
+                onclick="evictLocal({{ clip.id }})">Evict local</button>
+      {% else %}
+        <button type="button"
+                class="ca-btn"
+                onclick="cacheClip({{ clip.id }})">⬇ Cache video</button>
+      {% endif %}
+    </span>
     <span class="grow"></span>
     <span class="tc-readout mono">
       <span class="cur" x-text="tc(current)">00:00:00:00</span>
@@ -84,4 +98,28 @@
     {% endif %}
   </aside>
 </div>
+<script>
+  async function cacheClip(clipId) {
+    const r = await fetch('/api/cache/prefetch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clip_keys: [['catdv', String(clipId)]] }),
+    });
+    if (r.ok) {
+      window.location.reload();
+    }
+  }
+  async function evictLocal(clipId) {
+    if (!confirm('Evict the local proxy for this clip?')) return;
+    const r = await fetch(
+      `/api/cache/clip/catdv/${clipId}/evict`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ layers: ['media-local'], force: false }),
+      },
+    );
+    if (r.ok) window.location.reload();
+  }
+</script>
 {% endblock %}
