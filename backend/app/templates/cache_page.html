@@ -1,109 +1,215 @@
-{# Cache management page — server-rendered, plain HTMX.
+{% extends "pages/layout.html" %}
+{% block rail_active %}cache{% endblock %}
+{% block title %}Cache · CatDV Annotator{% endblock %}
+{% block crumb %}
+  <span class="crumb">
+    <span>System</span>
+    <span class="sep"> / </span>
+    <span class="strong">Cache management</span>
+  </span>
+{% endblock %}
 
-   Querystring filters:
-     ?store=gcs:b
-     ?workspace=3
-     ?orphans=1
-     ?evictable=1
+{% block body %}
+<div class="page cache-page" x-data="cacheSel()">
 
-   No client-side state beyond row checkboxes (the form serialises them
-   on submit).
-#}
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Cache management</title>
-  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 1.5rem; }
-    .summary { background: #f4f4f8; padding: 1rem; border-radius: 6px;
-               margin-bottom: 1.5rem; }
-    table.cache-rows { border-collapse: collapse; width: 100%; }
-    table.cache-rows th, table.cache-rows td {
-      padding: 0.4rem 0.6rem; border-bottom: 1px solid #eee;
-      text-align: left; vertical-align: top;
-    }
-    .glyph { display: inline-block; padding: 0 2px; }
-    .glyph.present-fresh { color: #2d8f5e; }
-    .glyph.present-pinned { color: #b86b00; }
-    .glyph.absent { color: #bbb; }
-  </style>
-</head>
-<body>
-  <h1>Cache management</h1>
-
-  <div class="summary">
-    <h2>Summary</h2>
-    <p>Local cache: <b>{{ summary.total_local_bytes }}</b> bytes
-       / <b>{{ summary.media_cache_cap_bytes }}</b> bytes cap
-       ({{ summary.metadata_clip_count }} metadata,
-        {{ summary.media_local_clip_count }} media)</p>
-    <p>AI store: <b>{{ summary.total_ai_bytes }}</b> bytes
-       ({% for store, n in summary.counts_by_store.items() %}
-          {{ store }}={{ n }}
-          {% if not loop.last %}, {% endif %}
-        {% endfor %})</p>
-    <p>Pending ops: <b>{{ summary.pending_ops_count }}</b>
-       — <a href="/ui/sync-drawer">Open sync drawer</a></p>
-    <form method="post" action="/api/cache/bulk-evict" style="display: inline">
-      <button type="submit"
-              name="all_orphans" value="1"
-              hx-confirm="Evict all orphans?"
-              hx-post="/api/cache/orphans/evict"
-              hx-target="#cache-rows" hx-swap="innerHTML">
-        Evict orphans
-      </button>
-    </form>
+  <div class="page-hdr">
+    <h1>Cache</h1>
+    <span class="meta">inspector · queue · purge</span>
+    <span class="grow"></span>
+    <button class="btn ghost" type="button" onclick="location.reload()">Refresh</button>
   </div>
 
-  {# Prefetch queue lives here, server-rendered on first paint, then
-     self-refreshes every 2s via HTMX. #}
-  {% include "pages/_prefetch_panel.html" %}
+  {# ─── Metric strip ─────────────────────────────────────────────── #}
+  {% set cap = summary.media_cache_cap_bytes or 1 %}
+  {% set local_pct = (100 * summary.total_local_bytes / cap) %}
+  <div class="metric-strip">
 
-  <form action="" method="get" class="filters">
-    <label>Store: <input name="store" value="{{ filters.store or '' }}"></label>
-    <label>Workspace: <input name="workspace" value="{{ filters.workspace or '' }}"></label>
-    <label><input type="checkbox" name="orphans" value="1"
-                  {% if filters.orphans %}checked{% endif %}> orphans only</label>
-    <label><input type="checkbox" name="evictable" value="1"
-                  {% if filters.evictable %}checked{% endif %}> evictable only</label>
-    <button type="submit">Apply</button>
-  </form>
+    <div class="metric">
+      <div class="m-label">Local cache</div>
+      <div class="m-value">{{ summary.total_local_bytes | bytes_human }}</div>
+      <div class="m-sub">of {{ summary.media_cache_cap_bytes | bytes_human }}</div>
+      <div class="m-bar"><span style="width: {{ '%.1f' % local_pct }}%"></span></div>
+      <div class="m-foot">
+        <b>{{ summary.metadata_clip_count }}</b> metadata ·
+        <b>{{ summary.media_local_clip_count }}</b> media
+      </div>
+    </div>
 
-  <form id="bulk-form" hx-post="/api/cache/bulk-evict"
-        hx-ext="json-enc" hx-target="#cache-rows" hx-swap="innerHTML">
-    <p>
-      Selected layers:
-      <label><input type="checkbox" name="layers" value="metadata"> metadata</label>
-      <label><input type="checkbox" name="layers" value="media-local" checked> media-local</label>
-      <label><input type="checkbox" name="layers" value="media-ai"> media-ai</label>
-      <label><input type="checkbox" name="force" value="true"> force</label>
-      <button type="submit">Evict selected</button>
-    </p>
+    <div class="metric">
+      <div class="m-label">AI store</div>
+      <div class="m-value">{{ summary.total_ai_bytes | bytes_human }}</div>
+      <div class="m-sub">
+        {%- if summary.counts_by_store -%}
+          {%- for store_id in summary.counts_by_store.keys() -%}
+            {%- if loop.first -%}{{ store_id }}{%- endif -%}
+          {%- endfor -%}
+        {%- else -%}—{%- endif -%}
+      </div>
+      <div class="m-foot">
+        <b>{{ ai_total_count }}</b> objects ·
+        <span class="muted-2">{{ summary.total_ai_bytes | comma }} B</span>
+      </div>
+    </div>
 
-    <table class="cache-rows" id="cache-rows">
-      <thead>
-        <tr>
-          <th></th><th>Clip</th><th>Layers</th>
-          <th>Total local</th><th>Total AI</th>
-          <th>Pinned by</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for status in rows %}
-          <tr>
-            <td><input type="checkbox" name="clip_keys"
-                       value="{{ status.clip_key[0] }}/{{ status.clip_key[1] }}"></td>
-            <td>{{ status.name }} ({{ status.clip_key[0] }}/{{ status.clip_key[1] }})</td>
-            <td>{% include "cache_badge.html" %}</td>
-            <td>{{ status.total_local_bytes }}</td>
-            <td>{{ status.total_ai_bytes }}</td>
-            <td>{{ status.layers[0].pinned_by_workspaces|join(", ") }}</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </form>
-</body>
-</html>
+    <div class="metric">
+      <div class="m-label">Prefetch queue</div>
+      {% set active_n = queue_counts.get("queued", 0) + queue_counts.get("downloading", 0) %}
+      <div class="m-value">{{ active_n }}</div>
+      <div class="m-sub">{% if active_n > 0 %}active{% else %}idle{% endif %}</div>
+      <div class="m-foot">
+        <b>{{ queue_counts.get("done", 0) }}</b> done ·
+        <b>{{ queue_counts.get("error", 0) }}</b> err ·
+        <b>{{ queue_counts.get("cancelled", 0) }}</b> cxl
+      </div>
+    </div>
+
+    <div class="metric danger">
+      <div class="m-label">Orphans</div>
+      <div class="m-value">{{ orphan_count }}</div>
+      <div class="m-sub">{{ orphan_bytes | bytes_human }}</div>
+      <div class="m-foot">
+        <a class="link-danger" href="/cache?orphans=1">Show &amp; purge →</a>
+      </div>
+    </div>
+
+  </div>
+
+  {# ─── Tabs ─────────────────────────────────────────────────────── #}
+  <div class="cache-tabs">
+    {% for t, label in [("all","All"),("queue","Queue"),("local","Local cache"),("ai","AI cache")] %}
+      <a class="ctab{% if tab == t %} active{% endif %}"
+         href="/cache?tab={{ t }}"
+         hx-get="/cache?tab={{ t }}"
+         hx-target="#cache-table-region"
+         hx-swap="innerHTML"
+         hx-push-url="true">
+        {{ label }} <span class="ctab-n mono">{{ counts.get(t, 0) }}</span>
+      </a>
+    {% endfor %}
+  </div>
+
+  {# ─── Filter bar ───────────────────────────────────────────────── #}
+  <div class="cache-filterbar">
+    <div class="lyr-legend">
+      <span class="lyr-row">
+        <span class="lyr-meta on"></span><span class="lyr-lbl">metadata</span>
+      </span>
+      <span class="lyr-row">
+        <span class="lyr-local on"></span><span class="lyr-lbl">media-local</span>
+      </span>
+      <span class="lyr-row">
+        <span class="lyr-ai on"></span><span class="lyr-lbl">media-ai</span>
+      </span>
+    </div>
+    <span class="grow"></span>
+    <span class="mono muted">{{ rows | length }} entries</span>
+  </div>
+
+  <details class="cache-extra-filters">
+    <summary>Filters</summary>
+    <form action="/cache" method="get" class="filters-form">
+      <input type="hidden" name="tab" value="{{ tab }}">
+      <label>Store: <input name="store" value="{{ filters.store or '' }}"></label>
+      <label>Workspace: <input name="workspace" value="{{ filters.workspace or '' }}"></label>
+      <label><input type="checkbox" name="orphans" value="1"
+                    {% if filters.orphans %}checked{% endif %}> orphans only</label>
+      <label><input type="checkbox" name="evictable" value="1"
+                    {% if filters.evictable %}checked{% endif %}> evictable only</label>
+      <button type="submit" class="bulk-btn">Apply</button>
+    </form>
+  </details>
+
+  {# ─── Bulk action bar ──────────────────────────────────────────── #}
+  <div class="bulkbar" x-show="count > 0" x-cloak>
+    <span class="bulk-count">
+      <b x-text="count"></b> selected ·
+      <span class="mono muted" x-text="bytesHuman(totalBytes)"></span>
+    </span>
+    <span class="grow"></span>
+    <button type="button" class="bulk-btn" @click="clearSel()">Clear</button>
+    <button type="button" class="bulk-btn" @click="bulkPrefetch()">Re-fetch</button>
+    <button type="button" class="bulk-btn bulk-btn-danger" @click="bulkEvict()">Purge selected</button>
+  </div>
+
+  {# ─── Table region (HTMX target) ──────────────────────────────── #}
+  <div id="cache-table-region" class="cache-listwrap">
+    {% if tab == "queue" %}
+      {% include "pages/_cache_queue_table.html" %}
+    {% else %}
+      {% include "pages/_cache_inventory_table.html" %}
+    {% endif %}
+  </div>
+
+</div>
+
+<script>
+  function cacheSel() {
+    return {
+      count: 0,
+      totalBytes: 0,
+      _selected() {
+        return Array.from(document.querySelectorAll('.row-check:checked'));
+      },
+      _selectedKeys() {
+        return this._selected().map(el => el.value.split('/'));
+      },
+      _recount() {
+        const sel = this._selected();
+        this.count = sel.length;
+        this.totalBytes = sel.reduce(
+          (acc, el) => acc + parseInt(el.dataset.bytes || '0', 10),
+          0,
+        );
+      },
+      bytesHuman(n) {
+        if (!n) return '0 B';
+        const u = ['B','KB','MB','GB','TB'];
+        let i = 0;
+        while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+        return (i === 0 ? n.toFixed(0) : n.toFixed(1)) + ' ' + u[i];
+      },
+      init() {
+        document.addEventListener('change', e => {
+          if (e.target.classList.contains('row-check')) this._recount();
+          if (e.target.id === 'row-select-all') {
+            document.querySelectorAll('.row-check').forEach(
+              cb => cb.checked = e.target.checked
+            );
+            this._recount();
+          }
+        });
+        document.body.addEventListener('htmx:afterSwap', () => this._recount());
+      },
+      clearSel() {
+        document.querySelectorAll('.row-check:checked').forEach(cb => cb.checked = false);
+        this._recount();
+      },
+      async bulkPrefetch(keys) {
+        keys = keys || this._selectedKeys();
+        if (keys.length === 0) return;
+        const r = await fetch('/api/cache/prefetch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clip_keys: keys }),
+        });
+        if (r.ok) htmx.ajax('GET', window.location.href, '#cache-table-region');
+      },
+      async bulkEvict(keys) {
+        keys = keys || this._selectedKeys();
+        if (keys.length === 0) return;
+        if (!confirm(`Purge local media for ${keys.length} clip(s)?`)) return;
+        const r = await fetch('/api/cache/bulk-evict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            clip_keys: keys,
+            layers: ['media-local'],
+            force: false,
+          }),
+        });
+        if (r.ok) htmx.ajax('GET', window.location.href, '#cache-table-region');
+      },
+    };
+  }
+</script>
+{% endblock %}

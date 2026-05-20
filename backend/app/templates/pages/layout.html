@@ -13,12 +13,16 @@
   <script defer src="/static/player.js"></script>
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="/"><span class="brand-dot"></span> CatDV Annotator</a>
-    {% block crumb %}{% endblock %}
-    <span class="grow"></span>
-    <span class="env-pill"><span class="led"></span> READ-ONLY</span>
-  </header>
-  <main class="main">{% block body %}{% endblock %}</main>
+  {% set rail_active %}{% block rail_active %}{% endblock %}{% endset %}
+  <div class="app">
+    <header class="topbar">
+      <a class="brand" href="/"><span class="brand-dot"></span> CatDV Annotator</a>
+      {% block crumb %}{% endblock %}
+      <span class="grow"></span>
+      {% block topbar_pills %}{% include "pages/_topbar_pills.html" %}{% endblock %}
+    </header>
+    <aside class="rail">{% include "pages/_rail.html" %}</aside>
+    <main class="main">{% block body %}{% endblock %}</main>
+  </div>
 </body>
 </html>

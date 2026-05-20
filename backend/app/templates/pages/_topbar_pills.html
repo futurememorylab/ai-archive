@@ -1,0 +1,9 @@
+{# Default right-side pillset for the topbar.
+   Reads settings from request.app.state.ctx.settings so no per-handler
+   wiring is required. #}
+{% set _settings = request.app.state.ctx.settings %}
+<span class="pillset">
+  <span class="env-pill ok"><span class="led"></span>DEV · {{ request.url.netloc }}</span>
+  <span class="env-pill">CATALOG {{ _settings.catdv_catalog_id }}</span>
+  <span class="env-pill">READ-ONLY</span>
+</span>

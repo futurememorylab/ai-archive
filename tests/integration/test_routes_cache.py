@@ -186,6 +186,109 @@ def test_cache_orphans_endpoint(monkeypatch, tmp_path: Path):
     assert arr[0]["clip_key"] == ["catdv", "33"]
 
 
+def test_cache_page_full_render(monkeypatch, tmp_path: Path):
+    """New cache page: metric strip + four tiles + tabs render."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        r = client.get("/cache")
+    assert r.status_code == 200
+    body = r.text
+    assert "metric-strip" in body
+    assert "cache-tabs" in body
+    # All four metric tile labels
+    assert "Local cache" in body
+    assert "AI store" in body
+    assert "Prefetch queue" in body
+    assert "Orphans" in body
+    # Shell shows pillset (PR1/2) and rail-cache-active
+    assert "rail-btn active" in body
+    assert "CATALOG 881507" in body
+
+
+def test_cache_page_orphans_tile(monkeypatch, tmp_path: Path):
+    """Orphan count + bytes surface in the metric strip."""
+    app = _make_app(monkeypatch, tmp_path)
+    proxy = tmp_path / "orph.mov"
+    proxy.write_bytes(b"o" * 42)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        import asyncio
+        now = datetime.now(UTC).isoformat()
+
+        async def _seed():
+            await ctx.db.execute(
+                """
+                INSERT INTO proxy_cache
+                  (catdv_clip_id, provider_id, provider_clip_id, file_path,
+                   size_bytes, etag, downloaded_at, last_used_at)
+                VALUES (77, 'catdv', '77', ?, 42, NULL, ?, ?)
+                """,
+                (str(proxy), now, now),
+            )
+            await ctx.db.commit()
+        asyncio.get_event_loop().run_until_complete(_seed())
+
+        r = client.get("/cache")
+    assert r.status_code == 200
+    body = r.text
+    # one orphan, 42 bytes (rendered via bytes_human → "42 B")
+    assert "Orphans" in body
+    # the tile renders the count in m-value; just spot-check the bytes
+    assert "42 B" in body
+
+
+def test_cache_tab_local_filters_rows(monkeypatch, tmp_path: Path):
+    """tab=local hides rows without media-local."""
+    app = _make_app(monkeypatch, tmp_path)
+    proxy = tmp_path / "a.mov"
+    proxy.write_bytes(b"x" * 10)
+    with TestClient(app) as client:
+        # 1) Has media_local
+        _seed_clip(client, key=("catdv", "1001"),
+                   proxy_path=str(proxy), proxy_size=10)
+        # 2) Metadata only
+        _seed_clip(client, key=("catdv", "1002"))
+        r = client.get("/cache?tab=local")
+    assert r.status_code == 200
+    assert "catdv/1001" in r.text
+    assert "catdv/1002" not in r.text
+
+
+def test_cache_tab_ai_filters_rows(monkeypatch, tmp_path: Path):
+    """tab=ai hides rows without media-ai."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        _seed_clip(client, key=("catdv", "2001"), ai_size=1234)
+        _seed_clip(client, key=("catdv", "2002"))
+        r = client.get("/cache?tab=ai")
+    assert r.status_code == 200
+    assert "catdv/2001" in r.text
+    assert "catdv/2002" not in r.text
+
+
+def test_cache_tab_swap_returns_partial(monkeypatch, tmp_path: Path):
+    """HX-Request returns only the table partial, no <html>."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        r = client.get("/cache?tab=local", headers={"HX-Request": "true"})
+    assert r.status_code == 200
+    assert "<!doctype" not in r.text.lower()
+    assert "<html" not in r.text.lower()
+
+
+def test_cache_tab_queue_partial(monkeypatch, tmp_path: Path):
+    """tab=queue serves the queue partial (auto-refresh wrapper)."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        r = client.get("/cache?tab=queue", headers={"HX-Request": "true"})
+    assert r.status_code == 200
+    body = r.text
+    assert "<!doctype" not in body.lower()
+    # queue wrapper carries the auto-refresh hx-trigger
+    assert 'id="prefetch-panel"' in body
+    assert 'hx-trigger="every 2s"' in body
+
+
 def test_bulk_evict_route(monkeypatch, tmp_path: Path):
     app = _make_app(monkeypatch, tmp_path)
     proxy = tmp_path / "4.mov"

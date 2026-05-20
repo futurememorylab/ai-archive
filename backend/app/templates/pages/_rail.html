@@ -1,0 +1,26 @@
+{# Left-rail navigation. Three icon buttons: Clips, Preview, Cache.
+
+   The active button is determined by the `rail_active` variable set in
+   layout.html from the `{% block rail_active %}` child override.
+
+   The Preview button's href is rewritten at load time from
+   localStorage["catdv:lastClipId"] so a click from any screen lands on
+   the most recently visited clip. If no clip has been visited yet, it
+   stays on "/" (which is fine — the clips list is the natural fallback).
+#}
+{% set _active = (rail_active or "") | trim %}
+<a class="rail-btn{% if _active == 'clips' %} active{% endif %}"
+   href="/" title="Clips">{% include "icons/_clips.svg" %}</a>
+<a class="rail-btn{% if _active == 'preview' %} active{% endif %}"
+   id="rail-preview" href="/" title="Preview clip">{% include "icons/_play.svg" %}</a>
+<a class="rail-btn{% if _active == 'cache' %} active{% endif %}"
+   href="/cache" title="Cache">{% include "icons/_cache.svg" %}</a>
+<script>
+  (function(){
+    try {
+      var id = localStorage.getItem("catdv:lastClipId");
+      var btn = document.getElementById("rail-preview");
+      if (id && btn) btn.href = "/clips/" + id;
+    } catch (e) { /* localStorage unavailable; leave default href */ }
+  })();
+</script>

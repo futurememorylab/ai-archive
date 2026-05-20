@@ -25,6 +25,27 @@ from backend.app.archive.model import ClipKey
 TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
+
+def _bytes_human(n: int | None) -> str:
+    if not n:
+        return "0 B"
+    n = int(n)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if abs(n) < 1024:
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} PB"
+
+
+def _comma(n: int | None) -> str:
+    if n is None:
+        return "0"
+    return f"{int(n):,}"
+
+
+templates.env.filters["bytes_human"] = _bytes_human
+templates.env.filters["comma"] = _comma
+
 api_router = APIRouter(prefix="/api/cache", tags=["cache"])
 page_router = APIRouter(tags=["cache"])
 ui_router = APIRouter(prefix="/ui", tags=["cache"])
@@ -155,9 +176,13 @@ async def prefetch_cancel(
 # --- HTML pages + HTMX partials ------------------------------------
 
 
+_VALID_TABS = {"all", "queue", "local", "ai"}
+
+
 @page_router.get("/cache", response_class=HTMLResponse)
 async def cache_page(
     request: Request,
+    tab: str | None = None,
     store: str | None = None,
     workspace: int | None = None,
     orphans: int | None = None,
@@ -165,49 +190,95 @@ async def cache_page(
 ) -> HTMLResponse:
     insp = _inspector(request)
     ctx = request.app.state.ctx
-    summary = await insp.summary()
-    if orphans:
-        statuses = await insp.list_orphans()
+
+    tab_val = tab if tab in _VALID_TABS else "all"
+    is_htmx = request.headers.get("HX-Request") == "true"
+
+    # Always load queue rows — both the queue tab and the metric strip
+    # use them, and the queries are cheap (status indexed).
+    queue_active = await ctx.prefetch_queue_repo.list_active(ctx.db)
+    queue_recent = await ctx.prefetch_queue_repo.list_recent(ctx.db, limit=50)
+    queue_counts = await ctx.prefetch_queue_repo.count_by_status(ctx.db)
+
+    if tab_val == "queue":
+        # Queue tab doesn't need the inventory pass.
+        rows_for_template: list = []
     else:
-        # Default page: list every clip with at least one cache layer.
-        # We pull from clip_cache + proxy_cache + ai_store_files keys.
-        keys = await _all_cached_keys(ctx.db)
-        statuses = await insp.status_for_clips(keys)
-    # Filter pass
-    rows = []
-    for status in statuses:
-        if store:
-            ai_layer = status.layers[2]
-            if not ai_layer.present or store not in (ai_layer.location or ""):
+        if orphans:
+            statuses = await insp.list_orphans()
+        else:
+            keys = await _all_cached_keys(ctx.db)
+            statuses = await insp.status_for_clips(keys)
+        rows = []
+        for status in statuses:
+            if store:
+                ai_layer = status.layers[2]
+                if not ai_layer.present or store not in (ai_layer.location or ""):
+                    continue
+            if workspace is not None:
+                md_layer = status.layers[0]
+                if workspace not in md_layer.pinned_by_workspaces:
+                    continue
+            if evictable:
+                if not any(layer.evictable for layer in status.layers):
+                    continue
+            if tab_val == "local" and not status.layers[1].present:
                 continue
-        if workspace is not None:
-            md_layer = status.layers[0]
-            if workspace not in md_layer.pinned_by_workspaces:
+            if tab_val == "ai" and not status.layers[2].present:
                 continue
-        if evictable:
-            if not any(layer.evictable for layer in status.layers):
-                continue
-        rows.append(status)
-    active = await ctx.prefetch_queue_repo.list_active(ctx.db)
-    recent = await ctx.prefetch_queue_repo.list_recent(ctx.db, limit=20)
-    counts = await ctx.prefetch_queue_repo.count_by_status(ctx.db)
-    return templates.TemplateResponse(
-        request,
-        "cache_page.html",
-        {
-            "summary": summary,
-            "rows": [_status_for_template(s) for s in rows],
-            "filters": {
-                "store": store,
-                "workspace": workspace,
-                "orphans": bool(orphans),
-                "evictable": bool(evictable),
-            },
-            "active": active,
-            "recent": recent,
-            "counts": counts,
-        },
+            rows.append(status)
+        rows_for_template = [_status_for_template(s) for s in rows]
+
+    summary = await insp.summary()
+
+    # Orphan totals for the metric strip. Computed once per request from
+    # list_orphans() since CacheSummary does not surface these yet.
+    orphan_statuses = await insp.list_orphans()
+    orphan_count = len(orphan_statuses)
+    orphan_bytes = sum(
+        sum((layer.size_bytes or 0) for layer in s.layers if layer.evictable)
+        for s in orphan_statuses
     )
+
+    # Per-tab counts for the tab badges (always shown for all four).
+    all_keys = await _all_cached_keys(ctx.db)
+    all_statuses = await insp.status_for_clips(all_keys)
+    counts = {
+        "all": len(all_statuses),
+        "local": sum(1 for s in all_statuses if s.layers[1].present),
+        "ai": sum(1 for s in all_statuses if s.layers[2].present),
+        "queue": queue_counts.get("queued", 0) + queue_counts.get("downloading", 0),
+    }
+
+    ai_total_count = sum(summary.counts_by_store.values())
+
+    ctx_dict = {
+        "summary": summary,
+        "tab": tab_val,
+        "rows": rows_for_template,
+        "filters": {
+            "store": store,
+            "workspace": workspace,
+            "orphans": bool(orphans),
+            "evictable": bool(evictable),
+        },
+        "queue_active": queue_active,
+        "queue_recent": queue_recent,
+        "queue_counts": queue_counts,
+        "orphan_count": orphan_count,
+        "orphan_bytes": orphan_bytes,
+        "ai_total_count": ai_total_count,
+        "counts": counts,
+    }
+
+    if is_htmx:
+        partial = (
+            "pages/_cache_queue_table.html"
+            if tab_val == "queue"
+            else "pages/_cache_inventory_table.html"
+        )
+        return templates.TemplateResponse(request, partial, ctx_dict)
+    return templates.TemplateResponse(request, "cache_page.html", ctx_dict)
 
 
 @ui_router.get("/cache-badge/{provider_id}/{clip_id}",
@@ -241,13 +312,17 @@ async def cache_popover(
 @ui_router.get("/cache/queue", response_class=HTMLResponse)
 async def cache_queue_panel(request: Request) -> HTMLResponse:
     ctx = request.app.state.ctx
-    active = await ctx.prefetch_queue_repo.list_active(ctx.db)
-    recent = await ctx.prefetch_queue_repo.list_recent(ctx.db, limit=20)
-    counts = await ctx.prefetch_queue_repo.count_by_status(ctx.db)
+    queue_active = await ctx.prefetch_queue_repo.list_active(ctx.db)
+    queue_recent = await ctx.prefetch_queue_repo.list_recent(ctx.db, limit=50)
+    queue_counts = await ctx.prefetch_queue_repo.count_by_status(ctx.db)
     return templates.TemplateResponse(
         request,
-        "pages/_prefetch_panel.html",
-        {"active": active, "recent": recent, "counts": counts},
+        "pages/_cache_queue_table.html",
+        {
+            "queue_active": queue_active,
+            "queue_recent": queue_recent,
+            "queue_counts": queue_counts,
+        },
     )
 
 

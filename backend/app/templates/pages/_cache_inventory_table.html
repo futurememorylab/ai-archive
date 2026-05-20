@@ -1,0 +1,77 @@
+{# Inventory table partial. Renders the All / Local / AI tab body.
+
+   Outer wrapper is intentionally not the same id as the swap target
+   (`#cache-table-region`); the page template sets innerHTML on the
+   target, so this partial just provides the table markup.
+
+   Per-row checkboxes carry `data-bytes` so the bulk bar can show a
+   running selected-byte total client-side.
+#}
+{% if rows %}
+<table class="cache-tbl">
+  <thead>
+    <tr>
+      <th class="col-sel"><input type="checkbox" id="row-select-all"></th>
+      <th>Clip</th>
+      <th>Workspace</th>
+      <th>Layers</th>
+      <th class="num">Local</th>
+      <th class="num">AI</th>
+      <th class="col-actions"></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for status in rows %}
+      {% set is_orphan = not status.layers[0].present %}
+      {% set local_bytes = status.layers[1].size_bytes or 0 %}
+      {% set ai_bytes = status.layers[2].size_bytes or 0 %}
+      {% set row_bytes = local_bytes + ai_bytes %}
+      <tr class="cache-row{% if is_orphan %} orphan{% endif %}">
+        <td class="col-sel">
+          <input type="checkbox"
+                 class="row-check row-select"
+                 value="{{ status.clip_key[0] }}/{{ status.clip_key[1] }}"
+                 data-bytes="{{ row_bytes }}">
+        </td>
+        <td>
+          <div class="clip-name-cell">
+            <span class="clip-name-text">{{ status.name }}</span>
+            {% if is_orphan %}<span class="orphan-mark">orphan</span>{% endif %}
+            <div class="mono muted-2 clip-id">{{ status.clip_key[0] }}/{{ status.clip_key[1] }}</div>
+          </div>
+        </td>
+        <td class="mono muted-2">
+          {{ status.layers[0].pinned_by_workspaces | join(", ") or "—" }}
+        </td>
+        <td>
+          <span class="lyr-row">
+            <span class="lyr-meta {% if status.layers[0].present %}on{% else %}off{% endif %}"></span>
+            <span class="lyr-local {% if status.layers[1].present %}on{% else %}off{% endif %}"></span>
+            <span class="lyr-ai {% if status.layers[2].present %}on{% else %}off{% endif %}"></span>
+          </span>
+        </td>
+        <td class="num mono">
+          {% if local_bytes %}
+            {{ local_bytes | bytes_human }}
+            <div class="muted-2 exact">{{ local_bytes | comma }} B</div>
+          {% else %}<span class="muted-2">—</span>{% endif %}
+        </td>
+        <td class="num mono">
+          {% if ai_bytes %}
+            {{ ai_bytes | bytes_human }}
+            <div class="muted-2 exact">{{ ai_bytes | comma }} B</div>
+          {% else %}<span class="muted-2">—</span>{% endif %}
+        </td>
+        <td class="row-actions">
+          <button type="button" class="ra-btn"
+                  @click="bulkPrefetch([['{{ status.clip_key[0] }}','{{ status.clip_key[1] }}']])">Re-fetch</button>
+          <button type="button" class="ra-btn ra-btn-danger"
+                  @click="bulkEvict([['{{ status.clip_key[0] }}','{{ status.clip_key[1] }}']])">Purge</button>
+        </td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No entries match the current filter.</p>
+{% endif %}

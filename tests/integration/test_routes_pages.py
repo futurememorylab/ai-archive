@@ -212,6 +212,30 @@ def test_cache_age_displayed_when_entry_present(monkeypatch, tmp_path):
         assert "refresh=1" in r.text
 
 
+def test_clips_page_marks_clips_rail_active(monkeypatch, tmp_path):
+    """Clips list sets rail_active so the Clips icon gets `.active`."""
+    with _make_client(monkeypatch, tmp_path) as client:
+        client.app.state.ctx.archive = FakeArchive((_canonical(),))
+        r = client.get("/")
+        assert r.status_code == 200
+        # exactly one rail button should be active; the first one is Clips
+        assert 'rail-btn active' in r.text
+        assert 'title="Clips"' in r.text
+        # all three icons present
+        assert 'rail-preview' in r.text
+        assert 'title="Cache"' in r.text
+
+
+def test_clip_detail_marks_preview_rail_active(monkeypatch, tmp_path):
+    """Detail page activates the Preview rail icon and writes lastClipId."""
+    with _make_client(monkeypatch, tmp_path) as client:
+        client.app.state.ctx.archive = FakeArchive((_canonical(),))
+        r = client.get("/clips/12041")
+        assert r.status_code == 200
+        assert 'rail-btn active' in r.text
+        assert 'localStorage.setItem("catdv:lastClipId", "12041")' in r.text
+
+
 def test_pager_url_encodes_search_query(monkeypatch, tmp_path):
     with _make_client(monkeypatch, tmp_path) as client:
         client.app.state.ctx.archive = FakeArchive((_canonical(),), total=100)
