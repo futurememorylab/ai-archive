@@ -1,12 +1,6 @@
 // Alpine player component for clip_detail.html.
-//
-// Props (from x-data="player(fps, duration, markers)"):
-//   fps      — frames per second (number)
-//   duration — clip duration in seconds (number)
-//   markers  — sorted-ascending list of {name, in_secs, out_secs}
-//
-// Markers may have out_secs === null (point markers). Sorting is the
-// server's job (see clip_detail view-model).
+// Markers must arrive sorted ascending by in_secs (see clip_detail view-model);
+// prev/next-marker navigation depends on it.
 
 document.addEventListener("alpine:init", () => {
   Alpine.data("player", (fps, duration, markers) => ({
@@ -16,24 +10,21 @@ document.addEventListener("alpine:init", () => {
     playing: false,
     markers: Array.isArray(markers) ? markers : [],
 
-    _onKey: null,
-
     init() {
       const v = this.$refs.video;
-      if (v) {
-        v.addEventListener("timeupdate", () => { this.current = v.currentTime; });
-        v.addEventListener("loadedmetadata", () => {
-          if (!this.duration || isNaN(this.duration)) this.duration = v.duration;
-        });
-        v.addEventListener("play",  () => { this.playing = true; });
-        v.addEventListener("pause", () => { this.playing = false; });
-      }
-      this._onKey = (e) => this._handleKey(e);
-      document.addEventListener("keydown", this._onKey);
-    },
-
-    destroy() {
-      if (this._onKey) document.removeEventListener("keydown", this._onKey);
+      if (!v) return;
+      v.addEventListener("timeupdate", () => {
+        // Quantize to frame boundary: timeupdate fires ~4×/sec and every
+        // `current` write fans out to N marker `isMarkerActive` recomputes.
+        if (Math.abs(v.currentTime - this.current) >= 0.5 / this.fps) {
+          this.current = v.currentTime;
+        }
+      });
+      v.addEventListener("loadedmetadata", () => {
+        if (!this.duration || isNaN(this.duration)) this.duration = v.duration;
+      });
+      v.addEventListener("play",  () => { this.playing = true; });
+      v.addEventListener("pause", () => { this.playing = false; });
     },
 
     // ─── transport ────────────────────────────────────────────────
@@ -73,44 +64,28 @@ document.addEventListener("alpine:init", () => {
     },
 
     seekFromEvent(e) {
-      // Use the bounding rect of the timeline itself, not e.target — clicks
-      // may land on .ticks / .ranges children, whose offsetX is relative to
-      // those, not the full timeline.
-      const tl = e.currentTarget;
-      const rect = tl.getBoundingClientRect();
+      // Rect of the timeline itself, not e.target — clicks may land on
+      // .ticks/.ranges children whose offsetX is relative to those.
+      const rect = e.currentTarget.getBoundingClientRect();
       if (!rect.width || !this.duration) return;
-      const x = e.clientX - rect.left;
-      const frac = Math.max(0, Math.min(1, x / rect.width));
+      const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
       this.seek(frac * this.duration);
     },
 
-    hasMarkers() {
-      return this.markers.length > 0;
-    },
-
-    prevMarker() {
+    _jumpMarker(direction) {
       if (!this.markers.length) return;
-      // First marker strictly before current; falls back to last marker if
-      // we're already at the start so wraparound is friendly.
       const EPS = 0.001;
-      let pick = null;
-      for (let i = this.markers.length - 1; i >= 0; i--) {
-        if (this.markers[i].in_secs < this.current - EPS) { pick = this.markers[i]; break; }
-      }
-      if (!pick) pick = this.markers[this.markers.length - 1];
+      const ahead = direction > 0;
+      const pick =
+        (ahead
+          ? this.markers.find(m => m.in_secs > this.current + EPS)
+          : [...this.markers].reverse().find(m => m.in_secs < this.current - EPS))
+        ?? this.markers[ahead ? 0 : this.markers.length - 1];
       this.seek(pick.in_secs);
     },
 
-    nextMarker() {
-      if (!this.markers.length) return;
-      const EPS = 0.001;
-      let pick = null;
-      for (let i = 0; i < this.markers.length; i++) {
-        if (this.markers[i].in_secs > this.current + EPS) { pick = this.markers[i]; break; }
-      }
-      if (!pick) pick = this.markers[0];
-      this.seek(pick.in_secs);
-    },
+    prevMarker() { this._jumpMarker(-1); },
+    nextMarker() { this._jumpMarker(1); },
 
     // ─── formatting ───────────────────────────────────────────────
     tc(secs) {
@@ -139,34 +114,19 @@ document.addEventListener("alpine:init", () => {
     },
 
     quintileTc(i) {
-      // i ∈ 0..4 → TC at 0, 25%, 50%, 75%, 100% of duration.
       return this.tc((i / 4) * this.duration);
     },
 
-    // ─── marker range styling ─────────────────────────────────────
     isMarkerActive(m) {
       if (m.in_secs == null) return false;
       const out = m.out_secs != null ? m.out_secs : m.in_secs + 0.04;
       return this.current >= m.in_secs && this.current <= out;
     },
 
-    rangeLeftPct(m) {
-      return this.pct(m.in_secs);
-    },
-
-    rangeWidthPct(m) {
-      const out = m.out_secs != null ? m.out_secs : m.in_secs + 1.0;
-      const w = this.pct(out) - this.pct(m.in_secs);
-      return Math.max(0.4, w);  // minimum visible width
-    },
-
-    // ─── keyboard ─────────────────────────────────────────────────
-    _handleKey(e) {
-      // Ignore when user is typing.
+    handleKey(e) {
       const t = e.target;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" ||
                 t.isContentEditable)) return;
-      // Ignore with modifiers (let browser shortcuts through).
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
       switch (e.key) {
@@ -178,13 +138,13 @@ document.addEventListener("alpine:init", () => {
         case ".":
           e.preventDefault(); this.stepFrame(1); break;
         case "ArrowUp":
-          if (this.hasMarkers()) { e.preventDefault(); this.prevMarker(); }
+          if (this.markers.length) { e.preventDefault(); this.prevMarker(); }
           break;
         case "ArrowDown":
-          if (this.hasMarkers()) { e.preventDefault(); this.nextMarker(); }
+          if (this.markers.length) { e.preventDefault(); this.nextMarker(); }
           break;
         case "j": case "J":
-          e.preventDefault(); this.stepFrame(-1); break;   // reverse-play fallback
+          e.preventDefault(); this.stepFrame(-1); break;
         case "k": case "K":
           e.preventDefault(); this.pause(); break;
         case "l": case "L":
@@ -193,7 +153,6 @@ document.addEventListener("alpine:init", () => {
           e.preventDefault(); this.seek(0); break;
         case "End":
           e.preventDefault(); this.seek(this.duration); break;
-        default: break;
       }
     },
   }));
