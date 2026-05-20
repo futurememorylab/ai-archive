@@ -14,9 +14,9 @@ async def test_list_clips_with_paging_and_search():
         async with client:
             await client.login()
             page = await client.list_clips(catalog_id=881507, offset=0, limit=2)
-            assert page["total"] == 5
-            assert len(page["clips"]) == 2
+            assert page["totalItems"] == 5
+            assert len(page["items"]) == 2
 
             matches = await client.list_clips(catalog_id=881507, q="clip_3")
-            assert matches["total"] == 1
-            assert matches["clips"][0]["ID"] == 3
+            assert matches["totalItems"] == 1
+            assert matches["items"][0]["ID"] == 3

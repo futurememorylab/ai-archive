@@ -1,4 +1,5 @@
 import contextlib
+import re
 import socket
 import threading
 import time
@@ -83,21 +84,27 @@ class FakeCatdv:
             self.clips[clip_id] = existing
             return self._envelope("OK", data={"ID": clip_id, "modifyDate": "2026-05-18"})
 
-        @self.app.get("/catdv/api/9/catalogs/{catalog_id}/clips")
-        async def list_clips(catalog_id: int, request: Request):
+        @self.app.get("/catdv/api/9/clips")
+        async def list_clips(request: Request):
             if request.cookies.get("JSESSIONID") != "fake-session":
                 return self._envelope("AUTH")
-            q = request.query_params.get("q", "").lower()
-            offset = int(request.query_params.get("offset", "0"))
-            limit = int(request.query_params.get("limit", "100"))
+            # Mirror real CatDV: paging via skip/take, search via the
+            # parenthesised query language (e.g. "((clip.name)contains(X))").
+            # We only need to parse the clip.name contains-clause for tests.
+            query = request.query_params.get("query", "")
+            skip = int(request.query_params.get("skip", "0"))
+            take = int(request.query_params.get("take", "100"))
+            match = re.search(r"\(\(clip\.name\)contains\(([^)]*)\)\)", query)
+            needle = (match.group(1) if match else "").lower()
             all_clips = list(self.clips.values())
-            if q:
-                all_clips = [c for c in all_clips if q in c.get("name", "").lower()]
+            if needle:
+                all_clips = [c for c in all_clips if needle in c.get("name", "").lower()]
             return self._envelope(
                 "OK",
                 data={
-                    "total": len(all_clips),
-                    "clips": all_clips[offset : offset + limit],
+                    "totalItems": len(all_clips),
+                    "offset": skip,
+                    "items": all_clips[skip : skip + take],
                 },
             )
 

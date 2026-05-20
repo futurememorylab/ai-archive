@@ -95,11 +95,11 @@ class CatdvArchiveAdapter:
             raise FatalProviderError(str(exc)) from exc
 
         now = self._clock()
-        raw_items = data.get("clips") if isinstance(data, dict) else []
+        raw_items = data.get("items") if isinstance(data, dict) else []
         items = tuple(from_catdv_clip(raw, fetched_at=now) for raw in (raw_items or []))
         return ClipPage(
             items=items,
-            total=int((data or {}).get("total", len(items))),
+            total=int((data or {}).get("totalItems", len(items))),
             offset=query.offset,
             limit=query.limit,
         )
