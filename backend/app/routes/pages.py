@@ -35,6 +35,13 @@ async def clips_list(
     except ProviderError as exc:
         raise HTTPException(502, f"archive error: {exc}") from exc
 
+    # Bulk cache lookup so each row gets a badge with no per-row HTMX hop.
+    statuses: dict[tuple[str, str], object] = {}
+    if ctx.cache_inspector is not None and page.items:
+        keys = [c.key for c in page.items]
+        rows = await ctx.cache_inspector.status_for_clips(keys)
+        statuses = {r.clip_key: r for r in rows}
+
     ctx_dict = {
         "q": q or "",
         "offset": offset,
@@ -44,7 +51,10 @@ async def clips_list(
             "id": ctx.settings.catdv_catalog_id,
             "name": "AI katalog",
         },
-        "clips": [clip_summary(c) for c in page.items],
+        "clips": [
+            clip_summary(c, cache_status=statuses.get(c.key))
+            for c in page.items
+        ],
         "prev_offset": max(0, offset - limit) if offset > 0 else None,
         "next_offset": offset + limit if offset + limit < page.total else None,
     }
@@ -67,7 +77,11 @@ async def clip_detail_page(request: Request, clip_id: int):
     except ProviderError as exc:
         raise HTTPException(404, f"clip not found: {exc}") from exc
 
-    ctx_dict = clip_detail(clip)
+    cache_status = None
+    if ctx.cache_inspector is not None:
+        cache_status = await ctx.cache_inspector.status_for_clip(clip.key)
+
+    ctx_dict = clip_detail(clip, cache_status=cache_status)
     ctx_dict["duration_smpte"] = secs_to_smpte(
         ctx_dict["clip"]["duration_secs"], ctx_dict["clip"]["fps"]
     )
