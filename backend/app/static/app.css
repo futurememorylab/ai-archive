@@ -243,18 +243,181 @@ a { color: inherit; text-decoration: none; }
 .detail-hdr .tc-readout .slash { color: var(--text-3); margin: 0 6px; font-weight: 400; }
 .detail-hdr .tc-readout .end { color: var(--text-2); font-weight: 400; }
 
+/* ─── player ──────────────────────────────────────────────────────── */
 .player-wrap {
   grid-area: play;
   background: #050607;
   border-right: 1px solid var(--line);
-  display: flex; align-items: stretch; justify-content: center;
+  display: flex; flex-direction: column;
   min-width: 0;
+  padding: 0;
+}
+
+.viewer {
+  flex: 1; min-height: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: #000;
+  position: relative;
+  overflow: hidden;
   padding: 12px;
 }
 .video {
   width: 100%; height: 100%;
   object-fit: contain;
   background: #000;
+}
+
+/* HUD overlay */
+.hud { position: absolute; font-family: var(--f-mono); pointer-events: none; }
+.hud-tl { top: 26px; left: 26px; }
+.hud-tc {
+  font-size: 22px; font-weight: 600;
+  color: #f5a623; letter-spacing: 0.02em;
+  text-shadow: 0 0 12px rgba(0,0,0,0.6), 0 1px 0 rgba(0,0,0,0.8);
+  font-variant-numeric: tabular-nums;
+}
+.hud-lbl {
+  font-size: 9.5px; color: rgba(255,255,255,0.55);
+  text-transform: uppercase; letter-spacing: 0.18em;
+  margin-bottom: 2px;
+}
+.hud-val {
+  font-size: 11px; color: rgba(255,255,255,0.85);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.7);
+}
+
+/* transport */
+.transport {
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  display: flex; flex-direction: column;
+  padding: 8px 14px 10px;
+  gap: 8px;
+}
+
+.timeline {
+  position: relative;
+  height: 36px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  overflow: hidden;
+}
+.timeline .ticks {
+  position: absolute; inset: 0;
+  background-image:
+    repeating-linear-gradient(90deg, var(--line)   0 1px, transparent 1px 60px),
+    repeating-linear-gradient(90deg, var(--line-2) 0 1px, transparent 1px 300px);
+  pointer-events: none;
+}
+.timeline .ranges {
+  position: absolute; left: 0; right: 0; top: 6px; bottom: 6px;
+}
+.timeline .range {
+  position: absolute; top: 0; bottom: 0;
+  background: color-mix(in oklab, var(--accent) 35%, transparent);
+  border-left: 2px solid var(--accent);
+  border-right: 2px solid var(--accent);
+  border-radius: 2px;
+  min-width: 4px;
+  cursor: pointer;
+}
+.timeline .range:hover {
+  background: color-mix(in oklab, var(--accent) 55%, transparent);
+}
+.timeline .range.active {
+  background: color-mix(in oklab, var(--accent) 55%, transparent);
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 0 18px color-mix(in oklab, var(--accent) 40%, transparent);
+}
+.timeline .playhead {
+  position: absolute; top: -2px; bottom: -2px; width: 2px;
+  background: #fff;
+  box-shadow: 0 0 8px rgba(255,255,255,0.6);
+  pointer-events: none;
+}
+.timeline .playhead::before {
+  content: ""; position: absolute; top: -4px; left: -5px;
+  width: 12px; height: 6px; background: #fff;
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+.timeline .tc-labels {
+  position: absolute; left: 0; right: 0; bottom: 1px;
+  display: flex; justify-content: space-between;
+  padding: 0 4px;
+  font-family: var(--f-mono); font-size: 9.5px;
+  color: var(--text-4);
+  pointer-events: none;
+}
+
+.transport-row {
+  display: flex; align-items: center; gap: 14px;
+  flex-wrap: wrap;
+}
+.transport-row .grow { flex: 1; }
+
+.transport-btns { display: flex; gap: 4px; }
+.tbtn {
+  width: 30px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-2);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.tbtn:hover:not(:disabled) { color: var(--text); background: var(--surface-2); }
+.tbtn:disabled { opacity: 0.35; cursor: not-allowed; }
+.tbtn.play {
+  background: var(--accent); color: var(--accent-fg);
+  border-color: transparent; width: 36px;
+}
+.tbtn svg { width: 14px; height: 14px; }
+
+.transport .tc-readout {
+  font-family: var(--f-mono); font-size: 14px; font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+.transport .tc-readout .slash { color: var(--text-3); margin: 0 6px; font-weight: 400; }
+.transport .tc-readout .end   { color: var(--text-2); font-weight: 400; }
+
+.transport-meta {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--f-mono); font-size: 11px; color: var(--text-3);
+}
+.transport-meta .tag {
+  display: inline-flex; align-items: center;
+  height: 18px; padding: 0 6px; border-radius: 3px;
+  background: var(--surface); border: 1px solid var(--line-2);
+  color: var(--text-2); font-size: 10.5px;
+}
+.transport-meta .dot-sep { color: var(--text-4); margin: 0 4px; }
+
+/* keyboard shortcuts strip */
+.kbdbar {
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  display: flex; align-items: center; gap: 14px;
+  padding: 8px 14px;
+  font-family: var(--f-mono); font-size: 10.5px;
+  color: var(--text-3);
+  overflow-x: auto;
+}
+.kbdbar::-webkit-scrollbar { display: none; }
+.kbdbar .group { display: flex; align-items: center; gap: 6px; flex: none; }
+.kbdbar .sep   { width: 1px; height: 16px; background: var(--line); }
+.kbd {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  font-family: var(--f-mono); font-size: 10px;
+  color: var(--text-2);
 }
 
 .anno-col {
@@ -324,36 +487,6 @@ a { color: inherit; text-decoration: none; }
 .note.big { white-space: pre-wrap; }
 .muted { color: var(--text-3); font-size: 12px; }
 
-/* ─── timeline ───────────────────────────────────────────────────────── */
-.player-wrap { flex-direction: column; gap: 8px; }
-.timeline {
-  position: relative;
-  height: 28px;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-2);
-  overflow: hidden;
-  flex: none;
-}
-.timeline .ranges { position: absolute; inset: 4px 0; }
-.timeline .range {
-  position: absolute; top: 0; bottom: 0;
-  background: color-mix(in oklab, var(--accent) 35%, transparent);
-  border-left: 2px solid var(--accent);
-  border-right: 2px solid var(--accent);
-  border-radius: 2px;
-  min-width: 4px;
-  cursor: pointer;
-}
-.timeline .range:hover {
-  background: color-mix(in oklab, var(--accent) 55%, transparent);
-}
-.timeline .playhead {
-  position: absolute; top: -2px; bottom: -2px;
-  width: 2px; background: #fff;
-  box-shadow: 0 0 6px rgba(255,255,255,0.5);
-  pointer-events: none;
-}
 
 /* ─── cache badge ────────────────────────────────────────────────────── */
 .cache-badge { display: inline-flex; gap: 2px; font-family: var(--f-mono); }
