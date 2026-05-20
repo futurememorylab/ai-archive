@@ -148,6 +148,8 @@ class AppContext:
                     cache_dir=settings.data_dir / "cache" / "proxies",
                     fs_root=settings.proxy_fs_root,
                     path_template=settings.proxy_path_template,
+                    proxy_cache_repo=ctx.proxy_cache_repo,
+                    db_provider=lambda c=ctx: c.db,
                 )
             else:
                 # FS adapter has media_is_local=True; the workspace
