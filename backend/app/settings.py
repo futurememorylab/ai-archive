@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     archive_provider: str = "catdv"
     ai_input_store: str = "gcs"
     clip_cache_ttl_hours: int = 168
+    clip_list_cache_ttl_minutes: int = 10
 
     # Filesystem archive provider (when ARCHIVE_PROVIDER=fs)
     fs_root: Path | None = None

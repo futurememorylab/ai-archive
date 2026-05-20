@@ -155,6 +155,63 @@ def test_clip_detail_renders_without_timeline_when_duration_zero(monkeypatch, tm
         assert 'class="timeline"' not in r.text
 
 
+class SpyListCacheRepo:
+    """In-memory stand-in that records invalidate/get calls."""
+
+    def __init__(self):
+        self.invalidated: list[tuple[str, str]] = []
+        self.entry: dict | None = None
+
+    async def invalidate_catalog(self, conn, *, provider_id, catalog_id):
+        self.invalidated.append((provider_id, catalog_id))
+        return 0
+
+    async def get(self, conn, *, provider_id, catalog_id, query_text, offset, limit):
+        return self.entry
+
+
+def test_refresh_query_invalidates_list_cache(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.ctx
+        ctx.archive = FakeArchive((_canonical(),))
+        spy = SpyListCacheRepo()
+        ctx.clip_list_cache_repo = spy
+
+        r = client.get("/?refresh=1")
+        assert r.status_code == 200
+        assert spy.invalidated == [("catdv", "881507")]
+
+
+def test_no_refresh_query_does_not_invalidate(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.ctx
+        ctx.archive = FakeArchive((_canonical(),))
+        spy = SpyListCacheRepo()
+        ctx.clip_list_cache_repo = spy
+
+        r = client.get("/")
+        assert r.status_code == 200
+        assert spy.invalidated == []
+
+
+def test_cache_age_displayed_when_entry_present(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.ctx
+        ctx.archive = FakeArchive((_canonical(),))
+        spy = SpyListCacheRepo()
+        # Pretend the list cache has a row 2 minutes old.
+        from datetime import datetime, timedelta, timezone
+        two_min_ago = (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat()
+        spy.entry = {"fetched_at": two_min_ago, "total": 1, "items": ()}
+        ctx.clip_list_cache_repo = spy
+
+        r = client.get("/")
+        assert r.status_code == 200
+        assert "Cached" in r.text
+        assert "Refresh" in r.text
+        assert "refresh=1" in r.text
+
+
 def test_pager_url_encodes_search_query(monkeypatch, tmp_path):
     with _make_client(monkeypatch, tmp_path) as client:
         client.app.state.ctx.archive = FakeArchive((_canonical(),), total=100)

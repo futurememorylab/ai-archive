@@ -17,13 +17,15 @@ def build_archive_provider(
     catdv_client: Any = None,
     clip_cache_repo: Any = None,
     field_def_cache_repo: Any = None,
+    clip_list_cache_repo: Any = None,
     db_provider: Any = None,
 ) -> ArchiveProvider:
     """Construct the active ArchiveProvider from settings.
 
     `settings` is duck-typed (only `archive_provider`, `clip_cache_ttl_hours`,
-    `catdv_catalog_id`, `fs_root`, `fs_media_exts` are read) so this is easy
-    to test without the full pydantic-settings instance.
+    `clip_list_cache_ttl_minutes`, `catdv_catalog_id`, `fs_root`,
+    `fs_media_exts` are read) so this is easy to test without the full
+    pydantic-settings instance.
     """
     name = getattr(settings, "archive_provider", "catdv")
     if name == "catdv":
@@ -33,9 +35,13 @@ def build_archive_provider(
             client=catdv_client,
             clip_cache_repo=clip_cache_repo,
             field_def_cache_repo=field_def_cache_repo,
+            clip_list_cache_repo=clip_list_cache_repo,
             db_provider=db_provider,
             clip_cache_ttl_hours=int(
                 getattr(settings, "clip_cache_ttl_hours", 168)
+            ),
+            clip_list_cache_ttl_minutes=int(
+                getattr(settings, "clip_list_cache_ttl_minutes", 10)
             ),
             default_catalog_id=str(getattr(settings, "catdv_catalog_id", "")),
         )

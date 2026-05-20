@@ -2,20 +2,31 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from backend.app.archive.model import ClipQuery
 from backend.app.archive.providers.catdv.adapter import CatdvArchiveAdapter
 from backend.app.repositories.clip_cache import ClipCacheRepo
+from backend.app.repositories.clip_list_cache import ClipListCacheRepo
 from backend.app.repositories.field_def_cache import FieldDefCacheRepo
 from backend.app.services.catdv_client import CatdvClient
 from tests.fakes.fake_catdv import running_fake_catdv
 
 
-def _adapter(client, db, *, ttl_hours: int = 168, now=None):
+def _adapter(
+    client,
+    db,
+    *,
+    ttl_hours: int = 168,
+    list_ttl_minutes: int = 10,
+    now=None,
+):
     return CatdvArchiveAdapter(
         client=client,
         clip_cache_repo=ClipCacheRepo(),
         field_def_cache_repo=FieldDefCacheRepo(),
+        clip_list_cache_repo=ClipListCacheRepo(),
         db_provider=lambda: db,
         clip_cache_ttl_hours=ttl_hours,
+        clip_list_cache_ttl_minutes=list_ttl_minutes,
         clock=now or (lambda: datetime.now(timezone.utc)),
     )
 
@@ -114,6 +125,74 @@ async def test_list_field_definitions_serves_from_cache_within_ttl(db):
             ]
             second = await adapter.list_field_definitions()
             assert {fd.identifier for fd in second} == {"f"}
+
+
+@pytest.mark.asyncio
+async def test_list_clips_writes_through_to_cache(db):
+    with running_fake_catdv() as (base_url, fake):
+        fake.clips[1] = {"ID": 1, "name": "Clip_A", "fps": 25.0, "markers": []}
+        async with CatdvClient(base_url, "klientAI", "secret") as client:
+            adapter = _adapter(client, db)
+            page = await adapter.list_clips("881507", ClipQuery(offset=0, limit=50))
+            assert tuple(c.name for c in page.items) == ("Clip_A",)
+
+        cur = await db.execute(
+            "SELECT total FROM clip_list_cache "
+            "WHERE provider_id='catdv' AND catalog_id='881507' "
+            "AND query_text='' AND offset_=0 AND limit_=50"
+        )
+        row = await cur.fetchone()
+        assert row is not None and row[0] == 1
+
+
+@pytest.mark.asyncio
+async def test_list_clips_serves_from_cache_within_ttl(db):
+    with running_fake_catdv() as (base_url, fake):
+        fake.clips[2] = {"ID": 2, "name": "Original", "fps": 25.0, "markers": []}
+        async with CatdvClient(base_url, "klientAI", "secret") as client:
+            adapter = _adapter(client, db, list_ttl_minutes=60)
+            first = await adapter.list_clips("881507", ClipQuery(offset=0, limit=50))
+            assert tuple(c.name for c in first.items) == ("Original",)
+
+            # Mutate upstream; cached page should still serve.
+            fake.clips[2]["name"] = "Mutated"
+            second = await adapter.list_clips("881507", ClipQuery(offset=0, limit=50))
+            assert tuple(c.name for c in second.items) == ("Original",)
+
+
+@pytest.mark.asyncio
+async def test_list_clips_bypasses_cache_when_expired(db):
+    with running_fake_catdv() as (base_url, fake):
+        fake.clips[3] = {"ID": 3, "name": "Old", "fps": 25.0, "markers": []}
+        now_holder = {"t": datetime(2026, 1, 1, tzinfo=timezone.utc)}
+
+        async with CatdvClient(base_url, "klientAI", "secret") as client:
+            adapter = _adapter(
+                client, db, list_ttl_minutes=5, now=lambda: now_holder["t"]
+            )
+            await adapter.list_clips("881507", ClipQuery(offset=0, limit=50))
+
+            now_holder["t"] = now_holder["t"] + timedelta(minutes=10)
+            fake.clips[3]["name"] = "Fresh"
+            second = await adapter.list_clips("881507", ClipQuery(offset=0, limit=50))
+            assert tuple(c.name for c in second.items) == ("Fresh",)
+
+
+@pytest.mark.asyncio
+async def test_list_clips_separate_keys_per_query_and_page(db):
+    with running_fake_catdv() as (base_url, fake):
+        fake.clips[1] = {"ID": 1, "name": "A", "fps": 25.0, "markers": []}
+        fake.clips[2] = {"ID": 2, "name": "B", "fps": 25.0, "markers": []}
+        async with CatdvClient(base_url, "klientAI", "secret") as client:
+            adapter = _adapter(client, db, list_ttl_minutes=60)
+            await adapter.list_clips("881507", ClipQuery(offset=0, limit=50))
+            await adapter.list_clips("881507", ClipQuery(text="A", offset=0, limit=50))
+            await adapter.list_clips("881507", ClipQuery(offset=50, limit=50))
+
+        cur = await db.execute(
+            "SELECT COUNT(*) FROM clip_list_cache WHERE catalog_id='881507'"
+        )
+        assert (await cur.fetchone())[0] == 3
 
 
 @pytest.mark.asyncio

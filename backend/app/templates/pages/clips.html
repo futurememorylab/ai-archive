@@ -13,6 +13,14 @@
              hx-include="this">
     </div>
     <span class="grow"></span>
+    {% if cache_age %}
+      <span class="meta" title="List fetched from CatDV {{ cache_fetched_at }}">
+        Cached {{ cache_age }}
+      </span>
+      <a class="meta" href="?{% if q %}q={{ q }}&{% endif %}offset={{ offset }}&limit={{ limit }}&refresh=1">
+        Refresh
+      </a>
+    {% endif %}
     <span class="meta mono">catalog {{ catalog.id }}</span>
   </div>
 

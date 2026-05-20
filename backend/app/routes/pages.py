@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -7,6 +8,31 @@ from fastapi.templating import Jinja2Templates
 from backend.app.archive.errors import ProviderError
 from backend.app.archive.model import ClipQuery
 from backend.app.ui.view_models import clip_detail, clip_summary
+
+
+def _humanize_age(fetched_at_iso: str | None) -> str | None:
+    if not fetched_at_iso:
+        return None
+    try:
+        ts = datetime.fromisoformat(fetched_at_iso)
+    except ValueError:
+        return None
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    delta = datetime.now(timezone.utc) - ts
+    secs = int(delta.total_seconds())
+    if secs < 5:
+        return "just now"
+    if secs < 60:
+        return f"{secs}s ago"
+    mins = secs // 60
+    if mins < 60:
+        return f"{mins}m ago"
+    hours = mins // 60
+    if hours < 24:
+        return f"{hours}h ago"
+    days = hours // 24
+    return f"{days}d ago"
 
 TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "templates"
 from backend.app.timecode import secs_to_smpte  # noqa: E402
@@ -23,17 +49,44 @@ async def clips_list(
     q: str | None = None,
     offset: int = 0,
     limit: int = 50,
+    refresh: int = 0,
 ):
     ctx = request.app.state.ctx
     if ctx.archive is None:
         raise HTTPException(503, "archive provider not initialized")
+
+    catalog_id = str(ctx.settings.catdv_catalog_id)
+
+    # `?refresh=1` lets the user bypass the list cache when they suspect
+    # upstream changed. Wipe every cached page for this catalog so the next
+    # list_clips() hits CatDV and we don't serve a stale neighbour page.
+    if refresh:
+        await ctx.clip_list_cache_repo.invalidate_catalog(
+            ctx.db, provider_id="catdv", catalog_id=catalog_id
+        )
+
     try:
         page = await ctx.archive.list_clips(
-            str(ctx.settings.catdv_catalog_id),
+            catalog_id,
             ClipQuery(text=q, offset=offset, limit=limit),
         )
     except ProviderError as exc:
         raise HTTPException(502, f"archive error: {exc}") from exc
+
+    # After list_clips, the adapter has either served from cache or
+    # written-through; either way the row's fetched_at is the age of the
+    # data the user is looking at.
+    cache_entry = await ctx.clip_list_cache_repo.get(
+        ctx.db,
+        provider_id="catdv",
+        catalog_id=catalog_id,
+        query_text=q,
+        offset=offset,
+        limit=limit,
+    )
+    cache_fetched_at = (
+        cache_entry["fetched_at"] if cache_entry is not None else None
+    )
 
     # Bulk cache lookup so each row gets a badge with no per-row HTMX hop.
     statuses: dict[tuple[str, str], object] = {}
@@ -57,6 +110,8 @@ async def clips_list(
         ],
         "prev_offset": max(0, offset - limit) if offset > 0 else None,
         "next_offset": offset + limit if offset + limit < page.total else None,
+        "cache_fetched_at": cache_fetched_at,
+        "cache_age": _humanize_age(cache_fetched_at),
     }
 
     template = (

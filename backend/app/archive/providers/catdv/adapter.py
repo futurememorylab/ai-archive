@@ -48,16 +48,20 @@ class CatdvArchiveAdapter:
         client: CatdvClient,
         clip_cache_repo: Any = None,
         field_def_cache_repo: Any = None,
+        clip_list_cache_repo: Any = None,
         db_provider: Callable[[], Any] | None = None,
         clip_cache_ttl_hours: int = 168,
+        clip_list_cache_ttl_minutes: int = 10,
         clock: Callable[[], datetime] | None = None,
         default_catalog_id: str = "",
     ) -> None:
         self._client = client
         self._clip_cache = clip_cache_repo
         self._field_def_cache = field_def_cache_repo
+        self._clip_list_cache = clip_list_cache_repo
         self._db_provider = db_provider
         self._ttl = timedelta(hours=clip_cache_ttl_hours)
+        self._list_ttl = timedelta(minutes=clip_list_cache_ttl_minutes)
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._default_catalog_id = default_catalog_id
 
@@ -80,6 +84,10 @@ class CatdvArchiveAdapter:
     # --- read API -----------------------------------------------------
 
     async def list_clips(self, catalog: str, query: ClipQuery) -> ClipPage:
+        cached = await self._read_list_from_cache(catalog, query)
+        if cached is not None:
+            return cached
+
         try:
             data = await self._client.list_clips(
                 int(catalog),
@@ -97,12 +105,15 @@ class CatdvArchiveAdapter:
         now = self._clock()
         raw_items = data.get("items") if isinstance(data, dict) else []
         items = tuple(from_catdv_clip(raw, fetched_at=now) for raw in (raw_items or []))
-        return ClipPage(
+        total = int((data or {}).get("totalItems", len(items)))
+        page = ClipPage(
             items=items,
-            total=int((data or {}).get("totalItems", len(items))),
+            total=total,
             offset=query.offset,
             limit=query.limit,
         )
+        await self._write_list_through(catalog, query, page, fetched_at=now)
+        return page
 
     async def get_clip(self, clip: str) -> CanonicalClip:
         cached = await self._read_clip_from_cache(clip)
@@ -274,7 +285,59 @@ class CatdvArchiveAdapter:
             field_defs=defs,
         )
 
-    def _is_expired(self, fetched_at_iso: str | None) -> bool:
+    def _list_cache_enabled(self) -> bool:
+        return self._clip_list_cache is not None and self._db_provider is not None
+
+    async def _read_list_from_cache(
+        self, catalog: str, query: ClipQuery
+    ) -> ClipPage | None:
+        if not self._list_cache_enabled():
+            return None
+        db = self._db_provider()
+        entry = await self._clip_list_cache.get(
+            db,
+            provider_id=self.id,
+            catalog_id=str(catalog),
+            query_text=query.text,
+            offset=query.offset,
+            limit=query.limit,
+        )
+        if entry is None:
+            return None
+        if self._is_expired(entry.get("fetched_at"), ttl=self._list_ttl):
+            return None
+        return ClipPage(
+            items=entry["items"],
+            total=int(entry["total"]),
+            offset=query.offset,
+            limit=query.limit,
+        )
+
+    async def _write_list_through(
+        self,
+        catalog: str,
+        query: ClipQuery,
+        page: ClipPage,
+        *,
+        fetched_at: datetime,
+    ) -> None:
+        if not self._list_cache_enabled():
+            return
+        await self._clip_list_cache.upsert(
+            self._db_provider(),
+            provider_id=self.id,
+            catalog_id=str(catalog),
+            query_text=query.text,
+            offset=query.offset,
+            limit=query.limit,
+            total=page.total,
+            items=page.items,
+            fetched_at_iso=fetched_at.isoformat(),
+        )
+
+    def _is_expired(
+        self, fetched_at_iso: str | None, *, ttl: timedelta | None = None
+    ) -> bool:
         if fetched_at_iso is None:
             return True
         try:
@@ -283,4 +346,4 @@ class CatdvArchiveAdapter:
             return True
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=timezone.utc)
-        return (self._clock() - ts) > self._ttl
+        return (self._clock() - ts) > (ttl or self._ttl)

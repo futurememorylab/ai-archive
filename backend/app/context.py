@@ -15,6 +15,7 @@ from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.ai_store_files import AIStoreFilesRepo
 from backend.app.repositories.cache_actions_log import CacheActionsLogRepo
 from backend.app.repositories.clip_cache import ClipCacheRepo
+from backend.app.repositories.clip_list_cache import ClipListCacheRepo
 from backend.app.repositories.field_def_cache import FieldDefCacheRepo
 from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.pending_operations import PendingOperationsRepo
@@ -52,6 +53,7 @@ class AppContext:
     proxy_cache_repo: ProxyCacheRepo = field(default_factory=ProxyCacheRepo)
     ai_store_files_repo: AIStoreFilesRepo = field(default_factory=AIStoreFilesRepo)
     clip_cache_repo: ClipCacheRepo = field(default_factory=ClipCacheRepo)
+    clip_list_cache_repo: ClipListCacheRepo = field(default_factory=ClipListCacheRepo)
     field_def_cache_repo: FieldDefCacheRepo = field(default_factory=FieldDefCacheRepo)
     pending_ops_repo: PendingOperationsRepo = field(default_factory=PendingOperationsRepo)
     workspaces_repo: WorkspacesRepo = field(default_factory=WorkspacesRepo)
@@ -132,6 +134,7 @@ class AppContext:
                 catdv_client=ctx.catdv,
                 clip_cache_repo=ctx.clip_cache_repo,
                 field_def_cache_repo=ctx.field_def_cache_repo,
+                clip_list_cache_repo=ctx.clip_list_cache_repo,
                 db_provider=lambda c=ctx: c.db,
             )
             ctx._gcs_service = GcsService(settings.gcs_bucket_name)
