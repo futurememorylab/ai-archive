@@ -60,3 +60,24 @@ def test_rail_includes_prompts_link(monkeypatch, tmp_path: Path):
         r = client.get("/prompts")
         assert r.status_code == 200
         assert 'href="/prompts"' in r.text
+
+
+def test_prompts_detail_renders_editor_textareas(monkeypatch, tmp_path: Path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        body = {
+            "name": "Editor Test", "description": "",
+            "body": "Edit me", "target_map": {"x": {"kind": "markers"}},
+            "output_schema": {"type": "object"}, "model": "gemini-2.5-pro",
+        }
+        pid = client.post("/api/prompts", json=body).json()["id"]
+        r = client.get(f"/prompts/{pid}")
+        assert r.status_code == 200
+        # Editor textareas present:
+        assert "x-model=\"draft.body\"" in r.text or "x-model='draft.body'" in r.text
+        assert "x-model=\"draft.target_map_text\"" in r.text or "x-model='draft.target_map_text'" in r.text
+        assert "x-model=\"draft.output_schema_text\"" in r.text or "x-model='draft.output_schema_text'" in r.text
+        # Alpine factory bootstrap:
+        assert "promptEditor({" in r.text
+        # The new draft prompt isn't read-only (state=draft → canEdit=true):
+        assert "Edit me" in r.text
