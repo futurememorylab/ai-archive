@@ -1,0 +1,13 @@
+{% if prompts %}
+  {% for p in prompts %}
+    <a class="tmpl-row{% if selected and selected.id == p.id %} selected{% endif %}"
+       href="/prompts/{{ p.id }}">
+      <div>
+        <div class="name">{{ p.name }}</div>
+        <div class="desc">{{ p.description or "" }}</div>
+      </div>
+    </a>
+  {% endfor %}
+{% else %}
+  <div class="empty-state">No prompts yet</div>
+{% endif %}
