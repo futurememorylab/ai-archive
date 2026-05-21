@@ -47,3 +47,4 @@ Open the UI at `http://localhost:8765/` (clips list) — first user-facing surfa
 - Backend plan: see `docs/plans/2026-05-18-catdv-annotator-backend.md`
 - UI MVP: `docs/plans/2026-05-20-ui-mvp.md` (clips list + clip detail, read-only)
 - Media prefetch + cache UI: `docs/plans/2026-05-20-pr8-media-prefetch-and-cache-ui.md`
+- Prompt management: `docs/plans/2026-05-21-prompt-management.md`
