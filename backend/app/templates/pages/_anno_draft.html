@@ -1,3 +1,9 @@
+<template x-if="$root.runStatus || $root.runError">
+  <div class="anno-status" :class="{ error: $root.runError }">
+    <span x-show="$root.runError" x-text="`Failed: ${$root.runError}`"></span>
+    <span x-show="!$root.runError" x-text="$root.runStatus"></span>
+  </div>
+</template>
 {% if draft.has_draft %}
   <div class="anno-draft-chip mono">
     {% if draft.prompt_name %}Prompt &ldquo;{{ draft.prompt_name }}&rdquo;{% endif %}

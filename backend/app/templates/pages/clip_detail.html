@@ -8,7 +8,7 @@
 {% block body %}
 <script>localStorage.setItem("catdv:lastClipId", "{{ clip.id }}");</script>
 <div class="detail"
-     x-data='player({{ clip.fps }}, {{ clip.duration_secs }}, {{ clip.markers|tojson }})'
+     x-data='Object.assign(player({{ clip.fps }}, {{ clip.duration_secs }}, {{ clip.markers|tojson }}), { scope: "published", tab: "markers", running: false, runningPromptName: null, runStatus: null, runError: null, jobId: null })'
      @keydown.window="handleKey($event)">
   <header class="detail-hdr">
     <span class="clip-title">{{ clip.name }}</span>
@@ -140,7 +140,7 @@
     </div>
   </section>
 
-  <aside class="anno-col" x-data="{ scope: 'published', tab: 'markers' }">
+  <aside class="anno-col">
     <div class="anno-scope" role="tablist" aria-label="Annotation source">
       <button type="button" class="anno-scope-btn"
               :class="{ active: scope === 'published' }"

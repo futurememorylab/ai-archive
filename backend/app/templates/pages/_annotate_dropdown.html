@@ -1,11 +1,11 @@
 <div class="annotate-wrap" x-data="clipAnnotate({{ clip.id }})">
   <button type="button"
           class="ca-btn ca-btn-primary"
-          :disabled="running"
+          :disabled="$root.running"
           @click="toggleOpen()">
-    <span x-show="!running">Annotate</span>
-    <span x-show="running" x-cloak>
-      Running: <span class="mono" x-text="runningPromptName"></span>
+    <span x-show="!$root.running">Annotate</span>
+    <span x-show="$root.running" x-cloak>
+      Running: <span class="mono" x-text="$root.runningPromptName"></span>
     </span>
   </button>
 
@@ -26,7 +26,7 @@
       <ul class="annotate-list">
         <template x-for="p in prompts" :key="p.id">
           <li>
-            <button type="button" class="annotate-item" @click="pick(p)">
+            <button type="button" class="annotate-item" @click="pick(p, $root)">
               <span class="annotate-name" x-text="p.name"></span>
               <span class="annotate-meta mono">
                 v<span x-text="p.current_production_version_num"></span>
