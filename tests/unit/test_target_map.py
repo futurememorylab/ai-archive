@@ -1,7 +1,7 @@
 import pytest
 
 from backend.app.models.annotation import ReviewItem
-from backend.app.models.template import TargetMap
+from backend.app.models.prompt import TargetMap
 from backend.app.services.target_map import expand
 
 

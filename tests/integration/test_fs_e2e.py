@@ -16,11 +16,10 @@ import pytest
 from backend.app.archive.providers.fs import media_probe
 from backend.app.archive.providers.fs.adapter import FilesystemArchiveProvider
 from backend.app.models.annotation import Annotation, ReviewItem
-from backend.app.models.template import Template
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.pending_operations import PendingOperationsRepo
+from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
-from backend.app.repositories.templates import TemplatesRepo
 from backend.app.repositories.write_log import WriteLogRepo
 from backend.app.services.sync_engine import SyncEngine
 from backend.app.services.write_queue import WriteQueue
@@ -44,33 +43,32 @@ async def test_fs_e2e_setfield_applies_to_sidecar(db, tmp_path: Path):
     adapter = FilesystemArchiveProvider(fs_root=root)
 
     # --- repos + services -----------------------------------------
-    templates = TemplatesRepo()
+    prompts = PromptsRepo()
     annotations = AnnotationsRepo()
     items_repo = ReviewItemsRepo()
     pending_repo = PendingOperationsRepo()
     write_log_repo = WriteLogRepo()
 
-    tid = await templates.create(
+    _, vid = await prompts.create_with_initial_version(
         db,
-        Template(
-            name="t-fs",
-            prompt="p",
-            output_schema={},
-            target_map={
-                "decade": {
-                    "kind": "field",
-                    "identifier": "pragafilm.dekáda.natočení",
-                }
-            },
-            model="m",
-        ),
+        name="t-fs",
+        description=None,
+        body="p",
+        target_map={
+            "decade": {
+                "kind": "field",
+                "identifier": "pragafilm.dekáda.natočení",
+            }
+        },
+        output_schema={},
+        model="m",
     )
     aid = await annotations.insert(
         db,
         Annotation(
             catdv_clip_id=0,  # ignored on FS path
             catdv_clip_name="clip001",
-            template_id=tid,
+            prompt_version_id=vid,
             model="m",
             prompt_used="p",
             raw_response={},
@@ -94,7 +92,7 @@ async def test_fs_e2e_setfield_applies_to_sidecar(db, tmp_path: Path):
         await items_repo.set_decision(db, it.id, "accepted")
     items = await items_repo.list_by_clip(db, 0, decision="accepted")
 
-    template = await templates.get(db, tid)
+    version = await prompts.get_version(db, vid)
     queue = WriteQueue(
         pending_ops_repo=pending_repo, review_items_repo=items_repo
     )
@@ -102,7 +100,7 @@ async def test_fs_e2e_setfield_applies_to_sidecar(db, tmp_path: Path):
         db,
         clip_key=("fs", "cat/clip001"),
         items=items,
-        target_map=template.target_map,
+        target_map=version.target_map,
         expected_etag=None,
         annotation_id=aid,
         fps=25.0,

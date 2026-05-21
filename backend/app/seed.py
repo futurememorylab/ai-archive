@@ -3,24 +3,24 @@ from pathlib import Path
 
 import aiosqlite
 
-from backend.app.models.template import Template
-from backend.app.repositories.templates import TemplatesRepo
+from backend.app.repositories.prompts import PromptsRepo
 
 
-async def seed_default_template(conn: aiosqlite.Connection, *, seed_path: Path) -> None:
-    """Insert the default template if no template by the same name exists."""
+async def seed_default_prompt(conn: aiosqlite.Connection, *, seed_path: Path) -> None:
+    """Insert the default prompt + v1@production if no prompt by that name exists."""
     raw = seed_path.read_text()  # noqa: ASYNC240  # sync read at startup is acceptable in lifespan
     data = json.loads(raw)
-    cur = await conn.execute("SELECT 1 FROM templates WHERE name = ?", (data["name"],))
+    cur = await conn.execute("SELECT 1 FROM prompts WHERE name = ?", (data["name"],))
     if await cur.fetchone():
         return
-    repo = TemplatesRepo()
-    tpl = Template(
+    repo = PromptsRepo()
+    await repo.create_with_initial_version(
+        conn,
         name=data["name"],
         description=data.get("description"),
-        prompt=data["prompt"],
-        output_schema=data["output_schema"],
+        body=data["prompt"],
         target_map=data["target_map"],
+        output_schema=data["output_schema"],
         model=data["model"],
+        initial_state="production",
     )
-    await repo.create(conn, tpl)

@@ -18,27 +18,25 @@ def _setenv(monkeypatch, tmp_path):
 
 async def _seed(ctx):
     from backend.app.models.annotation import Annotation, ReviewItem
-    from backend.app.models.template import Template
 
-    tid = await ctx.templates_repo.create(
+    _, vid = await ctx.prompts_repo.create_with_initial_version(
         ctx.db,
-        Template(
-            name="t",
-            prompt="p",
-            output_schema={},
-            target_map={
-                "scenes": {"kind": "markers"},
-                "decade": {"kind": "field", "identifier": "pragafilm.dekáda.natočení"},
-            },
-            model="m",
-        ),
+        name="t",
+        description=None,
+        body="p",
+        target_map={
+            "scenes": {"kind": "markers"},
+            "decade": {"kind": "field", "identifier": "pragafilm.dekáda.natočení"},
+        },
+        output_schema={},
+        model="m",
     )
     aid = await ctx.annotations_repo.insert(
         ctx.db,
         Annotation(
             catdv_clip_id=1,
             catdv_clip_name="Clip_1",
-            template_id=tid,
+            prompt_version_id=vid,
             model="m",
             prompt_used="p",
             raw_response={},
@@ -68,7 +66,7 @@ async def _seed(ctx):
             ),
         ],
     )
-    return tid, aid, items
+    return vid, aid, items
 
 
 def _make_app(monkeypatch, tmp_path):

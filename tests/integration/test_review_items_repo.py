@@ -1,19 +1,21 @@
 import pytest
 
 from backend.app.models.annotation import Annotation, ReviewItem
-from backend.app.models.template import Template
 from backend.app.repositories.annotations import AnnotationsRepo
+from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
-from backend.app.repositories.templates import TemplatesRepo
 
 
 async def _seed_annotation(db):
-    templates = TemplatesRepo()
-    template_id = await templates.create(
+    prompts = PromptsRepo()
+    _, vid = await prompts.create_with_initial_version(
         db,
-        Template(
-            name="t", prompt="p", output_schema={}, target_map={"x": {"kind": "markers"}}, model="m"
-        ),
+        name="t",
+        description=None,
+        body="p",
+        target_map={"x": {"kind": "markers"}},
+        output_schema={},
+        model="m",
     )
     annotations = AnnotationsRepo()
     return await annotations.insert(
@@ -21,7 +23,7 @@ async def _seed_annotation(db):
         Annotation(
             catdv_clip_id=1,
             catdv_clip_name="c",
-            template_id=template_id,
+            prompt_version_id=vid,
             model="m",
             prompt_used="p",
             raw_response={},

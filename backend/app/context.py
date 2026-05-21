@@ -22,7 +22,7 @@ from backend.app.repositories.pending_operations import PendingOperationsRepo
 from backend.app.repositories.prefetch_queue import PrefetchQueueRepo
 from backend.app.repositories.proxy_cache import ProxyCacheRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
-from backend.app.repositories.templates import TemplatesRepo
+from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.workspaces import WorkspacesRepo
 from backend.app.repositories.write_log import WriteLogRepo
 from backend.app.services.cache_actions import CacheActions
@@ -46,7 +46,7 @@ class AppContext:
     db: aiosqlite.Connection
     db_cm: object
 
-    templates_repo: TemplatesRepo = field(default_factory=TemplatesRepo)
+    prompts_repo: PromptsRepo = field(default_factory=PromptsRepo)
     jobs_repo: JobsRepo = field(default_factory=JobsRepo)
     annotations_repo: AnnotationsRepo = field(default_factory=AnnotationsRepo)
     review_items_repo: ReviewItemsRepo = field(default_factory=ReviewItemsRepo)

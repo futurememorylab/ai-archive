@@ -54,12 +54,15 @@ CREATE TABLE annotations_new (
   raw_response       TEXT NOT NULL,
   structured_output  TEXT NOT NULL,
   clip_snapshot      TEXT NOT NULL,
-  created_at         TEXT NOT NULL
+  created_at         TEXT NOT NULL,
+  provider_id        TEXT,
+  provider_clip_id   TEXT
 );
 INSERT INTO annotations_new
   SELECT a.id, a.catdv_clip_id, a.catdv_clip_name,
          pv.id, a.job_id, a.model, a.prompt_used, a.raw_response,
-         a.structured_output, a.clip_snapshot, a.created_at
+         a.structured_output, a.clip_snapshot, a.created_at,
+         a.provider_id, a.provider_clip_id
   FROM annotations a
   JOIN prompt_versions pv ON pv.prompt_id = a.template_id AND pv.version_num = 1;
 
