@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from backend.app.archive.errors import ProviderError
@@ -198,6 +198,45 @@ async def prompt_detail_page(request: Request, prompt_id: int, version_id: int |
             "rail_active": "prompts",
         },
     )
+
+
+@router.post("/prompts/{prompt_id}/_new_version")
+async def action_new_version(request: Request, prompt_id: int):
+    ctx = request.app.state.ctx
+    new_vid = await ctx.prompts_repo.create_version(ctx.db, prompt_id)
+    return RedirectResponse(
+        f"/prompts/{prompt_id}?version_id={new_vid}", status_code=303
+    )
+
+
+@router.post("/prompts/{prompt_id}/versions/{version_id}/_promote")
+async def action_promote_version(request: Request, prompt_id: int, version_id: int):
+    ctx = request.app.state.ctx
+    await ctx.prompts_repo.promote_version(ctx.db, prompt_id, version_id)
+    return RedirectResponse(
+        f"/prompts/{prompt_id}?version_id={version_id}", status_code=303
+    )
+
+
+@router.post("/prompts/{prompt_id}/_duplicate")
+async def action_duplicate_prompt(request: Request, prompt_id: int):
+    ctx = request.app.state.ctx
+    new_pid, _ = await ctx.prompts_repo.duplicate(ctx.db, prompt_id)
+    return RedirectResponse(f"/prompts/{new_pid}", status_code=303)
+
+
+@router.post("/prompts/{prompt_id}/_archive")
+async def action_archive_prompt(request: Request, prompt_id: int):
+    ctx = request.app.state.ctx
+    await ctx.prompts_repo.archive(ctx.db, prompt_id)
+    return RedirectResponse("/prompts", status_code=303)
+
+
+@router.post("/prompts/{prompt_id}/_restore")
+async def action_restore_prompt(request: Request, prompt_id: int):
+    ctx = request.app.state.ctx
+    await ctx.prompts_repo.restore(ctx.db, prompt_id)
+    return RedirectResponse(f"/prompts/{prompt_id}", status_code=303)
 
 
 def _pick_default_version(versions: list) -> object | None:

@@ -1,20 +1,33 @@
+{# Rendered inside x-data='promptEditor(...)' so we have prompt_id/version_id at hand.
+   But for form actions we use the server-rendered IDs directly — simpler and a
+   plain progressive-enhancement form. #}
 <div class="tmpl-menu">
-  <form method="post" :action="'/prompts/' + prompt_id + '/_new_version'">
+  <form method="post" action="/prompts/{{ selected.id }}/_new_version">
     <button type="submit" class="tmpl-menu-item">+ Create new version</button>
   </form>
-  <form method="post" :action="'/prompts/' + prompt_id + '/versions/' + version_id + '/_promote'"
-        x-show="state === 'draft'">
+  {% if selected_version.state == "draft" %}
+  <form method="post"
+        action="/prompts/{{ selected.id }}/versions/{{ selected_version.id }}/_promote">
     <button type="submit" class="tmpl-menu-item">&#9654; Promote to production</button>
   </form>
+  {% endif %}
   <div class="tmpl-menu-sep"></div>
-  <form method="post" :action="'/prompts/' + prompt_id + '/_duplicate'">
+  <form method="post" action="/prompts/{{ selected.id }}/_duplicate">
     <button type="submit" class="tmpl-menu-item">&#9192; Duplicate</button>
   </form>
   <a class="tmpl-menu-item"
-     :href="'/api/prompts/' + prompt_id + '/versions/' + version_id + '/export'"
-     download>&#11015; Export JSON</a>
+     href="/api/prompts/{{ selected.id }}/versions/{{ selected_version.id }}/export"
+     download="prompt-{{ selected.id }}-v{{ selected_version.version_num }}.json">
+     &#11015; Export JSON
+  </a>
   <div class="tmpl-menu-sep"></div>
-  <form method="post" :action="'/prompts/' + prompt_id + '/_archive'">
+  {% if not selected.archived %}
+  <form method="post" action="/prompts/{{ selected.id }}/_archive">
     <button type="submit" class="tmpl-menu-item danger">&#9635; Archive</button>
   </form>
+  {% else %}
+  <form method="post" action="/prompts/{{ selected.id }}/_restore">
+    <button type="submit" class="tmpl-menu-item">&#8634; Restore</button>
+  </form>
+  {% endif %}
 </div>
