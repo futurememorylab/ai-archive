@@ -26,7 +26,7 @@ from backend.app.archive.model import (
     Timecode,
 )
 from backend.app.models.annotation import ReviewItem
-from backend.app.models.template import TargetMap
+from backend.app.models.prompt import TargetMap
 from backend.app.repositories.pending_operations import PendingOperationsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 
