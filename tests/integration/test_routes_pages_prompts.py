@@ -136,6 +136,48 @@ def test_action_duplicate_redirects_to_new_prompt(client):
     assert new_p["name"] == "Copy of DUP"
 
 
+def test_new_prompt_form_renders(client):
+    r = client.get("/prompts/new")
+    assert r.status_code == 200
+    assert 'action="/prompts/_create"' in r.text
+    assert "New prompt" in r.text
+
+
+def test_new_prompt_post_creates_and_redirects(client):
+    r = client.post(
+        "/prompts/_create",
+        data={
+            "name": "Brand New",
+            "description": "ssr-created",
+            "body": "Hello",
+            "target_map": '{"x": {"kind": "markers"}}',
+            "output_schema": '{"type": "object"}',
+            "model": "gemini-2.5-pro",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert r.headers["location"].startswith("/prompts/")
+    pid = int(r.headers["location"].rsplit("/", 1)[1])
+    detail = client.get(f"/api/prompts/{pid}").json()
+    assert detail["name"] == "Brand New"
+    assert detail["versions"][0]["state"] == "draft"
+
+
+def test_new_prompt_post_invalid_json_returns_400_with_form(client):
+    r = client.post(
+        "/prompts/_create",
+        data={
+            "name": "X", "description": "",
+            "body": "h", "target_map": "not json",
+            "output_schema": "{}", "model": "gemini-2.5-pro",
+        },
+    )
+    assert r.status_code == 400
+    assert "invalid JSON" in r.text
+    assert "X" in r.text  # name persists in the form
+
+
 def test_action_archive_then_restore(client):
     pid = client.post("/api/prompts", json={
         "name": "ARCH", "description": "", "body": "p",

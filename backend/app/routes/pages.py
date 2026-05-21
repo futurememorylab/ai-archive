@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import aiosqlite
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -172,6 +173,78 @@ async def prompts_page(request: Request, archived: int = 0):
 @router.get("/prompts/archived", response_class=HTMLResponse)
 async def prompts_archived_page(request: Request):
     return await prompts_page(request, archived=1)
+
+
+@router.get("/prompts/new", response_class=HTMLResponse)
+async def prompt_new_page(request: Request):
+    ctx = request.app.state.ctx
+    prompts = await ctx.prompts_repo.list_active(ctx.db)
+    return templates.TemplateResponse(
+        request, "pages/_prompt_new.html",
+        {
+            "prompts": [p.model_dump() for p in prompts],
+            "rail_active": "prompts",
+            "error": None,
+            "form": {"name": "", "description": "", "body": "",
+                     "target_map_text": "{}", "output_schema_text": "{}",
+                     "model": "gemini-2.5-pro"},
+        },
+    )
+
+
+@router.post("/prompts/_create")
+async def action_create_prompt(request: Request):
+    ctx = request.app.state.ctx
+    form = await request.form()
+    name = (form.get("name") or "").strip()
+    description = (form.get("description") or "").strip() or None
+    body = form.get("body") or ""
+    target_map_text = form.get("target_map") or "{}"
+    output_schema_text = form.get("output_schema") or "{}"
+    model = form.get("model") or "gemini-2.5-pro"
+    error = None
+    try:
+        target_map = json.loads(target_map_text)
+        output_schema = json.loads(output_schema_text)
+    except json.JSONDecodeError as exc:
+        error = f"invalid JSON: {exc}"
+    if not name:
+        error = "name is required"
+    if error:
+        prompts = await ctx.prompts_repo.list_active(ctx.db)
+        return templates.TemplateResponse(
+            request, "pages/_prompt_new.html",
+            {
+                "prompts": [p.model_dump() for p in prompts],
+                "rail_active": "prompts",
+                "error": error,
+                "form": {"name": name, "description": description or "",
+                         "body": body, "target_map_text": target_map_text,
+                         "output_schema_text": output_schema_text, "model": model},
+            },
+            status_code=400,
+        )
+    try:
+        pid, _ = await ctx.prompts_repo.create_with_initial_version(
+            ctx.db, name=name, description=description,
+            body=body, target_map=target_map,
+            output_schema=output_schema, model=model,
+        )
+    except aiosqlite.IntegrityError as exc:
+        prompts = await ctx.prompts_repo.list_active(ctx.db)
+        return templates.TemplateResponse(
+            request, "pages/_prompt_new.html",
+            {
+                "prompts": [p.model_dump() for p in prompts],
+                "rail_active": "prompts",
+                "error": f"name already exists: {exc}",
+                "form": {"name": name, "description": description or "",
+                         "body": body, "target_map_text": target_map_text,
+                         "output_schema_text": output_schema_text, "model": model},
+            },
+            status_code=400,
+        )
+    return RedirectResponse(f"/prompts/{pid}", status_code=303)
 
 
 @router.get("/prompts/{prompt_id}", response_class=HTMLResponse)
