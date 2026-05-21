@@ -17,6 +17,7 @@ class Annotation(BaseModel):
     raw_response: dict[str, Any]
     structured_output: dict[str, Any] | None
     clip_snapshot: dict[str, Any]
+    created_at: str | None = None
 
 
 class ReviewItem(BaseModel):

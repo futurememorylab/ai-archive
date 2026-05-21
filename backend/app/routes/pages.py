@@ -150,7 +150,7 @@ async def _build_draft_for_clip(ctx, clip_id: int) -> dict:
         review_items=items,
         prompt_name=prompt_name,
         version_num=version_num,
-        created_at=None,  # Task 7 wires this once Annotation surfaces created_at
+        created_at=latest.created_at,
     )
 
 
