@@ -17,9 +17,14 @@ class GcsService:
 
     def upload_if_absent(self, clip_id: int, local_path: Path, mime: str) -> str:
         blob_name = f"clips/{clip_id}.mov"
-        blob = self._bucket.blob(blob_name)
+        # Setting chunk_size flips upload_from_filename into resumable mode,
+        # so a slow upload of a multi-hundred-MB proxy isn't bounded by the
+        # default 120s single-shot timeout.
+        blob = self._bucket.blob(blob_name, chunk_size=8 * 1024 * 1024)
         if not blob.exists():
-            blob.upload_from_filename(str(local_path), content_type=mime)
+            blob.upload_from_filename(
+                str(local_path), content_type=mime, timeout=1800
+            )
         return f"gs://{self._bucket.name}/{blob_name}"
 
     def delete(self, clip_id: int) -> None:
