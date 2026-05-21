@@ -8,7 +8,8 @@
 {% block body %}
 <script>localStorage.setItem("catdv:lastClipId", "{{ clip.id }}");</script>
 <div class="detail"
-     x-data='player({{ clip.fps }}, {{ clip.duration_secs }}, {{ clip.markers|tojson }})'>
+     x-data='player({{ clip.fps }}, {{ clip.duration_secs }}, {{ clip.markers|tojson }})'
+     @keydown.window="handleKey($event)">
   <header class="detail-hdr">
     <span class="clip-title">{{ clip.name }}</span>
     <span class="meta mono">{{ clip.format or "" }}</span>
@@ -57,13 +58,9 @@
         <div class="ticks"></div>
         <div class="ranges">
           {% for m in clip.markers %}
-            {# Jinja loop order matches the Alpine `markers` array — both come
-               from the same view-model field, sorted ascending by in_secs.
-               No @click here: clicks bubble to .timeline so seekFromEvent
-               jumps to the exact clicked position within the marker, not
-               to the marker's start. The marker card in the right rail
-               still seeks to in_secs (that's the "select this marker"
-               affordance). #}
+            {# No @click on .range: clicks bubble to .timeline so seekFromEvent
+               seeks to the exact clicked position, not the marker's start.
+               Index aligns with the Alpine `markers` array (same sorted source). #}
             <div class="range"
                  :class="{ active: isMarkerActive(markers[{{ loop.index0 }}]) }"
                  style="left: {{ (m.in_secs / clip.duration_secs) * 100 }}%; width: {{ (((m.out_secs or m.in_secs + 1) - m.in_secs) / clip.duration_secs) * 100 }}%"
@@ -83,16 +80,14 @@
       <div class="transport-row">
         <div class="transport-btns">
           <button type="button" class="tbtn"
-                  :disabled="!hasMarkers()"
+                  :disabled="!markers.length"
                   @click="prevMarker()"
                   title="prev marker (↑)">
-            {# double chevron = skip to prev marker #}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="12 6 6 12 12 18"/><polyline points="19 6 13 12 19 18"/></svg>
           </button>
           <button type="button" class="tbtn"
                   @click="stepFrame(-1)"
                   title="step back 1 frame (,)">
-            {# single chevron = step 1 frame #}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>
           </button>
           <button type="button" class="tbtn play"
@@ -104,14 +99,12 @@
           <button type="button" class="tbtn"
                   @click="stepFrame(1)"
                   title="step fwd 1 frame (.)">
-            {# single chevron = step 1 frame #}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
           </button>
           <button type="button" class="tbtn"
-                  :disabled="!hasMarkers()"
+                  :disabled="!markers.length"
                   @click="nextMarker()"
                   title="next marker (↓)">
-            {# double chevron = skip to next marker #}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 6 11 12 5 18"/><polyline points="12 6 18 12 12 18"/></svg>
           </button>
         </div>
@@ -121,8 +114,6 @@
           <span class="slash">/</span>
           <span class="end" x-text="tc(duration)">{{ duration_smpte }}</span>
         </div>
-
-        <div class="grow"></div>
 
         <div class="transport-meta mono">
           <span>SHUTTLE</span>
@@ -173,7 +164,7 @@
       {% endif %}
     </div>
 
-    <div class="anno-section" role="tabpanel" x-show="tab === 'markers'">
+    <div class="anno-section" role="tabpanel" x-show="tab === 'markers'" x-cloak>
       {% for m in clip.markers %}
         <article class="marker"
                  @click="seek({{ m.in_secs }})">

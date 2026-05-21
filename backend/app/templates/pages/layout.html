@@ -9,10 +9,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/app.css">
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-  {# player.js MUST load before Alpine: Alpine 3.14's CDN bundle fires
-     `alpine:init` synchronously when its script executes, so any defer
-     script after it misses the event. Registering the listener first
-     ensures Alpine.data("player", ...) lands in time. #}
+  {# player.js before Alpine: `alpine:init` fires synchronously when
+     Alpine's bundle executes, so the listener must register first. #}
   <script defer src="/static/player.js"></script>
   <script defer src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js"></script>
 </head>
