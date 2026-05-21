@@ -1,0 +1,20 @@
+<div class="tmpl-menu">
+  <form method="post" :action="'/prompts/' + prompt_id + '/_new_version'">
+    <button type="submit" class="tmpl-menu-item">+ Create new version</button>
+  </form>
+  <form method="post" :action="'/prompts/' + prompt_id + '/versions/' + version_id + '/_promote'"
+        x-show="state === 'draft'">
+    <button type="submit" class="tmpl-menu-item">&#9654; Promote to production</button>
+  </form>
+  <div class="tmpl-menu-sep"></div>
+  <form method="post" :action="'/prompts/' + prompt_id + '/_duplicate'">
+    <button type="submit" class="tmpl-menu-item">&#9192; Duplicate</button>
+  </form>
+  <a class="tmpl-menu-item"
+     :href="'/api/prompts/' + prompt_id + '/versions/' + version_id + '/export'"
+     download>&#11015; Export JSON</a>
+  <div class="tmpl-menu-sep"></div>
+  <form method="post" :action="'/prompts/' + prompt_id + '/_archive'">
+    <button type="submit" class="tmpl-menu-item danger">&#9635; Archive</button>
+  </form>
+</div>

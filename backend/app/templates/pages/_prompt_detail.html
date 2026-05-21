@@ -1,7 +1,7 @@
 {% if selected and selected_version %}
-  <div class="prompt-detail-inner">
-    <div class="detail-header">{{ selected.name }} — v{{ selected_version.version_num }} ({{ selected_version.state }})</div>
-    <div class="detail-body">(detail content fills in in later tasks)</div>
+  {% include "pages/_prompt_detail_header.html" %}
+  <div class="prompt-detail-body">
+    <div class="muted" style="font-size: 12px;">Editors fill in in the next task.</div>
   </div>
 {% else %}
   <div class="empty-state">Select a prompt or create one.</div>
