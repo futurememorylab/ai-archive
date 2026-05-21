@@ -144,4 +144,4 @@ def test_clip_detail_renders_draft_when_annotation_exists(monkeypatch, tmp_path)
         r = client.get("/clips/101")
         assert r.status_code == 200
         assert 'data-draft-empty="true"' not in r.text
-        assert 'data-draft-empty="false"' in r.text
+        assert "Scene 1" in r.text

@@ -139,15 +139,36 @@
     </div>
   </section>
 
-  <aside class="anno-col" x-data="{ tab: 'markers' }">
-    {% with panels = {
-        "markers": clip.markers,
-        "fields":  clip.fields,
-        "notes":   clip.notes,
-        "big_notes": clip.big_notes,
-       } %}
-      {% include "pages/_anno_panels.html" %}
-    {% endwith %}
+  <aside class="anno-col" x-data="{ scope: 'published', tab: 'markers' }">
+    <div class="anno-scope" role="tablist" aria-label="Annotation source">
+      <button type="button" class="anno-scope-btn"
+              :class="{ active: scope === 'published' }"
+              :aria-selected="scope === 'published'"
+              @click="scope = 'published'">
+        Published
+      </button>
+      <button type="button" class="anno-scope-btn"
+              :class="{ active: scope === 'draft' }"
+              :aria-selected="scope === 'draft'"
+              @click="scope = 'draft'">
+        Draft
+      </button>
+    </div>
+
+    <div class="anno-scoped" x-show="scope === 'published'" x-cloak>
+      {% with panels = {
+          "markers": clip.markers,
+          "fields":  clip.fields,
+          "notes":   clip.notes,
+          "big_notes": clip.big_notes,
+         } %}
+        {% include "pages/_anno_panels.html" %}
+      {% endwith %}
+    </div>
+
+    <div class="anno-scoped" id="draft-aside" x-show="scope === 'draft'" x-cloak>
+      {% include "pages/_anno_draft.html" %}
+    </div>
   </aside>
 </div>
 <script>
@@ -174,5 +195,4 @@
     if (r.ok) window.location.reload();
   }
 </script>
-<div hidden data-draft-empty="{{ 'true' if not draft.has_draft else 'false' }}"></div>
 {% endblock %}

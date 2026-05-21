@@ -1,0 +1,18 @@
+{% if draft.has_draft %}
+  <div class="anno-draft-chip mono">
+    {% if draft.prompt_name %}Prompt &ldquo;{{ draft.prompt_name }}&rdquo;{% endif %}
+    {% if draft.version_num %} · v{{ draft.version_num }}{% endif %}
+    {% if draft.model %} · {{ draft.model }}{% endif %}
+    {% if draft.created_at %} · {{ draft.created_at }}{% endif %}
+  </div>
+  {% with panels = {
+      "markers": draft.markers,
+      "fields":  draft.fields,
+      "notes":   draft.notes,
+      "big_notes": none,
+     } %}
+    {% include "pages/_anno_panels.html" %}
+  {% endwith %}
+{% else %}
+  {% include "pages/_anno_draft_empty.html" %}
+{% endif %}
