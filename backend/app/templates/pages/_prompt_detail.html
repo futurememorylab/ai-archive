@@ -7,7 +7,7 @@
                 body: {{ selected_version.body|tojson }},
                 target_map_text: {{ selected_version.target_map_text|tojson }},
                 output_schema_text: {{ selected_version.output_schema_text|tojson }},
-                model: "{{ selected_version.model }}"
+                model: {{ selected_version.model|tojson }}
             })'>
 
   {# Title row + tags + model picker + Save + kebab.

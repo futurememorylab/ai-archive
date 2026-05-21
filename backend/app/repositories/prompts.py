@@ -29,9 +29,15 @@ class VersionImmutableError(RuntimeError):
 
 
 def _target_map_to_json(target_map: Any) -> str:
-    """Accept dict OR a TargetMap model and produce a JSON string."""
+    """Accept dict OR a TargetMap model and produce a JSON string.
+
+    Uses exclude_unset=True when serializing a TargetMap model so that
+    optional TargetEntry fields (identifier, target, mode) are omitted
+    when not explicitly set. This keeps the stored JSON compact and
+    ensures exclude_unset=True works correctly on the round-trip read.
+    """
     if hasattr(target_map, "model_dump_json"):
-        return target_map.model_dump_json()
+        return target_map.model_dump_json(exclude_unset=True)
     return json.dumps(target_map)
 
 
@@ -228,6 +234,10 @@ class PromptsRepo:
         if from_version_id is None:
             raise LookupError(f"prompt {prompt_id} has no versions to clone from")
         src = await self.get_version(conn, from_version_id)
+        if src.prompt_id != prompt_id:
+            raise LookupError(
+                f"version {from_version_id} does not belong to prompt {prompt_id}"
+            )
         next_num = (await self._max_version_num(conn, prompt_id)) + 1
         now = _now_iso()
         cur = await conn.execute(
@@ -271,7 +281,16 @@ class PromptsRepo:
     async def promote_version(
         self, conn: aiosqlite.Connection, prompt_id: int, version_id: int
     ) -> None:
-        """Atomically demote current production -> 'archived', set target -> 'production'."""
+        """Atomically demote current production -> 'archived', set target -> 'production'.
+
+        Only draft versions can be promoted. Promoting a production version is
+        a no-op. Promoting an archived version raises VersionImmutableError.
+        """
+        target = await self.get_version(conn, version_id)
+        if target.state == "production":
+            return  # idempotent no-op
+        if target.state != "draft":
+            raise VersionImmutableError(version_id, target.state)
         now = _now_iso()
         # The partial unique index forbids two production rows existing at the
         # same instant, so we MUST archive the old one before promoting the

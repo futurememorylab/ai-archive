@@ -254,3 +254,34 @@ async def test_duplicate_skips_archived_name_collisions(db):
     pid3, _ = await repo.duplicate(db, pid)
     p, _ = await repo.get_with_versions(db, pid3)
     assert p.name == "Copy of P (2)"
+
+
+@pytest.mark.asyncio
+async def test_promote_on_archived_raises(db):
+    repo = PromptsRepo()
+    pid, v1 = await repo.create_with_initial_version(db, name="P", description=None, **_vbody())
+    await repo.promote_version(db, pid, v1)
+    v2 = await repo.create_version(db, pid)
+    await repo.promote_version(db, pid, v2)  # v1 now archived
+    assert (await repo.get_version(db, v1)).state == "archived"
+    with pytest.raises(VersionImmutableError):
+        await repo.promote_version(db, pid, v1)
+
+
+@pytest.mark.asyncio
+async def test_promote_on_already_production_is_noop(db):
+    repo = PromptsRepo()
+    pid, v1 = await repo.create_with_initial_version(db, name="P", description=None, **_vbody())
+    await repo.promote_version(db, pid, v1)
+    state_before = (await repo.get_version(db, v1)).state
+    await repo.promote_version(db, pid, v1)  # no-op
+    assert (await repo.get_version(db, v1)).state == state_before == "production"
+
+
+@pytest.mark.asyncio
+async def test_create_version_cross_prompt_from_version_id_raises(db):
+    repo = PromptsRepo()
+    pid_a, vid_a = await repo.create_with_initial_version(db, name="A", description=None, **_vbody())
+    pid_b, _ = await repo.create_with_initial_version(db, name="B", description=None, **_vbody())
+    with pytest.raises(LookupError):
+        await repo.create_version(db, pid_b, from_version_id=vid_a)

@@ -58,9 +58,10 @@ async def test_migration_0009_creates_tables_and_backfills(tmp_path: Path):
         # Annotation referencing template id 1.
         await db.execute(
             "INSERT INTO annotations(catdv_clip_id, catdv_clip_name, template_id, "
-            "model, prompt_used, raw_response, structured_output, clip_snapshot, created_at) "
+            "model, prompt_used, raw_response, structured_output, clip_snapshot, "
+            "created_at, provider_id, provider_clip_id) "
             "VALUES (12041, 'c', 1, 'gemini-2.5-pro', 'body1', '{}', '{}', '{}', "
-            "'2026-05-10T00:00:00+00:00')"
+            "'2026-05-10T00:00:00+00:00', 'catdv', '12041')"
         )
         # Job referencing template id 2.
         await db.execute(
@@ -104,6 +105,13 @@ async def test_migration_0009_creates_tables_and_backfills(tmp_path: Path):
         assert row is not None
         version_id, prompt_id = row
         assert prompt_id == 1
+
+        # provider_id and provider_clip_id must survive the annotations rebuild.
+        cur = await db.execute(
+            "SELECT provider_id, provider_clip_id FROM annotations WHERE catdv_clip_id = 12041"
+        )
+        row = await cur.fetchone()
+        assert row == ("catdv", "12041"), "migration must preserve provider_id/provider_clip_id"
 
         # Job now points at prompt_versions.id.
         cur = await db.execute(

@@ -2,6 +2,7 @@
 import importlib
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 
@@ -16,6 +17,13 @@ def _make_app(monkeypatch, tmp_path):
     from backend.app import main as main_mod
     importlib.reload(main_mod)
     return main_mod.app
+
+
+@pytest.fixture
+def client(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as c:
+        yield c
 
 
 def _new_body(**over):
@@ -151,3 +159,43 @@ def test_404_unknown_ids(monkeypatch, tmp_path: Path):
             "/api/prompts/1/versions/999",
             json={"body": "x", "target_map": {}, "output_schema": {}, "model": "m"},
         ).status_code == 404
+
+
+def test_create_with_invalid_target_map_shape_returns_422(client):
+    r = client.post("/api/prompts", json={
+        "name": "BAD", "description": "",
+        "body": "p",
+        "target_map": {"x": {"kind": "field"}},  # missing required 'identifier'
+        "output_schema": {}, "model": "gemini-2.5-pro",
+    })
+    assert r.status_code == 422, r.text
+
+
+def test_put_version_with_invalid_target_map_shape_returns_422(client):
+    pid = client.post("/api/prompts", json={
+        "name": "P", "description": "",
+        "body": "p", "target_map": {"x": {"kind": "markers"}},
+        "output_schema": {}, "model": "gemini-2.5-pro",
+    }).json()["id"]
+    vid = client.get(f"/api/prompts/{pid}").json()["versions"][0]["id"]
+    r = client.put(f"/api/prompts/{pid}/versions/{vid}", json={
+        "body": "p", "target_map": {"x": {"kind": "note"}},  # missing 'target'
+        "output_schema": {}, "model": "m",
+    })
+    assert r.status_code == 422, r.text
+
+
+def test_promote_archived_returns_409(client):
+    pid = client.post("/api/prompts", json={
+        "name": "PR2", "description": "",
+        "body": "p", "target_map": {"x": {"kind": "markers"}},
+        "output_schema": {}, "model": "gemini-2.5-pro",
+    }).json()["id"]
+    v1 = client.get(f"/api/prompts/{pid}").json()["versions"][0]["id"]
+    client.post(f"/api/prompts/{pid}/versions/{v1}:promote")
+    v2 = client.post(f"/api/prompts/{pid}/versions", json={}).json()["id"]
+    client.post(f"/api/prompts/{pid}/versions/{v2}:promote")
+    # v1 is now archived
+    r = client.post(f"/api/prompts/{pid}/versions/{v1}:promote")
+    assert r.status_code == 409
+    assert r.json()["error_code"] == "version_immutable"

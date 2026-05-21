@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from backend.app.models.prompt import Prompt, PromptVersion
+from backend.app.models.prompt import Prompt, PromptVersion, TargetMap
 from backend.app.repositories.prompts import VersionImmutableError
 
 router = APIRouter(prefix="/api/prompts", tags=["prompts"])
@@ -24,7 +24,7 @@ class PromptCreate(BaseModel):
     name: str
     description: str | None = None
     body: str
-    target_map: dict
+    target_map: TargetMap
     output_schema: dict
     model: str
 
@@ -40,7 +40,7 @@ class VersionCreate(BaseModel):
 
 class VersionEdit(BaseModel):
     body: str
-    target_map: dict
+    target_map: TargetMap
     output_schema: dict
     model: str
 
@@ -214,7 +214,13 @@ async def promote_version(request: Request, prompt_id: int, version_id: int):
         raise HTTPException(404, str(exc))
     if v.prompt_id != prompt_id:
         raise HTTPException(404, "version does not belong to prompt")
-    await ctx.prompts_repo.promote_version(ctx.db, prompt_id, version_id)
+    try:
+        await ctx.prompts_repo.promote_version(ctx.db, prompt_id, version_id)
+    except VersionImmutableError as exc:
+        return JSONResponse(
+            {"error_code": "version_immutable", "message": str(exc)},
+            status_code=409,
+        )
     return {"id": version_id, "state": "production"}
 
 

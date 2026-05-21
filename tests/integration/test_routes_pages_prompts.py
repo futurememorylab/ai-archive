@@ -196,3 +196,19 @@ def test_action_archive_then_restore(client):
     assert r.headers["location"] == f"/prompts/{pid}"
     names_after = [p["name"] for p in client.get("/api/prompts").json()]
     assert "ARCH" in names_after
+
+
+def test_new_prompt_post_invalid_target_map_shape_returns_400(client):
+    r = client.post("/prompts/_create", data={
+        "name": "BAD2", "description": "",
+        "body": "p",
+        "target_map": '{"x": {"kind": "field"}}',  # missing required 'identifier'
+        "output_schema": "{}", "model": "gemini-2.5-pro",
+    })
+    assert r.status_code == 400
+    assert "identifier" in r.text or "target_map" in r.text
+
+
+def test_action_new_version_404_on_unknown_prompt(client):
+    r = client.post("/prompts/99999/_new_version", follow_redirects=False)
+    assert r.status_code == 404
