@@ -127,6 +127,33 @@ async def clips_list(
     return templates.TemplateResponse(request, template, ctx_dict)
 
 
+async def _build_draft_for_clip(ctx, clip_id: int) -> dict:
+    from backend.app.services.draft_view import build_draft_view
+
+    annotations = await ctx.annotations_repo.list_by_clip(ctx.db, clip_id)
+    if not annotations:
+        return build_draft_view(annotation=None, review_items=[])
+    latest = annotations[0]  # DESC order
+    all_items = await ctx.review_items_repo.list_by_clip(ctx.db, clip_id)
+    items = [it for it in all_items if it.annotation_id == latest.id]
+    prompt_name: str | None = None
+    version_num: int | None = None
+    try:
+        version = await ctx.prompts_repo.get_version(ctx.db, latest.prompt_version_id)
+        version_num = version.version_num
+        prompt, _ = await ctx.prompts_repo.get_with_versions(ctx.db, version.prompt_id)
+        prompt_name = prompt.name
+    except LookupError:
+        pass
+    return build_draft_view(
+        annotation=latest,
+        review_items=items,
+        prompt_name=prompt_name,
+        version_num=version_num,
+        created_at=None,  # Task 7 wires this once Annotation surfaces created_at
+    )
+
+
 @router.get("/clips/{clip_id}", response_class=HTMLResponse)
 async def clip_detail_page(request: Request, clip_id: int):
     ctx = request.app.state.ctx
@@ -145,6 +172,7 @@ async def clip_detail_page(request: Request, clip_id: int):
     ctx_dict["duration_smpte"] = secs_to_smpte(
         ctx_dict["clip"]["duration_secs"], ctx_dict["clip"]["fps"]
     )
+    ctx_dict["draft"] = await _build_draft_for_clip(ctx, clip_id)
     return templates.TemplateResponse(request, "pages/clip_detail.html", ctx_dict)
 
 
