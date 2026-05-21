@@ -149,3 +149,31 @@ def test_build_draft_view_fields_sorted_by_identifier():
     result = build_draft_view(annotation=ann, review_items=items)
     idents = [f["identifier"] for f in result["fields"]]
     assert idents == ["pragafilm.barva", "pragafilm.rok.natočení"]
+
+
+def test_build_draft_view_maps_single_note():
+    ann = _annotation()
+    items = [
+        ReviewItem(
+            annotation_id=42, catdv_clip_id=101, kind="note",
+            target_identifier="notes", proposed_value="A summary of the clip.",
+        ),
+    ]
+    result = build_draft_view(annotation=ann, review_items=items)
+    assert result["notes"] == "A summary of the clip."
+
+
+def test_build_draft_view_joins_multiple_notes_with_blank_lines():
+    ann = _annotation()
+    items = [
+        ReviewItem(
+            annotation_id=42, catdv_clip_id=101, kind="note",
+            target_identifier="notes", proposed_value="Line one.",
+        ),
+        ReviewItem(
+            annotation_id=42, catdv_clip_id=101, kind="note",
+            target_identifier="bigNotes", proposed_value="Line two.",
+        ),
+    ]
+    result = build_draft_view(annotation=ann, review_items=items)
+    assert result["notes"] == "Line one.\n\nLine two."

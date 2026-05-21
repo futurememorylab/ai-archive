@@ -66,6 +66,12 @@ def build_draft_view(
         _field_from_review(it) for it in review_items if it.kind == "field"
     ]
     fields.sort(key=lambda f: f["identifier"])
+    note_texts = [
+        _fix(str(it.proposed_value)) or ""
+        for it in review_items
+        if it.kind == "note" and it.proposed_value is not None
+    ]
+    notes = "\n\n".join(t for t in note_texts if t) or None
     return {
         "has_draft": True,
         "annotation_id": annotation.id,
@@ -75,5 +81,5 @@ def build_draft_view(
         "model": annotation.model,
         "markers": markers,
         "fields": fields,
-        "notes": None,
+        "notes": notes,
     }
