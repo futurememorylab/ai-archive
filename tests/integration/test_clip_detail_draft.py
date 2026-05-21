@@ -145,3 +145,36 @@ def test_clip_detail_renders_draft_when_annotation_exists(monkeypatch, tmp_path)
         assert r.status_code == 200
         assert 'data-draft-empty="true"' not in r.text
         assert "Scene 1" in r.text
+
+
+def test_clips_draft_partial_returns_empty_state(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        client.app.state.ctx.archive = FakeArchive((_canonical(101),))
+        r = client.get("/clips/101/draft")
+        assert r.status_code == 200
+        assert 'data-draft-empty="true"' in r.text
+        # Body is a partial — must not include the full page layout.
+        assert "<html" not in r.text.lower()
+
+
+def test_clips_draft_partial_returns_populated_when_annotation_exists(
+    monkeypatch, tmp_path,
+):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        ctx.archive = FakeArchive((_canonical(101),))
+        _run(_seed_annotation_with_marker(ctx, clip_id=101))
+        r = client.get("/clips/101/draft")
+        assert r.status_code == 200
+        assert "Scene 1" in r.text
+        assert "<html" not in r.text.lower()
+
+
+def test_clips_draft_partial_returns_404_when_clip_missing(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        client.app.state.ctx.archive = FakeArchive(())
+        r = client.get("/clips/999999/draft")
+        assert r.status_code == 404

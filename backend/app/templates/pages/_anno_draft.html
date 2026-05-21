@@ -10,6 +10,7 @@
       "fields":  draft.fields,
       "notes":   draft.notes,
       "big_notes": none,
+      "fps": (clip.fps if clip is defined and clip is not none else 25.0),
      } %}
     {% include "pages/_anno_panels.html" %}
   {% endwith %}

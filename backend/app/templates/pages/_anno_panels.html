@@ -33,7 +33,7 @@
         <span class="kind marker-kind">MARKER</span>
         {% if m.category %}<span class="cat">{{ m.category }}</span>{% endif %}
         <span class="tc mono">
-          {{ smpte(m.in_secs, clip.fps) }}{% if m.out_secs is not none %} – {{ smpte(m.out_secs, clip.fps) }}{% endif %}
+          {{ smpte(m.in_secs, panels.fps or clip.fps) }}{% if m.out_secs is not none %} – {{ smpte(m.out_secs, panels.fps or clip.fps) }}{% endif %}
         </span>
       </header>
       <h3 class="m-name">{{ m.name }}</h3>

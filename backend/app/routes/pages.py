@@ -176,6 +176,23 @@ async def clip_detail_page(request: Request, clip_id: int):
     return templates.TemplateResponse(request, "pages/clip_detail.html", ctx_dict)
 
 
+@router.get("/clips/{clip_id}/draft", response_class=HTMLResponse)
+async def clip_draft_partial(request: Request, clip_id: int):
+    ctx = request.app.state.ctx
+    if ctx.archive is None:
+        raise HTTPException(503, "archive provider not initialized")
+    try:
+        # Confirm the clip exists so we 404 properly; we don't render it here.
+        await ctx.archive.get_clip(str(clip_id))
+    except ProviderError as exc:
+        raise HTTPException(404, f"clip not found: {exc}") from exc
+
+    draft = await _build_draft_for_clip(ctx, clip_id)
+    return templates.TemplateResponse(
+        request, "pages/_anno_draft.html", {"draft": draft, "clip": None}
+    )
+
+
 @router.get("/prompts", response_class=HTMLResponse)
 async def prompts_page(request: Request, archived: int = 0):
     ctx = request.app.state.ctx
