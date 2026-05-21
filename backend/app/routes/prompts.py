@@ -55,11 +55,12 @@ class VersionEdit(BaseModel):
 
 def _prompt_envelope(prompt: Prompt, versions: list[PromptVersion]) -> dict[str, Any]:
     """Render full detail: prompt + all versions + convenience pointers."""
-    current_prod = next((v.id for v in versions if v.state == "production"), None)
+    prod = next((v for v in versions if v.state == "production"), None)
     latest = versions[0].id if versions else None  # versions are desc by version_num
     return {
         **prompt.model_dump(),
-        "current_production_version_id": current_prod,
+        "current_production_version_id": prod.id if prod else None,
+        "current_production_version_num": prod.version_num if prod else None,
         "latest_version_id": latest,
         "versions": [_version_envelope(v) for v in versions],
     }
@@ -88,7 +89,16 @@ async def list_prompts(request: Request, archived: int = 0):
         rows = await ctx.prompts_repo.list_archived(ctx.db)
     else:
         rows = await ctx.prompts_repo.list_active(ctx.db)
-    return [p.model_dump() for p in rows]
+    results: list[dict[str, Any]] = []
+    for p in rows:
+        _, versions = await ctx.prompts_repo.get_with_versions(ctx.db, p.id)
+        prod = next((v for v in versions if v.state == "production"), None)
+        results.append({
+            **p.model_dump(),
+            "current_production_version_id": prod.id if prod else None,
+            "current_production_version_num": prod.version_num if prod else None,
+        })
+    return results
 
 
 @router.get("/{prompt_id}")

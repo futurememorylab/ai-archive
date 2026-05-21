@@ -1,0 +1,40 @@
+<div class="annotate-wrap" x-data="clipAnnotate({{ clip.id }})">
+  <button type="button"
+          class="ca-btn ca-btn-primary"
+          :disabled="running"
+          @click="toggleOpen()">
+    <span x-show="!running">Annotate</span>
+    <span x-show="running" x-cloak>
+      Running: <span class="mono" x-text="runningPromptName"></span>
+    </span>
+  </button>
+
+  <div class="annotate-menu" x-show="open" x-cloak @click.outside="open = false">
+    <template x-if="loading">
+      <p class="muted">Loading prompts…</p>
+    </template>
+    <template x-if="!loading && error">
+      <p class="error" x-text="error"></p>
+    </template>
+    <template x-if="!loading && !error && prompts && prompts.length === 0">
+      <p class="muted">
+        No production prompts.
+        <a href="/prompts">Open Prompts</a> to create one.
+      </p>
+    </template>
+    <template x-if="!loading && prompts && prompts.length > 0">
+      <ul class="annotate-list">
+        <template x-for="p in prompts" :key="p.id">
+          <li>
+            <button type="button" class="annotate-item" @click="pick(p)">
+              <span class="annotate-name" x-text="p.name"></span>
+              <span class="annotate-meta mono">
+                v<span x-text="p.current_production_version_num"></span>
+              </span>
+            </button>
+          </li>
+        </template>
+      </ul>
+    </template>
+  </div>
+</div>
