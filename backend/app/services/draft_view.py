@@ -45,14 +45,18 @@ def _field_from_review(item: ReviewItem) -> dict[str, Any]:
 def build_draft_view(
     annotation: Annotation | None,
     review_items: list[ReviewItem],
+    *,
+    prompt_name: str | None = None,
+    version_num: int | None = None,
+    created_at: str | None = None,
 ) -> dict[str, Any]:
     if annotation is None:
         return {
             "has_draft": False,
             "annotation_id": None,
-            "created_at": None,
-            "prompt_name": None,
-            "version_num": None,
+            "created_at": created_at,
+            "prompt_name": prompt_name,
+            "version_num": version_num,
             "model": None,
             "markers": [],
             "fields": [],
@@ -75,9 +79,9 @@ def build_draft_view(
     return {
         "has_draft": True,
         "annotation_id": annotation.id,
-        "created_at": None,
-        "prompt_name": None,
-        "version_num": None,
+        "created_at": created_at,
+        "prompt_name": prompt_name,
+        "version_num": version_num,
         "model": annotation.model,
         "markers": markers,
         "fields": fields,

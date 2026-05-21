@@ -177,3 +177,18 @@ def test_build_draft_view_joins_multiple_notes_with_blank_lines():
     ]
     result = build_draft_view(annotation=ann, review_items=items)
     assert result["notes"] == "Line one.\n\nLine two."
+
+
+def test_build_draft_view_includes_header_chip_metadata_when_supplied():
+    ann = _annotation()
+    result = build_draft_view(
+        annotation=ann,
+        review_items=[],
+        prompt_name="Decade tagger",
+        version_num=3,
+        created_at="2026-05-21T14:22:08+00:00",
+    )
+    assert result["prompt_name"] == "Decade tagger"
+    assert result["version_num"] == 3
+    assert result["created_at"] == "2026-05-21T14:22:08+00:00"
+    assert result["model"] == "gemini-2.5-pro"
