@@ -8,7 +8,7 @@
 {% block body %}
 <script>localStorage.setItem("catdv:lastClipId", "{{ clip.id }}");</script>
 <div class="detail"
-     x-data='player({{ clip.fps }}, {{ clip.duration_secs }}, {{ clip.markers|tojson }})'
+     x-data='Object.assign(player({{ clip.fps }}, {{ clip.duration_secs }}, {{ clip.markers|tojson }}), { scope: "published", tab: "markers", running: false, runningPromptName: null, runStatus: null, runError: null, jobId: null })'
      @keydown.window="handleKey($event)">
   <header class="detail-hdr">
     <span class="clip-title">{{ clip.name }}</span>
@@ -26,6 +26,7 @@
                 class="ca-btn"
                 onclick="cacheClip({{ clip.id }})">⬇ Cache video</button>
       {% endif %}
+      {% include "pages/_annotate_dropdown.html" %}
     </span>
     <span class="grow"></span>
     <span class="tc-readout mono">
@@ -139,68 +140,36 @@
     </div>
   </section>
 
-  {% set has_notes = clip.notes or clip.big_notes %}
-  <aside class="anno-col" x-data="{ tab: 'markers' }">
-    <div class="anno-tabs" role="tablist">
-      <button type="button" class="anno-tab" role="tab"
-              :class="{ active: tab === 'markers' }"
-              :aria-selected="tab === 'markers'"
-              @click="tab = 'markers'">
-        Markers <span class="count">{{ clip.markers|length }}</span>
+  <aside class="anno-col">
+    <div class="anno-scope" role="tablist" aria-label="Annotation source">
+      <button type="button" class="anno-scope-btn"
+              :class="{ active: scope === 'published' }"
+              :aria-selected="scope === 'published'"
+              @click="scope = 'published'">
+        Published
       </button>
-      <button type="button" class="anno-tab" role="tab"
-              :class="{ active: tab === 'fields' }"
-              :aria-selected="tab === 'fields'"
-              @click="tab = 'fields'">
-        Fields <span class="count">{{ clip.fields|length }}</span>
+      <button type="button" class="anno-scope-btn"
+              :class="{ active: scope === 'draft' }"
+              :aria-selected="scope === 'draft'"
+              @click="scope = 'draft'">
+        Draft
       </button>
-      {% if has_notes %}
-      <button type="button" class="anno-tab" role="tab"
-              :class="{ active: tab === 'notes' }"
-              :aria-selected="tab === 'notes'"
-              @click="tab = 'notes'">
-        Notes
-      </button>
-      {% endif %}
     </div>
 
-    <div class="anno-section" role="tabpanel" x-show="tab === 'markers'" x-cloak>
-      {% for m in clip.markers %}
-        <article class="marker"
-                 @click="seek({{ m.in_secs }})">
-          <header>
-            <span class="kind marker-kind">MARKER</span>
-            {% if m.category %}<span class="cat">{{ m.category }}</span>{% endif %}
-            <span class="tc mono">
-              {{ smpte(m.in_secs, clip.fps) }}{% if m.out_secs is not none %} – {{ smpte(m.out_secs, clip.fps) }}{% endif %}
-            </span>
-          </header>
-          <h3 class="m-name">{{ m.name }}</h3>
-          {% if m.description %}<p class="m-desc">{{ m.description }}</p>{% endif %}
-        </article>
-      {% else %}
-        <p class="muted">No markers.</p>
-      {% endfor %}
+    <div class="anno-scoped" x-show="scope === 'published'" x-cloak>
+      {% with panels = {
+          "markers": clip.markers,
+          "fields":  clip.fields,
+          "notes":   clip.notes,
+          "big_notes": clip.big_notes,
+         } %}
+        {% include "pages/_anno_panels.html" %}
+      {% endwith %}
     </div>
 
-    <div class="anno-section" role="tabpanel" x-show="tab === 'fields'" x-cloak>
-      {% for f in clip.fields %}
-        <div class="field-row">
-          <span class="ident mono">{{ f.identifier }}</span>
-          <span class="arrow">→</span>
-          <span class="val">{{ f.value }}</span>
-        </div>
-      {% else %}
-        <p class="muted">No custom fields.</p>
-      {% endfor %}
+    <div class="anno-scoped" id="draft-aside" x-show="scope === 'draft'" x-cloak>
+      {% include "pages/_anno_draft.html" %}
     </div>
-
-    {% if has_notes %}
-    <div class="anno-section" role="tabpanel" x-show="tab === 'notes'" x-cloak>
-      {% if clip.notes %}<p class="note">{{ clip.notes }}</p>{% endif %}
-      {% if clip.big_notes %}<p class="note big">{{ clip.big_notes }}</p>{% endif %}
-    </div>
-    {% endif %}
   </aside>
 </div>
 <script>

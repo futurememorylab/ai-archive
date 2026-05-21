@@ -99,3 +99,22 @@ async def test_list_by_clip_returns_latest_first(db):
     )
     rows = await repo.list_by_clip(db, 7)
     assert [r.id for r in rows] == [second, first]
+
+
+@pytest.mark.asyncio
+async def test_list_by_clip_returns_created_at(db):
+    vid = await _seed_version(db)
+    repo = AnnotationsRepo()
+    aid = await repo.insert(
+        db,
+        Annotation(
+            catdv_clip_id=999, catdv_clip_name="x",
+            prompt_version_id=vid, job_id=None, model="m",
+            prompt_used="p", raw_response={}, structured_output=None,
+            clip_snapshot={},
+        ),
+    )
+    rows = await repo.list_by_clip(db, 999)
+    assert len(rows) == 1
+    assert rows[0].id == aid
+    assert rows[0].created_at and "T" in rows[0].created_at

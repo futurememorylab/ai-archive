@@ -1050,3 +1050,83 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
   font-family: var(--f-mono);
 }
 .prompts-page .version-menu-item:hover { background: var(--panel-2); }
+
+/* ─── Annotate dropdown ──────────────────────────────────────────────── */
+.annotate-wrap { position: relative; display: inline-block; }
+.ca-btn-primary {
+  background: var(--accent, #4a8fff);
+  color: white;
+  border: 1px solid var(--accent, #4a8fff);
+}
+.ca-btn-primary:disabled { opacity: 0.6; cursor: progress; }
+.annotate-menu {
+  position: absolute; top: calc(100% + 4px); right: 0;
+  min-width: 280px; max-height: 360px; overflow-y: auto;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #d0d0d0);
+  border-radius: var(--r-2);
+  padding: 6px;
+  z-index: 50;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+.annotate-list { list-style: none; margin: 0; padding: 0; }
+.annotate-item {
+  display: flex; justify-content: space-between; align-items: baseline;
+  width: 100%; padding: 6px 8px;
+  background: transparent; border: 0; cursor: pointer; text-align: left;
+  border-radius: var(--r-1);
+}
+.annotate-item:hover { background: var(--hover, #f3f3f3); }
+.annotate-name { font-weight: 500; }
+.annotate-meta { color: var(--text-3, #7a7a7a); font-size: 0.9em; }
+
+/* ─── Published↔Draft scope toggle ────────────────────────────────── */
+.anno-scope {
+  display: inline-flex; gap: 0;
+  border: 1px solid var(--line, #d0d0d0);
+  border-radius: var(--r-2);
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.anno-scope-btn {
+  background: transparent;
+  border: 0;
+  padding: 4px 10px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text-3, #7a7a7a);
+}
+.anno-scope-btn.active {
+  background: var(--accent, #4a8fff);
+  color: white;
+}
+
+/* ─── Run status line ────────────────────────────────────────────────── */
+.anno-status {
+  padding: 8px 10px;
+  margin: 8px 0;
+  background: var(--info-bg, #eef4ff);
+  border-left: 3px solid var(--accent, #4a8fff);
+  font-size: 0.9em;
+}
+.anno-status.error {
+  background: var(--error-bg, #fdecec);
+  border-left-color: var(--error, #c0392b);
+  color: var(--error, #c0392b);
+}
+
+/* ─── Draft chip ──────────────────────────────────────────────────── */
+.anno-draft-chip {
+  font-size: 0.85em;
+  color: var(--text-3, #7a7a7a);
+  padding: 4px 0 6px;
+  border-bottom: 1px dashed var(--line, #d0d0d0);
+  margin-bottom: 6px;
+}
+
+/* ─── Empty draft state ──────────────────────────────────────────────– */
+.anno-draft-empty {
+  padding: 16px 8px;
+  text-align: center;
+}
+.anno-draft-empty .small { font-size: 0.85em; }

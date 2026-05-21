@@ -48,7 +48,7 @@ class AnnotationsRepo:
         cur = await conn.execute(
             """
             SELECT id, catdv_clip_id, catdv_clip_name, prompt_version_id, job_id, model,
-                   prompt_used, raw_response, structured_output, clip_snapshot
+                   prompt_used, raw_response, structured_output, clip_snapshot, created_at
             FROM annotations WHERE id = ?
             """,
             (annotation_id,),
@@ -62,7 +62,7 @@ class AnnotationsRepo:
         cur = await conn.execute(
             """
             SELECT id, catdv_clip_id, catdv_clip_name, prompt_version_id, job_id, model,
-                   prompt_used, raw_response, structured_output, clip_snapshot
+                   prompt_used, raw_response, structured_output, clip_snapshot, created_at
             FROM annotations WHERE catdv_clip_id = ? ORDER BY id DESC
             """,
             (clip_id,),
@@ -91,4 +91,5 @@ class AnnotationsRepo:
             raw_response=json.loads(row[7]),
             structured_output=structured,
             clip_snapshot=json.loads(row[9]),
+            created_at=row[10] if len(row) > 10 else None,
         )
