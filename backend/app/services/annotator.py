@@ -10,8 +10,8 @@ from backend.app.archive.ai_store import AIInputStore
 from backend.app.models.annotation import Annotation
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.jobs import JobsRepo
+from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
-from backend.app.repositories.templates import TemplatesRepo
 from backend.app.services.events import EventBus
 from backend.app.services.target_map import expand
 
@@ -30,11 +30,11 @@ async def run_job(
     annotations_repo: AnnotationsRepo,
     review_items_repo: ReviewItemsRepo,
     jobs_repo: JobsRepo,
-    templates_repo: TemplatesRepo,
+    prompts_repo: PromptsRepo,
 ) -> None:
     """Run a job to completion (or cancellation). Serial per job."""
     job = await jobs_repo.get_job(db, job_id)
-    template = await templates_repo.get(db, job.template_id)
+    version = await prompts_repo.get_version(db, job.prompt_version_id)
     await jobs_repo.update_status(db, job_id, "running")
 
     items = await jobs_repo.list_items(db, job_id)
@@ -53,7 +53,7 @@ async def run_job(
             await _process_item(
                 db=db,
                 item=item,
-                template=template,
+                version=version,
                 archive=archive,
                 proxy_resolver=proxy_resolver,
                 ai_store=ai_store,
@@ -89,7 +89,7 @@ async def _process_item(
     *,
     db,
     item,
-    template,
+    version,
     archive,
     proxy_resolver,
     ai_store,
@@ -119,9 +119,9 @@ async def _process_item(
     await event_bus.publish(topic, {"item_id": item.id, "status": "prompting"})
     result = gemini.annotate(
         file_ref=file_ref,
-        prompt=template.prompt,
-        schema=template.output_schema,
-        model=template.model,
+        prompt=version.body,
+        schema=version.output_schema,
+        model=version.model,
     )
 
     structured: dict[str, Any] | None
@@ -135,10 +135,10 @@ async def _process_item(
         Annotation(
             catdv_clip_id=item.catdv_clip_id,
             catdv_clip_name=clip_snapshot.get("name", ""),
-            template_id=template.id,
+            prompt_version_id=version.id,
             job_id=item.job_id,
-            model=template.model,
-            prompt_used=template.prompt,
+            model=version.model,
+            prompt_used=version.body,
             raw_response=result.get("raw", {}),
             structured_output=structured,
             clip_snapshot=clip_snapshot,
@@ -149,7 +149,7 @@ async def _process_item(
     if structured:
         review = expand(
             structured,
-            template.target_map,
+            version.target_map,
             annotation_id=annotation_id,
             catdv_clip_id=item.catdv_clip_id,
         )

@@ -14,14 +14,14 @@ TRANSIENT_STATUSES = ("resolving", "uploading", "prompting")
 
 class JobsRepo:
     async def create_job(
-        self, conn: aiosqlite.Connection, *, template_id: int, clip_ids: list[int]
+        self, conn: aiosqlite.Connection, *, prompt_version_id: int, clip_ids: list[int]
     ) -> int:
         cur = await conn.execute(
             """
-            INSERT INTO jobs (template_id, status, created_at, total_clips)
+            INSERT INTO jobs (prompt_version_id, status, created_at, total_clips)
             VALUES (?, 'pending', ?, ?)
             """,
-            (template_id, _now_iso(), len(clip_ids)),
+            (prompt_version_id, _now_iso(), len(clip_ids)),
         )
         job_id = cur.lastrowid
         assert job_id is not None
@@ -35,21 +35,21 @@ class JobsRepo:
 
     async def get_job(self, conn: aiosqlite.Connection, job_id: int) -> Job:
         cur = await conn.execute(
-            "SELECT id, template_id, status, total_clips, notes FROM jobs WHERE id = ?",
+            "SELECT id, prompt_version_id, status, total_clips, notes FROM jobs WHERE id = ?",
             (job_id,),
         )
         row = await cur.fetchone()
         if row is None:
             raise LookupError(f"job {job_id} not found")
-        return Job(id=row[0], template_id=row[1], status=row[2], total_clips=row[3], notes=row[4])
+        return Job(id=row[0], prompt_version_id=row[1], status=row[2], total_clips=row[3], notes=row[4])
 
     async def list_jobs(self, conn: aiosqlite.Connection, *, limit: int = 50) -> list[Job]:
         cur = await conn.execute(
-            "SELECT id, template_id, status, total_clips, notes FROM jobs ORDER BY id DESC LIMIT ?",
+            "SELECT id, prompt_version_id, status, total_clips, notes FROM jobs ORDER BY id DESC LIMIT ?",
             (limit,),
         )
         return [
-            Job(id=r[0], template_id=r[1], status=r[2], total_clips=r[3], notes=r[4])
+            Job(id=r[0], prompt_version_id=r[1], status=r[2], total_clips=r[3], notes=r[4])
             for r in await cur.fetchall()
         ]
 

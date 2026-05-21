@@ -10,7 +10,7 @@ class Annotation(BaseModel):
     id: int | None = None
     catdv_clip_id: int
     catdv_clip_name: str
-    template_id: int
+    prompt_version_id: int
     job_id: int | None = None
     model: str
     prompt_used: str

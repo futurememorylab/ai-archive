@@ -5,7 +5,7 @@ from fastapi import FastAPI
 
 from backend.app.context import AppContext
 from backend.app.logging_setup import configure_logging
-from backend.app.seed import seed_default_template
+from backend.app.seed import seed_default_prompt
 from backend.app.settings import Settings
 
 SEEDS = Path(__file__).resolve().parents[1] / "seeds"
@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
     app.state.ctx = ctx
     seed_path = SEEDS / "default_template.json"
     if seed_path.exists():
-        await seed_default_template(ctx.db, seed_path=seed_path)
+        await seed_default_prompt(ctx.db, seed_path=seed_path)
     if init_external:
         if ctx.connection_monitor is not None:
             await ctx.connection_monitor.start()
@@ -64,9 +64,9 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-from backend.app.routes.templates import router as templates_router
+from backend.app.routes.prompts import router as prompts_router
 
-app.include_router(templates_router)
+app.include_router(prompts_router)
 
 from backend.app.routes.catdv import router as catdv_router
 

@@ -1,6 +1,16 @@
-from typing import Any, Literal
+"""Domain models for the prompts management feature.
+
+A Prompt is the long-lived identity (name + description). A PromptVersion
+is a snapshot of editable content (body + target_map + output_schema + model)
+plus a state (draft / production / archived) that gates mutability.
+"""
+from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, RootModel, model_validator
+
+
+PromptVersionState = Literal["draft", "production", "archived"]
+PROMPT_VERSION_STATES: tuple[str, ...] = get_args(PromptVersionState)
 
 
 class TargetEntry(BaseModel):
@@ -26,14 +36,27 @@ class TargetMap(RootModel[dict[str, TargetEntry]]):
         return self.root
 
 
-class Template(BaseModel):
+class Prompt(BaseModel):
     id: int | None = None
     name: str
     description: str | None = None
-    prompt: str
-    output_schema: dict[str, Any]
-    target_map: TargetMap
-    model: str
     archived: bool = False
+    created_at: str
+    updated_at: str
+
+    model_config = ConfigDict(extra="allow")
+
+
+class PromptVersion(BaseModel):
+    id: int | None = None
+    prompt_id: int
+    version_num: int
+    state: PromptVersionState
+    body: str
+    target_map: TargetMap
+    output_schema: dict[str, Any]
+    model: str
+    created_at: str
+    updated_at: str
 
     model_config = ConfigDict(extra="allow")

@@ -20,10 +20,10 @@ async def test_build_context_from_settings(tmp_path, monkeypatch):
     ctx = await AppContext.build(settings, init_external=False)
     try:
         assert ctx.settings is settings
-        assert ctx.templates_repo is not None
+        assert ctx.prompts_repo is not None
         assert ctx.jobs_repo is not None
         assert ctx.event_bus is not None
-        cur = await ctx.db.execute("SELECT count(*) FROM templates")
+        cur = await ctx.db.execute("SELECT count(*) FROM prompts")
         assert (await cur.fetchone())[0] == 0
     finally:
         await ctx.aclose()

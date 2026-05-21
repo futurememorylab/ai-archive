@@ -25,13 +25,12 @@ import pytest
 from backend.app.archive.providers.catdv.adapter import CatdvArchiveAdapter
 from backend.app.archive.providers.catdv.mapping import from_catdv_clip
 from backend.app.models.annotation import Annotation, ReviewItem
-from backend.app.models.template import Template
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.clip_cache import ClipCacheRepo
 from backend.app.repositories.field_def_cache import FieldDefCacheRepo
 from backend.app.repositories.pending_operations import PendingOperationsRepo
+from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
-from backend.app.repositories.templates import TemplatesRepo
 from backend.app.repositories.workspaces import WorkspacesRepo
 from backend.app.repositories.write_log import WriteLogRepo
 from backend.app.services.catdv_client import CatdvClient
@@ -59,25 +58,24 @@ def _seed_clip(fake, clip_id: int, name: str):
     fake.proxies[clip_id] = b"VIDEO_BYTES_" + str(clip_id).encode()
 
 
-async def _seed_template_and_annotations(db, clip_ids: list[int]):
-    """Insert a template + an annotation + accepted review_items per clip."""
-    templates = TemplatesRepo()
+async def _seed_prompt_and_annotations(db, clip_ids: list[int]):
+    """Insert a prompt+version + an annotation + accepted review_items per clip."""
+    prompts = PromptsRepo()
     annotations = AnnotationsRepo()
     items_repo = ReviewItemsRepo()
-    tid = await templates.create(
+    _, vid = await prompts.create_with_initial_version(
         db,
-        Template(
-            name="t-e2e",
-            prompt="p",
-            output_schema={},
-            target_map={
-                "decade": {
-                    "kind": "field",
-                    "identifier": "pragafilm.dekáda.natočení",
-                }
-            },
-            model="m",
-        ),
+        name="t-e2e",
+        description=None,
+        body="p",
+        target_map={
+            "decade": {
+                "kind": "field",
+                "identifier": "pragafilm.dekáda.natočení",
+            }
+        },
+        output_schema={},
+        model="m",
     )
     review_items_by_clip: dict[int, list[ReviewItem]] = {}
     for clip_id in clip_ids:
@@ -86,7 +84,7 @@ async def _seed_template_and_annotations(db, clip_ids: list[int]):
             Annotation(
                 catdv_clip_id=clip_id,
                 catdv_clip_name=f"Clip_{clip_id}",
-                template_id=tid,
+                prompt_version_id=vid,
                 model="m",
                 prompt_used="p",
                 raw_response={},
@@ -117,7 +115,7 @@ async def _seed_template_and_annotations(db, clip_ids: list[int]):
         review_items_by_clip[clip_id] = await items_repo.list_by_clip(
             db, clip_id, decision="accepted"
         )
-    return tid, review_items_by_clip
+    return vid, review_items_by_clip
 
 
 @pytest.mark.asyncio
@@ -191,11 +189,11 @@ async def test_offline_cycle_full(db, tmp_path: Path):
             monitor.set_manual_offline(True)
             assert monitor.current_state().value == "offline"
 
-            tid, items_by_clip = await _seed_template_and_annotations(
+            vid, items_by_clip = await _seed_prompt_and_annotations(
                 db, [101, 102]
             )
-            templates_repo = TemplatesRepo()
-            template = await templates_repo.get(db, tid)
+            prompts_repo = PromptsRepo()
+            version = await prompts_repo.get_version(db, vid)
             for clip_id, items in items_by_clip.items():
                 ann = await AnnotationsRepo().get(
                     db, items[0].annotation_id
@@ -204,7 +202,7 @@ async def test_offline_cycle_full(db, tmp_path: Path):
                     db,
                     clip_key=("catdv", str(clip_id)),
                     items=items,
-                    target_map=template.target_map,
+                    target_map=version.target_map,
                     expected_etag=etag_from_snapshot(ann.clip_snapshot),
                     annotation_id=ann.id,
                     fps=fps_from_snapshot(ann.clip_snapshot),

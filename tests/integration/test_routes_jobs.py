@@ -1,3 +1,4 @@
+import asyncio
 import importlib
 
 from fastapi.testclient import TestClient
@@ -15,6 +16,14 @@ def _setenv(monkeypatch, tmp_path):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
 
 
+def _run(coro):
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+
+
 def test_create_job_lists_and_cancels(monkeypatch, tmp_path):
     _setenv(monkeypatch, tmp_path)
     from backend.app import main as main_mod
@@ -23,20 +32,24 @@ def test_create_job_lists_and_cancels(monkeypatch, tmp_path):
     app = main_mod.app
 
     with TestClient(app) as client:
-        r = client.post(
-            "/api/templates",
-            json={
-                "name": "t",
-                "prompt": "p",
-                "output_schema": {},
-                "target_map": {"scenes": {"kind": "markers"}},
-                "model": "m",
-            },
+        ctx = client.app.state.ctx
+        # Seed a prompt + version via PromptsRepo directly — the prompts
+        # REST API arrives in a later task.
+        _, vid = _run(
+            ctx.prompts_repo.create_with_initial_version(
+                ctx.db,
+                name="t",
+                description=None,
+                body="p",
+                target_map={"scenes": {"kind": "markers"}},
+                output_schema={},
+                model="m",
+            )
         )
-        tid = r.json()["id"]
 
         r = client.post(
-            "/api/jobs", json={"template_id": tid, "clip_ids": [1, 2, 3], "auto_start": False}
+            "/api/jobs",
+            json={"prompt_version_id": vid, "clip_ids": [1, 2, 3], "auto_start": False},
         )
         assert r.status_code == 201
         job_id = r.json()["id"]

@@ -1,7 +1,7 @@
 from typing import Any
 
 from backend.app.models.annotation import ReviewItem
-from backend.app.models.template import TargetEntry, TargetMap
+from backend.app.models.prompt import TargetEntry, TargetMap
 
 
 def expand(

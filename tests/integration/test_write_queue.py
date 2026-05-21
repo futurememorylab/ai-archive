@@ -3,39 +3,37 @@ import json
 import pytest
 
 from backend.app.models.annotation import Annotation, ReviewItem
-from backend.app.models.template import Template
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.pending_operations import PendingOperationsRepo
+from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
-from backend.app.repositories.templates import TemplatesRepo
 from backend.app.services.write_queue import WriteQueue
 
 
 async def _seed(conn):
-    templates = TemplatesRepo()
+    prompts = PromptsRepo()
     annotations = AnnotationsRepo()
     items = ReviewItemsRepo()
-    tid = await templates.create(
+    _, vid = await prompts.create_with_initial_version(
         conn,
-        Template(
-            name="t",
-            prompt="p",
-            output_schema={},
-            target_map={
-                "scenes": {"kind": "markers"},
-                "decade": {"kind": "field", "identifier": "pragafilm.dekáda.natočení"},
-                "summary": {"kind": "note", "target": "notes", "mode": "append"},
-                "ovr": {"kind": "note", "target": "bigNotes", "mode": "replace"},
-            },
-            model="m",
-        ),
+        name="t",
+        description=None,
+        body="p",
+        target_map={
+            "scenes": {"kind": "markers"},
+            "decade": {"kind": "field", "identifier": "pragafilm.dekáda.natočení"},
+            "summary": {"kind": "note", "target": "notes", "mode": "append"},
+            "ovr": {"kind": "note", "target": "bigNotes", "mode": "replace"},
+        },
+        output_schema={},
+        model="m",
     )
     aid = await annotations.insert(
         conn,
         Annotation(
             catdv_clip_id=1,
             catdv_clip_name="Clip_1",
-            template_id=tid,
+            prompt_version_id=vid,
             model="m",
             prompt_used="p",
             raw_response={},
@@ -93,8 +91,8 @@ async def _seed(conn):
         await items.set_decision(conn, it.id, "accepted")
     # re-fetch with applied_at column populated.
     accepted = await items.list_by_clip(conn, 1, decision="accepted")
-    template = await templates.get(conn, tid)
-    return accepted, template, aid
+    version = await prompts.get_version(conn, vid)
+    return accepted, version, aid
 
 
 def _make_queue():
@@ -106,13 +104,13 @@ def _make_queue():
 
 @pytest.mark.asyncio
 async def test_enqueue_apply_groups_markers_into_single_op(db):
-    accepted, template, aid = await _seed(db)
+    accepted, version, aid = await _seed(db)
     q = _make_queue()
     op_ids = await q.enqueue_apply(
         db,
         clip_key=("catdv", "1"),
         items=accepted,
-        target_map=template.target_map,
+        target_map=version.target_map,
         expected_etag="2026-05-19",
         annotation_id=aid,
         fps=25.0,
@@ -127,13 +125,13 @@ async def test_enqueue_apply_groups_markers_into_single_op(db):
 
 @pytest.mark.asyncio
 async def test_enqueue_apply_emits_set_field_and_note_ops(db):
-    accepted, template, aid = await _seed(db)
+    accepted, version, aid = await _seed(db)
     q = _make_queue()
     await q.enqueue_apply(
         db,
         clip_key=("catdv", "1"),
         items=accepted,
-        target_map=template.target_map,
+        target_map=version.target_map,
         expected_etag=None,
         annotation_id=aid,
         fps=25.0,
@@ -148,13 +146,13 @@ async def test_enqueue_apply_emits_set_field_and_note_ops(db):
 
 @pytest.mark.asyncio
 async def test_enqueue_apply_marks_review_items_applied_atomically(db):
-    accepted, template, aid = await _seed(db)
+    accepted, version, aid = await _seed(db)
     q = _make_queue()
     await q.enqueue_apply(
         db,
         clip_key=("catdv", "1"),
         items=accepted,
-        target_map=template.target_map,
+        target_map=version.target_map,
         expected_etag=None,
         annotation_id=aid,
         fps=25.0,
@@ -166,13 +164,13 @@ async def test_enqueue_apply_marks_review_items_applied_atomically(db):
 
 @pytest.mark.asyncio
 async def test_enqueue_apply_is_idempotent_on_second_call(db):
-    accepted, template, aid = await _seed(db)
+    accepted, version, aid = await _seed(db)
     q = _make_queue()
     ids1 = await q.enqueue_apply(
         db,
         clip_key=("catdv", "1"),
         items=accepted,
-        target_map=template.target_map,
+        target_map=version.target_map,
         expected_etag=None,
         annotation_id=aid,
         fps=25.0,
@@ -185,7 +183,7 @@ async def test_enqueue_apply_is_idempotent_on_second_call(db):
         db,
         clip_key=("catdv", "1"),
         items=accepted_again,
-        target_map=template.target_map,
+        target_map=version.target_map,
         expected_etag=None,
         annotation_id=aid,
         fps=25.0,
@@ -197,13 +195,13 @@ async def test_enqueue_apply_is_idempotent_on_second_call(db):
 
 @pytest.mark.asyncio
 async def test_enqueue_apply_captures_expected_etag_per_row(db):
-    accepted, template, aid = await _seed(db)
+    accepted, version, aid = await _seed(db)
     q = _make_queue()
     await q.enqueue_apply(
         db,
         clip_key=("catdv", "1"),
         items=accepted,
-        target_map=template.target_map,
+        target_map=version.target_map,
         expected_etag="modify-date-v1",
         annotation_id=aid,
         fps=25.0,

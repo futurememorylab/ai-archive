@@ -1,0 +1,28 @@
+{% extends "pages/layout.html" %}
+{% block title %}Prompts · CatDV Annotator{% endblock %}
+{% block rail_active %}prompts{% endblock %}
+
+{% block body %}
+<div class="page prompts-page">
+  <div class="page-hdr">
+    <h1>Prompts</h1>
+    <span class="meta">{{ prompts|length }} {% if archived_view %}archived{% else %}active{% endif %}</span>
+    <div class="grow"></div>
+    {% if archived_view %}
+      <a class="btn ghost" href="/prompts">Active prompts</a>
+    {% else %}
+      <a class="btn ghost" href="/prompts/archived">Archived</a>
+      <a class="btn primary" href="/prompts/new">+ New prompt</a>
+    {% endif %}
+  </div>
+  <div class="page-body prompts-body">
+    <aside class="prompts-list scroll">
+      {% include "pages/_prompts_list.html" %}
+    </aside>
+    <section class="prompt-detail scroll" id="prompt-detail">
+      {% include "pages/_prompt_detail.html" %}
+    </section>
+  </div>
+</div>
+<script src="/static/promptEditor.js" defer></script>
+{% endblock %}

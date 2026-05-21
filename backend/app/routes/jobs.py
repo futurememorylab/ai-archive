@@ -9,7 +9,7 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 
 class JobCreate(BaseModel):
-    template_id: int
+    prompt_version_id: int
     clip_ids: list[int]
     auto_start: bool = True
 
@@ -19,7 +19,7 @@ async def create_job(request: Request, body: JobCreate, background: BackgroundTa
     ctx = request.app.state.ctx
     job_id = await ctx.jobs_repo.create_job(
         ctx.db,
-        template_id=body.template_id,
+        prompt_version_id=body.prompt_version_id,
         clip_ids=body.clip_ids,
     )
     if body.auto_start and ctx.archive and ctx.ai_store and ctx.gemini and ctx.proxy_resolver:
@@ -41,7 +41,7 @@ async def _run_in_bg(ctx, job_id: int) -> None:
             annotations_repo=ctx.annotations_repo,
             review_items_repo=ctx.review_items_repo,
             jobs_repo=ctx.jobs_repo,
-            templates_repo=ctx.templates_repo,
+            prompts_repo=ctx.prompts_repo,
         )
     finally:
         ctx._running_jobs.pop(job_id, None)
