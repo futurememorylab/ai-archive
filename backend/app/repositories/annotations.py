@@ -21,14 +21,14 @@ class AnnotationsRepo:
         cur = await conn.execute(
             """
             INSERT INTO annotations
-              (catdv_clip_id, catdv_clip_name, template_id, job_id, model, prompt_used,
+              (catdv_clip_id, catdv_clip_name, prompt_version_id, job_id, model, prompt_used,
                raw_response, structured_output, clip_snapshot, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 ann.catdv_clip_id,
                 ann.catdv_clip_name,
-                ann.template_id,
+                ann.prompt_version_id,
                 ann.job_id,
                 ann.model,
                 ann.prompt_used,
@@ -47,7 +47,7 @@ class AnnotationsRepo:
     async def get(self, conn: aiosqlite.Connection, annotation_id: int) -> Annotation:
         cur = await conn.execute(
             """
-            SELECT id, catdv_clip_id, catdv_clip_name, template_id, job_id, model,
+            SELECT id, catdv_clip_id, catdv_clip_name, prompt_version_id, job_id, model,
                    prompt_used, raw_response, structured_output, clip_snapshot
             FROM annotations WHERE id = ?
             """,
@@ -61,7 +61,7 @@ class AnnotationsRepo:
     async def list_by_clip(self, conn: aiosqlite.Connection, clip_id: int) -> list[Annotation]:
         cur = await conn.execute(
             """
-            SELECT id, catdv_clip_id, catdv_clip_name, template_id, job_id, model,
+            SELECT id, catdv_clip_id, catdv_clip_name, prompt_version_id, job_id, model,
                    prompt_used, raw_response, structured_output, clip_snapshot
             FROM annotations WHERE catdv_clip_id = ? ORDER BY id DESC
             """,
@@ -84,7 +84,7 @@ class AnnotationsRepo:
             id=row[0],
             catdv_clip_id=row[1],
             catdv_clip_name=row[2],
-            template_id=row[3],
+            prompt_version_id=row[3],
             job_id=row[4],
             model=row[5],
             prompt_used=row[6],

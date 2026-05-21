@@ -18,7 +18,7 @@ ItemStatus = Literal[
 
 class Job(BaseModel):
     id: int | None = None
-    template_id: int
+    prompt_version_id: int
     status: JobStatus = "pending"
     total_clips: int
     notes: str | None = None
