@@ -163,7 +163,7 @@ class PromptsRepo:
         )
         await conn.commit()
 
-    # ── version-level (Task 4 fills in create_version, update_version, promote, duplicate) ──
+    # ── version-level ───────────────────────────────────────────────────────
 
     async def get_version(
         self, conn: aiosqlite.Connection, version_id: int
@@ -176,3 +176,156 @@ class PromptsRepo:
         if row is None:
             raise LookupError(f"prompt_version {version_id} not found")
         return _row_to_version(row)
+
+    async def _current_production_id(
+        self, conn: aiosqlite.Connection, prompt_id: int
+    ) -> int | None:
+        cur = await conn.execute(
+            "SELECT id FROM prompt_versions "
+            "WHERE prompt_id = ? AND state = 'production' LIMIT 1",
+            (prompt_id,),
+        )
+        row = await cur.fetchone()
+        return row[0] if row else None
+
+    async def _latest_version_id(
+        self, conn: aiosqlite.Connection, prompt_id: int
+    ) -> int | None:
+        cur = await conn.execute(
+            "SELECT id FROM prompt_versions WHERE prompt_id = ? "
+            "ORDER BY version_num DESC LIMIT 1",
+            (prompt_id,),
+        )
+        row = await cur.fetchone()
+        return row[0] if row else None
+
+    async def _max_version_num(
+        self, conn: aiosqlite.Connection, prompt_id: int
+    ) -> int:
+        cur = await conn.execute(
+            "SELECT COALESCE(MAX(version_num), 0) FROM prompt_versions WHERE prompt_id = ?",
+            (prompt_id,),
+        )
+        row = await cur.fetchone()
+        return int(row[0]) if row else 0
+
+    async def create_version(
+        self,
+        conn: aiosqlite.Connection,
+        prompt_id: int,
+        *,
+        from_version_id: int | None = None,
+    ) -> int:
+        """Clone a source version into a new draft. Returns new version_id.
+
+        Source selection: explicit from_version_id > current production > latest.
+        """
+        if from_version_id is None:
+            from_version_id = (
+                await self._current_production_id(conn, prompt_id)
+                or await self._latest_version_id(conn, prompt_id)
+            )
+        if from_version_id is None:
+            raise LookupError(f"prompt {prompt_id} has no versions to clone from")
+        src = await self.get_version(conn, from_version_id)
+        next_num = (await self._max_version_num(conn, prompt_id)) + 1
+        now = _now_iso()
+        cur = await conn.execute(
+            "INSERT INTO prompt_versions(prompt_id, version_num, state, body, "
+            "target_map, output_schema, model, created_at, updated_at) "
+            "VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?)",
+            (
+                prompt_id, next_num, src.body,
+                _target_map_to_json(src.target_map),
+                json.dumps(src.output_schema), src.model, now, now,
+            ),
+        )
+        new_id = cur.lastrowid
+        assert new_id is not None
+        await conn.commit()
+        return new_id
+
+    async def update_version(
+        self,
+        conn: aiosqlite.Connection,
+        version_id: int,
+        *,
+        body: str,
+        target_map: Any,
+        output_schema: Any,
+        model: str,
+    ) -> None:
+        v = await self.get_version(conn, version_id)
+        if v.state != "draft":
+            raise VersionImmutableError(version_id, v.state)
+        await conn.execute(
+            "UPDATE prompt_versions SET body = ?, target_map = ?, output_schema = ?, "
+            "model = ?, updated_at = ? WHERE id = ?",
+            (
+                body, _target_map_to_json(target_map), json.dumps(output_schema),
+                model, _now_iso(), version_id,
+            ),
+        )
+        await conn.commit()
+
+    async def promote_version(
+        self, conn: aiosqlite.Connection, prompt_id: int, version_id: int
+    ) -> None:
+        """Atomically demote current production -> 'archived', set target -> 'production'."""
+        now = _now_iso()
+        # The partial unique index forbids two production rows existing at the
+        # same instant, so we MUST archive the old one before promoting the
+        # new one. Single transaction.
+        try:
+            await conn.execute("BEGIN")
+            await conn.execute(
+                "UPDATE prompt_versions SET state = 'archived', updated_at = ? "
+                "WHERE prompt_id = ? AND state = 'production' AND id != ?",
+                (now, prompt_id, version_id),
+            )
+            await conn.execute(
+                "UPDATE prompt_versions SET state = 'production', updated_at = ? "
+                "WHERE id = ? AND prompt_id = ?",
+                (now, version_id, prompt_id),
+            )
+            await conn.execute("COMMIT")
+        except Exception:
+            await conn.execute("ROLLBACK")
+            raise
+
+    async def duplicate(
+        self, conn: aiosqlite.Connection, prompt_id: int
+    ) -> tuple[int, int]:
+        """Create a new prompt 'Copy of <name>' with v1 cloned from source's
+        current production (fallback: latest). Walks past existing names.
+        Returns (new_prompt_id, new_version_id).
+        """
+        src_prompt, _ = await self.get_with_versions(conn, prompt_id)
+        src_version_id = (
+            await self._current_production_id(conn, prompt_id)
+            or await self._latest_version_id(conn, prompt_id)
+        )
+        assert src_version_id is not None  # invariant: every prompt has >=1 version
+        src_version = await self.get_version(conn, src_version_id)
+        new_name = await self._next_copy_name(conn, src_prompt.name)
+        return await self.create_with_initial_version(
+            conn,
+            name=new_name,
+            description=src_prompt.description,
+            body=src_version.body,
+            target_map=src_version.target_map,
+            output_schema=src_version.output_schema,
+            model=src_version.model,
+            initial_state="draft",
+        )
+
+    async def _next_copy_name(self, conn: aiosqlite.Connection, src_name: str) -> str:
+        base = f"Copy of {src_name}"
+        candidate = base
+        n = 2
+        while True:
+            cur = await conn.execute("SELECT 1 FROM prompts WHERE name = ?", (candidate,))
+            if (await cur.fetchone()) is None:
+                return candidate
+            candidate = f"{base} ({n})"
+            n += 1
