@@ -9,6 +9,21 @@ from __future__ import annotations
 from typing import Any
 
 from backend.app.models.annotation import Annotation, ReviewItem
+from backend.app.ui.view_models import _fix
+
+
+def _marker_from_review(item: ReviewItem) -> dict[str, Any]:
+    pv: dict[str, Any] = item.proposed_value if isinstance(item.proposed_value, dict) else {}
+    in_part = pv.get("in") or {}
+    out_part = pv.get("out")
+    return {
+        "name": _fix(pv.get("name")) or "",
+        "category": pv.get("category"),
+        "description": _fix(pv.get("description")),
+        "in_secs": float(in_part.get("secs", 0.0)),
+        "out_secs": float(out_part["secs"]) if isinstance(out_part, dict) and "secs" in out_part else None,
+        "color": pv.get("color"),
+    }
 
 
 def build_draft_view(
@@ -27,6 +42,10 @@ def build_draft_view(
             "fields": [],
             "notes": None,
         }
+    markers = [
+        _marker_from_review(it) for it in review_items if it.kind == "marker"
+    ]
+    markers.sort(key=lambda m: m["in_secs"])
     return {
         "has_draft": True,
         "annotation_id": annotation.id,
@@ -34,7 +53,7 @@ def build_draft_view(
         "prompt_name": None,
         "version_num": None,
         "model": annotation.model,
-        "markers": [],
+        "markers": markers,
         "fields": [],
         "notes": None,
     }
