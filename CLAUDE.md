@@ -59,3 +59,18 @@ Otherwise the seat stays held for the JSESSIONID's idle-timeout window.
 ## Why this matters
 
 The CatDV REST API binds the session to `JSESSIONID` and the seat is held *server-side*, not by our process. So even when our process dies, the seat can linger. The combination of (a) checking before starting and (b) graceful shutdown after running is what keeps the single available seat usable for the next dev session.
+
+## Recording decisions at end of session
+
+When a session involves any non-trivial design call — a schema replacement,
+an API shape choice, a deliberate deviation from the spec, a "we considered
+X and Y, picked Z" moment — append a new entry to `docs/decisions.md`
+before the session ends. Match the existing format: a dated header, then
+**Context** / **Alternatives** / **Choice** / **Why** paragraphs. Group
+several related calls under one entry when they share context (see the
+PR 3 / PR 5 / PR 6 / PR 7 entries for the pattern).
+
+The bar is "would a future contributor reading the diff ask *why*?" If
+yes, document it. If the call was forced by an obvious constraint and the
+diff itself makes the reasoning self-evident, skip it. Pure mechanical
+work (renames, dependency bumps, test additions) does not need an entry.
