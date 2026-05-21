@@ -7,7 +7,9 @@
                 body: {{ selected_version.body|tojson }},
                 target_map_text: {{ selected_version.target_map_text|tojson }},
                 output_schema_text: {{ selected_version.output_schema_text|tojson }},
-                model: {{ selected_version.model|tojson }}
+                model: {{ selected_version.model|tojson }},
+                prompt_name: {{ selected.name|tojson }},
+                prompt_description: {{ (selected.description or "")|tojson }}
             })'>
 
   {# Title row + tags + model picker + Save + kebab.
@@ -101,6 +103,40 @@
               x-model="draft.output_schema_text"></textarea>
     <div class="muted" style="font-size: 11px; margin-top: 4px;">
       JSON Schema for the Gemini response. Versioned alongside the body.
+    </div>
+  </div>
+
+  {# Duplicate-prompt modal. #}
+  <div class="modal-overlay" x-show="dupOpen" x-cloak
+       @keydown.escape.window="dupOpen = false"
+       @click.self="dupOpen = false">
+    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="dup-title">
+      <div class="modal-h" id="dup-title">Duplicate prompt</div>
+      <form @submit.prevent="duplicate()">
+        <div class="modal-body">
+          <label class="modal-field">
+            <span class="modal-label">Name</span>
+            <input type="text" class="txt" x-model="dupName" x-ref="dupNameInput"
+                   required maxlength="200" autocomplete="off">
+          </label>
+          <label class="modal-field">
+            <span class="modal-label">Description</span>
+            <textarea class="txt scroll" x-model="dupDesc" rows="2"
+                      style="resize: vertical;"></textarea>
+          </label>
+          <div class="error-banner" x-show="dupError" x-cloak x-text="dupError"></div>
+          <div class="muted" style="font-size: 11px;">
+            Creates a new prompt with v1 (draft) cloned from this prompt&rsquo;s current production version.
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" @click="dupOpen = false">Cancel</button>
+          <button type="submit" class="btn primary" :disabled="dupSaving || !dupName.trim()">
+            <span x-show="!dupSaving">Duplicate</span>
+            <span x-show="dupSaving" x-cloak>Duplicating&hellip;</span>
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 </div>

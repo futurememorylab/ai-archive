@@ -313,10 +313,18 @@ class PromptsRepo:
             raise
 
     async def duplicate(
-        self, conn: aiosqlite.Connection, prompt_id: int
+        self,
+        conn: aiosqlite.Connection,
+        prompt_id: int,
+        *,
+        name: str | None = None,
+        description: str | None = None,
     ) -> tuple[int, int]:
-        """Create a new prompt 'Copy of <name>' with v1 cloned from source's
-        current production (fallback: latest). Walks past existing names.
+        """Create a new prompt with v1 cloned from source's current production
+        (fallback: latest). When ``name`` is omitted, walks to the next available
+        ``Copy of <name>`` / ``Copy of <name> (n)``. When ``name`` is provided,
+        used as-is and a UNIQUE collision raises ``aiosqlite.IntegrityError``.
+        When ``description`` is omitted, copies the source's description.
         Returns (new_prompt_id, new_version_id).
         """
         src_prompt, _ = await self.get_with_versions(conn, prompt_id)
@@ -326,11 +334,12 @@ class PromptsRepo:
         )
         assert src_version_id is not None  # invariant: every prompt has >=1 version
         src_version = await self.get_version(conn, src_version_id)
-        new_name = await self._next_copy_name(conn, src_prompt.name)
+        new_name = name if name is not None else await self._next_copy_name(conn, src_prompt.name)
+        new_desc = description if description is not None else src_prompt.description
         return await self.create_with_initial_version(
             conn,
             name=new_name,
-            description=src_prompt.description,
+            description=new_desc,
             body=src_version.body,
             target_map=src_version.target_map,
             output_schema=src_version.output_schema,

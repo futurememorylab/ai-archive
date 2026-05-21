@@ -3,8 +3,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import aiosqlite
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
@@ -319,12 +319,32 @@ async def action_promote_version(request: Request, prompt_id: int, version_id: i
 
 
 @router.post("/prompts/{prompt_id}/_duplicate")
-async def action_duplicate_prompt(request: Request, prompt_id: int):
+async def action_duplicate_prompt(
+    request: Request,
+    prompt_id: int,
+    name: str | None = Form(default=None),
+    description: str | None = Form(default=None),
+):
     ctx = request.app.state.ctx
+    cleaned_name = name.strip() if name is not None else None
+    cleaned_desc = description if description is not None else None
     try:
-        new_pid, _ = await ctx.prompts_repo.duplicate(ctx.db, prompt_id)
+        new_pid, _ = await ctx.prompts_repo.duplicate(
+            ctx.db,
+            prompt_id,
+            name=cleaned_name or None,
+            description=cleaned_desc,
+        )
     except LookupError as exc:
         raise HTTPException(404, str(exc))
+    except aiosqlite.IntegrityError:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error_code": "name_conflict",
+                "message": f"A prompt named {cleaned_name!r} already exists.",
+            },
+        )
     return RedirectResponse(f"/prompts/{new_pid}", status_code=303)
 
 

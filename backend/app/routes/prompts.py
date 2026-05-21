@@ -34,6 +34,11 @@ class PromptPatch(BaseModel):
     description: str | None = None
 
 
+class PromptDuplicate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
 class VersionCreate(BaseModel):
     from_version_id: int | None = None
 
@@ -141,12 +146,20 @@ async def restore_prompt(request: Request, prompt_id: int):
 
 
 @router.post("/{prompt_id}:duplicate", status_code=status.HTTP_201_CREATED)
-async def duplicate_prompt(request: Request, prompt_id: int):
+async def duplicate_prompt(
+    request: Request, prompt_id: int, body: PromptDuplicate | None = None
+):
     ctx = request.app.state.ctx
+    name = (body.name.strip() if body and body.name else None) or None
+    description = body.description if body else None
     try:
-        new_pid, _ = await ctx.prompts_repo.duplicate(ctx.db, prompt_id)
+        new_pid, _ = await ctx.prompts_repo.duplicate(
+            ctx.db, prompt_id, name=name, description=description
+        )
     except LookupError as exc:
         raise HTTPException(404, str(exc))
+    except aiosqlite.IntegrityError:
+        raise HTTPException(409, f"A prompt named {name!r} already exists.")
     return {"id": new_pid}
 
 

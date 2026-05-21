@@ -35,3 +35,6 @@ dist/
 build/
 frontend/dist/
 backend/app/static/dist/
+
+# Dev server logs
+logs/

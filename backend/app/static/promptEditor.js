@@ -22,6 +22,14 @@ document.addEventListener("alpine:init", () => {
     error: "",
     saving: false,
 
+    prompt_name: initial.prompt_name || "",
+    prompt_description: initial.prompt_description || "",
+    dupOpen: false,
+    dupName: "",
+    dupDesc: "",
+    dupError: "",
+    dupSaving: false,
+
     MODELS: [
       "gemini-2.5-pro",
       "gemini-2.5-flash",
@@ -42,6 +50,43 @@ document.addEventListener("alpine:init", () => {
     parseOrFail(label, text) {
       try { return JSON.parse(text); }
       catch (e) { throw new Error(`${label}: invalid JSON — ${e.message}`); }
+    },
+
+    openDuplicate() {
+      this.menuOpen = false;
+      this.dupName = `Copy of ${this.prompt_name}`;
+      this.dupDesc = this.prompt_description || "";
+      this.dupError = "";
+      this.dupOpen = true;
+      this.$nextTick(() => {
+        const el = this.$refs.dupNameInput;
+        if (el) { el.focus(); el.select(); }
+      });
+    },
+
+    async duplicate() {
+      if (this.dupSaving) return;
+      const name = this.dupName.trim();
+      if (!name) { this.dupError = "Name is required."; return; }
+      this.dupSaving = true;
+      this.dupError = "";
+      try {
+        const fd = new FormData();
+        fd.set("name", name);
+        fd.set("description", this.dupDesc);
+        const resp = await fetch(
+          `/prompts/${this.prompt_id}/_duplicate`,
+          { method: "POST", body: fd, redirect: "follow" }
+        );
+        if (resp.redirected) { window.location.href = resp.url; return; }
+        if (resp.ok) { window.location.reload(); return; }
+        const data = await resp.json().catch(() => ({ message: resp.statusText }));
+        this.dupError = data.message || `duplicate failed (${resp.status})`;
+      } catch (e) {
+        this.dupError = e.message || "duplicate failed";
+      } finally {
+        this.dupSaving = false;
+      }
     },
 
     async save() {

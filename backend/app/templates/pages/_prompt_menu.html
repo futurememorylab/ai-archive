@@ -12,9 +12,7 @@
   </form>
   {% endif %}
   <div class="tmpl-menu-sep"></div>
-  <form method="post" action="/prompts/{{ selected.id }}/_duplicate">
-    <button type="submit" class="tmpl-menu-item">&#9192; Duplicate</button>
-  </form>
+  <button type="button" class="tmpl-menu-item" @click="openDuplicate()">&#9192; Duplicate&hellip;</button>
   <a class="tmpl-menu-item"
      href="/api/prompts/{{ selected.id }}/versions/{{ selected_version.id }}/export"
      download="prompt-{{ selected.id }}-v{{ selected_version.version_num }}.json">

@@ -257,6 +257,28 @@ async def test_duplicate_skips_archived_name_collisions(db):
 
 
 @pytest.mark.asyncio
+async def test_duplicate_with_explicit_name_and_description(db):
+    repo = PromptsRepo()
+    pid, _ = await repo.create_with_initial_version(db, name="P", description="orig", **_vbody())
+    new_pid, _ = await repo.duplicate(db, pid, name="My Variant", description="new desc")
+    p, versions = await repo.get_with_versions(db, new_pid)
+    assert p.name == "My Variant"
+    assert p.description == "new desc"
+    assert versions[0].state == "draft"
+    assert versions[0].body == "Identify scenes."
+
+
+@pytest.mark.asyncio
+async def test_duplicate_with_explicit_name_collision_raises(db):
+    import aiosqlite
+    repo = PromptsRepo()
+    pid, _ = await repo.create_with_initial_version(db, name="P", description=None, **_vbody())
+    await repo.create_with_initial_version(db, name="Taken", description=None, **_vbody())
+    with pytest.raises(aiosqlite.IntegrityError):
+        await repo.duplicate(db, pid, name="Taken")
+
+
+@pytest.mark.asyncio
 async def test_promote_on_archived_raises(db):
     repo = PromptsRepo()
     pid, v1 = await repo.create_with_initial_version(db, name="P", description=None, **_vbody())
