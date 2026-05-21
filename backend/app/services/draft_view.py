@@ -26,6 +26,22 @@ def _marker_from_review(item: ReviewItem) -> dict[str, Any]:
     }
 
 
+def _field_from_review(item: ReviewItem) -> dict[str, Any]:
+    identifier = item.target_identifier or ""
+    value = item.proposed_value
+    if isinstance(value, list):
+        value_str = ", ".join(_fix(str(v)) or "" for v in value)
+    elif value is None:
+        value_str = ""
+    else:
+        value_str = _fix(str(value)) or ""
+    return {
+        "identifier": identifier,
+        "name": identifier.split(".")[-1],
+        "value": value_str,
+    }
+
+
 def build_draft_view(
     annotation: Annotation | None,
     review_items: list[ReviewItem],
@@ -46,6 +62,10 @@ def build_draft_view(
         _marker_from_review(it) for it in review_items if it.kind == "marker"
     ]
     markers.sort(key=lambda m: m["in_secs"])
+    fields = [
+        _field_from_review(it) for it in review_items if it.kind == "field"
+    ]
+    fields.sort(key=lambda f: f["identifier"])
     return {
         "has_draft": True,
         "annotation_id": annotation.id,
@@ -54,6 +74,6 @@ def build_draft_view(
         "version_num": None,
         "model": annotation.model,
         "markers": markers,
-        "fields": [],
+        "fields": fields,
         "notes": None,
     }

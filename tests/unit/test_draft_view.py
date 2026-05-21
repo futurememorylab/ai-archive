@@ -94,3 +94,58 @@ def test_build_draft_view_applies_mojibake_fix_to_marker_name_and_description():
     # leaves the string untouched. We just assert it ran and produced a str.
     assert isinstance(m["name"], str) and m["name"]
     assert isinstance(m["description"], str)
+
+
+def test_build_draft_view_maps_string_field():
+    ann = _annotation()
+    items = [
+        ReviewItem(
+            annotation_id=42, catdv_clip_id=101, kind="field",
+            target_identifier="pragafilm.dekáda.natočení",
+            proposed_value="30.léta",
+        ),
+    ]
+    result = build_draft_view(annotation=ann, review_items=items)
+    assert result["fields"] == [
+        {
+            "identifier": "pragafilm.dekáda.natočení",
+            "name": "natočení",
+            "value": "30.léta",
+        },
+    ]
+
+
+def test_build_draft_view_maps_list_field_by_joining():
+    ann = _annotation()
+    items = [
+        ReviewItem(
+            annotation_id=42, catdv_clip_id=101, kind="field",
+            target_identifier="pragafilm.rok.natočení",
+            proposed_value=["1932", "1933"],
+        ),
+    ]
+    result = build_draft_view(annotation=ann, review_items=items)
+    assert result["fields"] == [
+        {
+            "identifier": "pragafilm.rok.natočení",
+            "name": "natočení",
+            "value": "1932, 1933",
+        },
+    ]
+
+
+def test_build_draft_view_fields_sorted_by_identifier():
+    ann = _annotation()
+    items = [
+        ReviewItem(
+            annotation_id=42, catdv_clip_id=101, kind="field",
+            target_identifier="pragafilm.rok.natočení", proposed_value="1932",
+        ),
+        ReviewItem(
+            annotation_id=42, catdv_clip_id=101, kind="field",
+            target_identifier="pragafilm.barva", proposed_value="true",
+        ),
+    ]
+    result = build_draft_view(annotation=ann, review_items=items)
+    idents = [f["identifier"] for f in result["fields"]]
+    assert idents == ["pragafilm.barva", "pragafilm.rok.natočení"]
