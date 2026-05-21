@@ -8,7 +8,8 @@
 {% block body %}
 <script>localStorage.setItem("catdv:lastClipId", "{{ clip.id }}");</script>
 <div class="detail"
-     x-data='Object.assign(player({{ clip.fps }}, {{ clip.duration_secs }}, {{ clip.markers|tojson }}), { scope: "published", tab: "markers", running: false, runningPromptName: null, runStatus: null, runError: null, jobId: null })'
+     :class="{ 'is-draft': scope === 'draft' }"
+     x-data='Object.assign(player({{ clip.fps }}, {{ clip.duration_secs }}, {{ clip.markers|tojson }}), clipAnnotate({{ clip.id }}), { scope: "published", tab: "markers" })'
      @keydown.window="handleKey($event)">
   <header class="detail-hdr">
     <span class="clip-title">{{ clip.name }}</span>
@@ -64,6 +65,13 @@
                Index aligns with the Alpine `markers` array (same sorted source). #}
             <div class="range"
                  :class="{ active: isMarkerActive(markers[{{ loop.index0 }}]) }"
+                 style="left: {{ (m.in_secs / clip.duration_secs) * 100 }}%; width: {{ (((m.out_secs or m.in_secs + 1) - m.in_secs) / clip.duration_secs) * 100 }}%"
+                 title="{{ m.name }}"></div>
+          {% endfor %}
+        </div>
+        <div class="ranges draft-ranges" x-show="scope === 'draft'" x-cloak>
+          {% for m in draft.markers %}
+            <div class="range draft-range"
                  style="left: {{ (m.in_secs / clip.duration_secs) * 100 }}%; width: {{ (((m.out_secs or m.in_secs + 1) - m.in_secs) / clip.duration_secs) * 100 }}%"
                  title="{{ m.name }}"></div>
           {% endfor %}
@@ -142,13 +150,13 @@
 
   <aside class="anno-col">
     <div class="anno-scope" role="tablist" aria-label="Annotation source">
-      <button type="button" class="anno-scope-btn"
+      <button type="button" class="anno-scope-btn" data-scope="published"
               :class="{ active: scope === 'published' }"
               :aria-selected="scope === 'published'"
               @click="scope = 'published'">
         Published
       </button>
-      <button type="button" class="anno-scope-btn"
+      <button type="button" class="anno-scope-btn" data-scope="draft"
               :class="{ active: scope === 'draft' }"
               :aria-selected="scope === 'draft'"
               @click="scope = 'draft'">

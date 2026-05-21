@@ -18,6 +18,30 @@ from backend.app.services.target_map import expand
 log = logging.getLogger(__name__)
 
 
+def _render_prompt(body: str, *, duration_secs: float) -> str:
+    """Prepend a hard duration anchor so Gemini doesn't fabricate timestamps
+    past the end of the clip — a known failure mode of gemini-2.5-flash on
+    multi-minute video. Belt-and-suspenders alongside post-hoc clamping in
+    `target_map.expand`."""
+    if duration_secs <= 0:
+        return body
+    anchor = (
+        f"TIMECODE UNITS — read carefully:\n"
+        f"• This clip is exactly {duration_secs:.2f} seconds long.\n"
+        f"• Every `in.secs` and `out.secs` you return is a FLOAT in SECONDS,\n"
+        f"  measured from the start of the clip (t = 0.00 at frame 0).\n"
+        f"• Do NOT use frames, milliseconds, fractions of duration, or any\n"
+        f"  other unit. Decimal seconds only, e.g. 12.50 for 12 s 500 ms.\n"
+        f"• Every timestamp MUST satisfy 0.0 <= secs <= {duration_secs:.2f}.\n"
+        f"• Out > in for every scene; scenes must not overlap; the LAST\n"
+        f"  scene's `out.secs` MUST equal the clip duration "
+        f"({duration_secs:.2f}) — never exceed it.\n"
+        f"• If you reach the end of the clip, STOP emitting scenes. Do not\n"
+        f"  invent content beyond {duration_secs:.2f} s.\n\n"
+    )
+    return anchor + body
+
+
 async def run_job(
     *,
     db: aiosqlite.Connection,
@@ -114,12 +138,14 @@ async def _process_item(
 
     canonical = await archive.get_clip(str(item.catdv_clip_id))
     clip_snapshot: dict[str, Any] = dict(canonical.provider_data)
+    duration_secs = float(canonical.duration_secs or 0.0)
 
     await jobs_repo.update_item_status(db, item.id, "prompting")
     await event_bus.publish(topic, {"item_id": item.id, "status": "prompting"})
+    rendered_body = _render_prompt(version.body, duration_secs=duration_secs)
     result = gemini.annotate(
         file_ref=file_ref,
-        prompt=version.body,
+        prompt=rendered_body,
         schema=version.output_schema,
         model=version.model,
     )
@@ -138,7 +164,7 @@ async def _process_item(
             prompt_version_id=version.id,
             job_id=item.job_id,
             model=version.model,
-            prompt_used=version.body,
+            prompt_used=rendered_body,
             raw_response=result.get("raw", {}),
             structured_output=structured,
             clip_snapshot=clip_snapshot,
@@ -152,6 +178,7 @@ async def _process_item(
             version.target_map,
             annotation_id=annotation_id,
             catdv_clip_id=item.catdv_clip_id,
+            clip_duration_secs=duration_secs or None,
         )
         if review:
             await review_items_repo.bulk_insert(db, review)

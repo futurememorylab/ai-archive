@@ -1,7 +1,6 @@
-<template x-if="$root.runStatus || $root.runError">
-  <div class="anno-status" :class="{ error: $root.runError }">
-    <span x-show="$root.runError" x-text="`Failed: ${$root.runError}`"></span>
-    <span x-show="!$root.runError" x-text="$root.runStatus"></span>
+<template x-if="runError">
+  <div class="anno-status error">
+    <span x-text="`Failed: ${runError}`"></span>
   </div>
 </template>
 {% if draft.has_draft %}

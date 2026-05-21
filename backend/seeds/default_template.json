@@ -14,8 +14,8 @@
           "properties": {
             "name": {"type": "string"},
             "description": {"type": "string"},
-            "in":  {"type": "object", "properties": {"secs": {"type": "number"}}, "required": ["secs"]},
-            "out": {"type": "object", "properties": {"secs": {"type": "number"}}, "required": ["secs"]},
+            "in":  {"type": "object", "properties": {"secs": {"type": "number", "minimum": 0, "description": "Elapsed seconds (float) from the start of the clip. Decimal seconds only — never frames, milliseconds, or normalised fractions. MUST be in [0, clip_duration_secs]."}}, "required": ["secs"]},
+            "out": {"type": "object", "properties": {"secs": {"type": "number", "minimum": 0, "description": "Elapsed seconds (float) from the start of the clip. Decimal seconds only — never frames, milliseconds, or normalised fractions. MUST be in [0, clip_duration_secs]."}}, "required": ["secs"]},
             "category": {"type": "string"}
           }
         }

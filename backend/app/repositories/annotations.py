@@ -1,3 +1,4 @@
+import base64
 import json
 from datetime import datetime, timezone
 
@@ -13,6 +14,8 @@ def _now_iso() -> str:
 def _json_default(obj):
     if isinstance(obj, datetime):
         return obj.isoformat()
+    if isinstance(obj, (bytes, bytearray)):
+        return base64.b64encode(bytes(obj)).decode("ascii")
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 

@@ -1,4 +1,17 @@
 <div class="anno-draft-empty" data-draft-empty="true">
-  <p class="muted">No draft yet.</p>
-  <p class="muted small">Click <strong>Annotate</strong> to generate one.</p>
+  <template x-if="!running">
+    <div>
+      <p class="muted">No draft yet.</p>
+      <p class="muted small">Click <strong>Annotate</strong> to generate one.</p>
+    </div>
+  </template>
+  <template x-if="running">
+    <div>
+      <p class="muted">
+        <span class="ca-spinner ca-spinner-inline" aria-hidden="true"></span>
+        <span x-text="runStatus || 'Running…'"></span>
+      </p>
+      <p class="muted small">Waiting for run metadata.</p>
+    </div>
+  </template>
 </div>

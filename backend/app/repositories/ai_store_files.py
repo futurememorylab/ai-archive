@@ -26,24 +26,31 @@ class AIStoreFilesRepo:
         size_bytes: int,
         sha256: str,
         expires_at: str | None = None,
+        provider_id: str = "catdv",
+        provider_clip_id: str | None = None,
     ) -> None:
         now = _now_iso()
+        pcid = provider_clip_id if provider_clip_id is not None else str(clip_id)
         await conn.execute(
             """
             INSERT INTO ai_store_files
-              (store_id, catdv_clip_id, gcs_uri, mime_type, size_bytes,
+              (store_id, catdv_clip_id, provider_id, provider_clip_id,
+               gcs_uri, mime_type, size_bytes,
                sha256, uploaded_at, last_used_at, expires_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(store_id, catdv_clip_id) DO UPDATE SET
-              gcs_uri      = excluded.gcs_uri,
-              mime_type    = excluded.mime_type,
-              size_bytes   = excluded.size_bytes,
-              sha256       = excluded.sha256,
-              uploaded_at  = excluded.uploaded_at,
-              last_used_at = excluded.last_used_at,
-              expires_at   = excluded.expires_at
+              provider_id      = excluded.provider_id,
+              provider_clip_id = excluded.provider_clip_id,
+              gcs_uri          = excluded.gcs_uri,
+              mime_type        = excluded.mime_type,
+              size_bytes       = excluded.size_bytes,
+              sha256           = excluded.sha256,
+              uploaded_at      = excluded.uploaded_at,
+              last_used_at     = excluded.last_used_at,
+              expires_at       = excluded.expires_at
             """,
-            (store_id, clip_id, gcs_uri, mime_type, size_bytes, sha256,
+            (store_id, clip_id, provider_id, pcid,
+             gcs_uri, mime_type, size_bytes, sha256,
              now, now, expires_at),
         )
         await conn.commit()

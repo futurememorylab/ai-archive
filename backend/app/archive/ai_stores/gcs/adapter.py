@@ -67,6 +67,8 @@ class GcsInputStore:
             size_bytes=size,
             sha256=sha,
             expires_at=None,
+            provider_id=clip_key[0],
+            provider_clip_id=str(clip_key[1]),
         )
 
         return UploadedRef(

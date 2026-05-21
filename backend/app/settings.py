@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     gcp_location: str = "europe-west3"
     gcs_bucket_name: str
     google_application_credentials: Path | None = None
-    gemini_model: str = "gemini-2.5-pro"
+    gemini_model: str = "gemini-2.5-flash-lite"
 
     archive_provider: str = "catdv"
     ai_input_store: str = "gcs"

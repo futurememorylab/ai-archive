@@ -4,6 +4,11 @@ function clipAnnotate(clipId) {
     prompts: null,
     loading: false,
     error: null,
+    running: false,
+    runningPromptName: null,
+    runStatus: null,
+    runError: null,
+    jobId: null,
 
     async toggleOpen() {
       this.open = !this.open;
@@ -30,13 +35,13 @@ function clipAnnotate(clipId) {
       }
     },
 
-    async pick(prompt, root) {
+    async pick(prompt) {
       this.open = false;
-      root.runError = null;
-      root.runStatus = "starting";
-      root.running = true;
-      root.runningPromptName = prompt.name;
-      root.scope = "draft";
+      this.runError = null;
+      this.runStatus = "starting";
+      this.running = true;
+      this.runningPromptName = prompt.name;
+      this.scope = "draft";
 
       try {
         const r = await fetch("/api/jobs", {
@@ -50,16 +55,16 @@ function clipAnnotate(clipId) {
         });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const data = await r.json();
-        root.jobId = data.id;
-        this.attachStream(root, root.jobId);
+        this.jobId = data.id;
+        this.attachStream(this.jobId);
       } catch (e) {
-        root.runError = String(e);
-        root.runStatus = null;
-        root.running = false;
+        this.runError = String(e);
+        this.runStatus = null;
+        this.running = false;
       }
     },
 
-    attachStream(root, jobId) {
+    attachStream(jobId) {
       const STATUS_LABEL = {
         resolving:    "Locating proxy…",
         uploading:    "Uploading proxy to GCS…",
@@ -71,46 +76,45 @@ function clipAnnotate(clipId) {
         let payload;
         try { payload = JSON.parse(evt.data); } catch { return; }
         if (payload.status === "error") {
-          root.runError = payload.error || "Unknown error";
-          root.runStatus = null;
-          root.running = false;
+          this.runError = payload.error || "Unknown error";
+          this.runStatus = null;
+          this.running = false;
           es.close();
           return;
         }
         const label = STATUS_LABEL[payload.status];
-        if (label) root.runStatus = label;
+        if (label) this.runStatus = label;
         if (payload.status === "review_ready") {
-          await this.swapDraft(root);
+          await this.swapDraft();
           es.close();
         }
       };
       es.onerror = () => {
         es.close();
-        // Fall back to polling — Task 14.
-        this.pollJob(root, jobId);
+        this.pollJob(jobId);
       };
     },
 
-    async swapDraft(root) {
+    async swapDraft() {
       const r = await fetch(`/clips/${clipId}/draft`);
       if (!r.ok) {
-        root.runError = `Failed to load draft: HTTP ${r.status}`;
-        root.running = false;
+        this.runError = `Failed to load draft: HTTP ${r.status}`;
+        this.running = false;
         return;
       }
       const html = await r.text();
       const target = document.getElementById("draft-aside");
       if (target) target.innerHTML = html;
-      root.runStatus = null;
-      root.running = false;
+      this.runStatus = null;
+      this.running = false;
     },
 
-    async pollJob(root, jobId) {
+    async pollJob(jobId) {
       const TERMINAL = new Set(["completed", "failed", "cancelled"]);
       const STATUS_LABEL = {
         running: "Calling Gemini…",
       };
-      while (root.running) {
+      while (this.running) {
         await new Promise((res) => setTimeout(res, 2000));
         let job;
         try {
@@ -120,15 +124,15 @@ function clipAnnotate(clipId) {
         } catch {
           continue;
         }
-        if (STATUS_LABEL[job.status]) root.runStatus = STATUS_LABEL[job.status];
+        if (STATUS_LABEL[job.status]) this.runStatus = STATUS_LABEL[job.status];
         if (TERMINAL.has(job.status)) {
           if (job.status === "completed") {
-            await this.swapDraft(root);
+            await this.swapDraft();
           } else {
             const errItem = (job.items || []).find((it) => it.status === "error");
-            root.runError = errItem?.error || `Job ${job.status}`;
-            root.runStatus = null;
-            root.running = false;
+            this.runError = errItem?.error || `Job ${job.status}`;
+            this.runStatus = null;
+            this.running = false;
           }
           return;
         }

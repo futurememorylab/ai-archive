@@ -1071,34 +1071,74 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 }
 .annotate-list { list-style: none; margin: 0; padding: 0; }
 .annotate-item {
-  display: flex; justify-content: space-between; align-items: baseline;
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
   width: 100%; padding: 6px 8px;
   background: transparent; border: 0; cursor: pointer; text-align: left;
+  color: var(--text);
   border-radius: var(--r-1);
 }
-.annotate-item:hover { background: var(--hover, #f3f3f3); }
-.annotate-name { font-weight: 500; }
-.annotate-meta { color: var(--text-3, #7a7a7a); font-size: 0.9em; }
+.annotate-item:hover { background: var(--hover); color: var(--text); }
+.annotate-name { font-weight: 500; color: var(--text); }
+.annotate-meta { color: var(--text-3); font-size: 0.9em; }
 
 /* ─── Published↔Draft scope toggle ────────────────────────────────── */
 .anno-scope {
+  align-self: flex-start;
+  flex: none;
   display: inline-flex; gap: 0;
   border: 1px solid var(--line, #d0d0d0);
   border-radius: var(--r-2);
   overflow: hidden;
-  margin-bottom: 8px;
+  margin: 8px 12px;
 }
 .anno-scope-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 28px; padding: 0 12px;
   background: transparent;
   border: 0;
-  padding: 4px 10px;
   cursor: pointer;
-  font: inherit;
+  font-family: var(--f-display, inherit);
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--text-3, #7a7a7a);
 }
 .anno-scope-btn.active {
-  background: var(--accent, #4a8fff);
-  color: white;
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+.anno-scope-btn[data-scope="draft"].active {
+  background: var(--info);
+  color: #0b1722;
+}
+
+/* ─── Draft pane recolor ─────────────────────────────────────────────── */
+/* Re-scope --accent to blue so every shared partial inside the draft
+   aside (markers/fields/chip) auto-renders in the draft colorway. */
+#draft-aside {
+  --accent:    var(--info);
+  --accent-2:  color-mix(in oklab, var(--info) 30%, transparent);
+  --accent-fg: #0b1722;
+}
+.anno-draft-chip {
+  border-left: 3px solid var(--info);
+  padding-left: 8px;
+  color: color-mix(in oklab, var(--info) 70%, var(--text-2));
+}
+
+/* ─── Draft timeline track ───────────────────────────────────────────── */
+/* When draft is active, split the marker band: published on top half,
+   draft on bottom half. Otherwise published uses full height. */
+.detail.is-draft .timeline .ranges:not(.draft-ranges) { bottom: 50%; }
+.timeline .draft-ranges {
+  position: absolute; left: 0; right: 0;
+  top: 50%; bottom: 6px;
+  pointer-events: none;
+}
+.timeline .range.draft-range {
+  background: color-mix(in oklab, var(--info) 35%, transparent);
+  border-left: 2px solid var(--info);
+  border-right: 2px solid var(--info);
 }
 
 /* ─── Run status line ────────────────────────────────────────────────── */
@@ -1130,3 +1170,17 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
   text-align: center;
 }
 .anno-draft-empty .small { font-size: 0.85em; }
+
+/* ─── Spinner ────────────────────────────────────────────────────────── */
+.ca-running { display: inline-flex; align-items: center; gap: 6px; }
+.ca-spinner {
+  display: inline-block;
+  width: 12px; height: 12px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: ca-spin 0.7s linear infinite;
+  vertical-align: -2px;
+}
+.ca-spinner-inline { margin-right: 4px; }
+@keyframes ca-spin { to { transform: rotate(360deg); } }

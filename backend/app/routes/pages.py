@@ -235,7 +235,7 @@ async def prompt_new_page(request: Request):
             "error": None,
             "form": {"name": "", "description": "", "body": "",
                      "target_map_text": "{}", "output_schema_text": "{}",
-                     "model": "gemini-2.5-pro"},
+                     "model": "gemini-2.5-flash-lite"},
         },
     )
 
@@ -249,7 +249,7 @@ async def action_create_prompt(request: Request):
     body = form.get("body") or ""
     target_map_text = form.get("target_map") or "{}"
     output_schema_text = form.get("output_schema") or "{}"
-    model = form.get("model") or "gemini-2.5-pro"
+    model = form.get("model") or "gemini-2.5-flash-lite"
     error = None
     target_map = None
     output_schema = None

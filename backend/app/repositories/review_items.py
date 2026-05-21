@@ -1,3 +1,4 @@
+import base64
 import json
 from datetime import datetime, timezone
 from typing import Literal
@@ -9,6 +10,14 @@ from backend.app.models.annotation import ReviewItem
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _json_default(obj):
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    if isinstance(obj, (bytes, bytearray)):
+        return base64.b64encode(bytes(obj)).decode("ascii")
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
 class ReviewItemsRepo:
@@ -29,7 +38,7 @@ class ReviewItemsRepo:
                     it.catdv_clip_id,
                     it.kind,
                     it.target_identifier,
-                    json.dumps(it.proposed_value, ensure_ascii=False),
+                    json.dumps(it.proposed_value, ensure_ascii=False, default=_json_default),
                 ),
             )
             it.id = cur.lastrowid
@@ -86,7 +95,9 @@ class ReviewItemsRepo:
         edited_value=None,
     ) -> None:
         edited_json = (
-            json.dumps(edited_value, ensure_ascii=False) if edited_value is not None else None
+            json.dumps(edited_value, ensure_ascii=False, default=_json_default)
+            if edited_value is not None
+            else None
         )
         await conn.execute(
             """
