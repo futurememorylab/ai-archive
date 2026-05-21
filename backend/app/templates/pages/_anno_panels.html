@@ -1,0 +1,64 @@
+{# Inputs:
+     panels — { markers: list, fields: list, notes: str|None, big_notes: str|None }
+     scope  — "published" or "draft" (used only for distinct DOM ids if needed)
+#}
+{% set has_notes = panels.notes or panels.big_notes %}
+<div class="anno-tabs" role="tablist">
+  <button type="button" class="anno-tab" role="tab"
+          :class="{ active: tab === 'markers' }"
+          :aria-selected="tab === 'markers'"
+          @click="tab = 'markers'">
+    Markers <span class="count">{{ panels.markers|length }}</span>
+  </button>
+  <button type="button" class="anno-tab" role="tab"
+          :class="{ active: tab === 'fields' }"
+          :aria-selected="tab === 'fields'"
+          @click="tab = 'fields'">
+    Fields <span class="count">{{ panels.fields|length }}</span>
+  </button>
+  {% if has_notes %}
+  <button type="button" class="anno-tab" role="tab"
+          :class="{ active: tab === 'notes' }"
+          :aria-selected="tab === 'notes'"
+          @click="tab = 'notes'">
+    Notes
+  </button>
+  {% endif %}
+</div>
+
+<div class="anno-section" role="tabpanel" x-show="tab === 'markers'" x-cloak>
+  {% for m in panels.markers %}
+    <article class="marker" @click="seek({{ m.in_secs }})">
+      <header>
+        <span class="kind marker-kind">MARKER</span>
+        {% if m.category %}<span class="cat">{{ m.category }}</span>{% endif %}
+        <span class="tc mono">
+          {{ smpte(m.in_secs, clip.fps) }}{% if m.out_secs is not none %} – {{ smpte(m.out_secs, clip.fps) }}{% endif %}
+        </span>
+      </header>
+      <h3 class="m-name">{{ m.name }}</h3>
+      {% if m.description %}<p class="m-desc">{{ m.description }}</p>{% endif %}
+    </article>
+  {% else %}
+    <p class="muted">No markers.</p>
+  {% endfor %}
+</div>
+
+<div class="anno-section" role="tabpanel" x-show="tab === 'fields'" x-cloak>
+  {% for f in panels.fields %}
+    <div class="field-row">
+      <span class="ident mono">{{ f.identifier }}</span>
+      <span class="arrow">→</span>
+      <span class="val">{{ f.value }}</span>
+    </div>
+  {% else %}
+    <p class="muted">No custom fields.</p>
+  {% endfor %}
+</div>
+
+{% if has_notes %}
+<div class="anno-section" role="tabpanel" x-show="tab === 'notes'" x-cloak>
+  {% if panels.notes %}<p class="note">{{ panels.notes }}</p>{% endif %}
+  {% if panels.big_notes %}<p class="note big">{{ panels.big_notes }}</p>{% endif %}
+</div>
+{% endif %}
