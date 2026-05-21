@@ -105,8 +105,34 @@ function clipAnnotate(clipId) {
       root.running = false;
     },
 
-    pollJob(root, jobId) {
-      // Implemented in Task 14.
+    async pollJob(root, jobId) {
+      const TERMINAL = new Set(["completed", "failed", "cancelled"]);
+      const STATUS_LABEL = {
+        running: "Calling Gemini…",
+      };
+      while (root.running) {
+        await new Promise((res) => setTimeout(res, 2000));
+        let job;
+        try {
+          const r = await fetch(`/api/jobs/${jobId}`);
+          if (!r.ok) continue;
+          job = await r.json();
+        } catch {
+          continue;
+        }
+        if (STATUS_LABEL[job.status]) root.runStatus = STATUS_LABEL[job.status];
+        if (TERMINAL.has(job.status)) {
+          if (job.status === "completed") {
+            await this.swapDraft(root);
+          } else {
+            const errItem = (job.items || []).find((it) => it.status === "error");
+            root.runError = errItem?.error || `Job ${job.status}`;
+            root.runStatus = null;
+            root.running = false;
+          }
+          return;
+        }
+      }
     },
   };
 }
