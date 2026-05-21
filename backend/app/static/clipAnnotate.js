@@ -51,12 +51,62 @@ function clipAnnotate(clipId) {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const data = await r.json();
         root.jobId = data.id;
-        // Task 13 attaches the SSE listener here.
+        this.attachStream(root, root.jobId);
       } catch (e) {
         root.runError = String(e);
         root.runStatus = null;
         root.running = false;
       }
+    },
+
+    attachStream(root, jobId) {
+      const STATUS_LABEL = {
+        resolving:    "Locating proxy…",
+        uploading:    "Uploading proxy to GCS…",
+        prompting:    "Calling Gemini…",
+        review_ready: "Done — loading draft…",
+      };
+      const es = new EventSource(`/api/jobs/${jobId}/events`);
+      es.onmessage = async (evt) => {
+        let payload;
+        try { payload = JSON.parse(evt.data); } catch { return; }
+        if (payload.status === "error") {
+          root.runError = payload.error || "Unknown error";
+          root.runStatus = null;
+          root.running = false;
+          es.close();
+          return;
+        }
+        const label = STATUS_LABEL[payload.status];
+        if (label) root.runStatus = label;
+        if (payload.status === "review_ready") {
+          await this.swapDraft(root);
+          es.close();
+        }
+      };
+      es.onerror = () => {
+        es.close();
+        // Fall back to polling — Task 14.
+        this.pollJob(root, jobId);
+      };
+    },
+
+    async swapDraft(root) {
+      const r = await fetch(`/clips/${clipId}/draft`);
+      if (!r.ok) {
+        root.runError = `Failed to load draft: HTTP ${r.status}`;
+        root.running = false;
+        return;
+      }
+      const html = await r.text();
+      const target = document.getElementById("draft-aside");
+      if (target) target.innerHTML = html;
+      root.runStatus = null;
+      root.running = false;
+    },
+
+    pollJob(root, jobId) {
+      // Implemented in Task 14.
     },
   };
 }
