@@ -306,32 +306,81 @@ a { color: inherit; text-decoration: none; }
 
 .clips-region { display: flex; flex-direction: column; min-height: 0; flex: 1; }
 .tbl-scroll { overflow: auto; flex: 1; min-height: 0; }
-.tbl { width: 100%; border-collapse: collapse; }
-.tbl thead th {
-  position: sticky; top: 0;
-  background: var(--panel);
-  text-align: left;
-  font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--text-3); font-weight: 600;
-  padding: 8px 12px;
+
+.clip-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+
+.clip-row {
+  display: grid;
+  grid-template-columns: 32px 160px 1fr;
+  gap: 12px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--line);
+  align-items: start;
 }
-.tbl tbody td {
-  padding: 0 12px; height: 36px;
-  border-bottom: 1px solid var(--line);
-  vertical-align: middle;
-  white-space: nowrap;
-  font-size: 13px;
+.clip-row:hover { background: var(--hover); }
+.clip-row--empty {
+  display: block; text-align: center;
+  color: var(--text-3); padding: 32px 0;
 }
-.tbl tbody tr.row { cursor: pointer; }
-.tbl tbody tr.row:hover { background: var(--hover); }
-.tbl .col-year, .tbl .col-decade, .tbl .col-dur, .tbl .col-mk { width: 90px; }
-.tbl .clip-name { display: flex; align-items: center; gap: 10px; }
-.tbl .thumb {
-  width: 36px; height: 22px; flex: none; border-radius: 3px;
-  background: linear-gradient(135deg, #2a221a, #4a3826 60%, #6b4d2e);
+
+.clip-row__rail {
+  display: flex; flex-direction: column; gap: 6px; align-items: center;
 }
-.tbl .empty { text-align: center; color: var(--text-3); padding: 32px 0; }
+
+.clip-row__poster {
+  display: block;
+  width: 160px;
+  aspect-ratio: 16 / 9;
+  background: var(--panel-2, #1c1c1c);
+  border-radius: 4px;
+  overflow: hidden;
+  text-decoration: none;
+}
+.clip-row__poster img {
+  width: 100%; height: 100%;
+  object-fit: cover; display: block;
+}
+.poster-fallback {
+  display: block; width: 100%; height: 100%;
+  background: var(--panel-2, #1c1c1c) url("/static/film-strip.svg") center/45% no-repeat;
+  color: var(--text-4, #555);
+  opacity: 0.6;
+}
+
+.clip-row__body { min-width: 0; }
+.clip-row__title {
+  margin: 0 0 4px;
+  font-size: 13px; font-weight: 600;
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline;
+}
+.clip-row__title a { color: var(--text); text-decoration: none; }
+.clip-row__title a:hover { text-decoration: underline; }
+.clip-row__title .meta {
+  color: var(--text-3); font-weight: 400; font-size: 11.5px;
+}
+
+.clip-row__notes {
+  margin: 0;
+  color: var(--text-2, var(--text-3));
+  font-size: 12.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.clip-row__notes.is-clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.clip-row__more {
+  margin-top: 2px;
+  padding: 0;
+  background: none; border: none;
+  color: var(--accent, #6aaaff);
+  font-size: 11.5px; cursor: pointer;
+}
+.clip-row__more:hover { text-decoration: underline; }
 
 .pager {
   display: flex; align-items: center; gap: 12px;
