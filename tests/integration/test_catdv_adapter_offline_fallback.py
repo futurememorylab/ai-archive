@@ -129,3 +129,82 @@ async def test_is_online_provider_none_preserves_today_behavior(db):
             )
             clip = await adapter.get_clip("1")
             assert clip.name == "X"
+
+
+@pytest.mark.asyncio
+async def test_list_clips_offline_paginates_from_cache(db):
+    """Offline path returns ClipPage built from clip_cache."""
+    from backend.app.archive.model import CanonicalClip, ClipQuery, MediaRef
+
+    repo = ClipCacheRepo()
+    for i in range(3):
+        clip = CanonicalClip(
+            key=("catdv", str(i)),
+            name=f"Clip{i}",
+            duration_secs=10.0,
+            fps=25.0,
+            markers=(),
+            fields={},
+            notes={"notes": ""},
+            media=MediaRef(
+                mime_type="video/quicktime",
+                size_bytes=0,
+                cached_path=None,
+                upstream_handle=str(i),
+            ),
+            provider_data={},
+            fetched_at=datetime.now(timezone.utc),
+        )
+        await repo.upsert(db, clip=clip, catalog_id="881507")
+
+    adapter = CatdvArchiveAdapter(
+        client=None,
+        clip_cache_repo=repo,
+        field_def_cache_repo=FieldDefCacheRepo(),
+        clip_list_cache_repo=ClipListCacheRepo(),
+        db_provider=lambda: db,
+        is_online_provider=lambda: False,
+        default_catalog_id="881507",
+    )
+    page = await adapter.list_clips("881507", ClipQuery(text=None, offset=0, limit=10))
+    assert page.total == 3
+    assert {c.name for c in page.items} == {"Clip0", "Clip1", "Clip2"}
+
+
+@pytest.mark.asyncio
+async def test_list_clips_offline_search_q(db):
+    from backend.app.archive.model import CanonicalClip, ClipQuery, MediaRef
+
+    repo = ClipCacheRepo()
+    for name, cid in [("Alpha", "1"), ("Beta", "2"), ("Bravo", "3")]:
+        clip = CanonicalClip(
+            key=("catdv", cid),
+            name=name,
+            duration_secs=10.0,
+            fps=25.0,
+            markers=(),
+            fields={},
+            notes={"notes": ""},
+            media=MediaRef(
+                mime_type="video/quicktime",
+                size_bytes=0,
+                cached_path=None,
+                upstream_handle=cid,
+            ),
+            provider_data={},
+            fetched_at=datetime.now(timezone.utc),
+        )
+        await repo.upsert(db, clip=clip, catalog_id="881507")
+
+    adapter = CatdvArchiveAdapter(
+        client=None,
+        clip_cache_repo=repo,
+        field_def_cache_repo=FieldDefCacheRepo(),
+        clip_list_cache_repo=ClipListCacheRepo(),
+        db_provider=lambda: db,
+        is_online_provider=lambda: False,
+        default_catalog_id="881507",
+    )
+    page = await adapter.list_clips("881507", ClipQuery(text="b", offset=0, limit=10))
+    assert page.total == 2
+    assert {c.name for c in page.items} == {"Beta", "Bravo"}

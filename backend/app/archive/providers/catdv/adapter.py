@@ -91,6 +91,9 @@ class CatdvArchiveAdapter:
     # --- read API -----------------------------------------------------
 
     async def list_clips(self, catalog: str, query: ClipQuery) -> ClipPage:
+        if not self._is_online():
+            return await self._list_clips_from_cache(catalog, query)
+
         cached = await self._read_list_from_cache(catalog, query)
         if cached is not None:
             return cached
@@ -104,8 +107,8 @@ class CatdvArchiveAdapter:
             )
         except CatdvAuthError as exc:
             raise AuthError(str(exc)) from exc
-        except CatdvBusyError as exc:
-            raise RetryableError(str(exc)) from exc
+        except CatdvBusyError:
+            return await self._list_clips_from_cache(catalog, query)
         except CatdvError as exc:
             raise FatalProviderError(str(exc)) from exc
 
@@ -121,6 +124,24 @@ class CatdvArchiveAdapter:
         )
         await self._write_list_through(catalog, query, page, fetched_at=now)
         return page
+
+    async def _list_clips_from_cache(
+        self, catalog: str, query: ClipQuery
+    ) -> ClipPage:
+        if not self._cache_enabled():
+            return ClipPage(items=(), total=0, offset=query.offset, limit=query.limit)
+        items, total = await self._clip_cache.list_by_catalog(
+            self._db_provider(),
+            provider_id=self.id,
+            catalog_id=catalog,
+            offset=query.offset,
+            limit=query.limit,
+            q=query.text,
+            canonical=True,
+        )
+        return ClipPage(
+            items=items, total=total, offset=query.offset, limit=query.limit
+        )
 
     async def get_clip(self, clip: str) -> CanonicalClip:
         cached = await self._read_clip_from_cache(clip)

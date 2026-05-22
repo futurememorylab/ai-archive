@@ -234,7 +234,14 @@ class ClipCacheRepo:
         params: list = [provider_id, catalog_id]
         where = "provider_id = ? AND catalog_id = ?"
         if q:
-            where += " AND (LOWER(name) LIKE ? OR LOWER(canonical_json) LIKE ?)"
+            # Search name + the notes JSON value (not the whole blob; the
+            # blob's JSON keys would cause false positives on short queries).
+            where += (
+                " AND ("
+                "LOWER(name) LIKE ? OR "
+                "LOWER(COALESCE(json_extract(canonical_json, '$.notes.notes'), '')) LIKE ?"
+                ")"
+            )
             needle = f"%{q.lower()}%"
             params.extend([needle, needle])
 
