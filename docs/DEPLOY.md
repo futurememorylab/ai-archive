@@ -98,3 +98,41 @@ When `ARCHIVE_PROVIDER=fs`:
 
 See `docs/fs-archive-format.md` for the directory layout, sidecar JSON
 schema, and etag semantics.
+
+## Running on the CatDV host (no proxy cache)
+
+When the annotator runs on the same machine as the CatDV server, set:
+
+```
+PROXY_SOURCE=filesystem
+```
+
+…and ensure the OS user has **read access** to every directory listed
+under `mediaType: proxy, target: web` in `GET /catdv/api/9/mediastores`.
+For this installation that's `/Volumes/ARECA/CatDV_Proxy/` and
+`/Volumes/ARECA2/CatDV_Proxy/`.
+
+No other settings change. At startup the app fetches the media-store
+config and builds the hires→proxy mapping. Per clip, it reads
+`media.filePath` from CatDV, swaps the hires-root prefix for the
+matching proxy root, and hands the resulting path to Gemini ingestion.
+
+**What this turns off:** the `data/cache/proxies/` directory is no
+longer written. `proxy_cache` rows are not recorded. CatDV doesn't get
+hit for proxy bytes — only for clip metadata (which is light, already
+cached).
+
+**Failure modes:**
+
+- `ProxyNotFound: ... no media.filePath` — the clip has no media
+  attached upstream. Same outcome as the REST resolver would have had.
+- `ProxyNotFound: ... no mediastore rule` — the clip's `media.filePath`
+  prefix isn't in any media-store. Re-check `/mediastores` and confirm
+  the volume mount you expect is present.
+- `ProxyNotFound: ... not on disk` — the file is missing or the LTO
+  archive has reclaimed it. CatDV's web client would show the same
+  "media unavailable" state for that clip.
+
+There is intentionally no automatic fallback to the REST resolver
+when a proxy is missing on disk — failing loudly is better than
+silently re-introducing the cache + VPN dependency.
