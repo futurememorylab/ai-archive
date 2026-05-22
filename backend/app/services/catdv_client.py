@@ -26,7 +26,13 @@ class CatdvClient:
     """
 
     def __init__(
-        self, base_url: str, username: str, password: str, timeout_secs: float = 60.0
+        self,
+        base_url: str,
+        username: str,
+        password: str,
+        timeout_secs: float = 60.0,
+        *,
+        transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._base = base_url.rstrip("/")
         self._username = username
@@ -34,10 +40,13 @@ class CatdvClient:
         self._client: httpx.AsyncClient | None = None
         self._login_lock = asyncio.Lock()
         self._timeout = timeout_secs
+        self._transport = transport
         self._logged_in = False
 
     async def __aenter__(self) -> Self:
-        self._client = httpx.AsyncClient(timeout=self._timeout)
+        self._client = httpx.AsyncClient(
+            timeout=self._timeout, transport=self._transport
+        )
         return self
 
     async def __aexit__(self, *exc_info) -> None:
@@ -162,6 +171,22 @@ class CatdvClient:
         with open(dest, mode) as f:
             async for chunk in resp.aiter_bytes(chunk_size):
                 f.write(chunk)
+
+    async def download_poster(self, clip_id: int) -> bytes:
+        """Fetch the JPEG poster for a clip. Small blob; returned all at once.
+
+        Reuses the existing CatDV session (no new seat consumed). Re-logs in
+        once on 401 and retries.
+        """
+        if not self._logged_in:
+            await self.login()
+        url = f"{self._base}/catdv/api/9/clips/{clip_id}/poster"
+        resp = await self.http.get(url)
+        if resp.status_code == 401:
+            await self.login()
+            resp = await self.http.get(url)
+        resp.raise_for_status()
+        return resp.content
 
     async def put_clip(self, clip_id: int, payload: dict[str, Any]) -> dict[str, Any]:
         env = await self._call_json("PUT", f"/catdv/api/9/clips/{clip_id}", json=payload)
