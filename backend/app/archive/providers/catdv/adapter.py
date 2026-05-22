@@ -45,7 +45,7 @@ class CatdvArchiveAdapter:
     def __init__(
         self,
         *,
-        client: CatdvClient,
+        client: CatdvClient | None,
         clip_cache_repo: Any = None,
         field_def_cache_repo: Any = None,
         clip_list_cache_repo: Any = None,
@@ -54,6 +54,7 @@ class CatdvArchiveAdapter:
         clip_list_cache_ttl_minutes: int = 10,
         clock: Callable[[], datetime] | None = None,
         default_catalog_id: str = "",
+        is_online_provider: Callable[[], bool] | None = None,
     ) -> None:
         self._client = client
         self._clip_cache = clip_cache_repo
@@ -64,6 +65,12 @@ class CatdvArchiveAdapter:
         self._list_ttl = timedelta(minutes=clip_list_cache_ttl_minutes)
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._default_catalog_id = default_catalog_id
+        self._is_online_provider = is_online_provider
+
+    def _is_online(self) -> bool:
+        if self._is_online_provider is None:
+            return True
+        return bool(self._is_online_provider())
 
     # --- health -------------------------------------------------------
 
@@ -120,11 +127,20 @@ class CatdvArchiveAdapter:
         if cached is not None:
             return cached
 
+        if not self._is_online():
+            stale = await self._read_clip_from_cache_stale(clip)
+            if stale is not None:
+                return stale
+            raise FatalProviderError(f"clip {clip} not available offline")
+
         try:
             raw = await self._client.get_clip(int(clip))
         except CatdvAuthError as exc:
             raise AuthError(str(exc)) from exc
         except CatdvBusyError as exc:
+            stale = await self._read_clip_from_cache_stale(clip)
+            if stale is not None:
+                return stale
             raise RetryableError(str(exc)) from exc
         except CatdvError as exc:
             raise FatalProviderError(str(exc)) from exc
@@ -138,11 +154,18 @@ class CatdvArchiveAdapter:
         if cached is not None:
             return cached
 
+        if not self._is_online():
+            stale = await self._read_field_defs_from_cache_stale()
+            return stale or []
+
         try:
             rows = await self._client.list_fields()
         except CatdvAuthError as exc:
             raise AuthError(str(exc)) from exc
         except CatdvBusyError as exc:
+            stale = await self._read_field_defs_from_cache_stale()
+            if stale is not None:
+                return stale
             raise RetryableError(str(exc)) from exc
         except CatdvError as exc:
             raise FatalProviderError(str(exc)) from exc
@@ -159,6 +182,8 @@ class CatdvArchiveAdapter:
             raise FatalProviderError(
                 f"ChangeSet for provider {provider_id!r} sent to catdv adapter"
             )
+        if not self._is_online():
+            raise RetryableError("offline — change queued")
         from backend.app.archive.providers.catdv.payload import build_put_payload
 
         try:
@@ -236,6 +261,21 @@ class CatdvArchiveAdapter:
         return await self._clip_cache.get_by_key(
             db, provider_id=self.id, provider_clip_id=clip_id
         )
+
+    async def _read_clip_from_cache_stale(self, clip_id: str) -> CanonicalClip | None:
+        if not self._cache_enabled():
+            return None
+        return await self._clip_cache.get_by_key(
+            self._db_provider(), provider_id=self.id, provider_clip_id=clip_id
+        )
+
+    async def _read_field_defs_from_cache_stale(self) -> list[FieldDef] | None:
+        if not self._field_def_cache_enabled():
+            return None
+        defs = await self._field_def_cache.list_for_provider(
+            self._db_provider(), provider_id=self.id
+        )
+        return defs if defs else None
 
     async def _write_clip_through(
         self, canonical: CanonicalClip, raw: dict[str, Any]
