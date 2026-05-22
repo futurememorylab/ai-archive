@@ -1,47 +1,54 @@
 <div id="clips-region" class="clips-region">
-  <div class="tbl-scroll">
-    <table class="tbl">
-      <thead>
-        <tr>
-          <th class="col-sel"><input type="checkbox" id="row-select-all" aria-label="Select all"></th>
-          <th class="col-cache" title="metadata · media-local · media-ai">Cache</th>
-          <th class="col-name">Clip</th>
-          <th class="col-year">Year</th>
-          <th class="col-decade">Decade</th>
-          <th class="col-dur">Duration</th>
-          <th class="col-mk">Markers</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for c in clips %}
-        <tr class="row" data-clip-id="{{ c.id }}">
-          <td class="row-select" onclick="event.stopPropagation()">
-            <input type="checkbox"
-                   class="row-check"
-                   name="clip_keys"
-                   value="catdv/{{ c.id }}"
-                   aria-label="Select clip {{ c.id }}">
-          </td>
-          <td class="cell-cache" onclick="event.stopPropagation()">
-            {% with cache = c.cache %}
-              {% include "pages/_cache_badge.html" %}
-            {% endwith %}
-          </td>
-          <td class="clip-name" onclick="location.href='/clips/{{ c.id }}'">
-            <span class="thumb"></span>
-            <span class="name">{{ c.name }}</span>
-          </td>
-          <td class="mono" onclick="location.href='/clips/{{ c.id }}'">{{ c.year or "—" }}</td>
-          <td onclick="location.href='/clips/{{ c.id }}'">{{ c.decade or "—" }}</td>
-          <td class="mono" onclick="location.href='/clips/{{ c.id }}'">{{ "%d:%02d"|format((c.duration_secs|int)//60, (c.duration_secs|int)%60) }}</td>
-          <td class="mono" onclick="location.href='/clips/{{ c.id }}'">{{ c.marker_count }}</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="7" class="empty">No clips match.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+  <ul class="clip-list">
+    {% for c in clips %}
+      <li class="clip-row"
+          :class="{ 'is-expanded': expanded[{{ c.id }}] }">
+        <div class="clip-row__rail" onclick="event.stopPropagation()">
+          <input type="checkbox"
+                 class="row-check"
+                 name="clip_keys"
+                 value="catdv/{{ c.id }}"
+                 aria-label="Select clip {{ c.id }}">
+          {% with cache = c.cache %}
+            {% include "pages/_cache_badge.html" %}
+          {% endwith %}
+        </div>
+
+        <a class="clip-row__poster" href="/clips/{{ c.id }}" aria-hidden="true" tabindex="-1">
+          {% if c.poster_id %}
+            <img loading="lazy" decoding="async"
+                 src="/api/poster/{{ c.id }}?v={{ c.poster_id }}"
+                 alt="">
+          {% else %}
+            <span class="poster-fallback"></span>
+          {% endif %}
+        </a>
+
+        <div class="clip-row__body">
+          <h3 class="clip-row__title">
+            <a href="/clips/{{ c.id }}">{{ c.name }}</a>
+            <span class="meta mono">
+              {{ c.year or "—" }} ·
+              {{ "%d:%02d"|format((c.duration_secs|int)//60, (c.duration_secs|int)%60) }} ·
+              {{ c.marker_count }} mk
+            </span>
+          </h3>
+          {% if c.notes_excerpt %}
+            <p class="clip-row__notes"
+               :class="{ 'is-clamped': !expanded[{{ c.id }}] }">{{ c.notes_excerpt }}</p>
+            {% if c.notes_has_more %}
+              <button type="button" class="clip-row__more"
+                      @click="expanded[{{ c.id }}] = !expanded[{{ c.id }}]"
+                      x-text="expanded[{{ c.id }}] ? 'Less' : 'More'">More</button>
+            {% endif %}
+          {% endif %}
+        </div>
+      </li>
+    {% else %}
+      <li class="clip-row clip-row--empty">No clips match.</li>
+    {% endfor %}
+  </ul>
+
   {% set _pq = 'q=' ~ (q|urlencode) ~ '&limit=' ~ limit %}
   {% if cache_filter and cache_filter != 'any' %}{% set _pq = _pq ~ '&cache=' ~ cache_filter %}{% endif %}
   {% if anno_filter and anno_filter != 'any' %}{% set _pq = _pq ~ '&anno=' ~ anno_filter %}{% endif %}

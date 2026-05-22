@@ -95,7 +95,9 @@
     </div>
   </form>
 
-  {% include "pages/_clips_tbody.html" %}
+  <div x-data="{ expanded: {} }">
+    {% include "pages/_clips_tbody.html" %}
+  </div>
 </div>
 
 <script>

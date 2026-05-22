@@ -98,7 +98,8 @@ def test_clips_list_returns_full_page(monkeypatch, tmp_path):
         assert "<!doctype html>" in r.text.lower()
         assert "Abramcukova_Anna_09" in r.text
         assert "1932" in r.text
-        assert "30.léta" in r.text
+        # Decade is no longer rendered in the media-row layout (only year ·
+        # duration · markers in the meta line); see the redesign spec.
 
 
 def test_clips_list_htmx_returns_partial(monkeypatch, tmp_path):
@@ -234,6 +235,76 @@ def test_clip_detail_marks_preview_rail_active(monkeypatch, tmp_path):
         assert r.status_code == 200
         assert 'rail-btn active' in r.text
         assert 'localStorage.setItem("catdv:lastClipId", "12041")' in r.text
+
+
+def _canonical_with(
+    *, clip_id=12041, name="x",
+    poster_id: int | None = None,
+    notes: str | None = None,
+    big_notes: str | None = None,
+) -> CanonicalClip:
+    pd: dict = {"ID": clip_id, "name": name}
+    if poster_id is not None:
+        pd["posterID"] = poster_id
+    if notes is not None:
+        pd["notes"] = notes
+    if big_notes is not None:
+        pd["bigNotes"] = big_notes
+    base = _canonical(clip_id=clip_id, name=name)
+    return dataclasses.replace(base, provider_data=pd)
+
+
+def test_clips_list_renders_poster_img_when_poster_id_present(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        clip = _canonical_with(clip_id=12041, name="C1", poster_id=882119)
+        client.app.state.ctx.archive = FakeArchive((clip,))
+        r = client.get("/")
+        assert r.status_code == 200
+        assert '/api/poster/12041?v=882119' in r.text
+        assert 'loading="lazy"' in r.text
+
+
+def test_clips_list_uses_fallback_when_no_poster_id(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        clip = _canonical_with(clip_id=42, name="C2")
+        client.app.state.ctx.archive = FakeArchive((clip,))
+        r = client.get("/")
+        assert r.status_code == 200
+        assert "/api/poster/42" not in r.text
+        assert "poster-fallback" in r.text
+
+
+def test_clips_list_shows_notes_excerpt(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        clip = _canonical_with(
+            clip_id=7, name="C3", notes="LOV, STŘÍLENÍ, JELENI",
+        )
+        client.app.state.ctx.archive = FakeArchive((clip,))
+        r = client.get("/")
+        assert r.status_code == 200
+        assert "LOV, STŘÍLENÍ, JELENI" in r.text
+        assert "clip-row__notes" in r.text
+
+
+def test_clips_list_renders_more_button_for_long_notes(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        clip = _canonical_with(
+            clip_id=8, name="C4",
+            notes="line a\nline b\nline c with detail",
+        )
+        client.app.state.ctx.archive = FakeArchive((clip,))
+        r = client.get("/")
+        assert r.status_code == 200
+        assert "clip-row__more" in r.text
+
+
+def test_clips_list_no_more_button_for_short_notes(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        clip = _canonical_with(clip_id=9, name="C5", notes="krátká")
+        client.app.state.ctx.archive = FakeArchive((clip,))
+        r = client.get("/")
+        assert r.status_code == 200
+        assert "clip-row__more" not in r.text
 
 
 def test_clips_list_default_limit_is_20(monkeypatch, tmp_path):
