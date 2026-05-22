@@ -24,4 +24,6 @@ def test_health_returns_ok(tmp_path, monkeypatch):
     with TestClient(app) as client:
         response = client.get("/api/health")
         assert response.status_code == 200
-        assert response.json() == {"status": "ok"}
+        body = response.json()
+        assert body["status"] == "ok"
+        assert body["mode"] in {"online", "offline", "forced_offline"}

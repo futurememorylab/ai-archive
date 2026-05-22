@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 
 from backend.app.context import AppContext
 from backend.app.logging_setup import configure_logging
@@ -60,8 +60,24 @@ app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 
 @app.get("/api/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
+async def health(request: Request) -> dict:
+    ctx = getattr(request.app.state, "ctx", None)
+    monitor = getattr(ctx, "connection_monitor", None) if ctx else None
+    if monitor is None:
+        mode = "online"
+    elif getattr(monitor, "is_forced", False) or getattr(
+        monitor, "_forced_offline", False
+    ):
+        mode = "forced_offline"
+    else:
+        from backend.app.services.connection_monitor import ConnectionState
+
+        mode = (
+            "online"
+            if monitor.current_state() == ConnectionState.online
+            else "offline"
+        )
+    return {"status": "ok", "mode": mode}
 
 
 from backend.app.routes.prompts import router as prompts_router

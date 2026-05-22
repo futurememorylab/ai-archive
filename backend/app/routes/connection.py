@@ -12,18 +12,54 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 router = APIRouter(prefix="/api/connection", tags=["connection"])
 
 
+def _mode(monitor) -> str:
+    if monitor is None:
+        return "online"
+    if getattr(monitor, "is_forced", False) or getattr(
+        monitor, "_forced_offline", False
+    ):
+        return "forced_offline"
+    from backend.app.services.connection_monitor import ConnectionState
+
+    return (
+        "online"
+        if monitor.current_state() == ConnectionState.online
+        else "offline"
+    )
+
+
 @router.get("/state")
 async def get_state(request: Request) -> dict:
     ctx = request.app.state.ctx
-    if getattr(ctx, "connection_monitor", None) is None:
-        return {"state": "online"}
-    return {"state": str(ctx.connection_monitor.current_state().value)}
+    monitor = getattr(ctx, "connection_monitor", None)
+    if monitor is None:
+        return {"state": "online", "mode": "online"}
+    return {
+        "state": str(monitor.current_state().value),
+        "mode": _mode(monitor),
+    }
+
+
+@router.post("/retry")
+async def retry_now(request: Request) -> dict:
+    ctx = request.app.state.ctx
+    monitor = getattr(ctx, "connection_monitor", None)
+    if monitor is None:
+        return {"state": "online", "mode": "online"}
+    if getattr(monitor, "is_forced", False) or getattr(
+        monitor, "_forced_offline", False
+    ):
+        raise HTTPException(
+            status_code=409, detail="forced offline (CATDV_OFFLINE=true)"
+        )
+    state = await monitor.retry_now()
+    return {"state": str(state.value), "mode": _mode(monitor)}
 
 
 @router.post("/offline")
