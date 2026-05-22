@@ -136,3 +136,36 @@ cached).
 There is intentionally no automatic fallback to the REST resolver
 when a proxy is missing on disk — failing loudly is better than
 silently re-introducing the cache + VPN dependency.
+
+## Offline fallback (no CatDV at all)
+
+Two ways the app degrades to offline:
+
+1. **Forced** — set `CATDV_OFFLINE=true` in `.env`. The app skips the
+   CatDV login at startup (no seat is taken), uses the cached clip
+   list from SQLite, serves only proxies already on disk, and refuses
+   manual reconnects. The header chip is red. Useful when the VPN is
+   known to be down.
+2. **Auto** — with `CATDV_OFFLINE` unset, the app boots normally but
+   catches connection failures at startup and during the periodic
+   health probe. It then halts the probe loop, swaps the proxy
+   resolver to the cache-only variant for the rest of the session, and
+   shows a yellow "Offline — click to reconnect" chip. Clicking the
+   chip issues `POST /api/connection/retry`, which runs a single
+   probe; on success the loop resumes.
+
+**Writes while offline**: change-sets that the adapter would normally
+push to CatDV are queued by the existing `WriteQueue` (the adapter's
+`apply_changes` raises `RetryableError` when offline). They flush in
+order when the app is back online.
+
+**Reconnect**: the user clicks the chip — there is no background
+re-probing. This is intentional: a stuck app retrying CatDV every 30s
+without a working VPN would just generate noise and could hold a seat
+if the network flapped briefly.
+
+**What this turns off in the UI**: Annotate, "Cache locally", and
+"Refresh from CatDV" actions are hidden; clip-detail pages for
+un-cached clips render a 404-style "not available offline" page
+instead of erroring.
+

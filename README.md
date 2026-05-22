@@ -62,6 +62,35 @@ buttons) are hidden automatically in this mode.
 See `docs/DEPLOY.md` → "Running on the CatDV host (no proxy cache)"
 for failure-mode details.
 
+## Running offline (no CatDV at all)
+
+When the CatDV VPN is unavailable, run with:
+
+```
+CATDV_OFFLINE=true
+```
+
+The app will:
+
+- Boot without attempting CatDV login (no seat taken).
+- Serve the clip list and clip details from the local SQLite cache.
+- Serve proxies only when already cached to `data/cache/proxies/`.
+- Hide the Annotate, "Cache locally", and "Refresh from CatDV" actions.
+- Show a red "Offline (forced)" chip in the header.
+
+Writes (annotations, marker edits) made while offline are queued by the
+existing `WriteQueue` and flushed when the app is next started without
+the flag. To go back online, unset the flag and restart.
+
+### Auto-fallback (no env flag)
+
+When `CATDV_OFFLINE` is not set, the app boots normally but **degrades to
+offline automatically** if the initial CatDV login fails or if a periodic
+health probe fails mid-session. The header chip turns yellow and shows
+"Offline — click to reconnect"; clicking it triggers a single probe via
+`POST /api/connection/retry`. The probe loop only resumes once the user
+successfully reconnects.
+
 ## Tests
 
 ```bash
