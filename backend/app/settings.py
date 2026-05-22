@@ -19,8 +19,6 @@ class Settings(BaseSettings):
     catdv_catalog_id: int
 
     proxy_source: Literal["rest", "filesystem"] = "rest"
-    proxy_fs_root: Path | None = None
-    proxy_path_template: str | None = None
     proxy_cache_cap_gb: float = 20.0
 
     gcp_project_id: str
@@ -53,13 +51,6 @@ class Settings(BaseSettings):
 
     # media prefetch queue
     prefetch_tick_interval_s: int = 2
-
-    @model_validator(mode="after")
-    def _validate_proxy(self) -> "Settings":
-        fs_root_empty = self.proxy_fs_root is None or str(self.proxy_fs_root) in ("", ".")
-        if self.proxy_source == "filesystem" and fs_root_empty:
-            raise ValueError("PROXY_FS_ROOT is required when PROXY_SOURCE=filesystem")
-        return self
 
     @model_validator(mode="after")
     def _validate_fs_archive(self) -> "Settings":

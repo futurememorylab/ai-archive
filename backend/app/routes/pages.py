@@ -71,6 +71,9 @@ async def clips_list(
     catalog_id = str(ctx.settings.catdv_catalog_id)
     cache_f = normalize_cache(cache)
     anno_f = normalize_anno(anno)
+    host_local_proxies = getattr(
+        getattr(ctx, "proxy_resolver", None), "is_host_local", False
+    )
 
     # `?refresh=1` lets the user bypass the list cache when they suspect
     # upstream changed. Wipe every cached page for this catalog so the next
@@ -82,16 +85,22 @@ async def clips_list(
 
     cache_fetched_at: str | None = None
 
+    # In host-local mode `cache=local` matches every clip — collapse to "any"
+    # so the standard CatDV-paginated path is used. `cache=none` keeps its
+    # filter status (resolve_filters short-circuits to empty downstream).
+    effective_cache_f = "any" if (host_local_proxies and cache_f == "local") else cache_f
+
     try:
-        if filters_active(cache_f, anno_f):
+        if filters_active(effective_cache_f, anno_f):
             clips, total = await _filtered_page(
                 ctx,
                 catalog_id=catalog_id,
                 q=q,
                 offset=offset,
                 limit=limit,
-                cache_filter=cache_f,
+                cache_filter=effective_cache_f,
                 anno_filter=anno_f,
+                host_local_proxies=host_local_proxies,
             )
         else:
             page = await ctx.archive.list_clips(
@@ -126,7 +135,8 @@ async def clips_list(
         "total": total,
         "cache_filter": cache_f,
         "anno_filter": anno_f,
-        "filters_active": filters_active(cache_f, anno_f),
+        "filters_active": filters_active(effective_cache_f, anno_f),
+        "host_local_proxies": host_local_proxies,
         "catalog": {
             "id": ctx.settings.catdv_catalog_id,
             "name": "AI katalog",
@@ -158,6 +168,7 @@ async def _filtered_page(
     limit: int,
     cache_filter,
     anno_filter,
+    host_local_proxies: bool = False,
 ) -> tuple[list[CanonicalClip], int]:
     """Local-first paginated list when any filter is active.
 
@@ -172,6 +183,7 @@ async def _filtered_page(
         catalog_id=catalog_id,
         cache=cache_filter,
         anno=anno_filter,
+        host_local_proxies=host_local_proxies,
     )
     if not candidate_ids:
         return [], 0
@@ -255,6 +267,9 @@ async def clip_detail_page(request: Request, clip_id: int):
         ctx_dict["clip"]["duration_secs"], ctx_dict["clip"]["fps"]
     )
     ctx_dict["draft"] = await _build_draft_for_clip(ctx, clip_id)
+    ctx_dict["host_local_proxies"] = getattr(
+        getattr(ctx, "proxy_resolver", None), "is_host_local", False
+    )
     return templates.TemplateResponse(request, "pages/clip_detail.html", ctx_dict)
 
 

@@ -40,6 +40,7 @@
     </div>
 
     <div class="filter-row">
+      {% if not host_local_proxies %}
       <label class="filter-field">
         <span class="filter-lbl">Cache</span>
         <select name="cache" onchange="this.form.requestSubmit()">
@@ -49,6 +50,7 @@
           <option value="ai"    {% if cache_filter == 'ai'    %}selected{% endif %}>AI</option>
         </select>
       </label>
+      {% endif %}
       <label class="filter-field">
         <span class="filter-lbl">Annotations</span>
         <select name="anno" onchange="this.form.requestSubmit()">
@@ -76,6 +78,7 @@
           <span class="caret" aria-hidden="true">▾</span>
         </button>
         <div class="actions-menu" x-show="open" x-cloak>
+          {% if not host_local_proxies %}
           <button type="button"
                   class="actions-item"
                   @click="open = false; bulkPrefetch()">
@@ -86,6 +89,7 @@
                   @click="open = false; bulkEvict()">
             Remove from local cache
           </button>
+          {% endif %}
         </div>
       </div>
     </div>

@@ -22,37 +22,15 @@ def test_settings_loads_from_env(monkeypatch):
     assert s.gemini_model == "gemini-2.5-pro"  # default
 
 
-def test_settings_rejects_filesystem_without_root(monkeypatch):
-    monkeypatch.setenv("APP_ENV", "prod")
-    monkeypatch.setenv("CATDV_BASE_URL", "http://localhost:8080")
-    monkeypatch.setenv("CATDV_USERNAME", "x")
-    monkeypatch.setenv("CATDV_PASSWORD", "x")
-    monkeypatch.setenv("CATDV_CATALOG_ID", "881507")
+def test_settings_accepts_filesystem_without_fs_root(monkeypatch):
+    monkeypatch.setenv("CATDV_BASE_URL", "http://x")
+    monkeypatch.setenv("CATDV_CATALOG_ID", "1")
     monkeypatch.setenv("GCP_PROJECT_ID", "p")
     monkeypatch.setenv("GCS_BUCKET_NAME", "b")
     monkeypatch.setenv("PROXY_SOURCE", "filesystem")
     monkeypatch.delenv("PROXY_FS_ROOT", raising=False)
-    monkeypatch.setenv("DATA_DIR", "/tmp/cdv")
 
     from backend.app.settings import Settings
 
-    with pytest.raises(ValueError, match="PROXY_FS_ROOT"):
-        Settings(_env_file=None)
-
-
-def test_settings_rejects_filesystem_with_empty_root(monkeypatch):
-    monkeypatch.setenv("APP_ENV", "prod")
-    monkeypatch.setenv("CATDV_BASE_URL", "http://localhost:8080")
-    monkeypatch.setenv("CATDV_USERNAME", "x")
-    monkeypatch.setenv("CATDV_PASSWORD", "x")
-    monkeypatch.setenv("CATDV_CATALOG_ID", "881507")
-    monkeypatch.setenv("GCP_PROJECT_ID", "p")
-    monkeypatch.setenv("GCS_BUCKET_NAME", "b")
-    monkeypatch.setenv("PROXY_SOURCE", "filesystem")
-    monkeypatch.setenv("PROXY_FS_ROOT", "")
-    monkeypatch.setenv("DATA_DIR", "/tmp/cdv")
-
-    from backend.app.settings import Settings
-
-    with pytest.raises(ValueError, match="PROXY_FS_ROOT"):
-        Settings(_env_file=None)
+    s = Settings(_env_file=None)
+    assert s.proxy_source == "filesystem"

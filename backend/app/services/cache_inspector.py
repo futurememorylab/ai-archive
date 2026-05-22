@@ -116,10 +116,12 @@ class CacheInspector:
         db_provider: Callable[[], aiosqlite.Connection],
         media_cache_cap_bytes: int = 0,
         provider: Any | None = None,
+        host_local_proxies: bool = False,
     ) -> None:
         self._db_provider = db_provider
         self._cap = media_cache_cap_bytes
         self._provider = provider
+        self._host_local = host_local_proxies
 
     # --- single + batch ----------------------------------------------
 
@@ -136,7 +138,9 @@ class CacheInspector:
 
         # Fetch per-layer rows in one batched pass each.
         metadata = await self._load_metadata(db, keys)
-        media_local = await self._load_media_local(db, keys)
+        media_local = (
+            {} if self._host_local else await self._load_media_local(db, keys)
+        )
         media_ai = await self._load_media_ai(db, keys)
         pins = await self._load_pins(db, keys)
         pending = await self._load_pending_counts(db, keys)
@@ -162,20 +166,32 @@ class CacheInspector:
                 evictable=(md_row is not None and pending_n == 0),
             )
 
-            ml_layer = LayerStatus(
-                layer="media-local",
-                present=ml_row is not None,
-                size_bytes=ml_row["size_bytes"] if ml_row else None,
-                location=ml_row["file_path"] if ml_row else None,
-                fetched_at=(
-                    _parse_iso(ml_row["downloaded_at"]) if ml_row else None
-                ),
-                last_used_at=(
-                    _parse_iso(ml_row["last_used_at"]) if ml_row else None
-                ),
-                pinned_by_workspaces=ws_ids,
-                evictable=(ml_row is not None and not ws_ids),
-            )
+            if self._host_local:
+                ml_layer = LayerStatus(
+                    layer="media-local",
+                    present=True,
+                    size_bytes=None,
+                    location="host:filesystem",
+                    fetched_at=None,
+                    last_used_at=None,
+                    pinned_by_workspaces=ws_ids,
+                    evictable=False,
+                )
+            else:
+                ml_layer = LayerStatus(
+                    layer="media-local",
+                    present=ml_row is not None,
+                    size_bytes=ml_row["size_bytes"] if ml_row else None,
+                    location=ml_row["file_path"] if ml_row else None,
+                    fetched_at=(
+                        _parse_iso(ml_row["downloaded_at"]) if ml_row else None
+                    ),
+                    last_used_at=(
+                        _parse_iso(ml_row["last_used_at"]) if ml_row else None
+                    ),
+                    pinned_by_workspaces=ws_ids,
+                    evictable=(ml_row is not None and not ws_ids),
+                )
 
             ai_size = sum(int(r["size_bytes"]) for r in ai_rows)
             ai_last = None

@@ -1,15 +1,20 @@
 import os
 from collections.abc import Callable
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import aiosqlite
 
 from backend.app.repositories.proxy_cache import ProxyCacheRepo
 
+if TYPE_CHECKING:
+    from backend.app.services.media_store_map import MediaStoreMap
+
 
 @runtime_checkable
 class ProxyResolver(Protocol):
+    is_host_local: bool
+
     async def path_for_clip_id(self, clip_id: int) -> Path: ...
     def is_managed(self, path: Path) -> bool: ...
 
@@ -20,6 +25,8 @@ class RestProxyResolver:
     After a successful download, records the file into `proxy_cache` so
     `CacheInspector` and friends see it.
     """
+
+    is_host_local = False
 
     def __init__(
         self,
@@ -79,19 +86,35 @@ class ProxyNotFound(FileNotFoundError):
 
 
 class FilesystemProxyResolver:
-    """Returns proxy paths from the CatDV server's local filesystem (no download)."""
+    """Returns proxy paths from the CatDV server's local filesystem.
 
-    def __init__(self, root: Path, path_template: str = "{root}/{clip_id}.mov") -> None:
-        self._root = root
-        self._template = path_template
+    No download. Uses `/mediastores` to map the clip's `media.filePath`
+    (hires) to its on-disk web-proxy path. Intended for deployments
+    running on the same host as the CatDV server.
+    """
+
+    is_host_local = True
+
+    def __init__(self, *, archive, media_store_map: "MediaStoreMap") -> None:
+        self._archive = archive
+        self._map = media_store_map
 
     async def path_for_clip_id(self, clip_id: int) -> Path:
-        path = Path(self._template.format(root=str(self._root), clip_id=clip_id))
-        if not path.exists():
-            raise ProxyNotFound(f"proxy not on disk: {path}")
-        if not os.access(path, os.R_OK):
-            raise ProxyNotFound(f"proxy not readable: {path}")
-        return path
+        clip = await self._archive.get_clip(str(clip_id))
+        media = (clip.provider_data or {}).get("media") or {}
+        hires = media.get("filePath")
+        if not hires:
+            raise ProxyNotFound(f"clip {clip_id}: no media.filePath")
+        proxy = self._map.resolve_proxy(hires)
+        if proxy is None:
+            raise ProxyNotFound(
+                f"clip {clip_id}: no mediastore rule for {hires!r}"
+            )
+        if not proxy.exists():
+            raise ProxyNotFound(f"clip {clip_id}: proxy not on disk: {proxy}")
+        if not os.access(proxy, os.R_OK):
+            raise ProxyNotFound(f"clip {clip_id}: proxy not readable: {proxy}")
+        return proxy
 
     def is_managed(self, path: Path) -> bool:
         return False
@@ -102,8 +125,8 @@ def build_resolver(
     source: str,
     catdv_client,
     cache_dir: Path | None,
-    fs_root: Path | None,
-    path_template: str | None,
+    archive=None,
+    media_store_map: "MediaStoreMap | None" = None,
     proxy_cache_repo: ProxyCacheRepo | None = None,
     db_provider: Callable[[], aiosqlite.Connection] | None = None,
 ) -> ProxyResolver:
@@ -117,10 +140,11 @@ def build_resolver(
             db_provider=db_provider,
         )
     if source == "filesystem":
-        if fs_root is None:
-            raise ValueError("filesystem source requires fs_root")
+        if archive is None or media_store_map is None:
+            raise ValueError(
+                "filesystem source requires archive provider and media_store_map"
+            )
         return FilesystemProxyResolver(
-            root=fs_root,
-            path_template=path_template or "{root}/{clip_id}.mov",
+            archive=archive, media_store_map=media_store_map
         )
     raise ValueError(f"unknown PROXY_SOURCE: {source!r}")
