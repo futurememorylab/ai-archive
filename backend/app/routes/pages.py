@@ -59,7 +59,7 @@ async def clips_list(
     request: Request,
     q: str | None = None,
     offset: int = 0,
-    limit: int = 50,
+    limit: int = 20,
     refresh: int = 0,
     cache: str | None = None,
     anno: str | None = None,

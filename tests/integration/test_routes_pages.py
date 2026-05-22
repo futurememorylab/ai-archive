@@ -236,6 +236,15 @@ def test_clip_detail_marks_preview_rail_active(monkeypatch, tmp_path):
         assert 'localStorage.setItem("catdv:lastClipId", "12041")' in r.text
 
 
+def test_clips_list_default_limit_is_20(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        fake = FakeArchive((_canonical(),))
+        client.app.state.ctx.archive = fake
+        r = client.get("/")
+        assert r.status_code == 200
+        assert fake.last_query.limit == 20
+
+
 def test_pager_url_encodes_search_query(monkeypatch, tmp_path):
     with _make_client(monkeypatch, tmp_path) as client:
         client.app.state.ctx.archive = FakeArchive((_canonical(),), total=100)
