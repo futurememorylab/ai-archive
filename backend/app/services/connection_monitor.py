@@ -36,6 +36,7 @@ class ConnectionMonitor:
         timeout_s: float = 5.0,
         event_bus: Any = None,
         clock: Callable[[], datetime] | None = None,
+        forced_offline: bool = False,
     ) -> None:
         self._provider = provider
         self._db_provider = db_provider
@@ -45,11 +46,18 @@ class ConnectionMonitor:
         self._clock = clock or (lambda: datetime.now(UTC))
         self._state: ConnectionState = ConnectionState.online
         self._manual_offline: bool = False
+        self._forced_offline: bool = forced_offline
+        if forced_offline:
+            self._state = ConnectionState.offline
         self._task: asyncio.Task | None = None
         self._stop_evt: asyncio.Event = asyncio.Event()
 
+    @property
+    def is_forced(self) -> bool:
+        return self._forced_offline
+
     def current_state(self) -> ConnectionState:
-        if self._manual_offline:
+        if self._forced_offline or self._manual_offline:
             return ConnectionState.offline
         return self._state
 
@@ -70,7 +78,7 @@ class ConnectionMonitor:
 
     async def probe_once(self) -> ConnectionState:
         """One health probe; update state if it changed; return current."""
-        if self._manual_offline:
+        if self._forced_offline or self._manual_offline:
             return ConnectionState.offline
         new_state: ConnectionState
         detail: str | None = None
@@ -121,12 +129,24 @@ class ConnectionMonitor:
         finally:
             self._task = None
 
+    async def retry_now(self) -> ConnectionState:
+        """User-triggered probe. On success, resumes the probe loop."""
+        if self._forced_offline:
+            return ConnectionState.offline
+        state = await self.probe_once()
+        if state == ConnectionState.online and self._task is None:
+            await self.start()
+        return state
+
     async def _loop(self) -> None:
         while not self._stop_evt.is_set():
             try:
-                await self.probe_once()
+                state = await self.probe_once()
             except Exception:  # noqa: BLE001 — loop must not die
-                pass
+                state = ConnectionState.offline
+            if state != ConnectionState.online:
+                # halt — user must explicitly retry_now() to resume
+                return
             try:
                 await asyncio.wait_for(
                     self._stop_evt.wait(), timeout=self._interval_s
