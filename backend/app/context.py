@@ -211,6 +211,9 @@ class AppContext:
                 db_provider=lambda c=ctx: c.db,
                 media_cache_cap_bytes=cap_bytes,
                 provider=ctx.archive,
+                host_local_proxies=getattr(
+                    ctx.proxy_resolver, "is_host_local", False
+                ),
             )
             ctx.cache_actions = CacheActions(
                 db_provider=lambda c=ctx: c.db,

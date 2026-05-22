@@ -25,6 +25,7 @@
           <td>{{ layer.last_used_at or "—" }}</td>
           <td>{{ layer.pinned_by_workspaces|join(", ") or "—" }}</td>
           <td>
+            {% if not (host_local_proxies and layer.layer == "media-local") %}
             <button
               hx-post="/api/cache/clip/{{ status.clip_key[0] }}/{{ status.clip_key[1] }}/evict"
               hx-vals='{"layers": ["{{ layer.layer }}"], "force": false}'
@@ -35,6 +36,7 @@
                  title="Not evictable: {% if layer.pinned_by_workspaces %}pinned by {{ layer.pinned_by_workspaces|length }} workspace(s){% elif not layer.present %}absent{% else %}pending ops or other invariant{% endif %}"{% endif %}>
               Evict
             </button>
+            {% endif %}
           </td>
         </tr>
       {% endfor %}

@@ -302,10 +302,17 @@ async def cache_popover(
 ) -> HTMLResponse:
     insp = _inspector(request)
     status = await insp.status_for_clip((provider_id, clip_id))
+    ctx = request.app.state.ctx
+    host_local_proxies = getattr(
+        getattr(ctx, "proxy_resolver", None), "is_host_local", False
+    )
     return templates.TemplateResponse(
         request,
         "cache_popover.html",
-        {"status": _status_for_template(status)},
+        {
+            "status": _status_for_template(status),
+            "host_local_proxies": host_local_proxies,
+        },
     )
 
 

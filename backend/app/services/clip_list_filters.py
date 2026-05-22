@@ -142,6 +142,7 @@ async def resolve(
     catalog_id: str,
     cache: CacheFilter,
     anno: AnnoFilter,
+    host_local_proxies: bool = False,
 ) -> set[int] | None:
     """Resolve filters to a candidate clip_id set.
 
@@ -149,6 +150,12 @@ async def resolve(
     normal CatDV-paginated path). Returns a possibly-empty set when at
     least one filter is set.
     """
+    if host_local_proxies:
+        # `local` matches every clip (so the cache predicate contributes
+        # nothing) and `none` matches nothing (early-return empty set).
+        if cache == "none":
+            return set()
+        cache = "any"
     if not is_active(cache, anno):
         return None
 

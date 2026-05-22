@@ -13,6 +13,8 @@ if TYPE_CHECKING:
 
 @runtime_checkable
 class ProxyResolver(Protocol):
+    is_host_local: bool
+
     async def path_for_clip_id(self, clip_id: int) -> Path: ...
     def is_managed(self, path: Path) -> bool: ...
 
@@ -23,6 +25,8 @@ class RestProxyResolver:
     After a successful download, records the file into `proxy_cache` so
     `CacheInspector` and friends see it.
     """
+
+    is_host_local = False
 
     def __init__(
         self,
@@ -88,6 +92,8 @@ class FilesystemProxyResolver:
     (hires) to its on-disk web-proxy path. Intended for deployments
     running on the same host as the CatDV server.
     """
+
+    is_host_local = True
 
     def __init__(self, *, archive, media_store_map: "MediaStoreMap") -> None:
         self._archive = archive
