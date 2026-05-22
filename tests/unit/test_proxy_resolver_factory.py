@@ -16,29 +16,30 @@ def test_factory_returns_rest_resolver(tmp_path: Path):
         source="rest",
         catdv_client=fake_catdv,
         cache_dir=tmp_path / "cache",
-        fs_root=None,
-        path_template=None,
+        archive=None,
+        media_store_map=None,
     )
     assert isinstance(resolver, RestProxyResolver)
 
 
-def test_factory_returns_filesystem_resolver(tmp_path: Path):
+def test_factory_returns_filesystem_resolver():
+    from backend.app.services.media_store_map import MediaStoreMap
     resolver = build_resolver(
         source="filesystem",
         catdv_client=None,
         cache_dir=None,
-        fs_root=tmp_path,
-        path_template="{root}/{clip_id}.mov",
+        archive=object(),
+        media_store_map=MediaStoreMap(),
     )
     assert isinstance(resolver, FilesystemProxyResolver)
 
 
-def test_factory_rejects_filesystem_without_root():
-    with pytest.raises(ValueError, match="fs_root"):
+def test_factory_rejects_filesystem_without_archive_and_map():
+    with pytest.raises(ValueError, match="archive provider and media_store_map"):
         build_resolver(
             source="filesystem",
             catdv_client=None,
             cache_dir=None,
-            fs_root=None,
-            path_template=None,
+            archive=None,
+            media_store_map=None,
         )

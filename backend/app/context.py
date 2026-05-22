@@ -162,12 +162,18 @@ class AppContext:
                 location=settings.gcp_location,
             )
             if use_catdv:
+                media_store_map = None
+                if settings.proxy_source == "filesystem":
+                    from backend.app.services.media_store_map import (
+                        fetch_media_store_map,
+                    )
+                    media_store_map = await fetch_media_store_map(ctx.catdv)
                 ctx.proxy_resolver = build_resolver(
                     source=settings.proxy_source,
                     catdv_client=ctx.catdv,
                     cache_dir=settings.data_dir / "cache" / "proxies",
-                    fs_root=settings.proxy_fs_root,
-                    path_template=settings.proxy_path_template,
+                    archive=ctx.archive,
+                    media_store_map=media_store_map,
                     proxy_cache_repo=ctx.proxy_cache_repo,
                     db_provider=lambda c=ctx: c.db,
                 )
