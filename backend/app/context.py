@@ -31,6 +31,7 @@ from backend.app.services.connection_monitor import ConnectionMonitor
 from backend.app.services.events import EventBus
 from backend.app.services.lru_eviction import LruEviction
 from backend.app.services.media_prefetcher import MediaPrefetcher
+from backend.app.services.poster_cache import PosterCache
 from backend.app.services.proxy_cache_reconciler import ProxyCacheReconciler
 from backend.app.services.sync_engine import SyncEngine
 from backend.app.services.workspace_manager import WorkspaceManager
@@ -78,6 +79,7 @@ class AppContext:
     cache_actions: CacheActions | None = None
     lru_eviction: LruEviction | None = None
     media_prefetcher: MediaPrefetcher | None = None
+    poster_cache: PosterCache | None = None
 
     @classmethod
     async def build(cls, settings: Settings, *, init_external: bool = True) -> "AppContext":
@@ -108,6 +110,10 @@ class AppContext:
             db_provider=lambda c=ctx: c.db,
         )
         await reconciler.reconcile()
+
+        # PosterCache is pure-disk; safe to wire before init_external so
+        # both real-prod startup and tests-with-fake-CatDV share the path.
+        ctx.poster_cache = PosterCache(settings.data_dir / "cache" / "posters")
 
         # WriteQueue has no external deps; always available.
         ctx.write_queue = WriteQueue(
