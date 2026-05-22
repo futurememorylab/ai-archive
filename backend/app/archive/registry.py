@@ -19,6 +19,7 @@ def build_archive_provider(
     field_def_cache_repo: Any = None,
     clip_list_cache_repo: Any = None,
     db_provider: Any = None,
+    is_online_provider: Any = None,
 ) -> ArchiveProvider:
     """Construct the active ArchiveProvider from settings.
 
@@ -29,7 +30,10 @@ def build_archive_provider(
     """
     name = getattr(settings, "archive_provider", "catdv")
     if name == "catdv":
-        if catdv_client is None:
+        # client can be None when booting offline (CATDV_OFFLINE=true or
+        # login failure at startup). The adapter only touches its client
+        # when _is_online() is true.
+        if catdv_client is None and is_online_provider is None:
             raise ValueError("archive_provider=catdv requires a catdv_client")
         return CatdvArchiveAdapter(
             client=catdv_client,
@@ -44,6 +48,7 @@ def build_archive_provider(
                 getattr(settings, "clip_list_cache_ttl_minutes", 10)
             ),
             default_catalog_id=str(getattr(settings, "catdv_catalog_id", "")),
+            is_online_provider=is_online_provider,
         )
     if name == "fs":
         fs_root = getattr(settings, "fs_root", None)

@@ -129,19 +129,57 @@ class AppContext:
         )
 
         if init_external:
-            from backend.app.services.catdv_client import CatdvClient
+            import logging
+
+            from backend.app.services.catdv_client import (
+                CatdvAuthError,
+                CatdvClient,
+            )
             from backend.app.services.gcs import GcsService
             from backend.app.services.gemini import GeminiService
-            from backend.app.services.proxy_resolver import build_resolver
+            from backend.app.services.proxy_resolver import (
+                LocalCacheOnlyResolver,
+                build_resolver,
+            )
 
             use_catdv = settings.archive_provider == "catdv"
-            if use_catdv:
+            forced_offline = bool(getattr(settings, "catdv_offline", False)) and use_catdv
+            login_failed = False
+
+            if use_catdv and not forced_offline:
                 ctx.catdv = CatdvClient(
                     base_url=settings.catdv_base_url,
                     username=settings.catdv_username or "",
                     password=settings.catdv_password or "",
                 )
-                await ctx.catdv.__aenter__()
+                try:
+                    await ctx.catdv.__aenter__()
+                except CatdvAuthError as exc:
+                    logging.getLogger(__name__).warning(
+                        "CatDV login failed at startup (%s); booting offline",
+                        exc,
+                    )
+                    ctx.catdv = None
+                    login_failed = True
+                except Exception as exc:  # noqa: BLE001 — transport / DNS
+                    logging.getLogger(__name__).warning(
+                        "CatDV unreachable at startup (%s); booting offline",
+                        exc,
+                    )
+                    ctx.catdv = None
+                    login_failed = True
+
+            # The is_online provider closes over ctx so it can read the
+            # monitor's state once the monitor is constructed below.
+            def _is_online(c=ctx, forced=forced_offline, failed_at_boot=login_failed):
+                if forced or failed_at_boot:
+                    return False
+                if c.connection_monitor is None:
+                    return True
+                from backend.app.services.connection_monitor import ConnectionState
+
+                return c.connection_monitor.current_state() == ConnectionState.online
+
             ctx.archive = build_archive_provider(
                 settings,
                 catdv_client=ctx.catdv,
@@ -149,6 +187,7 @@ class AppContext:
                 field_def_cache_repo=ctx.field_def_cache_repo,
                 clip_list_cache_repo=ctx.clip_list_cache_repo,
                 db_provider=lambda c=ctx: c.db,
+                is_online_provider=_is_online if use_catdv else None,
             )
             ctx._gcs_service = GcsService(settings.gcs_bucket_name)
             ctx.ai_store = build_ai_input_store(
@@ -161,7 +200,15 @@ class AppContext:
                 project=settings.gcp_project_id,
                 location=settings.gcp_location,
             )
-            if use_catdv:
+            if use_catdv and (forced_offline or login_failed):
+                ctx.proxy_resolver = build_resolver(
+                    source="cache-only",
+                    catdv_client=None,
+                    cache_dir=settings.data_dir / "cache" / "proxies",
+                    proxy_cache_repo=ctx.proxy_cache_repo,
+                    db_provider=lambda c=ctx: c.db,
+                )
+            elif use_catdv:
                 media_store_map = None
                 if settings.proxy_source == "filesystem":
                     from backend.app.services.media_store_map import (
@@ -187,6 +234,7 @@ class AppContext:
                 interval_s=float(settings.health_probe_interval_s),
                 timeout_s=float(settings.health_probe_timeout_s),
                 event_bus=ctx.event_bus,
+                forced_offline=forced_offline or login_failed,
             )
             ctx.sync_engine = SyncEngine(
                 provider=ctx.archive,
@@ -228,7 +276,9 @@ class AppContext:
                 media_cache_cap_bytes=cap_bytes,
                 tick_interval_s=float(settings.lru_tick_interval_s),
             )
-            if ctx.proxy_resolver is not None:
+            if ctx.proxy_resolver is not None and not isinstance(
+                ctx.proxy_resolver, LocalCacheOnlyResolver
+            ):
                 ctx.media_prefetcher = MediaPrefetcher(
                     queue_repo=ctx.prefetch_queue_repo,
                     resolver=ctx.proxy_resolver,
