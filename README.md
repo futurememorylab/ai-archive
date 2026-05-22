@@ -25,6 +25,43 @@ Open the UI at `http://localhost:8765/` (clips list) — first user-facing surfa
 
 - **Cache view:** `http://localhost:8765/cache` — manage local proxy cache (status, queue, evict).
 
+## Running on the CatDV host (no proxy cache)
+
+When the annotator runs on the **same machine as the CatDV server**, it can read
+each clip's web proxy directly from CatDV's media-store directory instead of
+downloading it over HTTP. No `data/cache/proxies/` is written, no
+`proxy_cache` rows are recorded, and Gemini still receives the small H.264
+web proxy.
+
+In `.env`:
+
+```
+PROXY_SOURCE=filesystem
+```
+
+That's the only change. At startup the app fetches the hires→proxy mapping
+from `GET /catdv/api/9/mediastores` and resolves each clip's proxy by
+swapping the hires-root prefix in `media.filePath` for the matching
+proxy root (for this installation that's `/Volumes/ARECA/CatDV_Proxy/`
+and `/Volumes/ARECA2/CatDV_Proxy/`).
+
+Requirements:
+
+- The OS user running the app must have **read access** to every
+  directory listed under `mediaType: proxy, target: web` in
+  `/catdv/api/9/mediastores`.
+- The CatDV media-store volumes must be mounted on the host. If they
+  aren't, every clip's resolver call raises `ProxyNotFound: ... proxy
+  not on disk` — there is no automatic fallback to the REST resolver
+  (failing loudly is intentional).
+
+UI affordances tied to the local proxy cache (Cache filter dropdown,
+"Cache locally" / "Remove from local cache" actions, per-clip Evict
+buttons) are hidden automatically in this mode.
+
+See `docs/DEPLOY.md` → "Running on the CatDV host (no proxy cache)"
+for failure-mode details.
+
 ## Tests
 
 ```bash
