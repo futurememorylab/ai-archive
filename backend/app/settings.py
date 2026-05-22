@@ -20,6 +20,7 @@ class Settings(BaseSettings):
 
     proxy_source: Literal["rest", "filesystem"] = "rest"
     proxy_cache_cap_gb: float = 20.0
+    catdv_offline: bool = False
 
     gcp_project_id: str
     gcp_location: str = "europe-west3"
