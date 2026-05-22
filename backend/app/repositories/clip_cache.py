@@ -209,13 +209,56 @@ class ClipCacheRepo:
         *,
         provider_id: str,
         catalog_id: str,
-    ) -> list[dict[str, Any]]:
-        cur = await conn.execute(
-            f"SELECT {', '.join(_ROW_COLS)} FROM clip_cache "
-            "WHERE provider_id = ? AND catalog_id = ?",
-            (provider_id, catalog_id),
+        offset: int | None = None,
+        limit: int | None = None,
+        q: str | None = None,
+        canonical: bool = False,
+    ):
+        """Two modes:
+
+        - Legacy (no offset/limit/canonical): returns ``list[dict]`` of raw
+          rows for callers like ``CacheInspector.deep_orphans``.
+        - Paginated/canonical (kwargs provided): returns
+          ``(tuple[CanonicalClip, ...], total: int)`` filtered by an
+          optional substring ``q`` against ``name`` and the cached blob's
+          ``notes`` map.
+        """
+        if not canonical and offset is None and limit is None and q is None:
+            cur = await conn.execute(
+                f"SELECT {', '.join(_ROW_COLS)} FROM clip_cache "
+                "WHERE provider_id = ? AND catalog_id = ?",
+                (provider_id, catalog_id),
+            )
+            return [dict(zip(_ROW_COLS, row)) for row in await cur.fetchall()]
+
+        params: list = [provider_id, catalog_id]
+        where = "provider_id = ? AND catalog_id = ?"
+        if q:
+            where += " AND (LOWER(name) LIKE ? OR LOWER(canonical_json) LIKE ?)"
+            needle = f"%{q.lower()}%"
+            params.extend([needle, needle])
+
+        count_cur = await conn.execute(
+            f"SELECT COUNT(*) FROM clip_cache WHERE {where}", tuple(params)
         )
-        return [dict(zip(_ROW_COLS, row)) for row in await cur.fetchall()]
+        total_row = await count_cur.fetchone()
+        total = int(total_row[0]) if total_row else 0
+
+        page_sql = (
+            f"SELECT {', '.join(_ROW_COLS)} FROM clip_cache WHERE {where} "
+            "ORDER BY provider_clip_id ASC LIMIT ? OFFSET ?"
+        )
+        page_params = tuple(params) + (int(limit or 50), int(offset or 0))
+        cur = await conn.execute(page_sql, page_params)
+        rows = await cur.fetchall()
+
+        items: list[CanonicalClip] = []
+        for row in rows:
+            row_dict = dict(zip(_ROW_COLS, row))
+            blob = row_dict.get("canonical_json")
+            if blob:
+                items.append(_clip_from_json(blob))
+        return tuple(items), total
 
     async def delete_by_key(
         self,
