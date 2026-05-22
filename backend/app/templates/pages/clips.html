@@ -5,43 +5,145 @@
 {% endblock %}
 {% block body %}
 <div class="page page-clips" x-data="bulkSel()">
-  <div class="toolbar">
-    <div class="search">
-      <input type="search" name="q" value="{{ q }}"
-             placeholder="search name…"
-             hx-get="/" hx-trigger="input changed delay:300ms, keyup[key=='Enter']"
-             hx-target="#clips-region" hx-swap="outerHTML"
-             hx-include="this">
+  <form class="filter-form"
+        action="/"
+        method="get"
+        hx-get="/"
+        hx-target="#clips-region"
+        hx-swap="outerHTML"
+        hx-push-url="true"
+        x-data="filterState()"
+        @change="recompute()"
+        @input.debounce.150ms="recompute()">
+    <div class="search-row">
+      <label class="search search-prom">
+        <svg class="search-icon" viewBox="0 0 16 16" aria-hidden="true">
+          <circle cx="7" cy="7" r="4.25" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <line x1="10.2" y1="10.2" x2="13.5" y2="13.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <input type="search" name="q" value="{{ q }}"
+               placeholder="Search clips by name…"
+               autocomplete="off">
+      </label>
+      <button type="submit" class="btn btn-primary">Search</button>
+      <span class="grow"></span>
+      {% if cache_age %}
+        <span class="meta" title="List fetched from CatDV {{ cache_fetched_at }}">
+          Cached {{ cache_age }}
+        </span>
+        <a class="meta"
+           href="?{% if q %}q={{ q }}&{% endif %}{% if cache_filter and cache_filter != 'any' %}cache={{ cache_filter }}&{% endif %}{% if anno_filter and anno_filter != 'any' %}anno={{ anno_filter }}&{% endif %}offset={{ offset }}&limit={{ limit }}&refresh=1">
+          Refresh
+        </a>
+      {% endif %}
+      <span class="meta mono">catalog {{ catalog.id }}</span>
     </div>
-    <span class="grow"></span>
-    {% if cache_age %}
-      <span class="meta" title="List fetched from CatDV {{ cache_fetched_at }}">
-        Cached {{ cache_age }}
-      </span>
-      <a class="meta" href="?{% if q %}q={{ q }}&{% endif %}offset={{ offset }}&limit={{ limit }}&refresh=1">
-        Refresh
-      </a>
-    {% endif %}
-    <span class="meta mono">catalog {{ catalog.id }}</span>
-  </div>
 
-  <div class="bulk-toolbar"
-       :class="{ 'bulk-toolbar-active': count > 0 }">
-    <span class="bulk-count" x-text="count + ' selected'">0 selected</span>
-    <span class="grow"></span>
-    <a class="bulk-btn" href="/cache">Cache view ›</a>
-    <button type="button" class="bulk-btn"
-            :disabled="count === 0"
-            @click="bulkPrefetch()">Cache selected</button>
-    <button type="button" class="bulk-btn bulk-btn-danger"
-            :disabled="count === 0"
-            @click="bulkEvict()">Evict selected</button>
-  </div>
+    <div class="filter-row">
+      <label class="filter-field">
+        <span class="filter-lbl">Cache</span>
+        <select name="cache" onchange="this.form.requestSubmit()">
+          <option value="any"   {% if cache_filter == 'any'   %}selected{% endif %}>Any</option>
+          <option value="none"  {% if cache_filter == 'none'  %}selected{% endif %}>None</option>
+          <option value="local" {% if cache_filter == 'local' %}selected{% endif %}>Local</option>
+          <option value="ai"    {% if cache_filter == 'ai'    %}selected{% endif %}>AI</option>
+        </select>
+      </label>
+      <label class="filter-field">
+        <span class="filter-lbl">Annotations</span>
+        <select name="anno" onchange="this.form.requestSubmit()">
+          <option value="any"        {% if anno_filter == 'any'        %}selected{% endif %}>Any</option>
+          <option value="for_review" {% if anno_filter == 'for_review' %}selected{% endif %}>For review</option>
+          <option value="applied"    {% if anno_filter == 'applied'    %}selected{% endif %}>Applied</option>
+          <option value="none"       {% if anno_filter == 'none'       %}selected{% endif %}>No annotations</option>
+          <option value="has_any"    {% if anno_filter == 'has_any'    %}selected{% endif %}>Any annotations</option>
+        </select>
+      </label>
+      <a class="btn btn-ghost filter-reset"
+         :class="{ 'is-disabled': !active }"
+         href="/">Reset filters</a>
+      <span class="grow"></span>
+      <div class="actions-dropdown"
+           x-data="{ open: false }"
+           @keydown.escape.window="open = false"
+           @click.outside="open = false">
+        <button type="button"
+                class="bulk-btn actions-btn"
+                :class="{ 'actions-btn-active': count > 0 }"
+                :disabled="count === 0"
+                @click="open = !open">
+          Actions
+          <span class="caret" aria-hidden="true">▾</span>
+        </button>
+        <div class="actions-menu" x-show="open" x-cloak>
+          <button type="button"
+                  class="actions-item"
+                  @click="open = false; bulkPrefetch()">
+            Cache locally
+          </button>
+          <button type="button"
+                  class="actions-item actions-item-danger"
+                  @click="open = false; bulkEvict()">
+            Remove from local cache
+          </button>
+        </div>
+      </div>
+    </div>
+  </form>
 
   {% include "pages/_clips_tbody.html" %}
 </div>
 
 <script>
+  // Persist the current query string (search, filters, offset) so the rail
+  // "Clips" button returns the user to the same view from any other page.
+  // Re-run on HTMX URL pushes too — filter/search changes swap the table
+  // partial without a full page reload.
+  (function saveClipsQuery() {
+    try {
+      sessionStorage.setItem("catdv:clipsListQuery", window.location.search || "");
+    } catch (e) { /* sessionStorage unavailable */ }
+  })();
+  document.body.addEventListener("htmx:pushedIntoHistory", function () {
+    try {
+      sessionStorage.setItem("catdv:clipsListQuery", window.location.search || "");
+    } catch (e) {}
+  });
+
+  function filterState() {
+    return {
+      active: false,
+      syncFromUrl() {
+        // Make the form mirror the current URL. HTMX history caches body
+        // HTML, not the live <select>.value, so when the browser restores
+        // a snapshot the URL + table may say "local" while the controls
+        // still show their server-rendered defaults.
+        const params = new URLSearchParams(window.location.search);
+        const f = this.$el;
+        const qInput = f.querySelector('input[name="q"]');
+        const cacheSel = f.querySelector('select[name="cache"]');
+        const annoSel = f.querySelector('select[name="anno"]');
+        if (qInput) qInput.value = params.get("q") || "";
+        if (cacheSel) cacheSel.value = params.get("cache") || "any";
+        if (annoSel) annoSel.value = params.get("anno") || "any";
+        this.recompute();
+      },
+      recompute() {
+        const f = this.$el;
+        const q = (f.querySelector('input[name="q"]')?.value || "").trim();
+        const cache = f.querySelector('select[name="cache"]')?.value || "any";
+        const anno = f.querySelector('select[name="anno"]')?.value || "any";
+        this.active = !!q || cache !== "any" || anno !== "any";
+      },
+      init() {
+        this.syncFromUrl();
+        window.addEventListener("popstate", () => this.syncFromUrl());
+        document.body.addEventListener("htmx:historyRestore",
+          () => this.syncFromUrl());
+      },
+    };
+  }
+
   function bulkSel() {
     return {
       count: 0,

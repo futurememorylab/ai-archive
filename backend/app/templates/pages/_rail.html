@@ -10,7 +10,7 @@
 #}
 {% set _active = (rail_active or "") | trim %}
 <a class="rail-btn{% if _active == 'clips' %} active{% endif %}"
-   href="/" title="Clips">{% include "icons/_clips.svg" %}</a>
+   id="rail-clips" href="/" title="Clips">{% include "icons/_clips.svg" %}</a>
 <a class="rail-btn{% if _active == 'preview' %} active{% endif %}"
    id="rail-preview" href="/" title="Preview clip">{% include "icons/_play.svg" %}</a>
 <a class="rail-btn{% if _active == 'prompts' %} active{% endif %}"
@@ -24,5 +24,13 @@
       var btn = document.getElementById("rail-preview");
       if (id && btn) btn.href = "/clips/" + id;
     } catch (e) { /* localStorage unavailable; leave default href */ }
+    try {
+      // Restore the last clip-list query (filters, search, paging) so the
+      // rail "Clips" button returns to where the user left off, even from
+      // a clip detail page or after the browser was reopened.
+      var q = sessionStorage.getItem("catdv:clipsListQuery");
+      var clipsBtn = document.getElementById("rail-clips");
+      if (q && clipsBtn) clipsBtn.href = "/" + q;
+    } catch (e) { /* sessionStorage unavailable; leave default href */ }
   })();
 </script>

@@ -42,15 +42,20 @@
       </tbody>
     </table>
   </div>
+  {% set _pq = 'q=' ~ (q|urlencode) ~ '&limit=' ~ limit %}
+  {% if cache_filter and cache_filter != 'any' %}{% set _pq = _pq ~ '&cache=' ~ cache_filter %}{% endif %}
+  {% if anno_filter and anno_filter != 'any' %}{% set _pq = _pq ~ '&anno=' ~ anno_filter %}{% endif %}
   <nav class="pager">
     {% if prev_offset is not none %}
-      <a class="pg-btn" href="/?q={{ q|urlencode }}&offset={{ prev_offset }}&limit={{ limit }}">‹ Prev</a>
+      <a class="pg-btn" href="/?{{ _pq }}&offset={{ prev_offset }}">‹ Prev</a>
     {% else %}
       <span class="pg-btn disabled">‹ Prev</span>
     {% endif %}
-    <span class="pg-meta mono">{{ offset + 1 }}–{{ offset + clips|length }} of {{ total }}</span>
+    <span class="pg-meta mono">
+      {% if clips %}{{ offset + 1 }}–{{ offset + clips|length }} of {{ total }}{% else %}0 of {{ total }}{% endif %}
+    </span>
     {% if next_offset is not none %}
-      <a class="pg-btn" href="/?q={{ q|urlencode }}&offset={{ next_offset }}&limit={{ limit }}">Next ›</a>
+      <a class="pg-btn" href="/?{{ _pq }}&offset={{ next_offset }}">Next ›</a>
     {% else %}
       <span class="pg-btn disabled">Next ›</span>
     {% endif %}

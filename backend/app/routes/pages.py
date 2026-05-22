@@ -9,9 +9,15 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 
 from backend.app.archive.errors import ProviderError
-from backend.app.archive.model import ClipQuery
+from backend.app.archive.model import CanonicalClip, ClipQuery
 from backend.app.models.prompt import TargetMap
 from backend.app.repositories.prompts import VersionImmutableError
+from backend.app.services.clip_list_filters import (
+    is_active as filters_active,
+    normalize_anno,
+    normalize_cache,
+    resolve as resolve_filters,
+)
 from backend.app.ui.view_models import clip_detail, clip_summary
 
 
@@ -55,12 +61,16 @@ async def clips_list(
     offset: int = 0,
     limit: int = 50,
     refresh: int = 0,
+    cache: str | None = None,
+    anno: str | None = None,
 ):
     ctx = request.app.state.ctx
     if ctx.archive is None:
         raise HTTPException(503, "archive provider not initialized")
 
     catalog_id = str(ctx.settings.catdv_catalog_id)
+    cache_f = normalize_cache(cache)
+    anno_f = normalize_anno(anno)
 
     # `?refresh=1` lets the user bypass the list cache when they suspect
     # upstream changed. Wipe every cached page for this catalog so the next
@@ -70,33 +80,42 @@ async def clips_list(
             ctx.db, provider_id="catdv", catalog_id=catalog_id
         )
 
+    cache_fetched_at: str | None = None
+
     try:
-        page = await ctx.archive.list_clips(
-            catalog_id,
-            ClipQuery(text=q, offset=offset, limit=limit),
-        )
+        if filters_active(cache_f, anno_f):
+            clips, total = await _filtered_page(
+                ctx,
+                catalog_id=catalog_id,
+                q=q,
+                offset=offset,
+                limit=limit,
+                cache_filter=cache_f,
+                anno_filter=anno_f,
+            )
+        else:
+            page = await ctx.archive.list_clips(
+                catalog_id,
+                ClipQuery(text=q, offset=offset, limit=limit),
+            )
+            clips = list(page.items)
+            total = page.total
+            entry = await ctx.clip_list_cache_repo.get(
+                ctx.db,
+                provider_id="catdv",
+                catalog_id=catalog_id,
+                query_text=q,
+                offset=offset,
+                limit=limit,
+            )
+            cache_fetched_at = entry["fetched_at"] if entry is not None else None
     except ProviderError as exc:
         raise HTTPException(502, f"archive error: {exc}") from exc
 
-    # After list_clips, the adapter has either served from cache or
-    # written-through; either way the row's fetched_at is the age of the
-    # data the user is looking at.
-    cache_entry = await ctx.clip_list_cache_repo.get(
-        ctx.db,
-        provider_id="catdv",
-        catalog_id=catalog_id,
-        query_text=q,
-        offset=offset,
-        limit=limit,
-    )
-    cache_fetched_at = (
-        cache_entry["fetched_at"] if cache_entry is not None else None
-    )
-
     # Bulk cache lookup so each row gets a badge with no per-row HTMX hop.
     statuses: dict[tuple[str, str], object] = {}
-    if ctx.cache_inspector is not None and page.items:
-        keys = [c.key for c in page.items]
+    if ctx.cache_inspector is not None and clips:
+        keys = [c.key for c in clips]
         rows = await ctx.cache_inspector.status_for_clips(keys)
         statuses = {r.clip_key: r for r in rows}
 
@@ -104,17 +123,20 @@ async def clips_list(
         "q": q or "",
         "offset": offset,
         "limit": limit,
-        "total": page.total,
+        "total": total,
+        "cache_filter": cache_f,
+        "anno_filter": anno_f,
+        "filters_active": filters_active(cache_f, anno_f),
         "catalog": {
             "id": ctx.settings.catdv_catalog_id,
             "name": "AI katalog",
         },
         "clips": [
             clip_summary(c, cache_status=statuses.get(c.key))
-            for c in page.items
+            for c in clips
         ],
         "prev_offset": max(0, offset - limit) if offset > 0 else None,
-        "next_offset": offset + limit if offset + limit < page.total else None,
+        "next_offset": offset + limit if offset + limit < total else None,
         "cache_fetched_at": cache_fetched_at,
         "cache_age": _humanize_age(cache_fetched_at),
     }
@@ -125,6 +147,66 @@ async def clips_list(
         else "pages/clips.html"
     )
     return templates.TemplateResponse(request, template, ctx_dict)
+
+
+async def _filtered_page(
+    ctx,
+    *,
+    catalog_id: str,
+    q: str | None,
+    offset: int,
+    limit: int,
+    cache_filter,
+    anno_filter,
+) -> tuple[list[CanonicalClip], int]:
+    """Local-first paginated list when any filter is active.
+
+    Builds the candidate clip-id set from SQLite, hydrates each clip
+    (preferring the metadata cache, falling back to a single CatDV fetch),
+    optionally applies the text query, sorts by name for stable paging,
+    then slices to the requested page.
+    """
+    candidate_ids = await resolve_filters(
+        ctx.db,
+        provider_id="catdv",
+        catalog_id=catalog_id,
+        cache=cache_filter,
+        anno=anno_filter,
+    )
+    if not candidate_ids:
+        return [], 0
+
+    needle = (q or "").strip().casefold() or None
+
+    hydrated: list[CanonicalClip] = []
+    for cid in candidate_ids:
+        clip = await _hydrate_clip(ctx, cid)
+        if clip is None:
+            continue
+        if needle is not None and needle not in clip.name.casefold():
+            continue
+        hydrated.append(clip)
+
+    hydrated.sort(key=lambda c: (c.name.casefold(), int(c.key[1])))
+    total = len(hydrated)
+    return hydrated[offset : offset + limit], total
+
+
+async def _hydrate_clip(ctx, clip_id: int) -> CanonicalClip | None:
+    """Fetch a CanonicalClip cheaply, preferring local metadata cache."""
+    clip = await ctx.clip_cache_repo.get_by_key(
+        ctx.db,
+        provider_id="catdv",
+        provider_clip_id=str(clip_id),
+    )
+    if clip is not None:
+        return clip
+    try:
+        return await ctx.archive.get_clip(str(clip_id))
+    except ProviderError:
+        # Stale ID (e.g. local cache row whose upstream clip was removed)
+        # — skip silently so one orphan doesn't blow up the whole page.
+        return None
 
 
 async def _build_draft_for_clip(ctx, clip_id: int) -> dict:
