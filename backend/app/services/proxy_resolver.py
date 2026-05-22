@@ -120,6 +120,48 @@ class FilesystemProxyResolver:
         return False
 
 
+class LocalCacheOnlyResolver:
+    """Returns proxy paths only if they're already on local disk.
+
+    Does NOT contact CatDV. Used when the app runs in offline mode
+    (CATDV_OFFLINE=true or detected disconnect). Raises ``ProxyNotFound``
+    when the requested clip's proxy hasn't been previously cached.
+    """
+
+    is_host_local = False
+
+    def __init__(
+        self,
+        *,
+        repo: ProxyCacheRepo,
+        db_provider: Callable[[], aiosqlite.Connection],
+        cache_dir: Path | None = None,
+    ) -> None:
+        self._repo = repo
+        self._db_provider = db_provider
+        self._cache_dir = cache_dir
+
+    async def path_for_clip_id(self, clip_id: int) -> Path:
+        row = await self._repo.get(self._db_provider(), clip_id)
+        if row is None:
+            raise ProxyNotFound(f"clip {clip_id} not cached locally")
+        file_path = Path(row["file_path"])
+        if not file_path.exists() or file_path.stat().st_size == 0:
+            raise ProxyNotFound(
+                f"clip {clip_id} cache row present but file missing: {file_path}"
+            )
+        return file_path
+
+    def is_managed(self, path: Path) -> bool:
+        if self._cache_dir is None:
+            return False
+        try:
+            path.resolve().relative_to(self._cache_dir.resolve())
+        except ValueError:
+            return False
+        return True
+
+
 def build_resolver(
     *,
     source: str,
@@ -130,6 +172,16 @@ def build_resolver(
     proxy_cache_repo: ProxyCacheRepo | None = None,
     db_provider: Callable[[], aiosqlite.Connection] | None = None,
 ) -> ProxyResolver:
+    if source == "cache-only":
+        if proxy_cache_repo is None or db_provider is None:
+            raise ValueError(
+                "cache-only source requires proxy_cache_repo and db_provider"
+            )
+        return LocalCacheOnlyResolver(
+            repo=proxy_cache_repo,
+            db_provider=db_provider,
+            cache_dir=cache_dir,
+        )
     if source == "rest":
         if cache_dir is None or catdv_client is None:
             raise ValueError("rest source requires catdv_client and cache_dir")
