@@ -59,6 +59,15 @@ def clip_summary(
     cache_status: Any | None = None,
 ) -> dict[str, Any]:
     """One row in the clips-list table."""
+    pd = clip.provider_data
+    raw_notes = pd.get("notes")
+    if not raw_notes:
+        raw_notes = pd.get("bigNotes") or ""
+    notes_excerpt = _fix(raw_notes) or None
+    notes_has_more = bool(
+        notes_excerpt
+        and (len(notes_excerpt) > 140 or notes_excerpt.count("\n") >= 2)
+    )
     return {
         "id": int(clip.key[1]),
         "name": _fix(clip.name),
@@ -67,6 +76,9 @@ def clip_summary(
         "decade": _first_value(clip.fields.get(_DECADE_FIELD)),
         "marker_count": len(clip.markers),
         "cache": cache_status_view(cache_status) if cache_status else None,
+        "poster_id": pd.get("posterID"),
+        "notes_excerpt": notes_excerpt,
+        "notes_has_more": notes_has_more,
     }
 
 

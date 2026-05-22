@@ -184,6 +184,79 @@ def test_clip_detail_fixes_mojibake_in_markers_and_notes():
     assert "Žena s dítětem" in d["clip"]["notes"]
 
 
+def test_clip_summary_carries_poster_id_from_provider_data():
+    clip = _canonical(provider_data={"ID": 12041, "name": "x", "posterID": 882119})
+    s = clip_summary(clip)
+    assert s["poster_id"] == 882119
+
+
+def test_clip_summary_poster_id_none_when_absent():
+    clip = _canonical(provider_data={"ID": 12041, "name": "x"})
+    s = clip_summary(clip)
+    assert s["poster_id"] is None
+
+
+def test_clip_summary_notes_excerpt_prefers_notes_over_bigNotes():
+    clip = _canonical(provider_data={
+        "ID": 1, "name": "x",
+        "notes": "krátká poznámka",
+        "bigNotes": "totally different text",
+    })
+    s = clip_summary(clip)
+    assert s["notes_excerpt"] == "krátká poznámka"
+
+
+def test_clip_summary_notes_excerpt_falls_back_to_bigNotes():
+    clip = _canonical(provider_data={
+        "ID": 1, "name": "x",
+        "notes": "",
+        "bigNotes": "fallback text",
+    })
+    s = clip_summary(clip)
+    assert s["notes_excerpt"] == "fallback text"
+
+
+def test_clip_summary_notes_excerpt_none_when_both_empty():
+    clip = _canonical(provider_data={"ID": 1, "name": "x"})
+    s = clip_summary(clip)
+    assert s["notes_excerpt"] is None
+
+
+def test_clip_summary_notes_has_more_true_when_long():
+    long_text = "x" * 200
+    clip = _canonical(provider_data={"ID": 1, "name": "x", "notes": long_text})
+    s = clip_summary(clip)
+    assert s["notes_has_more"] is True
+
+
+def test_clip_summary_notes_has_more_true_when_multiline():
+    clip = _canonical(provider_data={
+        "ID": 1, "name": "x",
+        "notes": "line a\nline b\nline c",
+    })
+    s = clip_summary(clip)
+    assert s["notes_has_more"] is True
+
+
+def test_clip_summary_notes_has_more_false_for_short_notes():
+    clip = _canonical(provider_data={"ID": 1, "name": "x", "notes": "krátké"})
+    s = clip_summary(clip)
+    assert s["notes_has_more"] is False
+
+
+def test_clip_summary_notes_excerpt_fixes_mojibake():
+    # Single-mojibaked 'Žena s dítětem'
+    bad = (
+        b"\xc3\x85\xc2\xbdena s d"
+        b"\xc3\x83\xc2\xadt"
+        b"\xc3\x84\xc2\x9bte"
+        b"m"
+    ).decode("utf-8")
+    clip = _canonical(provider_data={"ID": 1, "name": "x", "notes": bad})
+    s = clip_summary(clip)
+    assert s["notes_excerpt"] == "Žena s dítětem"
+
+
 def test_clip_detail_leaves_clean_text_unchanged():
     """Already-correct strings must pass through ftfy untouched."""
     markers = (
