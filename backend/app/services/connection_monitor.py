@@ -37,6 +37,7 @@ class ConnectionMonitor:
         event_bus: Any = None,
         clock: Callable[[], datetime] | None = None,
         forced_offline: bool = False,
+        initial_state: ConnectionState = ConnectionState.online,
     ) -> None:
         self._provider = provider
         self._db_provider = db_provider
@@ -44,7 +45,7 @@ class ConnectionMonitor:
         self._timeout_s = timeout_s
         self._event_bus = event_bus
         self._clock = clock or (lambda: datetime.now(UTC))
-        self._state: ConnectionState = ConnectionState.online
+        self._state: ConnectionState = initial_state
         self._manual_offline: bool = False
         self._forced_offline: bool = forced_offline
         if forced_offline:
@@ -83,14 +84,22 @@ class ConnectionMonitor:
         new_state: ConnectionState
         detail: str | None = None
         try:
-            await asyncio.wait_for(self._provider.health(), timeout=self._timeout_s)
-            new_state = ConnectionState.online
+            health = await asyncio.wait_for(
+                self._provider.health(), timeout=self._timeout_s
+            )
         except TimeoutError:
             new_state = ConnectionState.offline
             detail = "health probe timeout"
         except Exception as exc:  # noqa: BLE001 — provider error surface
             new_state = ConnectionState.offline
             detail = f"{type(exc).__name__}: {exc}"
+        else:
+            ok = getattr(health, "ok", True) if health is not None else True
+            if ok:
+                new_state = ConnectionState.online
+            else:
+                new_state = ConnectionState.offline
+                detail = getattr(health, "detail", None) or "health probe not ok"
         if new_state != self._state:
             old = self._state
             self._state = new_state

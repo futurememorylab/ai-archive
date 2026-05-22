@@ -152,13 +152,19 @@ class AppContext:
                     username=settings.catdv_username or "",
                     password=settings.catdv_password or "",
                 )
+                await ctx.catdv.__aenter__()
+                # CatdvClient.__aenter__ only opens the httpx pool; auth is
+                # lazy. Force one round-trip so an unreachable host or bad
+                # credentials degrade us to offline cleanly at startup
+                # instead of half-booting and tripping the first request.
                 try:
-                    await ctx.catdv.__aenter__()
+                    await ctx.catdv.login()
                 except CatdvAuthError as exc:
                     logging.getLogger(__name__).warning(
                         "CatDV login failed at startup (%s); booting offline",
                         exc,
                     )
+                    await ctx.catdv.__aexit__(None, None, None)
                     ctx.catdv = None
                     login_failed = True
                 except Exception as exc:  # noqa: BLE001 — transport / DNS
@@ -166,6 +172,7 @@ class AppContext:
                         "CatDV unreachable at startup (%s); booting offline",
                         exc,
                     )
+                    await ctx.catdv.__aexit__(None, None, None)
                     ctx.catdv = None
                     login_failed = True
 
@@ -228,13 +235,20 @@ class AppContext:
                 # FS adapter has media_is_local=True; the workspace
                 # manager skips the proxy-resolver step entirely.
                 ctx.proxy_resolver = None
+            from backend.app.services.connection_monitor import ConnectionState
+
             ctx.connection_monitor = ConnectionMonitor(
                 provider=ctx.archive,
                 db_provider=lambda c=ctx: c.db,
                 interval_s=float(settings.health_probe_interval_s),
                 timeout_s=float(settings.health_probe_timeout_s),
                 event_bus=ctx.event_bus,
-                forced_offline=forced_offline or login_failed,
+                forced_offline=forced_offline,
+                initial_state=(
+                    ConnectionState.offline
+                    if login_failed
+                    else ConnectionState.online
+                ),
             )
             ctx.sync_engine = SyncEngine(
                 provider=ctx.archive,

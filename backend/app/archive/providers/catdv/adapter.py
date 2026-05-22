@@ -76,6 +76,8 @@ class CatdvArchiveAdapter:
 
     async def health(self) -> ProviderHealth:
         from time import perf_counter
+        if not self._is_online() or self._client is None:
+            return ProviderHealth(ok=False, detail="offline")
         t0 = perf_counter()
         try:
             await self._client.health()
