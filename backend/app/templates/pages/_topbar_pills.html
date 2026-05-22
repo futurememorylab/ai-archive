@@ -3,6 +3,7 @@
    wiring is required. #}
 {% set _settings = request.app.state.ctx.settings %}
 <span class="pillset">
+  {% include "_connection_chip.html" %}
   <span class="env-pill ok"><span class="led"></span>DEV · {{ request.url.netloc }}</span>
   <span class="env-pill">CATALOG {{ _settings.catdv_catalog_id }}</span>
   <span class="env-pill">READ-ONLY</span>

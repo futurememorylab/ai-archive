@@ -11,11 +11,16 @@ ship the endpoint without a template so the wire shape is locked.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from fastapi.templating import Jinja2Templates
 
 router = APIRouter(prefix="/api/connection", tags=["connection"])
+
+_TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "templates"
+_templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
 
 def _mode(monitor) -> str:
@@ -47,19 +52,37 @@ async def get_state(request: Request) -> dict:
 
 
 @router.post("/retry")
-async def retry_now(request: Request) -> dict:
+async def retry_now(request: Request):
     ctx = request.app.state.ctx
     monitor = getattr(ctx, "connection_monitor", None)
+    is_htmx = request.headers.get("HX-Request") == "true"
+
     if monitor is None:
-        return {"state": "online", "mode": "online"}
-    if getattr(monitor, "is_forced", False) or getattr(
+        body = {"state": "online", "mode": "online"}
+    elif getattr(monitor, "is_forced", False) or getattr(
         monitor, "_forced_offline", False
     ):
+        if is_htmx:
+            return _templates.TemplateResponse(
+                request,
+                "_connection_chip.html",
+                {"mode": "forced_offline"},
+                status_code=409,
+            )
         raise HTTPException(
             status_code=409, detail="forced offline (CATDV_OFFLINE=true)"
         )
-    state = await monitor.retry_now()
-    return {"state": str(state.value), "mode": _mode(monitor)}
+    else:
+        state = await monitor.retry_now()
+        body = {"state": str(state.value), "mode": _mode(monitor)}
+
+    if is_htmx:
+        return _templates.TemplateResponse(
+            request,
+            "_connection_chip.html",
+            {"mode": body["mode"]},
+        )
+    return body
 
 
 @router.post("/offline")

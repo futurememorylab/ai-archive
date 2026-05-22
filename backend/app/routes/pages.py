@@ -256,6 +256,13 @@ async def clip_detail_page(request: Request, clip_id: int):
     try:
         clip = await ctx.archive.get_clip(str(clip_id))
     except ProviderError as exc:
+        if "not available offline" in str(exc):
+            return templates.TemplateResponse(
+                request,
+                "pages/clip_not_cached.html",
+                {"clip_id": clip_id},
+                status_code=404,
+            )
         raise HTTPException(404, f"clip not found: {exc}") from exc
 
     cache_status = None

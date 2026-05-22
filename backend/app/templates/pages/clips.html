@@ -5,6 +5,11 @@
 {% endblock %}
 {% block body %}
 <div class="page page-clips" x-data="bulkSel()">
+  {% if mode != "online" %}
+    <div class="banner banner--offline" role="status">
+      Showing cached clips only — {{ total }} clip{{ "s" if total != 1 else "" }} available.
+    </div>
+  {% endif %}
   <form class="filter-form"
         action="/"
         method="get"
@@ -31,10 +36,12 @@
         <span class="meta" title="List fetched from CatDV {{ cache_fetched_at }}">
           Cached {{ cache_age }}
         </span>
+        {% if mode == "online" %}
         <a class="meta"
            href="?{% if q %}q={{ q }}&{% endif %}{% if cache_filter and cache_filter != 'any' %}cache={{ cache_filter }}&{% endif %}{% if anno_filter and anno_filter != 'any' %}anno={{ anno_filter }}&{% endif %}offset={{ offset }}&limit={{ limit }}&refresh=1">
           Refresh
         </a>
+        {% endif %}
       {% endif %}
       <span class="meta mono">catalog {{ catalog.id }}</span>
     </div>
@@ -78,12 +85,14 @@
           <span class="caret" aria-hidden="true">▾</span>
         </button>
         <div class="actions-menu" x-show="open" x-cloak>
-          {% if not host_local_proxies %}
+          {% if not host_local_proxies and mode == "online" %}
           <button type="button"
                   class="actions-item"
                   @click="open = false; bulkPrefetch()">
             Cache locally
           </button>
+          {% endif %}
+          {% if not host_local_proxies %}
           <button type="button"
                   class="actions-item actions-item-danger"
                   @click="open = false; bulkEvict()">

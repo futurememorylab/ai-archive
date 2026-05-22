@@ -17,6 +17,17 @@
   <script defer src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js"></script>
 </head>
 <body>
+  {%- set _ctx = request.app.state.ctx if request is defined else None -%}
+  {%- set _monitor = _ctx.connection_monitor if _ctx else None -%}
+  {%- if _monitor is none -%}
+    {%- set mode = "online" -%}
+  {%- elif _monitor.is_forced -%}
+    {%- set mode = "forced_offline" -%}
+  {%- elif _monitor.current_state().value == "online" -%}
+    {%- set mode = "online" -%}
+  {%- else -%}
+    {%- set mode = "offline" -%}
+  {%- endif -%}
   {% set rail_active %}{% block rail_active %}{% endblock %}{% endset %}
   <div class="app">
     <header class="topbar">
