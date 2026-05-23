@@ -136,3 +136,7 @@ app.include_router(cache_ui_router)
 from backend.app.routes.pages import router as pages_router  # noqa: E402
 
 app.include_router(pages_router)
+
+from backend.app.routes.live import router as live_router  # noqa: E402
+
+app.include_router(live_router)

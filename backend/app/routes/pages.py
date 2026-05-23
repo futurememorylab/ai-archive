@@ -248,6 +248,93 @@ async def _build_draft_for_clip(ctx, clip_id: int) -> dict:
     )
 
 
+async def _build_clip_view_model_for_live(ctx, clip_id: int) -> dict:
+    """Reshape a CanonicalClip into the dict shape `build_context_text` expects:
+    `fields` as identifier→raw-value dict, `markers` carrying smpte timestamps.
+    """
+    from backend.app.ui.view_models import _PRAGAFILM_PREFIX, _fix
+
+    clip = await ctx.archive.get_clip(str(clip_id))
+    fps = clip.fps or 25.0
+    markers = []
+    for m in sorted(clip.markers, key=lambda x: x.in_.secs):
+        in_secs = m.in_.secs
+        out_secs = m.out.secs if m.out is not None else None
+        markers.append({
+            "name": _fix(m.name) or "",
+            "description": _fix(m.description) or "",
+            "in_secs": in_secs,
+            "out_secs": out_secs,
+            "in_smpte": secs_to_smpte(in_secs, fps),
+            "out_smpte": secs_to_smpte(out_secs, fps) if out_secs is not None else "",
+            "category": m.category,
+        })
+    fields = {
+        ident: fv.value
+        for ident, fv in clip.fields.items()
+        if ident.startswith(_PRAGAFILM_PREFIX)
+    }
+    return {
+        "id": int(clip.key[1]),
+        "name": clip.name,
+        "fps": fps,
+        "duration_secs": clip.duration_secs,
+        "duration_smpte": secs_to_smpte(clip.duration_secs or 0, fps),
+        "format": "",  # purely cosmetic in the context block; raw provider data unparsed
+        "notes": clip.provider_data.get("notes") if clip.provider_data else None,
+        "big_notes": clip.provider_data.get("bigNotes") if clip.provider_data else None,
+        "markers": markers,
+        "fields": fields,
+    }
+
+
+async def _build_draft_view_model_for_live(ctx, clip_id: int) -> dict:
+    """Reshape the draft view into `build_context_text`'s expected shape."""
+    from backend.app.ui.view_models import _fix
+
+    annotations = await ctx.annotations_repo.list_by_clip(ctx.db, clip_id)
+    if not annotations:
+        return {"markers": [], "fields": {}, "notes": ""}
+    latest = annotations[0]
+    all_items = await ctx.review_items_repo.list_by_clip(ctx.db, clip_id)
+    items = [it for it in all_items if it.annotation_id == latest.id]
+
+    clip = await ctx.archive.get_clip(str(clip_id))
+    fps = clip.fps or 25.0
+
+    markers: list[dict] = []
+    fields: dict = {}
+    notes_parts: list[str] = []
+    for it in items:
+        if it.kind == "marker":
+            pv = it.proposed_value if isinstance(it.proposed_value, dict) else {}
+            in_secs = float((pv.get("in") or {}).get("secs", 0.0))
+            out_part = pv.get("out") or {}
+            out_secs = float(out_part["secs"]) if isinstance(out_part, dict) and "secs" in out_part else None
+            markers.append({
+                "name": _fix(pv.get("name")) or "",
+                "description": _fix(pv.get("description")) or "",
+                "in_secs": in_secs,
+                "out_secs": out_secs,
+                "in_smpte": secs_to_smpte(in_secs, fps),
+                "out_smpte": secs_to_smpte(out_secs, fps) if out_secs is not None else "",
+                "category": pv.get("category"),
+            })
+        elif it.kind == "field":
+            ident = it.target_identifier or ""
+            if ident:
+                fields[ident] = it.proposed_value
+        elif it.kind == "note":
+            if it.proposed_value is not None:
+                notes_parts.append(str(it.proposed_value))
+    markers.sort(key=lambda m: m["in_secs"])
+    return {
+        "markers": markers,
+        "fields": fields,
+        "notes": "\n\n".join(notes_parts),
+    }
+
+
 @router.get("/clips/{clip_id}", response_class=HTMLResponse)
 async def clip_detail_page(request: Request, clip_id: int):
     ctx = request.app.state.ctx
