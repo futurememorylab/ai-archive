@@ -17,17 +17,14 @@ from backend.app.services.live_sessions import (
 router = APIRouter(prefix="/api/live", tags=["live"])
 
 WSS_URL_TEMPLATE = (
-    # NOTE: `authTokens.create` lives in v1alpha but the WSS BidiGenerateContent
-    # endpoint is served from v1beta. Cross-version usage is supported and is
-    # the documented pattern: mint in alpha, connect in beta.
-    #
-    # The token is presented via `?key=<tokens/...>` — the Gemini Developer
-    # API treats ephemeral token names the same way it treats regular API
-    # keys. `?access_token=` is for OAuth bearers (Vertex AI style) and is
-    # rejected here with WSS close code 1008
-    #     "Method doesn't allow unregistered callers ... use API Key".
+    # Browser-direct Live API pattern: token name from authTokens.create
+    # (v1alpha) is presented via `?key=tokens/<id>` against the v1alpha
+    # BidiGenerateContent endpoint. The token is namespaced to v1alpha;
+    # using it against v1beta returns close code 1007 "API key not valid",
+    # and using `?access_token=` instead of `?key=` returns 1008
+    # "Method doesn't allow unregistered callers".
     "wss://generativelanguage.googleapis.com/ws/"
-    "google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
+    "google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent"
     "?key={token}"
 )
 
