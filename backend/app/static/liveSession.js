@@ -69,7 +69,41 @@ function liveSession(clipId, config) {
       return r.json();
     },
 
-    async _openMic() { /* Task 18 */ },
+    async _openMic() {
+      this._mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+        video: false,
+      });
+      this._audioCtxIn = new AudioContext();
+      await this._audioCtxIn.audioWorklet.addModule("/static/audio-worklet-recorder.js");
+      const src = this._audioCtxIn.createMediaStreamSource(this._mediaStream);
+      this._workletNode = new AudioWorkletNode(this._audioCtxIn, "recorder-processor");
+      src.connect(this._workletNode);
+      // Do NOT connect to destination — we don't want to hear ourselves.
+      this._workletNode.port.onmessage = (e) => this._onCaptureChunk(e.data);
+      this._workletNode.port.postMessage({ type: "start" });
+    },
+
+    _onCaptureChunk(arrayBuffer) {
+      if (!this._ws || this._ws.readyState !== 1) return;
+      // Gemini Live expects { realtimeInput: { mediaChunks: [{ mimeType, data }] } }
+      // mediaChunks is base64 PCM at the rate declared in setup (16000).
+      const b64 = this._b64FromBuffer(arrayBuffer);
+      this._ws.send(JSON.stringify({
+        realtimeInput: {
+          mediaChunks: [{ mimeType: "audio/pcm;rate=16000", data: b64 }],
+        },
+      }));
+      this._resetInactivity();
+    },
+
+    _b64FromBuffer(buf) {
+      const bytes = new Uint8Array(buf);
+      let bin = "";
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      return btoa(bin);
+    },
+
     _openWs(url) { /* Task 19 */ },
     _onWsMessage(evt) { /* Task 19 + 21 */ },
     _resetInactivity() { /* Task 22 */ },
