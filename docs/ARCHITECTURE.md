@@ -41,16 +41,18 @@ read `docs/CONTEXT.md` first.
   Annotation, LiveSession). Archive-side dataclasses live in
   `archive/model.py`, not here.
 
-### Layer rules are aspirational today
+### Layer rules are enforced by import-linter
 
-The diagram is what we *want*. In practice some routes still call
-repositories directly (`routes/jobs.py` reaches `ctx.jobs_repo`,
-`routes/live.py` instantiates `LiveSessionsRepo()`). This is a known
-deviation. PR C of the architecture plan
-(`docs/plans/2026-05-23-codebase-architecture-tier-2-and-beyond.md`
-§2.1) will add `import-linter` to enforce a layering contract; until
-then, treat the diagram as the intended direction of new code, not a
-guarantee about every existing module.
+`import-linter` runs on every commit (see `.importlinter` for the
+contracts and `.pre-commit-config.yaml` for the hook). The contract is
+deliberately the *looser* option from plan §2.1: routes may call either
+services or repositories directly (current practice in
+`routes/jobs.py` and `routes/live.py`), but they must not reach into
+archive adapter internals (`archive.providers`, `archive.registry`,
+`archive.ai_stores`, etc.) — only the pure type modules
+`archive.errors` and `archive.model` are fair game. Services must not
+import routes, and models must not import services, repositories, or
+routes. Run `.venv/bin/lint-imports` to check locally.
 
 ## Symptom → first file to read
 

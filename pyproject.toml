@@ -29,6 +29,7 @@ dev = [
   "respx>=0.21",
   "basedpyright>=1.18",
   "pre-commit>=3.7",
+  "import-linter>=2.0",
 ]
 
 [tool.setuptools.packages.find]

@@ -20,3 +20,10 @@ repos:
         types: [python]
         pass_filenames: false
         args: [backend, tests]
+
+      - id: import-linter
+        name: import-linter (layer contracts)
+        entry: .venv/bin/lint-imports
+        language: system
+        pass_filenames: false
+        types: [python]

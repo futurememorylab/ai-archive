@@ -1,0 +1,47 @@
+[importlinter]
+root_package = backend
+include_external_packages = True
+
+# Looser layering contract (see plan §2.1 option (a)). Routes are allowed to
+# call services OR repositories directly — current practice in jobs/live —
+# and may still import pure types from archive.errors / archive.model. What
+# they MUST NOT do is reach into the archive adapter internals (providers,
+# registry, ai_stores), which would couple the HTTP layer to a specific
+# storage backend.
+
+[importlinter:contract:no-routes-into-archive-adapters]
+name = Routes must not reach into archive adapter internals
+type = forbidden
+source_modules =
+    backend.app.routes
+forbidden_modules =
+    backend.app.archive.providers
+    backend.app.archive.registry
+    backend.app.archive.ai_stores
+    backend.app.archive.ai_store
+    backend.app.archive.ai_store_model
+    backend.app.archive.provider
+    backend.app.archive.change_set_json
+# Only flag direct imports — routes legitimately call services, and services
+# legitimately use adapter internals, so transitive paths are expected.
+allow_indirect_imports = True
+
+[importlinter:contract:no-services-importing-routes]
+name = Services must not import routes
+type = forbidden
+source_modules =
+    backend.app.services
+forbidden_modules =
+    backend.app.routes
+allow_indirect_imports = True
+
+[importlinter:contract:no-models-importing-anything]
+name = Models stay pure (no service/repo/route imports)
+type = forbidden
+source_modules =
+    backend.app.models
+forbidden_modules =
+    backend.app.services
+    backend.app.repositories
+    backend.app.routes
+allow_indirect_imports = True
