@@ -86,7 +86,9 @@ talking.
 
 - **At session start:** the frame currently visible in `<video>` is
   captured and sent as the first user turn's image part, alongside the
-  clip's metadata context.
+  assembled annotation context (see §3.3 for the exact shape — it
+  includes both published CatDV data and the operator's in-progress
+  draft, clearly labeled in Czech).
 - **On `<video>` `pause` event:** the current frame is auto-captured and
   pushed as a `realtimeInput` image part. (Playing → pausing is the
   natural "look at this" gesture during scrubbing.)
@@ -218,9 +220,44 @@ The backend assembles a `liveConnectConstraints` payload like:
 
 The browser sends this verbatim as the first WSS `setup` message, then
 sends a `clientContent` user turn containing the initial JPEG frame and
-a text part with the assembled annotation context (clip name, notes,
-big_notes, format, fps, duration, sorted markers JSON, all `pragafilm.*`
-field values).
+a text part with the assembled annotation context. The context is two
+clearly-labeled Czech blocks so the model never conflates committed
+data with the operator's working hypothesis:
+
+```
+=== Publikované anotace (z CatDV) ===
+Název klipu: <clip.name>
+Formát: <clip.format>   FPS: <clip.fps>   Délka: <clip.duration smpte>
+Poznámky:
+<clip.notes>
+Rozšířené poznámky:
+<clip.big_notes>
+Markery (čas → popis):
+- <smpte> – <smpte>  „<marker.name>" — <marker.description>
+- ...
+Vlastní pole (pragafilm.*):
+- pragafilm.rok.natočení: <values>
+- pragafilm.dekáda.natočení: <value>
+- ... (jen vyplněná pole)
+
+=== Rozpracované anotace (můj draft, ještě neuložené do CatDV) ===
+Draft markery:
+- <smpte> – <smpte>  „<draft_marker.name>" — <draft_marker.description>
+- ...
+Draft pole:
+- <field>: <value>
+- ...
+Draft poznámky:
+<draft.notes>
+
+(Konec kontextu. Následuje aktuální snímek a moje otázka.)
+```
+
+If either block is empty (a clip with no draft yet, or a freshly-imported
+clip with no published custom fields), it is omitted entirely rather
+than printed as an empty section. All Czech text is run through
+`view_models._fix` first for mojibake repair (see
+[[catdv-mojibake-display-fix]]).
 
 ### 3.4 Czech system instruction
 
@@ -231,8 +268,12 @@ through the prompts UI without redeploying):
 > *Jsi asistent pro popis archivních filmových záběrů ze soukromého
 > českého archivu, převážně z let 1920–1950 (formáty 9,5 mm a 16 mm,
 > domácí filmy). Uživatel ti pošle aktuální snímek z proxy videa
-> a metadata k záběru. Tvým úkolem je pomoci popsat scénu, odhadnout
-> lokaci, dataci, identifikovat objekty a historický kontext.
+> a metadata k záběru. Metadata obsahují dva bloky: **Publikované
+> anotace** (data již uložená v CatDV — ber je jako daná) a
+> **Rozpracované anotace** (uživatelův draft, jeho pracovní hypotéza —
+> užitečný kontext, ale ne pravda; pokud vidíš ve snímku rozpor
+> s draftem, klidně to zmiň). Tvým úkolem je pomoci popsat scénu,
+> odhadnout lokaci, dataci, identifikovat objekty a historický kontext.
 > Komunikuj výhradně česky, krátkými větami vhodnými pro hlasovou
 > odpověď. Pokud potřebuješ ověřit lokaci, historickou událost,
 > vozidlo, módu nebo jiný detail, použij nástroj `googleSearch`.
@@ -282,9 +323,12 @@ All routes 404 when `app_state.mode != "online"`.
 
 ### 4.2 Service (`backend/app/services/live_sessions.py`)
 
-- `assemble_setup_payload(clip) -> dict` — prompt + tools + speech +
-  initial context turn (uses existing `view_models._fix` for mojibake
-  cleanup of `notes` / marker descriptions, see [[catdv-mojibake-display-fix]]).
+- `assemble_setup_payload(clip, draft) -> dict` — prompt + tools +
+  speech + initial context turn. Pulls published data from the clip
+  object and draft data (markers, fields, notes) from the existing
+  `annotations` repository for this `clip_id`; omits either block if
+  empty; runs all Czech text through `view_models._fix` for mojibake
+  cleanup (see [[catdv-mojibake-display-fix]]).
 - `mint_ephemeral_token(setup_payload) -> AuthToken` — HTTP POST to
   `authTokens.create` with `uses=1`, `expireTime=+30min`.
 - `summarize(session_id) -> None` — load transcript, call
@@ -413,8 +457,11 @@ Existing Vertex usage (batch annotation) stays as-is.
 ### 8.1 Automated (TDD per project default)
 
 - **`tests/services/test_live_sessions.py`** — `assemble_setup_payload`
-  with rich `pragafilm.*` fields, none, and mojibake notes; token-mint
-  HTTP shape (mocked); summarize idempotency + call shape.
+  with: (a) rich `pragafilm.*` published fields + a non-empty draft;
+  (b) published-only clip with no draft; (c) draft-only (freshly-cached
+  clip not yet annotated in CatDV); (d) both empty (smoke); (e) mojibake
+  in both published `notes` and a draft marker description.
+  Token-mint HTTP shape (mocked); summarize idempotency + call shape.
 - **`tests/repositories/test_live_sessions_repo.py`** — CRUD, state
   transitions, list-by-clip ordering, pending-row cleanup.
 - **`tests/routes/test_live.py`** — happy paths, 404 in `offline` mode,
@@ -434,6 +481,9 @@ and assertions over audio quality are brittle:
 - [ ] Round-trip Czech latency feels < ~600 ms (the PoC benchmark).
 - [ ] Initial frame is delivered (mention something visible to Gemini and
       confirm a relevant answer).
+- [ ] Initial context includes both published and draft annotations;
+      Gemini correctly distinguishes them when asked
+      (e.g. *"co o tomhle vím z CatDV, a co jsem si k tomu psal?"*).
 - [ ] `<video>` pause auto-sends current frame; manual *Send frame* works.
 - [ ] Saying *"konec"* / *"děkuji, ukonči to"* triggers `end_session`
       tool call and closes the session.
