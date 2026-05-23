@@ -119,6 +119,24 @@ class CacheInspector:
         self._provider = provider
         self._host_local = host_local_proxies
 
+    def attach_provider(
+        self,
+        provider: Any | None,
+        *,
+        host_local_proxies: bool = False,
+    ) -> None:
+        """Late-bind the archive provider and host-local-proxies flag.
+
+        PR H of the arch plan collapsed the duplicate construction of this
+        service. `_build_cache_subsystem` instantiates it with `provider=None`
+        before external services are wired; `_build_sync_subsystem` then
+        calls this method once `ctx.archive` and `ctx.proxy_resolver` exist.
+        Calling this on an already-attached instance simply re-sets the
+        provider — idempotent enough for the boot path's one invocation.
+        """
+        self._provider = provider
+        self._host_local = host_local_proxies
+
     # --- single + batch ----------------------------------------------
 
     async def status_for_clip(self, key: ClipKey) -> ClipCacheStatus:

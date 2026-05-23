@@ -156,12 +156,14 @@ async def _build_core(settings: Settings) -> AppContext:
 
 
 async def _build_cache_subsystem(ctx: AppContext) -> None:
-    """Reconcile on-disk proxy cache and wire minimal CacheInspector/Actions.
+    """Reconcile on-disk proxy cache and wire CacheInspector/Actions.
 
     These are pure-DB services with no external dependencies, so we wire them
     up even when init_external=False. When init_external runs, the archive
-    subsystem replaces them with provider/ai_store-aware variants
-    (see _build_sync_subsystem). PR H will revisit this duplication.
+    subsystem calls `attach_provider` / `attach_ai_store` on the *same*
+    instances so they pick up provider (for deep-orphan checks) and ai_store
+    (for bucket-side evictions). The instances themselves are never replaced
+    — see PR H / ADR 0021.
     """
     settings = ctx.settings
 
@@ -177,7 +179,9 @@ async def _build_cache_subsystem(ctx: AppContext) -> None:
     )
     await reconciler.reconcile()
 
-    # CacheInspector + CacheActions are pure-DB; always wire them.
+    # CacheInspector + CacheActions are pure-DB; always wire them now and
+    # mutate to attach the provider/ai_store later. `ctx.cache_inspector`
+    # and `ctx.cache_actions` are bound exactly once for the ctx lifetime.
     cap_bytes = int(settings.media_cache_cap_gb) * 1024**3
     ctx.cache_inspector = CacheInspector(
         db_provider=lambda c=ctx: c.db,
@@ -187,7 +191,7 @@ async def _build_cache_subsystem(ctx: AppContext) -> None:
         db_provider=lambda c=ctx: c.db,
         inspector=ctx.cache_inspector,
         log_repo=ctx.cache_actions_log_repo,
-        ai_store=None,  # filled in when init_external runs
+        ai_store=None,  # filled in by _build_sync_subsystem via attach_ai_store
     )
 
 
@@ -308,12 +312,13 @@ async def _build_archive_subsystem(ctx: AppContext) -> _OnlineFlags:
 
 
 async def _build_sync_subsystem(ctx: AppContext, flags: _OnlineFlags) -> None:
-    """Wire ConnectionMonitor, SyncEngine, WorkspaceManager, full cache services,
-    LRU eviction, and (if the resolver supports it) MediaPrefetcher.
+    """Wire ConnectionMonitor, SyncEngine, WorkspaceManager, LRU eviction,
+    and (if the resolver supports it) MediaPrefetcher.
 
-    The cache_inspector / cache_actions assigned here *replace* the minimal
-    ones from _build_cache_subsystem so they pick up provider (for deep-orphan
-    checks) and ai_store (for bucket-side evictions). PR H will revisit.
+    The cache_inspector / cache_actions instances are *already* built by
+    _build_cache_subsystem; here we only `attach_provider` /
+    `attach_ai_store` so deep-orphan and bucket-side eviction code paths
+    pick up the now-wired archive provider and AI store. See ADR 0021.
     """
     from backend.app.services.connection_monitor import ConnectionState
     from backend.app.services.proxy_resolver import LocalCacheOnlyResolver
@@ -323,6 +328,10 @@ async def _build_sync_subsystem(ctx: AppContext, flags: _OnlineFlags) -> None:
 
     # archive is guaranteed populated by _build_archive_subsystem.
     assert ctx.archive is not None
+    # cache services were wired by _build_cache_subsystem; we only mutate
+    # them here, never re-bind ctx.cache_inspector / ctx.cache_actions.
+    assert ctx.cache_inspector is not None
+    assert ctx.cache_actions is not None
 
     ctx.connection_monitor = ConnectionMonitor(
         provider=ctx.archive,
@@ -350,20 +359,15 @@ async def _build_sync_subsystem(ctx: AppContext, flags: _OnlineFlags) -> None:
         proxy_resolver=ctx.proxy_resolver,
         db_provider=lambda c=ctx: c.db,
     )
-    # Inspector picks up the provider for deep-orphan checks;
-    # actions pick up the AI store for bucket-side evictions.
-    ctx.cache_inspector = CacheInspector(
-        db_provider=lambda c=ctx: c.db,
-        media_cache_cap_bytes=cap_bytes,
-        provider=ctx.archive,
+    # Attach the late-bound deps to the cache services. The instances
+    # themselves were created in _build_cache_subsystem and stay the
+    # same object identity for the ctx's lifetime — this is the
+    # acceptance criterion for PR H / ADR 0021.
+    ctx.cache_inspector.attach_provider(
+        ctx.archive,
         host_local_proxies=getattr(ctx.proxy_resolver, "is_host_local", False),
     )
-    ctx.cache_actions = CacheActions(
-        db_provider=lambda c=ctx: c.db,
-        inspector=ctx.cache_inspector,
-        log_repo=ctx.cache_actions_log_repo,
-        ai_store=ctx.ai_store,
-    )
+    ctx.cache_actions.attach_ai_store(ctx.ai_store)
     ctx.lru_eviction = LruEviction(
         actions=ctx.cache_actions,
         log_repo=ctx.cache_actions_log_repo,

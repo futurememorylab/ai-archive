@@ -79,6 +79,16 @@ class CacheActions:
         self._ai_store = ai_store
         self._who_provider = who_provider or (lambda: "request")
 
+    def attach_ai_store(self, ai_store: Any | None) -> None:
+        """Late-bind the AIInputStore for bucket-side evictions.
+
+        See `CacheInspector.attach_provider` for the rationale — both services
+        are constructed once in `_build_cache_subsystem` with their external
+        deps set to `None`, then receive them via these attach methods once
+        `_build_sync_subsystem` has wired the archive subsystem.
+        """
+        self._ai_store = ai_store
+
     # --- single-layer evictions --------------------------------------
 
     async def evict_local_media(
