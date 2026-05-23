@@ -91,6 +91,15 @@ health probe fails mid-session. The header chip turns yellow and shows
 `POST /api/connection/retry`. The probe loop only resumes once the user
 successfully reconnects.
 
+## Architecture & orientation
+
+New to the codebase? Read these two first:
+
+- [`docs/CONTEXT.md`](docs/CONTEXT.md) — domain glossary; one sentence per
+  noun (Clip, Workspace, Write Queue, Live Session, …).
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — layer map plus a
+  "symptom → first file to read" table for triage.
+
 ## Tests
 
 ```bash
