@@ -1308,3 +1308,47 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 }
 .ca-spinner-inline { margin-right: 4px; }
 @keyframes ca-spin { to { transform: rotate(360deg); } }
+
+/* Gemini Live clip assistant */
+.detail-hdr .detail-hdr-row { display: flex; align-items: center; gap: .6rem; width: 100%; }
+.detail-hdr .live-bar { display: flex; align-items: center; gap: .6rem; width: 100%; }
+.live-bar .rec-pill {
+  background: #400; color: #f88; padding: .15rem .5rem;
+  border-radius: 999px; font-family: monospace; font-size: 12px;
+}
+.live-bar .rec-pill.pulsing { animation: live-pulse 1.2s infinite; }
+@keyframes live-pulse { 0%, 100% { opacity: 1 } 50% { opacity: .55 } }
+.live-bar .live-error { color: var(--bad, #f66); font-size: 12px; }
+.live-strip {
+  background: rgba(255, 255, 180, 0.06); padding: .4rem .6rem;
+  border-bottom: 1px solid #333; font-size: .9rem; position: relative;
+}
+.live-strip-lines { margin: 0; padding: 0; }
+.live-strip-lines li { list-style: none; padding: .05rem 0; }
+.live-strip.expanded .live-strip-lines { display: none; }
+.live-strip-full { max-height: 40vh; overflow-y: auto; }
+.live-expand {
+  background: transparent; color: var(--text-3); border: none;
+  cursor: pointer; font-size: 11px; padding: 0 .4rem;
+  position: absolute; right: .6rem; top: .4rem;
+}
+.ca-btn-live { background: #262; color: #bfb; }
+.ca-btn-live:hover { background: #383; }
+
+/* History tab */
+.live-history-list { list-style: none; padding: 0; margin: 0; }
+.live-history-item { border-bottom: 1px solid var(--surface-2, #2a2a2a); }
+.live-history-row {
+  display: grid; grid-template-columns: 1.5fr .6fr .8fr .4fr .6fr;
+  gap: .5rem; align-items: center; padding: .4rem .2rem;
+  width: 100%; background: transparent; color: inherit;
+  border: none; text-align: left; cursor: pointer; font-size: 12px;
+}
+.live-history-row:hover { background: var(--surface-2, rgba(255,255,255,0.04)); }
+.live-history-row .ts { color: var(--text-2); }
+.live-history-row .dur { color: var(--text-3); }
+.live-history-row .has-summary { text-align: center; }
+.live-history-detail { padding: .4rem .2rem .8rem; font-size: 12px; }
+.live-summary { padding: .4rem 0; }
+.live-summary-missing { padding: .4rem 0; }
+.live-transcript { padding-top: .4rem; border-top: 1px solid var(--surface-2, #2a2a2a); }

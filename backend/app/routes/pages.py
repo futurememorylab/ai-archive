@@ -364,6 +364,9 @@ async def clip_detail_page(request: Request, clip_id: int):
     ctx_dict["host_local_proxies"] = getattr(
         getattr(ctx, "proxy_resolver", None), "is_host_local", False
     )
+    ctx_dict["gemini_live_inactivity_s"] = getattr(
+        ctx.settings, "gemini_live_inactivity_s", 60,
+    )
     return templates.TemplateResponse(request, "pages/clip_detail.html", ctx_dict)
 
 
