@@ -1,4 +1,11 @@
-from backend.app.services.live_sessions import assemble_setup_payload
+import pytest
+import respx
+from httpx import Response
+
+from backend.app.services.live_sessions import (
+    assemble_setup_payload,
+    mint_ephemeral_token,
+)
 
 
 class _Settings:
@@ -69,3 +76,56 @@ def test_setup_payload_initial_context_turn_has_text_part():
     assert "Rozpracované anotace" in text_part["text"]
     assert "P1010001" in text_part["text"]
     assert "myslím, že je to Praha" in text_part["text"]
+
+
+class _SettingsWithKey(_Settings):
+    gemini_api_key = "test-key-XYZ"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_mint_ephemeral_token_posts_to_auth_tokens_create_endpoint():
+    route = respx.post(
+        "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
+    ).mock(return_value=Response(200, json={"name": "tokens/abc123"}))
+    setup = {
+        "model": "models/x",
+        "config": {"responseModalities": ["AUDIO"]},
+        "initial_context_turn": {"role": "user", "parts": [{"text": "hi"}]},
+    }
+    tok = await mint_ephemeral_token(setup=setup, settings=_SettingsWithKey())
+    assert tok == "tokens/abc123"
+    assert route.called
+    sent = route.calls[0].request
+    assert sent.url.params["key"] == "test-key-XYZ"
+    import json as _j
+    body = _j.loads(sent.content)
+    assert body["uses"] == 1
+    assert "expireTime" in body
+    bidi = body["bidiGenerateContentSetup"]
+    assert "initial_context_turn" not in bidi
+    assert bidi["model"] == "models/x"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_mint_ephemeral_token_raises_on_non_200():
+    respx.post(
+        "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
+    ).mock(return_value=Response(403, json={"error": {"message": "Forbidden"}}))
+    with pytest.raises(RuntimeError, match="auth_tokens"):
+        await mint_ephemeral_token(
+            setup={"model": "x", "config": {}, "initial_context_turn": {}},
+            settings=_SettingsWithKey(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_mint_ephemeral_token_requires_api_key():
+    s = _Settings()
+    s.gemini_api_key = None  # type: ignore[attr-defined]
+    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
+        await mint_ephemeral_token(
+            setup={"model": "x", "config": {}, "initial_context_turn": {}},
+            settings=s,
+        )
