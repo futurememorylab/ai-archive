@@ -1,3 +1,9 @@
+"""AIInputStore port — protocol for stores that hand media bytes to Gemini.
+
+Implemented by `ai_stores/gcs/adapter.py` and `ai_stores/gemini_files/adapter.py`;
+selected at startup by `ai_stores/registry.py`.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path

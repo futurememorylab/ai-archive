@@ -1,3 +1,6 @@
+"""Pydantic models for annotations and review items — persisted by
+AnnotationsRepo / ReviewItemsRepo."""
+
 from typing import Any, Literal
 
 from pydantic import BaseModel

@@ -1,3 +1,6 @@
+"""FieldDefCacheRepo — persists / reads `field_def_cache`; per-provider
+catalog FieldDef snapshots with TTL. Called by the CatDV adapter."""
+
 from __future__ import annotations
 
 import json

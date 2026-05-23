@@ -1,3 +1,7 @@
+"""TargetMap expansion — turns a Gemini structured output + a prompt's
+TargetMap into ReviewItems (markers / fields / notes), with clamping of
+out-of-range timestamps."""
+
 from typing import Any
 
 from backend.app.models.annotation import ReviewItem

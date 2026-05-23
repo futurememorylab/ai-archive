@@ -1,3 +1,7 @@
+"""GcsService — thin wrapper over google-cloud-storage. Uploads proxy
+files to the configured bucket and returns gs:// URIs for the GCS
+AIInputStore adapter."""
+
 from pathlib import Path
 
 from google.cloud import storage  # type: ignore[import-not-found]

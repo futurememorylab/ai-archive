@@ -1,3 +1,7 @@
+"""ReviewItemsRepo — persists / reads `review_items`; the per-clip
+human-review queue produced by the annotator. Called by the annotator
+service and the review route."""
+
 import base64
 import json
 from datetime import UTC, datetime

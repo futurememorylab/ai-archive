@@ -1,3 +1,6 @@
+"""Simple SQL migrations runner — applies `*.sql` files under a directory
+in lexical order, tracking applied names in `schema_migrations`."""
+
 from pathlib import Path
 
 import aiosqlite

@@ -1,3 +1,6 @@
+"""ProxyCacheRepo — persists / reads `proxy_cache`; the registry of
+on-disk proxy files. Called by RestProxyResolver and CacheInspector."""
+
 from datetime import UTC, datetime
 from typing import Any
 

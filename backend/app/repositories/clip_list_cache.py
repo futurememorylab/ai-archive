@@ -1,3 +1,6 @@
+"""ClipListCacheRepo — persists / reads `clip_list_cache`; read-through
+cache for paginated `list_clips` results. Called by the CatDV adapter."""
+
 from __future__ import annotations
 
 import json

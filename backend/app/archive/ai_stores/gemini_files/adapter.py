@@ -1,3 +1,7 @@
+"""Gemini Files API AIInputStore adapter — stub. Defined to prove the
+AIInputStore Protocol compiles against a non-GCS shape; not yet wired up.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path

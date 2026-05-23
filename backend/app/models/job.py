@@ -1,3 +1,6 @@
+"""Pydantic models for annotation jobs and per-clip job items — persisted
+by JobsRepo."""
+
 from typing import Literal
 
 from pydantic import BaseModel

@@ -1,3 +1,8 @@
+"""CatdvClient — thin async HTTP wrapper over the CatDV Enterprise REST
+API. Handles login/relogin, session lifecycle, and the busy-server
+(seat-limit) signal. Used by the CatDV archive adapter and the proxy
+resolver."""
+
 import asyncio
 from pathlib import Path
 from typing import Any, Self

@@ -1,3 +1,7 @@
+"""AppContext composition root — owns the DB connection, repos, services,
+and the archive/ai-store/proxy stack. Built once at FastAPI startup and
+stashed on `app.state` so routes can pull it via `get_ctx`."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

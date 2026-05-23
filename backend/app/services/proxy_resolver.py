@@ -1,3 +1,7 @@
+"""ProxyResolver protocol + REST and filesystem implementations. Resolves
+a clip_id to a local file path (downloading via CatDV REST if needed)
+and records the result in ProxyCacheRepo."""
+
 import os
 from collections.abc import Callable
 from pathlib import Path

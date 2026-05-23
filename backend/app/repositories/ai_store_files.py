@@ -1,3 +1,7 @@
+"""AIStoreFilesRepo — persists `ai_store_files`; the registry of
+clip-to-AIInputStore uploads (e.g. GCS object refs), keyed on store_id
+and clip_id. Called by AIInputStore adapters and CacheInspector."""
+
 from datetime import UTC, datetime
 from typing import Any
 

@@ -1,3 +1,6 @@
+"""Media routes — HTTP endpoints under /api/media for HTTP Range
+streaming of proxy files resolved by ProxyResolver."""
+
 import mimetypes
 from pathlib import Path
 

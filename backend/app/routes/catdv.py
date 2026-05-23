@@ -1,3 +1,6 @@
+"""CatDV routes — HTTP endpoints under /api/catdv for listing and getting
+clips. Thin wrapper around the active ArchiveProvider."""
+
 from fastapi import APIRouter, HTTPException, Request
 
 from backend.app.archive.errors import ProviderError

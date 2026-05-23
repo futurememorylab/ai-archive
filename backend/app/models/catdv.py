@@ -1,3 +1,6 @@
+"""Pydantic models mirroring the CatDV REST shapes (Envelope, Clip,
+Marker, TimecodeQuad). Used by `CatdvClient` and the CatDV adapter."""
+
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field

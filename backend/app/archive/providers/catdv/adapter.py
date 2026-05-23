@@ -1,3 +1,7 @@
+"""CatDV ArchiveProvider adapter — implements ArchiveProvider on top of
+CatdvClient. Uses ClipCache / FieldDefCache / ClipListCache repos when
+offline; translates CatDV REST errors into ProviderError variants."""
+
 from __future__ import annotations
 
 from collections.abc import Callable

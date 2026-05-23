@@ -1,3 +1,7 @@
+"""Canonical archive domain model — provider-agnostic dataclasses
+(CanonicalClip, ChangeOp, FieldDef, ClipPage, ...) consumed by every
+ArchiveProvider adapter and by the routes/services above them."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

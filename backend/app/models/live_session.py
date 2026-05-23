@@ -1,3 +1,6 @@
+"""Pydantic model for a Gemini Live narration session — persisted by
+LiveSessionsRepo."""
+
 from typing import Literal
 
 from pydantic import BaseModel

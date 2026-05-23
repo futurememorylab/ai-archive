@@ -1,3 +1,6 @@
+"""CatDV PUT-body builder. Translates a list of ChangeOps into the minimal
+JSON body CatDV expects (markers, notes, fields)."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable

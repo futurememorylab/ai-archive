@@ -1,3 +1,7 @@
+"""ArchiveProvider Protocol — the port that every backend (CatDV, filesystem)
+must satisfy. Defines list/get/write/health surface plus capability/health
+value objects."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -1,3 +1,6 @@
+"""Startup helpers — stale-session cleanup and external-dependency
+liveness checks. Called from the FastAPI lifespan before serving."""
+
 from dataclasses import dataclass, field
 
 import aiosqlite

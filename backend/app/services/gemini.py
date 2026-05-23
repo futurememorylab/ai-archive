@@ -1,3 +1,7 @@
+"""GeminiService — orchestrates Vertex Gemini structured-output calls
+for the annotator. Classifies provider errors into quota / safety /
+permission variants for the caller's retry policy."""
+
 import asyncio
 from typing import Any
 

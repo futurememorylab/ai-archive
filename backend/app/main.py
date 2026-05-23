@@ -1,3 +1,7 @@
+"""FastAPI app factory and lifespan. Wires routers, mounts static assets,
+and owns the `AppContext` lifecycle (build at startup, aclose at shutdown
+to release the CatDV session seat)."""
+
 from contextlib import asynccontextmanager
 from pathlib import Path
 

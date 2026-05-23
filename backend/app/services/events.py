@@ -1,3 +1,6 @@
+"""EventBus — in-process pub/sub backing the SSE event-stream routes.
+One asyncio.Queue per subscriber per topic, with overflow-drop semantics."""
+
 import asyncio
 from collections import defaultdict
 from typing import Any

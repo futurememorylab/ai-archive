@@ -1,3 +1,6 @@
+"""AnnotationsRepo — persists `annotations` (raw + structured Gemini
+output, clip snapshot). Called by the annotator service."""
+
 import base64
 import json
 from datetime import UTC, datetime

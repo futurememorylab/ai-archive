@@ -1,3 +1,6 @@
+"""CatDV <-> canonical model translation helpers. Imported by the CatDV
+adapter and by `payload.py` when building PUT requests."""
+
 from __future__ import annotations
 
 from datetime import datetime

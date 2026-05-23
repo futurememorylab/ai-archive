@@ -1,3 +1,6 @@
+"""Jobs routes — HTTP endpoints under /api/jobs for creating and
+inspecting annotation jobs. Delegates execution to the annotator service."""
+
 import asyncio
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status

@@ -1,3 +1,7 @@
+"""WriteLogRepo — persists / reads `write_log`; an audit trail of upstream
+writes (CatDV PUTs) with payload + response + status. Called by the
+write queue / apply path."""
+
 import json
 from datetime import UTC, datetime
 from typing import Any, Literal

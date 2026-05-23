@@ -1,3 +1,7 @@
+"""ClipCacheRepo — persists / reads `clip_cache` (per-clip CanonicalClip
+JSON snapshots with TTL). Called by the CatDV adapter and the offline
+fallback path."""
+
 from __future__ import annotations
 
 import json

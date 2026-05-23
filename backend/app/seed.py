@@ -1,3 +1,6 @@
+"""Default-prompt seeders — idempotently insert the bundled `seeds/*.json`
+prompts on first boot. Called from the FastAPI lifespan."""
+
 import json
 from pathlib import Path
 

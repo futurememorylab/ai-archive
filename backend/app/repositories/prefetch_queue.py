@@ -1,3 +1,6 @@
+"""PrefetchQueueRepo — persists / reads `prefetch_queue`; queued and
+in-flight proxy downloads. Called by MediaPrefetcher."""
+
 from datetime import UTC, datetime
 from typing import Any
 

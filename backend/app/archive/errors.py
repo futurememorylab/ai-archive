@@ -1,3 +1,6 @@
+"""Exception hierarchy raised by ArchiveProvider adapters (auth, retry, conflict, fatal)."""
+
+
 class ProviderError(Exception):
     """Base for any error raised by an ArchiveProvider adapter."""
 

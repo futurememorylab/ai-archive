@@ -1,3 +1,6 @@
+"""Secret accessor — reads from env in dev, from GCP Secret Manager in
+prod. Cached per process."""
+
 import os
 from functools import lru_cache
 

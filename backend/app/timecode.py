@@ -1,3 +1,6 @@
+"""SMPTE timecode helpers — non-drop-frame conversion between seconds
+and HH:MM:SS:FF, plus frame snapping."""
+
 import re
 
 _SMPTE_RE = re.compile(r"^(\d{1,2}):(\d{2}):(\d{2}):(\d{2})$")

@@ -1,3 +1,6 @@
+"""SQLite connection helper. `open_db` returns an aiosqlite connection
+with WAL, foreign keys, and a 5s busy timeout."""
+
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path

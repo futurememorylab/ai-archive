@@ -30,6 +30,7 @@ dev = [
   "basedpyright>=1.18",
   "pre-commit>=3.7",
   "import-linter>=2.0",
+  "interrogate>=1.7",
 ]
 
 [tool.setuptools.packages.find]
@@ -56,6 +57,22 @@ ignore = ["ASYNC240"]
 # Tests sometimes assert against the broad exception surface a contract
 # raises, so `pytest.raises(Exception)` is intentional, not a bug.
 "tests/**/*.py" = ["B017"]
+
+[tool.interrogate]
+ignore-init-method = true
+ignore-init-module = true
+ignore-magic = true
+ignore-private = true
+ignore-property-decorators = true
+ignore-module = false
+# Module-level coverage is the goal of the §3.3 sweep — every backend file
+# now has a top-of-file docstring. Function/method docstrings are a separate
+# ratchet; the fail-under here is set to current coverage with a small
+# headroom so regressions on the module front are caught, while leaving the
+# rest of the per-callable ratchet for a follow-up.
+fail-under = 30
+exclude = ["tests", "backend/migrations"]
+verbose = 1
 
 [tool.basedpyright]
 include = ["backend", "tests"]

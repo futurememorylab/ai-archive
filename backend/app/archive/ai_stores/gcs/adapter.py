@@ -1,3 +1,7 @@
+"""GCS-backed AIInputStore adapter — uploads clip media to a GCS bucket and
+returns a gs:// reference for Gemini. Depends on GcsService and AIStoreFilesRepo.
+"""
+
 from __future__ import annotations
 
 import hashlib

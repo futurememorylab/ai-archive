@@ -1,3 +1,7 @@
+"""Settings — pydantic-settings model loaded from env + .env. Single
+source of truth for runtime configuration (CatDV creds, GCP project,
+cache caps, provider selection, etc.)."""
+
 from pathlib import Path
 from typing import Literal
 

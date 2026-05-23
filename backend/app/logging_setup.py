@@ -1,3 +1,6 @@
+"""JSON logging setup — installs a `python-json-logger` JsonFormatter on
+the root logger. Called once from `main.py` at process start."""
+
 import logging
 import sys
 from typing import IO

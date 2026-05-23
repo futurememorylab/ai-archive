@@ -1,3 +1,6 @@
+"""ArchiveProvider registry — `build_archive_provider` picks catdv or fs
+from settings. Called by `AppContext.build`."""
+
 from __future__ import annotations
 
 from pathlib import Path

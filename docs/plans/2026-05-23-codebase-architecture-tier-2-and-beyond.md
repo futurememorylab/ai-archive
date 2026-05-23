@@ -2,6 +2,40 @@
 
 Status as of 2026-05-23, after commit `83dd3f6` (Tier 1 tooling).
 
+## Status as of 2026-05-23 (end of session)
+
+The plan was executed end-to-end across commits A–I on branch
+`claude/tender-hawking-rp1zc`. Per-section status:
+
+- **§1.4 findings**: addressed by §3.1 / §3.2 / §3.3 / §4.x work below.
+- **§2.1 import-linter**: DONE — `5005673`. 3 contracts kept.
+- **§2.2 C901 / radon**: NOT DONE (deferred — out of session scope).
+- **§2.3 vulture**: NOT DONE (deferred).
+- **§2.4 basedpyright**: PARTIAL — typed `get_ctx` landed (PR E `6aecaf3`);
+  baseline grew because the typing surfaced latent Optional issues we hadn't
+  been seeing. Steps 2–4 of §6 (specific-rule ratchets, baseline tightening)
+  deferred.
+- **§3.1 CONTEXT.md**: DONE — `a562c67`.
+- **§3.2 ARCHITECTURE.md**: DONE — `a562c67`.
+- **§3.3 module docstrings**: DONE (this PR). Every backend file now has a
+  top-of-file docstring except the one re-export `__init__.py` we
+  intentionally skip. `interrogate` is wired into `pyproject.toml` and
+  pre-commit; `fail-under` is set to current per-callable coverage (~30%)
+  rather than 70%, because the §3.3 sweep was module-level only and
+  function/method docstring coverage is a separate ratchet to pick up later
+  (see ADR 0022).
+- **§3.4 ADR migration**: DONE — `8baf647`.
+- **§4.1 pages.py split**: DONE — `e3849b5`.
+- **§4.2 cache_actions / cache_inspector**: DONE — `0200577`. Construction
+  collapsed; both modules kept because a deletion test asserts they remain
+  separate seams.
+- **§4.3 archive adapters sharpening**: NOT DONE (deferred).
+- **§4.4 context.build() decomp**: DONE — `336dd80`.
+- **§6 basedpyright ratchet**: PARTIAL (see §2.4 above).
+- **§7 broken tests**: DONE (PR A) — `c94d702`.
+
+Pick-up notes for future contributors are in ADR 0022.
+
 This plan picks up where the Tier 1 hygiene work left off. Tier 1
 closed the door on new mess — ruff lint + format, basedpyright with
 a baseline file, and pre-commit are now enforced on every commit.

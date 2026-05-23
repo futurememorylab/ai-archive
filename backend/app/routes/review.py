@@ -1,3 +1,7 @@
+"""Review routes — HTTP endpoints under /api/review for listing review
+items per clip, setting accept/reject decisions, and enqueuing the
+upstream apply via the write queue."""
+
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request

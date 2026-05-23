@@ -1,3 +1,6 @@
+"""SSE event-stream routes — exposes the EventBus over Server-Sent Events
+for job, prefetch, and connection topics."""
+
 import json
 from collections.abc import AsyncIterator
 

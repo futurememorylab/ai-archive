@@ -1,3 +1,8 @@
+"""Annotator service — orchestrates a job's per-clip pipeline (resolve
+proxy, upload to AI store, prompt Gemini, persist annotation + review
+items). Depends on ArchiveProvider, AIInputStore, GeminiService,
+ProxyResolver, and the prompts/jobs/annotations/review-items repos."""
+
 import json
 import logging
 import mimetypes

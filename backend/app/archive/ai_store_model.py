@@ -1,3 +1,5 @@
+"""AIInputStore value objects — UploadedRef, AIStoreCapabilities, StoreHealth."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

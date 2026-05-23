@@ -1,3 +1,6 @@
+"""JobsRepo — persists / reads `jobs` and `job_items`. Called by the
+jobs route and the annotator service."""
+
 from datetime import UTC, datetime
 
 import aiosqlite
