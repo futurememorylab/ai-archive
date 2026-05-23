@@ -74,7 +74,7 @@ async def test_session_config_returns_token_and_setup(client_and_db, monkeypatch
     assert data["token"] == "tokens/xyz"
     assert data["session_id"]
     assert data["ws_url"].startswith("wss://generativelanguage.googleapis.com/ws/")
-    assert "access_token=tokens/xyz" in data["ws_url"]
+    assert "key=tokens/xyz" in data["ws_url"]
     assert data["setup_payload"]["model"].endswith("native-audio-dialog")
     assert data["setup_payload"]["initial_context_turn"]["parts"][0]["text"].startswith(
         "=== Publikované anotace"
