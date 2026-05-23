@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from backend.app.archive.errors import ProviderError
 from backend.app.archive.model import CanonicalClip, ClipQuery
 from backend.app.models.prompt import TargetMap
+from backend.app.repositories.live_sessions import LiveSessionsRepo
 from backend.app.repositories.prompts import VersionImmutableError
 from backend.app.services.clip_list_filters import (
     is_active as filters_active,
@@ -632,3 +633,31 @@ def _version_view(v) -> dict:
         "created_at": v.created_at,
         "updated_at": v.updated_at,
     }
+
+
+@router.get("/clips/{clip_id}/live-history", response_class=HTMLResponse)
+async def clip_live_history(request: Request, clip_id: int):
+    ctx = request.app.state.ctx
+    repo = LiveSessionsRepo()
+    rows = await repo.list_by_clip(ctx.db, clip_id)
+    sessions = []
+    from datetime import datetime as _dt
+    for s in rows:
+        duration_s = None
+        if s.started_at and s.ended_at:
+            try:
+                duration_s = (
+                    _dt.fromisoformat(s.ended_at)
+                    - _dt.fromisoformat(s.started_at)
+                ).total_seconds()
+            except ValueError:
+                pass
+        sessions.append({
+            "id": s.id, "started_at": s.started_at, "created_at": s.created_at,
+            "duration_s": duration_s, "end_reason": s.end_reason,
+            "state": s.state, "has_summary": s.summary_cs is not None,
+            "frame_count": s.frame_count,
+        })
+    return templates.TemplateResponse(
+        request, "pages/_anno_live_history.html", {"sessions": sessions},
+    )

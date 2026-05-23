@@ -9,6 +9,15 @@ function clipAnnotate(clipId) {
     runStatus: null,
     runError: null,
     jobId: null,
+    historyLoaded: false,
+    historyHtml: "",
+    async loadHistory() {
+      this.historyLoaded = true;
+      const r = await fetch(`/clips/${clipId}/live-history`);
+      this.historyHtml = r.ok
+        ? await r.text()
+        : "<p class='error'>Selhalo načtení.</p>";
+    },
 
     async toggleOpen() {
       this.open = !this.open;

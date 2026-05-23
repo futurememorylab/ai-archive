@@ -24,6 +24,12 @@
     Notes
   </button>
   {% endif %}
+  <button type="button" class="anno-tab" role="tab"
+          :class="{ active: tab === 'history' }"
+          :aria-selected="tab === 'history'"
+          @click="tab = 'history'; if (!historyLoaded) loadHistory()">
+    History
+  </button>
 </div>
 
 <div class="anno-section" role="tabpanel" x-show="tab === 'markers'" x-cloak>
@@ -62,3 +68,7 @@
   {% if panels.big_notes %}<p class="note big">{{ panels.big_notes }}</p>{% endif %}
 </div>
 {% endif %}
+
+<div class="anno-section" role="tabpanel" x-show="tab === 'history'" x-cloak>
+  <div x-html="historyHtml || '<p class=&quot;muted&quot;>Načítám…</p>'"></div>
+</div>

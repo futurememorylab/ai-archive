@@ -1,0 +1,51 @@
+{# Live session history for a clip — read-only. #}
+<div class="live-history">
+  {% if sessions %}
+    <ul class="live-history-list">
+      {% for s in sessions %}
+        <li class="live-history-item"
+            x-data="{ open: false, detail: null, loading: false }">
+          <button type="button" class="live-history-row"
+                  @click="open = !open;
+                          if (open && !detail) {
+                            loading = true;
+                            const r = await fetch('/api/live/sessions/{{ s.id }}');
+                            if (r.ok) detail = await r.json();
+                            loading = false;
+                          }">
+            <span class="ts mono">{{ s.started_at or s.created_at }}</span>
+            <span class="dur mono">{% if s.duration_s %}{{ '%d'|format(s.duration_s) }} s{% else %}—{% endif %}</span>
+            <span class="reason">{{ s.end_reason or s.state }}</span>
+            <span class="has-summary">{% if s.has_summary %}✓{% else %}—{% endif %}</span>
+            <span class="frames">{{ s.frame_count }} fr.</span>
+          </button>
+          <div class="live-history-detail" x-show="open" x-cloak>
+            <template x-if="loading"><div>Načítám…</div></template>
+            <template x-if="detail">
+              <div>
+                <div class="live-summary" x-show="detail.summary_cs">
+                  <b>Shrnutí:</b> <span x-text="detail.summary_cs"></span>
+                </div>
+                <div class="live-summary-missing" x-show="!detail.summary_cs">
+                  <button type="button"
+                          @click="
+                            const r = await fetch('/api/live/sessions/{{ s.id }}/summarize', {method:'POST'});
+                            if (r.ok) { const d = await r.json(); detail.summary_cs = d.summary_cs; }">
+                    Generovat shrnutí
+                  </button>
+                </div>
+                <div class="live-transcript">
+                  <template x-for="(line, i) in detail.transcript" :key="i">
+                    <div><b x-text="line.role + ':'"></b> <span x-text="line.text"></span></div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty">Zatím žádné živé relace pro tento klip.</p>
+  {% endif %}
+</div>
