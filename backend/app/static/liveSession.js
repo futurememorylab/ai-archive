@@ -60,7 +60,54 @@ function liveSession(clipId, config) {
       this.state = "idle";
     },
 
-    sendFrame() { /* implemented in Task 20 */ },
+    init() {
+      // Auto-send frame on player pause while session is active.
+      const v = document.querySelector("video.video");
+      if (v) {
+        v.addEventListener("pause", () => {
+          if (this.state === "active") this.sendFrame();
+        });
+      }
+      // Persist transcript on navigation away mid-session.
+      window.addEventListener("beforeunload", () => {
+        if (this.state === "active") {
+          this._endReason = "navigate";
+          this._persistAndSummarize();
+        }
+      });
+    },
+
+    sendFrame() {
+      if (this.state !== "active" || !this._ws) return;
+      const b64 = this._captureFrameJpegB64();
+      if (!b64) return;
+      this._ws.send(JSON.stringify({
+        realtimeInput: {
+          mediaChunks: [{ mimeType: "image/jpeg", data: b64 }],
+        },
+      }));
+      this._frameCount += 1;
+      this._resetInactivity();
+    },
+
+    _captureFrameJpegB64() {
+      const v = document.querySelector("video.video");
+      if (!v || !v.videoWidth) return null;
+      const maxW = 1280, maxH = 720;
+      const scale = Math.min(1, maxW / v.videoWidth, maxH / v.videoHeight);
+      const w = Math.round(v.videoWidth * scale);
+      const h = Math.round(v.videoHeight * scale);
+      let canvas = this._frameCanvas;
+      if (!canvas) {
+        canvas = this._frameCanvas = document.createElement("canvas");
+      }
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w; canvas.height = h;
+      }
+      canvas.getContext("2d").drawImage(v, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      return dataUrl.substring(dataUrl.indexOf(",") + 1);
+    },
 
     // ── helpers (stubs filled in later tasks) ────────────────────────────
     async _fetchConfig() {
