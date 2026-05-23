@@ -180,3 +180,50 @@ async def test_summarize_route_idempotent(client_and_db):
     r = await ac.post("/api/live/sessions/abc/summarize")
     assert r.status_code == 200
     assert r.json()["summary_cs"] == "Existující."
+
+
+@pytest.mark.asyncio
+async def test_list_by_clip(client_and_db):
+    ac, conn = client_and_db
+    repo = LiveSessionsRepo()
+    await repo.insert_pending(conn, id="a", clip_id=42, prompt_version=None)
+    await repo.mark_active(conn, "a")
+    await repo.mark_ended(
+        conn, "a", end_reason="user_stop",
+        transcript_json=json.dumps([{"role": "u", "text": "x", "ts": 1}]),
+    )
+    await repo.insert_pending(conn, id="b", clip_id=99, prompt_version=None)
+    r = await ac.get("/api/live/sessions", params={"clip_id": 42})
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data) == 1
+    assert data[0]["id"] == "a"
+    assert data[0]["end_reason"] == "user_stop"
+    assert "has_summary" in data[0]
+    assert data[0]["has_summary"] is False
+
+
+@pytest.mark.asyncio
+async def test_get_detail(client_and_db):
+    ac, conn = client_and_db
+    repo = LiveSessionsRepo()
+    await repo.insert_pending(conn, id="abc", clip_id=42, prompt_version=None)
+    await repo.mark_active(conn, "abc")
+    await repo.mark_ended(
+        conn, "abc", end_reason="user_stop",
+        transcript_json=json.dumps([{"role": "u", "text": "hi", "ts": 1}]),
+    )
+    await repo.set_summary(conn, "abc", "Shrnutí.")
+    r = await ac.get("/api/live/sessions/abc")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["id"] == "abc"
+    assert data["summary_cs"] == "Shrnutí."
+    assert data["transcript"] == [{"role": "u", "text": "hi", "ts": 1}]
+
+
+@pytest.mark.asyncio
+async def test_get_detail_404(client_and_db):
+    ac, _ = client_and_db
+    r = await ac.get("/api/live/sessions/no-such")
+    assert r.status_code == 404
