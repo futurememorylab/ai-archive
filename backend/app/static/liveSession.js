@@ -104,8 +104,77 @@ function liveSession(clipId, config) {
       return btoa(bin);
     },
 
-    _openWs(url) { /* Task 19 */ },
-    _onWsMessage(evt) { /* Task 19 + 21 */ },
+    _openWs(url) {
+      const ws = new WebSocket(url);
+      this._ws = ws;
+      ws.binaryType = "arraybuffer";
+      ws.onopen = () => {
+        // Send the setup message — same shape the backend assembled, minus our private key.
+        const setup = { ...this._setupPayload };
+        const initial = setup.initial_context_turn;
+        delete setup.initial_context_turn;
+        ws.send(JSON.stringify({ setup }));
+        this._sendInitialClientContent(initial);
+        this.state = "active";
+        this._startedAt = Date.now();
+        this._elapsedTimer = setInterval(() => this._tickElapsed(), 1000);
+        this._resetInactivity();
+      };
+      ws.onmessage = (evt) => this._onWsMessage(evt);
+      ws.onerror = () => {
+        this._endReason = "error";
+      };
+      ws.onclose = () => {
+        if (this.state === "active") {
+          this.close(this._endReason || "error");
+        }
+      };
+    },
+
+    _sendInitialClientContent(initialTurn) {
+      const parts = [...(initialTurn?.parts || [])];
+      const frame = this._captureFrameJpegB64();
+      if (frame) parts.push({ inlineData: { mimeType: "image/jpeg", data: frame } });
+      const msg = { clientContent: { turns: [{ role: "user", parts }], turnComplete: false } };
+      try { this._ws.send(JSON.stringify(msg)); } catch {}
+      this._frameCount += frame ? 1 : 0;
+    },
+
+    _tickElapsed() {
+      const s = Math.floor((Date.now() - this._startedAt) / 1000);
+      const mm = Math.floor(s / 60);
+      const ss = s % 60;
+      this.elapsedFmt = `${mm}:${ss.toString().padStart(2, "0")}`;
+    },
+
+    _onWsMessage(evt) {
+      let msg;
+      try { msg = JSON.parse(evt.data); } catch { return; }
+      if (msg.serverContent) this._handleServerContent(msg.serverContent);
+      if (msg.toolCall) this._handleToolCall(msg.toolCall);
+      this._resetInactivity();
+    },
+
+    _handleServerContent(sc) {
+      const transcripts = sc.outputTranscription;
+      if (transcripts?.text) {
+        this.transcript.push({ role: "model", text: transcripts.text, ts: Date.now(), kind: "speech" });
+      }
+      const input = sc.inputTranscription;
+      if (input?.text) {
+        this.transcript.push({ role: "user", text: input.text, ts: Date.now(), kind: "speech" });
+      }
+    },
+
+    _handleToolCall(tc) {
+      const calls = tc.functionCalls || [];
+      for (const c of calls) {
+        if (c.name === "end_session") {
+          this.transcript.push({ role: "system", text: `Konec: ${c.args?.reason || ""}`, ts: Date.now(), kind: "function_call" });
+          this.close("voice_stop");
+        }
+      }
+    },
     _resetInactivity() { /* Task 22 */ },
 
     async _persistAndSummarize() {
