@@ -140,3 +140,28 @@ Notes:
   scope in this iteration; both flows already have backend hooks
   (`review_items.decision`, `write_queue`) and will land in a follow-up.
 - If no prompt has a production version, the dropdown links to `/prompts`.
+
+## Gemini Live clip assistant (optional)
+
+Voice-driven Czech assistant on the clip-detail page. Browser opens a WebSocket
+directly to Google's Gemini Live API using ephemeral tokens minted by the
+backend; audio bytes never traverse our process.
+
+**One-shot infrastructure setup:**
+
+```bash
+GCP_PROJECT_ID=<your-project> ./deploy/enable-gemini-live.sh
+# Copy the printed key into .env:
+echo 'GEMINI_API_KEY=<key>' >> .env
+```
+
+**Env vars added (all optional; Live feature is disabled until `GEMINI_API_KEY` is set):**
+
+- `GEMINI_API_KEY` — Generative Language API key.
+- `GEMINI_LIVE_MODEL` — default `gemini-2.5-flash-preview-native-audio-dialog`.
+- `GEMINI_LIVE_VOICE` — default `Aoede`.
+- `GEMINI_LIVE_INACTIVITY_S` — default `60` (seconds of mutual silence → auto-close).
+
+Sessions are stored in the `live_sessions` SQLite table and surface as a History
+tab on the clip page. Output is read-only — nothing is auto-pushed to draft
+annotations.
