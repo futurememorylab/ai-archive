@@ -90,3 +90,50 @@ async def test_session_config_404_when_offline(client_and_db):
     app.state.ctx.mode = "offline"
     r = await ac.get("/api/live/session-config", params={"clip_id": 42})
     assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_transcript_persist_happy_path(client_and_db):
+    ac, conn = client_and_db
+    repo = LiveSessionsRepo()
+    await repo.insert_pending(conn, id="abc", clip_id=42, prompt_version=None)
+    await repo.mark_active(conn, "abc")
+
+    payload = {
+        "end_reason": "user_stop",
+        "transcript": [
+            {"role": "user", "text": "ahoj", "ts": 1, "kind": "speech"},
+            {"role": "model", "text": "dobrý den", "ts": 2, "kind": "speech"},
+        ],
+        "frame_count": 3,
+        "search_calls": 1,
+    }
+    r = await ac.post("/api/live/sessions/abc/transcript", json=payload)
+    assert r.status_code == 200, r.text
+    s = await repo.get(conn, "abc")
+    assert s.state == "ended"
+    assert s.end_reason == "user_stop"
+    assert s.frame_count == 3
+    assert json.loads(s.transcript_json) == payload["transcript"]
+
+
+@pytest.mark.asyncio
+async def test_transcript_invalid_end_reason_rejected(client_and_db):
+    ac, conn = client_and_db
+    repo = LiveSessionsRepo()
+    await repo.insert_pending(conn, id="abc", clip_id=42, prompt_version=None)
+    r = await ac.post(
+        "/api/live/sessions/abc/transcript",
+        json={"end_reason": "nonsense", "transcript": []},
+    )
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_transcript_unknown_session_404(client_and_db):
+    ac, _ = client_and_db
+    r = await ac.post(
+        "/api/live/sessions/missing/transcript",
+        json={"end_reason": "user_stop", "transcript": []},
+    )
+    assert r.status_code == 404
