@@ -31,13 +31,13 @@ WSS_URL_TEMPLATE = (
 
 # Indirection points so tests can monkeypatch without touching pages.py internals.
 async def load_clip_for_live(ctx: Any, clip_id: int) -> dict:
-    from backend.app.routes.pages import _build_clip_view_model_for_live
+    from backend.app.routes.pages.clips import _build_clip_view_model_for_live
 
     return await _build_clip_view_model_for_live(ctx, clip_id)
 
 
 async def load_draft_for_live(ctx: Any, clip_id: int) -> dict:
-    from backend.app.routes.pages import _build_draft_view_model_for_live
+    from backend.app.routes.pages.clips import _build_draft_view_model_for_live
 
     return await _build_draft_view_model_for_live(ctx, clip_id)
 

@@ -15,7 +15,7 @@ from backend.app.routes.events import router as events_router
 from backend.app.routes.jobs import router as jobs_router
 from backend.app.routes.live import router as live_router
 from backend.app.routes.media import router as media_router
-from backend.app.routes.pages import router as pages_router
+from backend.app.routes.pages import page_routers
 from backend.app.routes.prompts import router as prompts_router
 from backend.app.routes.review import router as review_router
 from backend.app.routes.sync import router as sync_router
@@ -87,7 +87,8 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(cache_api_router)
     app.include_router(cache_page_router)
     app.include_router(cache_ui_router)
-    app.include_router(pages_router)
+    for r in page_routers:
+        app.include_router(r)
     app.include_router(live_router)
 
 
