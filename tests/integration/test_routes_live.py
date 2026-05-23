@@ -137,3 +137,46 @@ async def test_transcript_unknown_session_404(client_and_db):
         json={"end_reason": "user_stop", "transcript": []},
     )
     assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_summarize_route_happy_path(client_and_db):
+    ac, conn = client_and_db
+    repo = LiveSessionsRepo()
+    await repo.insert_pending(conn, id="abc", clip_id=42, prompt_version=None)
+    await repo.mark_active(conn, "abc")
+    await repo.mark_ended(
+        conn, "abc", end_reason="user_stop",
+        transcript_json=json.dumps([
+            {"role": "user", "text": "co je to za auto?", "ts": 1},
+            {"role": "model", "text": "Škoda 30. léta.", "ts": 2},
+        ], ensure_ascii=False),
+    )
+    respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        "gemini-2.5-flash-lite:generateContent"
+    ).mock(return_value=Response(200, json={
+        "candidates": [{"content": {"parts": [{"text": "Škoda z 30. let na rodinném záběru."}]}}]
+    }))
+    r = await ac.post("/api/live/sessions/abc/summarize")
+    assert r.status_code == 200, r.text
+    assert r.json()["summary_cs"] == "Škoda z 30. let na rodinném záběru."
+    assert (await repo.get(conn, "abc")).summary_cs == "Škoda z 30. let na rodinném záběru."
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_summarize_route_idempotent(client_and_db):
+    ac, conn = client_and_db
+    repo = LiveSessionsRepo()
+    await repo.insert_pending(conn, id="abc", clip_id=42, prompt_version=None)
+    await repo.mark_active(conn, "abc")
+    await repo.mark_ended(
+        conn, "abc", end_reason="user_stop",
+        transcript_json=json.dumps([{"role": "user", "text": "x", "ts": 1}]),
+    )
+    await repo.set_summary(conn, "abc", "Existující.")
+    r = await ac.post("/api/live/sessions/abc/summarize")
+    assert r.status_code == 200
+    assert r.json()["summary_cs"] == "Existující."
