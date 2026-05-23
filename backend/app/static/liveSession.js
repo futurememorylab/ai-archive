@@ -152,14 +152,15 @@ function liveSession(clipId, config) {
     },
 
     _openWs(url) {
+      console.log("[live] WSS opening:", url.replace(/access_token=[^&]+/, "access_token=…"));
       const ws = new WebSocket(url);
       this._ws = ws;
       ws.binaryType = "arraybuffer";
       ws.onopen = () => {
-        // Send the setup message — same shape the backend assembled, minus our private key.
         const setup = { ...this._setupPayload };
         const initial = setup.initial_context_turn;
         delete setup.initial_context_turn;
+        console.log("[live] WSS open. Sending setup:", JSON.stringify(setup, null, 2));
         ws.send(JSON.stringify({ setup }));
         this._sendInitialClientContent(initial);
         this.state = "active";
@@ -167,13 +168,39 @@ function liveSession(clipId, config) {
         this._elapsedTimer = setInterval(() => this._tickElapsed(), 1000);
         this._resetInactivity();
       };
-      ws.onmessage = (evt) => this._onWsMessage(evt);
-      ws.onerror = () => {
-        this._endReason = "error";
+      ws.onmessage = (evt) => {
+        // Log all inbound frames so we can see error messages Google sends
+        // before closing the socket. Binary frames are rare here (audio
+        // arrives as base64 inside JSON), but log size if so.
+        if (typeof evt.data === "string") {
+          console.log("[live] WSS msg:", evt.data.length > 800
+            ? evt.data.slice(0, 800) + "…(+" + (evt.data.length - 800) + " bytes)"
+            : evt.data);
+        } else {
+          console.log("[live] WSS msg (binary):", evt.data.byteLength, "bytes");
+        }
+        this._onWsMessage(evt);
       };
-      ws.onclose = () => {
+      ws.onerror = (e) => {
+        console.warn("[live] WSS error event:", e);
+        this._endReason = "error";
+        this.error = "WebSocket error — viz konzole.";
+      };
+      ws.onclose = (e) => {
+        console.warn("[live] WSS close:",
+          "code=" + e.code,
+          "wasClean=" + e.wasClean,
+          "reason=" + JSON.stringify(e.reason || ""));
+        if (!this.error && !e.wasClean) {
+          this.error = `WSS uzavřeno (code=${e.code}${e.reason ? ", " + e.reason : ""})`;
+        }
         if (this.state === "active") {
           this.close(this._endReason || "error");
+        } else if (this.state === "connecting") {
+          // Failure before onopen — make sure we leave connecting state so
+          // the user sees the error rather than a stuck spinner.
+          this.state = "idle";
+          this._teardown();
         }
       };
     },

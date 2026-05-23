@@ -17,8 +17,11 @@ from backend.app.services.live_sessions import (
 router = APIRouter(prefix="/api/live", tags=["live"])
 
 WSS_URL_TEMPLATE = (
+    # NOTE: `authTokens.create` lives in v1alpha but the WSS BidiGenerateContent
+    # endpoint is served from v1beta. Cross-version usage is supported and is
+    # the documented pattern: mint in alpha, connect in beta.
     "wss://generativelanguage.googleapis.com/ws/"
-    "google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent"
+    "google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
     "?access_token={token}"
 )
 
