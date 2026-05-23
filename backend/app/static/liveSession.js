@@ -213,8 +213,8 @@ function liveSession(clipId, config) {
       const frame = this._captureFrameJpegB64();
       if (frame) parts.push({ inlineData: { mimeType: "image/jpeg", data: frame } });
       parts.push({ text:
-        "Pozdrav mě prosím krátce česky („Dobrý den") a v jedné větě popiš, "
-        + "co vidíš na aktuálním snímku. Pak počkej na moji další otázku." });
+        'Pozdrav mě prosím krátce česky („Dobrý den") a v jedné větě popiš, '
+        + 'co vidíš na aktuálním snímku. Pak počkej na moji další otázku.' });
       const msg = { clientContent: { turns: [{ role: "user", parts }], turnComplete: true } };
       try { this._ws.send(JSON.stringify(msg)); } catch {}
       this._frameCount += frame ? 1 : 0;
