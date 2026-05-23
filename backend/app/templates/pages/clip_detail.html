@@ -9,7 +9,7 @@
 <script>localStorage.setItem("catdv:lastClipId", "{{ clip.id }}");</script>
 <div class="detail"
      :class="{ 'is-draft': scope === 'draft' }"
-     x-data='Object.assign(player({{ clip.fps }}, {{ clip.duration_secs }}, {{ clip.markers|tojson }}), clipAnnotate({{ clip.id }}), { scope: "published", tab: "markers" })'
+     x-data='Object.assign(player({{ clip.fps }}, {{ clip.duration_secs }}, {{ clip.markers|tojson }}, {{ draft.markers|tojson }}), clipAnnotate({{ clip.id }}), { scope: "published", tab: "markers" })'
      @keydown.window="handleKey($event)">
   <header class="detail-hdr">
     <span class="clip-title">{{ clip.name }}</span>
@@ -29,7 +29,7 @@
                   onclick="cacheClip({{ clip.id }})">⬇ Cache video</button>
         {% endif %}
       {% endif %}
-      {% if mode == "online" %}
+      {% if mode == "online" or (clip.cache and clip.cache.media_local.present) %}
         {% include "pages/_annotate_dropdown.html" %}
       {% endif %}
     </span>
@@ -93,7 +93,7 @@
       <div class="transport-row">
         <div class="transport-btns">
           <button type="button" class="tbtn"
-                  :disabled="!markers.length"
+                  :disabled="!activeMarkers().length"
                   @click="prevMarker()"
                   title="prev marker (↑)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="12 6 6 12 12 18"/><polyline points="19 6 13 12 19 18"/></svg>
@@ -115,7 +115,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
           </button>
           <button type="button" class="tbtn"
-                  :disabled="!markers.length"
+                  :disabled="!activeMarkers().length"
                   @click="nextMarker()"
                   title="next marker (↓)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 6 11 12 5 18"/><polyline points="12 6 18 12 12 18"/></svg>

@@ -3,12 +3,17 @@
 // prev/next-marker navigation depends on it.
 
 document.addEventListener("alpine:init", () => {
-  Alpine.data("player", (fps, duration, markers) => ({
+  Alpine.data("player", (fps, duration, markers, draftMarkers) => ({
     fps: fps || 25,
     duration: duration || 0,
     current: 0,
     playing: false,
     markers: Array.isArray(markers) ? markers : [],
+    draftMarkers: Array.isArray(draftMarkers) ? draftMarkers : [],
+
+    activeMarkers() {
+      return this.scope === "draft" ? this.draftMarkers : this.markers;
+    },
 
     init() {
       const v = this.$refs.video;
@@ -73,14 +78,15 @@ document.addEventListener("alpine:init", () => {
     },
 
     _jumpMarker(direction) {
-      if (!this.markers.length) return;
+      const list = this.activeMarkers();
+      if (!list.length) return;
       const EPS = 0.001;
       const ahead = direction > 0;
       const pick =
         (ahead
-          ? this.markers.find(m => m.in_secs > this.current + EPS)
-          : [...this.markers].reverse().find(m => m.in_secs < this.current - EPS))
-        ?? this.markers[ahead ? 0 : this.markers.length - 1];
+          ? list.find(m => m.in_secs > this.current + EPS)
+          : [...list].reverse().find(m => m.in_secs < this.current - EPS))
+        ?? list[ahead ? 0 : list.length - 1];
       this.seek(pick.in_secs);
     },
 
@@ -138,10 +144,10 @@ document.addEventListener("alpine:init", () => {
         case ".":
           e.preventDefault(); this.stepFrame(1); break;
         case "ArrowUp":
-          if (this.markers.length) { e.preventDefault(); this.prevMarker(); }
+          if (this.activeMarkers().length) { e.preventDefault(); this.prevMarker(); }
           break;
         case "ArrowDown":
-          if (this.markers.length) { e.preventDefault(); this.nextMarker(); }
+          if (this.activeMarkers().length) { e.preventDefault(); this.nextMarker(); }
           break;
         case "j": case "J":
           e.preventDefault(); this.stepFrame(-1); break;
