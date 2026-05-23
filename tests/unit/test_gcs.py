@@ -22,9 +22,11 @@ def test_upload_if_absent_uploads_when_missing(tmp_path: Path):
     service._bucket = bucket
 
     uri = service.upload_if_absent(clip_id=42, local_path=local, mime="video/quicktime")
-    blob.upload_from_filename.assert_called_once_with(str(local), content_type="video/quicktime")
+    blob.upload_from_filename.assert_called_once_with(
+        str(local), content_type="video/quicktime", timeout=1800
+    )
     assert uri == "gs://test-bucket/clips/42.mov"
-    bucket.blob.assert_called_with("clips/42.mov")
+    bucket.blob.assert_called_with("clips/42.mov", chunk_size=8 * 1024 * 1024)
 
 
 def test_upload_if_absent_skips_when_present(tmp_path: Path):

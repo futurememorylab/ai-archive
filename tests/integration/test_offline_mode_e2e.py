@@ -79,7 +79,9 @@ async def test_catdv_unreachable_at_startup_boots_offline(tmp_path, monkeypatch)
 
     The app must still boot, degrade to offline, and serve /api/health.
     """
-    _env(monkeypatch, tmp_path)  # base URL points at 127.0.0.1:1 → connection refused
+    # base URL points at 127.0.0.1:1 → connection refused; force CATDV_OFFLINE=false
+    # so the offline mode comes from the unreachable upstream, not the forced flag.
+    _env(monkeypatch, tmp_path, CATDV_OFFLINE="false")
 
     app = _reload_app()
     with TestClient(app) as c:

@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -78,6 +79,8 @@ async def test_raises_when_proxy_file_missing_on_disk(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_raises_when_proxy_unreadable(tmp_path: Path):
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        pytest.skip("chmod(0) does not restrict the root user")
     hires_root = tmp_path / "hires"
     proxy_root = tmp_path / "proxy"
     proxy_root.mkdir()

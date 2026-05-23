@@ -16,7 +16,7 @@ def test_settings_loads_from_env(monkeypatch):
     assert s.catdv_base_url == "http://example.test:8080"
     assert s.catdv_catalog_id == 881507
     assert s.proxy_source == "rest"
-    assert s.gemini_model == "gemini-2.5-pro"  # default
+    assert s.gemini_model == "gemini-2.5-flash-lite"  # default
 
 
 def test_settings_accepts_filesystem_without_fs_root(monkeypatch):
