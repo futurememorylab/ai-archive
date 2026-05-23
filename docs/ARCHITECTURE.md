@@ -72,8 +72,8 @@ routes. Run `.venv/bin/lint-imports` to check locally.
 ## Where else to look
 
 - `docs/CONTEXT.md` — domain glossary; one sentence per noun.
-- `docs/decisions.md` — historical decisions in append-only form;
-  will migrate to `docs/adr/NNNN-*.md` per the architecture plan §3.4.
+- `docs/adr/` — architecture decisions, one MADR-lite file per decision
+  (`NNNN-slug.md`). `docs/decisions.md` is now just the index.
 - `docs/specs/` — feature designs (one per dated spec).
 - `docs/plans/` — implementation plans, one per PR / feature slice.
 - `docs/DEPLOY.md` — production deployment guide.

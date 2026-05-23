@@ -64,11 +64,15 @@ The CatDV REST API binds the session to `JSESSIONID` and the seat is held *serve
 
 When a session involves any non-trivial design call — a schema replacement,
 an API shape choice, a deliberate deviation from the spec, a "we considered
-X and Y, picked Z" moment — append a new entry to `docs/decisions.md`
-before the session ends. Match the existing format: a dated header, then
-**Context** / **Alternatives** / **Choice** / **Why** paragraphs. Group
-several related calls under one entry when they share context (see the
-PR 3 / PR 5 / PR 6 / PR 7 entries for the pattern).
+X and Y, picked Z" moment — append a new ADR file to
+`docs/adr/NNNN-slug.md` (one number higher than the last) before the
+session ends. Use the MADR-lite format: a `# NNNN. <Title>` heading,
+`**Date:**` / `**Status:**` metadata, then `## Context` / `## Alternatives` /
+`## Decision` / `## Consequences` sections. See any existing ADR (e.g.
+`docs/adr/0001-python-only-stack-no-node-frontend.md`) for the template.
+Update the index table in `docs/decisions.md` with the new entry. Group
+several related calls under one ADR when they share context (see the
+PR 3 / PR 5 / PR 6 / PR 7 ADRs for the pattern).
 
 The bar is "would a future contributor reading the diff ask *why*?" If
 yes, document it. If the call was forced by an obvious constraint and the
