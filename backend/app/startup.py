@@ -1,5 +1,15 @@
 from dataclasses import dataclass, field
 
+import aiosqlite
+
+from backend.app.repositories.live_sessions import LiveSessionsRepo
+
+
+async def run_startup_cleanup(conn: aiosqlite.Connection) -> int:
+    """Drop stale-pending live_sessions older than 1h. Returns rows deleted."""
+    repo = LiveSessionsRepo()
+    return await repo.cleanup_stale_pending(conn, older_than_hours=1)
+
 
 @dataclass
 class StartupCheckResult:

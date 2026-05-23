@@ -24,6 +24,8 @@ async def lifespan(app: FastAPI):
     live_seed = SEEDS / "live_system_instruction_cs.json"
     if live_seed.exists():
         await seed_live_system_instruction(ctx.db, seed_path=live_seed)
+    from backend.app.startup import run_startup_cleanup
+    await run_startup_cleanup(ctx.db)
     if init_external:
         if ctx.connection_monitor is not None:
             await ctx.connection_monitor.start()
