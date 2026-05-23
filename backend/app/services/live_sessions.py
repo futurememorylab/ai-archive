@@ -83,39 +83,29 @@ def assemble_setup_payload(
 
 
 async def mint_ephemeral_token(*, setup: dict, settings: Any) -> str:
-    """POST to `authTokens.create`, return the `tokens/<id>` access string.
+    """Return the WSS-side key for browser→Gemini Live.
 
-    Single-use (`uses=1`), 30-minute lifetime. The setup is forwarded verbatim
-    as `bidiGenerateContentSetup`, minus our private `initial_context_turn`
-    key (which the browser sends as a separate `clientContent` message after
-    the setup handshake).
+    Strategy: pass the raw `GEMINI_API_KEY` from settings directly. Ephemeral
+    tokens minted via `authTokens.create` open the WSS handshake but Google
+    closes the connection with code 1007 "API key not valid" the moment the
+    client sends its `setup` frame — verified empirically in browser. The
+    most likely cause is a binding mismatch between the setup bound at
+    mint time and the setup sent over WSS, but we've spent enough cycles
+    on it; the threat model for this single-operator local app over VPN
+    does not justify continuing.
+
+    Trade-off recorded in `docs/decisions.md`. If we ever harden auth,
+    switch to ephemeral tokens (or short-lived OAuth bearers if Google
+    fixes the Vertex AI Live story).
     """
     if not getattr(settings, "gemini_api_key", None):
-        raise RuntimeError("GEMINI_API_KEY is not configured; cannot mint live token")
-    bidi = {k: v for k, v in setup.items() if k != "initial_context_turn"}
-    expire = (
-        datetime.now(timezone.utc) + timedelta(minutes=TOKEN_TTL_MINUTES)
-    ).isoformat()
-    body = {
-        "uses": 1,
-        "expireTime": expire,
-        "newSessionExpireTime": expire,
-        "bidiGenerateContentSetup": bidi,
-    }
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        r = await client.post(
-            AUTH_TOKENS_URL,
-            params={"key": settings.gemini_api_key},
-            json=body,
+        raise RuntimeError(
+            "GEMINI_API_KEY is not configured; Live audio cannot connect"
         )
-    if r.status_code != 200:
-        raise RuntimeError(f"auth_tokens.create failed: {r.status_code} {r.text}")
-    # The `name` field is the resource identifier ("auth_tokens/<hex>"),
-    # but the WSS endpoint expects just the bare token value as the API
-    # key. Passing the full resource name returns close code 1007
-    # "API key not valid". Verified empirically: stripping the prefix
-    # makes both `?key=<hex>` and `?access_token=<hex>` open cleanly.
-    return r.json()["name"].split("/", 1)[-1]
+    # Touch the unused `setup` arg to keep call-sites stable while we
+    # decide between this and a real ephemeral-token mint.
+    _ = setup
+    return settings.gemini_api_key
 
 
 def _generate_content_url(model: str) -> str:

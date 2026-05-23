@@ -17,14 +17,13 @@ from backend.app.services.live_sessions import (
 router = APIRouter(prefix="/api/live", tags=["live"])
 
 WSS_URL_TEMPLATE = (
-    # Browser-direct Live API pattern: token name from authTokens.create
-    # (v1alpha) is presented via `?key=tokens/<id>` against the v1alpha
-    # BidiGenerateContent endpoint. The token is namespaced to v1alpha;
-    # using it against v1beta returns close code 1007 "API key not valid",
-    # and using `?access_token=` instead of `?key=` returns 1008
-    # "Method doesn't allow unregistered callers".
+    # Browser-direct Live API: the GEMINI_API_KEY is presented via `?key=`
+    # against the v1beta BidiGenerateContent endpoint. The Live-capable
+    # native-audio models (gemini-2.5-flash-native-audio-*) are only
+    # surfaced on v1beta; v1alpha returns close code 1008 "model is not
+    # found for API version v1alpha". See docs/decisions.md 2026-05-23.
     "wss://generativelanguage.googleapis.com/ws/"
-    "google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent"
+    "google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
     "?key={token}"
 )
 

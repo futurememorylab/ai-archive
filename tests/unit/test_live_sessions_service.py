@@ -10,7 +10,7 @@ from backend.app.services.live_sessions import (
 
 
 class _Settings:
-    gemini_live_model = "gemini-2.5-flash-preview-native-audio-dialog"
+    gemini_live_model = "gemini-2.5-flash-native-audio-latest"
     gemini_live_voice = "Aoede"
 
 
@@ -36,7 +36,7 @@ def test_setup_payload_top_level_model_and_generation_config():
         prompt_body="SYSTÉM INSTRUKCE",
         settings=_Settings(),
     )
-    assert p["model"] == "models/gemini-2.5-flash-preview-native-audio-dialog"
+    assert p["model"] == "models/gemini-2.5-flash-native-audio-latest"
     gc = p["generationConfig"]
     assert gc["responseModalities"] == ["AUDIO"]
     assert gc["speechConfig"]["languageCode"] == "cs-CZ"
@@ -90,43 +90,16 @@ class _SettingsWithKey(_Settings):
 
 
 @pytest.mark.asyncio
-@respx.mock
-async def test_mint_ephemeral_token_posts_to_auth_tokens_create_endpoint():
-    route = respx.post(
-        "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
-    ).mock(return_value=Response(200, json={"name": "auth_tokens/abc123"}))
-    setup = {
-        "model": "models/x",
-        "config": {"responseModalities": ["AUDIO"]},
-        "initial_context_turn": {"role": "user", "parts": [{"text": "hi"}]},
-    }
-    tok = await mint_ephemeral_token(setup=setup, settings=_SettingsWithKey())
-    # mint_ephemeral_token strips the "auth_tokens/" resource prefix so the
-    # returned value is the bare token suitable for `?key=` in the WSS URL.
-    assert tok == "abc123"
-    assert route.called
-    sent = route.calls[0].request
-    assert sent.url.params["key"] == "test-key-XYZ"
-    import json as _j
-    body = _j.loads(sent.content)
-    assert body["uses"] == 1
-    assert "expireTime" in body
-    bidi = body["bidiGenerateContentSetup"]
-    assert "initial_context_turn" not in bidi
-    assert bidi["model"] == "models/x"
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_mint_ephemeral_token_raises_on_non_200():
-    respx.post(
-        "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
-    ).mock(return_value=Response(403, json={"error": {"message": "Forbidden"}}))
-    with pytest.raises(RuntimeError, match="auth_tokens"):
-        await mint_ephemeral_token(
-            setup={"model": "x", "config": {}, "initial_context_turn": {}},
-            settings=_SettingsWithKey(),
-        )
+async def test_mint_ephemeral_token_returns_raw_api_key():
+    """Live audio uses the raw GEMINI_API_KEY as the WSS `?key=` value.
+    Ephemeral tokens (authTokens.create) opened the WSS handshake but
+    Google rejected the bound setup with close code 1007 — recorded in
+    docs/decisions.md 2026-05-23. The function keeps its signature so
+    callers don't change, and accepts the `setup` arg as a no-op for
+    forward compatibility.
+    """
+    tok = await mint_ephemeral_token(setup={"anything": "ignored"}, settings=_SettingsWithKey())
+    assert tok == "test-key-XYZ"
 
 
 @pytest.mark.asyncio
@@ -135,8 +108,7 @@ async def test_mint_ephemeral_token_requires_api_key():
     s.gemini_api_key = None  # type: ignore[attr-defined]
     with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
         await mint_ephemeral_token(
-            setup={"model": "x", "config": {}, "initial_context_turn": {}},
-            settings=s,
+            setup={"model": "x"}, settings=s,
         )
 
 

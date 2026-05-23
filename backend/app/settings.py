@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     google_application_credentials: Path | None = None
     gemini_model: str = "gemini-2.5-flash-lite"
     gemini_api_key: str | None = None
-    gemini_live_model: str = "gemini-2.5-flash-preview-native-audio-dialog"
+    gemini_live_model: str = "gemini-3.1-flash-live-preview"
     gemini_live_voice: str = "Aoede"
     gemini_live_inactivity_s: int = 60
 

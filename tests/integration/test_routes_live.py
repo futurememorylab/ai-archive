@@ -32,7 +32,7 @@ async def client_and_db(tmp_path):
         mode = "online"
         settings = type("S", (), {
             "gemini_api_key": "test-key",
-            "gemini_live_model": "gemini-2.5-flash-preview-native-audio-dialog",
+            "gemini_live_model": "gemini-2.5-flash-native-audio-latest",
             "gemini_live_voice": "Aoede",
             "gemini_live_inactivity_s": 60,
             "gemini_model": "gemini-2.5-flash-lite",
@@ -64,18 +64,19 @@ async def test_session_config_returns_token_and_setup(client_and_db, monkeypatch
     monkeypatch.setattr(live_routes, "load_clip_for_live", fake_load_clip)
     monkeypatch.setattr(live_routes, "load_draft_for_live", fake_load_draft)
 
-    respx.post(
-        "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
-    ).mock(return_value=Response(200, json={"name": "auth_tokens/xyz"}))
+    # NOTE: no respx mock — Live uses the raw GEMINI_API_KEY directly as the
+    # WSS `?key=` value (see docs/decisions.md 2026-05-23, ephemeral-token
+    # path closed with code 1007 in practice).
 
     r = await ac.get("/api/live/session-config", params={"clip_id": 42})
     assert r.status_code == 200, r.text
     data = r.json()
-    assert data["token"] == "xyz"
+    assert data["token"] == "test-key"
     assert data["session_id"]
     assert data["ws_url"].startswith("wss://generativelanguage.googleapis.com/ws/")
-    assert "key=xyz" in data["ws_url"]
-    assert data["setup_payload"]["model"].endswith("native-audio-dialog")
+    assert "key=test-key" in data["ws_url"]
+    assert "v1beta.GenerativeService.BidiGenerateContent" in data["ws_url"]
+    assert data["setup_payload"]["model"].endswith("native-audio-latest")
     assert data["setup_payload"]["initial_context_turn"]["parts"][0]["text"].startswith(
         "=== Publikované anotace"
     )
@@ -111,13 +112,9 @@ async def test_session_config_works_offline_when_clip_cached(client_and_db, monk
     monkeypatch.setattr(live_routes, "load_clip_for_live", fake_load_clip)
     monkeypatch.setattr(live_routes, "load_draft_for_live", fake_load_draft)
 
-    respx.post(
-        "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
-    ).mock(return_value=Response(200, json={"name": "auth_tokens/xyz"}))
-
     r = await ac.get("/api/live/session-config", params={"clip_id": 42})
     assert r.status_code == 200, r.text
-    assert r.json()["token"] == "xyz"
+    assert r.json()["token"] == "test-key"
 
 
 @pytest.mark.asyncio

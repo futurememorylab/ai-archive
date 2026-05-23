@@ -83,7 +83,7 @@ function liveSession(clipId, config) {
       if (!b64) return;
       this._ws.send(JSON.stringify({
         realtimeInput: {
-          mediaChunks: [{ mimeType: "image/jpeg", data: b64 }],
+          video: { mimeType: "image/jpeg", data: b64 },
         },
       }));
       this._frameCount += 1;
@@ -133,12 +133,12 @@ function liveSession(clipId, config) {
 
     _onCaptureChunk(arrayBuffer) {
       if (!this._ws || this._ws.readyState !== 1) return;
-      // Gemini Live expects { realtimeInput: { mediaChunks: [{ mimeType, data }] } }
-      // mediaChunks is base64 PCM at the rate declared in setup (16000).
+      // Live API current shape: realtimeInput.audio is a single Blob,
+      // not the deprecated mediaChunks array. Same for .video / .text.
       const b64 = this._b64FromBuffer(arrayBuffer);
       this._ws.send(JSON.stringify({
         realtimeInput: {
-          mediaChunks: [{ mimeType: "audio/pcm;rate=16000", data: b64 }],
+          audio: { mimeType: "audio/pcm;rate=16000", data: b64 },
         },
       }));
       this._resetInactivity();
