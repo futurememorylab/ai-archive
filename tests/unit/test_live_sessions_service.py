@@ -5,6 +5,7 @@ from httpx import Response
 from backend.app.services.live_sessions import (
     assemble_setup_payload,
     mint_ephemeral_token,
+    summarize,
 )
 
 
@@ -129,3 +130,113 @@ async def test_mint_ephemeral_token_requires_api_key():
             setup={"model": "x", "config": {}, "initial_context_turn": {}},
             settings=s,
         )
+
+
+class _SettingsForSummary(_Settings):
+    gemini_api_key = "test-key"
+    gemini_model = "gemini-2.5-flash-lite"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_summarize_calls_generate_content_with_czech_prompt(tmp_path):
+    import json as _j
+
+    import aiosqlite
+    from pathlib import Path
+    from backend.app.migrations_runner import apply_migrations
+    from backend.app.repositories.live_sessions import LiveSessionsRepo
+
+    MIGRATIONS = Path(__file__).resolve().parents[2] / "backend" / "migrations"
+
+    db = tmp_path / "t.db"
+    async with aiosqlite.connect(db) as conn:
+        await apply_migrations(conn, MIGRATIONS)
+        repo = LiveSessionsRepo()
+        await repo.insert_pending(conn, id="abc", clip_id=1, prompt_version=None)
+        await repo.mark_active(conn, "abc")
+        transcript = [
+            {"role": "user", "text": "co to je za auto?", "ts": 1},
+            {"role": "model", "text": "Vypadá to jako Škoda z 30. let.", "ts": 2},
+        ]
+        await repo.mark_ended(
+            conn, "abc", end_reason="user_stop",
+            transcript_json=_j.dumps(transcript, ensure_ascii=False),
+        )
+
+        route = respx.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            "gemini-2.5-flash-lite:generateContent"
+        ).mock(return_value=Response(200, json={
+            "candidates": [{"content": {"parts": [{"text": "Krátké české shrnutí."}]}}]
+        }))
+
+        ok = await summarize(conn, session_id="abc", settings=_SettingsForSummary())
+        assert ok is True
+        assert route.called
+        body = route.calls[0].request.read().decode("utf-8")
+        assert "česky" in body or "Shrň" in body or "shrň" in body
+        s = await repo.get(conn, "abc")
+        assert s.summary_cs == "Krátké české shrnutí."
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_summarize_is_idempotent(tmp_path):
+    import json as _j
+
+    import aiosqlite
+    from pathlib import Path
+    from backend.app.migrations_runner import apply_migrations
+    from backend.app.repositories.live_sessions import LiveSessionsRepo
+
+    MIGRATIONS = Path(__file__).resolve().parents[2] / "backend" / "migrations"
+
+    db = tmp_path / "t.db"
+    async with aiosqlite.connect(db) as conn:
+        await apply_migrations(conn, MIGRATIONS)
+        repo = LiveSessionsRepo()
+        await repo.insert_pending(conn, id="abc", clip_id=1, prompt_version=None)
+        await repo.mark_active(conn, "abc")
+        await repo.mark_ended(
+            conn, "abc", end_reason="user_stop",
+            transcript_json=_j.dumps([{"role": "user", "text": "x", "ts": 1}]),
+        )
+        await repo.set_summary(conn, "abc", "Již existující shrnutí.")
+
+        respx.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            "gemini-2.5-flash-lite:generateContent"
+        ).mock(return_value=Response(
+            200,
+            json={"candidates": [{"content": {"parts": [{"text": "new"}]}}]},
+        ))
+
+        ok = await summarize(conn, session_id="abc", settings=_SettingsForSummary())
+        assert ok is False
+        s = await repo.get(conn, "abc")
+        assert s.summary_cs == "Již existující shrnutí."
+
+
+@pytest.mark.asyncio
+async def test_summarize_skips_when_transcript_empty(tmp_path):
+    import aiosqlite
+    from pathlib import Path
+    from backend.app.migrations_runner import apply_migrations
+    from backend.app.repositories.live_sessions import LiveSessionsRepo
+
+    MIGRATIONS = Path(__file__).resolve().parents[2] / "backend" / "migrations"
+
+    db = tmp_path / "t.db"
+    async with aiosqlite.connect(db) as conn:
+        await apply_migrations(conn, MIGRATIONS)
+        repo = LiveSessionsRepo()
+        await repo.insert_pending(conn, id="abc", clip_id=1, prompt_version=None)
+        await repo.mark_active(conn, "abc")
+        await repo.mark_ended(
+            conn, "abc", end_reason="error", transcript_json="[]",
+        )
+        ok = await summarize(conn, session_id="abc", settings=_SettingsForSummary())
+        assert ok is False
+        s = await repo.get(conn, "abc")
+        assert s.summary_cs is None
