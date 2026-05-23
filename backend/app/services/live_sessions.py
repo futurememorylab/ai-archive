@@ -40,9 +40,16 @@ def assemble_setup_payload(
     test stub).
     """
     context_text = build_context_text(clip, draft)
+    # NOTE: BidiGenerateContentSetup is FLAT — fields like systemInstruction,
+    # tools, outputAudioTranscription, inputAudioTranscription sit at the
+    # top level alongside `model` and `generationConfig`. The earlier shape
+    # nested everything under `config` (the REST `generateContent` style),
+    # which Google's authTokens.create rejected with:
+    #   "Unknown name \"config\" at 'auth_token.bidi_generate_content_setup'"
+    # Only `responseModalities` + `speechConfig` belong inside generationConfig.
     return {
         "model": f"models/{settings.gemini_live_model}",
-        "config": {
+        "generationConfig": {
             "responseModalities": ["AUDIO"],
             "speechConfig": {
                 "languageCode": "cs-CZ",
@@ -50,24 +57,24 @@ def assemble_setup_payload(
                     "prebuiltVoiceConfig": {"voiceName": settings.gemini_live_voice},
                 },
             },
-            "outputAudioTranscription": {},
-            "inputAudioTranscription": {},
-            "systemInstruction": {"parts": [{"text": prompt_body}]},
-            "tools": [
-                {"googleSearch": {}},
-                {"functionDeclarations": [
-                    {
-                        "name": "end_session",
-                        "description": "Ukončit aktuální živou relaci na žádost uživatele.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {"reason": {"type": "string"}},
-                            "required": ["reason"],
-                        },
-                    },
-                ]},
-            ],
         },
+        "outputAudioTranscription": {},
+        "inputAudioTranscription": {},
+        "systemInstruction": {"parts": [{"text": prompt_body}]},
+        "tools": [
+            {"googleSearch": {}},
+            {"functionDeclarations": [
+                {
+                    "name": "end_session",
+                    "description": "Ukončit aktuální živou relaci na žádost uživatele.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"reason": {"type": "string"}},
+                        "required": ["reason"],
+                    },
+                },
+            ]},
+        ],
         "initial_context_turn": {
             "role": "user",
             "parts": [{"text": context_text}],

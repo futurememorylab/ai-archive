@@ -27,19 +27,25 @@ def _draft():
     return dict(markers=[], fields={}, notes="myslím, že je to Praha")
 
 
-def test_setup_payload_top_level_model_and_config():
+def test_setup_payload_top_level_model_and_generation_config():
+    # BidiGenerateContentSetup is FLAT: model + generationConfig + tools +
+    # systemInstruction + transcription configs sit at the same level. Only
+    # responseModalities/speechConfig nest inside generationConfig.
     p = assemble_setup_payload(
         clip=_clip(), draft=_draft(),
         prompt_body="SYSTÉM INSTRUKCE",
         settings=_Settings(),
     )
     assert p["model"] == "models/gemini-2.5-flash-preview-native-audio-dialog"
-    cfg = p["config"]
-    assert cfg["responseModalities"] == ["AUDIO"]
-    assert cfg["speechConfig"]["languageCode"] == "cs-CZ"
-    assert cfg["speechConfig"]["voiceConfig"]["prebuiltVoiceConfig"]["voiceName"] == "Aoede"
-    assert cfg["outputAudioTranscription"] == {}
-    assert cfg["inputAudioTranscription"] == {}
+    gc = p["generationConfig"]
+    assert gc["responseModalities"] == ["AUDIO"]
+    assert gc["speechConfig"]["languageCode"] == "cs-CZ"
+    assert gc["speechConfig"]["voiceConfig"]["prebuiltVoiceConfig"]["voiceName"] == "Aoede"
+    assert p["outputAudioTranscription"] == {}
+    assert p["inputAudioTranscription"] == {}
+    # No legacy "config" wrapper — that was the shape Google rejected with
+    # `Unknown name "config" at 'auth_token.bidi_generate_content_setup'`.
+    assert "config" not in p
 
 
 def test_setup_payload_has_system_instruction_text():
@@ -48,7 +54,7 @@ def test_setup_payload_has_system_instruction_text():
         prompt_body="MŮJ ČESKÝ SYSTÉM",
         settings=_Settings(),
     )
-    parts = p["config"]["systemInstruction"]["parts"]
+    parts = p["systemInstruction"]["parts"]
     assert parts == [{"text": "MŮJ ČESKÝ SYSTÉM"}]
 
 
@@ -57,7 +63,7 @@ def test_setup_payload_declares_google_search_and_end_session_tools():
         clip=_clip(), draft=_draft(),
         prompt_body="x", settings=_Settings(),
     )
-    tools = p["config"]["tools"]
+    tools = p["tools"]
     assert {"googleSearch": {}} in tools
     fd = next(t for t in tools if "functionDeclarations" in t)["functionDeclarations"]
     assert any(d["name"] == "end_session" for d in fd)
