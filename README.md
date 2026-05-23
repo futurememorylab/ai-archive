@@ -147,21 +147,63 @@ Voice-driven Czech assistant on the clip-detail page. Browser opens a WebSocket
 directly to Google's Gemini Live API using ephemeral tokens minted by the
 backend; audio bytes never traverse our process.
 
-**One-shot infrastructure setup:**
+### Setup (one-shot)
+
+There's exactly one operator-run script. Everything else (SQLite migration
+`0010_live_sessions`, the Czech `live.system_instruction.cs` prompt seed,
+and the stale-pending session reaper) is wired into the FastAPI `lifespan`
+and runs automatically the next time you start the app.
+
+Prereqs:
+
+- `gcloud` CLI installed and `gcloud auth login` already done
+- `gcloud components install alpha` (the API-keys subcommand lives there)
+- The signed-in account has `roles/serviceusage.serviceUsageAdmin` and
+  `roles/serviceusage.apiKeysAdmin` on `$GCP_PROJECT_ID`
+- This is **separate** from the existing `scripts/setup-gcp.sh` /
+  `GOOGLE_APPLICATION_CREDENTIALS` setup. Vertex / batch annotation keeps
+  using the service-account key; Live uses a Generative Language API key.
 
 ```bash
+# 1. Mint the API key (idempotent — re-uses an existing one if present)
 GCP_PROJECT_ID=<your-project> ./deploy/enable-gemini-live.sh
-# Copy the printed key into .env:
-echo 'GEMINI_API_KEY=<key>' >> .env
+
+# 2. The script prints the key value. Paste it into .env:
+echo 'GEMINI_API_KEY=<printed-key>' >> .env
+
+# 3. Restart the app. Migration + seed apply on lifespan start.
+./run.sh
 ```
 
-**Env vars added (all optional; Live feature is disabled until `GEMINI_API_KEY` is set):**
+Open any clip with `duration_secs > 0` while the app is in `online` mode —
+a `🎤 Live` button appears in the header next to *Annotate ▾*.
 
-- `GEMINI_API_KEY` — Generative Language API key.
+If you skip step 1, the `GEMINI_API_KEY` is empty and the feature stays
+silent: schema and seed still apply on startup, but `🎤 Live` requests
+will get a `RuntimeError: GEMINI_API_KEY is not configured` from the
+session-config endpoint, so the button is gated to `mode == "online"`
+only and the operator never sees it without a key.
+
+### Env vars
+
+All four are optional. The Live button only appears when `GEMINI_API_KEY`
+is set; the other three have working defaults.
+
+- `GEMINI_API_KEY` — Generative Language API key (printed by the script
+  above). When unset, the Live feature is disabled.
 - `GEMINI_LIVE_MODEL` — default `gemini-2.5-flash-preview-native-audio-dialog`.
-- `GEMINI_LIVE_VOICE` — default `Aoede`.
-- `GEMINI_LIVE_INACTIVITY_S` — default `60` (seconds of mutual silence → auto-close).
+- `GEMINI_LIVE_VOICE` — default `Aoede` (speaks `cs-CZ` because
+  `speechConfig.languageCode` pins it).
+- `GEMINI_LIVE_INACTIVITY_S` — default `60`. Mutual-silence timeout
+  before the session auto-closes with `end_reason=inactivity`.
 
-Sessions are stored in the `live_sessions` SQLite table and surface as a History
-tab on the clip page. Output is read-only — nothing is auto-pushed to draft
-annotations.
+`.env.example` ships with these four lines already, with the key blank;
+just paste the value the script prints.
+
+### What's stored
+
+Sessions land in the `live_sessions` SQLite table and surface as a
+**History** tab next to *Markers / Fields / Notes* on the clip page.
+The History panel is read-only — transcripts and Czech summaries are
+never auto-pushed into draft annotations. Audio bytes are not stored
+at all (only the transcripts that Gemini emits).
