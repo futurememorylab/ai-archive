@@ -132,6 +132,28 @@ class PromptsRepo:
         )
         return [_row_to_prompt(r) for r in await cur.fetchall()]
 
+    async def get_by_name(
+        self, conn: aiosqlite.Connection, name: str,
+    ) -> Prompt | None:
+        """Fetch a single prompt by unique `name`, or None if missing."""
+        cur = await conn.execute(
+            f"SELECT {_PROMPT_COLS} FROM prompts WHERE name = ?", (name,)
+        )
+        row = await cur.fetchone()
+        return _row_to_prompt(row) if row else None
+
+    async def get_production_version(
+        self, conn: aiosqlite.Connection, prompt_id: int,
+    ) -> PromptVersion | None:
+        """Return the current production version of a prompt, or None."""
+        cur = await conn.execute(
+            f"SELECT {_VERSION_COLS} FROM prompt_versions "
+            "WHERE prompt_id = ? AND state = 'production' LIMIT 1",
+            (prompt_id,),
+        )
+        row = await cur.fetchone()
+        return _row_to_version(row) if row else None
+
     async def update_metadata(
         self,
         conn: aiosqlite.Connection,

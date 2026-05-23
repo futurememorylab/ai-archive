@@ -24,3 +24,24 @@ async def seed_default_prompt(conn: aiosqlite.Connection, *, seed_path: Path) ->
         model=data["model"],
         initial_state="production",
     )
+
+
+async def seed_live_system_instruction(
+    conn: aiosqlite.Connection, *, seed_path: Path,
+) -> None:
+    """Insert the Czech Live system-instruction prompt + v1@production if missing."""
+    data = json.loads(seed_path.read_text())  # noqa: ASYNC240
+    cur = await conn.execute("SELECT 1 FROM prompts WHERE name = ?", (data["name"],))
+    if await cur.fetchone():
+        return
+    repo = PromptsRepo()
+    await repo.create_with_initial_version(
+        conn,
+        name=data["name"],
+        description=data.get("description"),
+        body=data["prompt"],
+        target_map=data.get("target_map", {}),
+        output_schema=data.get("output_schema", {}),
+        model=data["model"],
+        initial_state="production",
+    )

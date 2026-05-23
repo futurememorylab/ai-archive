@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request
 
 from backend.app.context import AppContext
 from backend.app.logging_setup import configure_logging
-from backend.app.seed import seed_default_prompt
+from backend.app.seed import seed_default_prompt, seed_live_system_instruction
 from backend.app.settings import Settings
 
 SEEDS = Path(__file__).resolve().parents[1] / "seeds"
@@ -21,6 +21,9 @@ async def lifespan(app: FastAPI):
     seed_path = SEEDS / "default_template.json"
     if seed_path.exists():
         await seed_default_prompt(ctx.db, seed_path=seed_path)
+    live_seed = SEEDS / "live_system_instruction_cs.json"
+    if live_seed.exists():
+        await seed_live_system_instruction(ctx.db, seed_path=live_seed)
     if init_external:
         if ctx.connection_monitor is not None:
             await ctx.connection_monitor.start()
