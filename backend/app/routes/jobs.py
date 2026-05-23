@@ -3,6 +3,7 @@ import asyncio
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from pydantic import BaseModel
 
+from backend.app.deps import get_ctx
 from backend.app.services.annotator import run_job
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -16,7 +17,7 @@ class JobCreate(BaseModel):
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_job(request: Request, body: JobCreate, background: BackgroundTasks):
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     job_id = await ctx.jobs_repo.create_job(
         ctx.db,
         prompt_version_id=body.prompt_version_id,
@@ -49,13 +50,13 @@ async def _run_in_bg(ctx, job_id: int) -> None:
 
 @router.get("")
 async def list_jobs(request: Request, limit: int = 50):
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     return [j.model_dump() for j in await ctx.jobs_repo.list_jobs(ctx.db, limit=limit)]
 
 
 @router.get("/{job_id}")
 async def get_job(request: Request, job_id: int):
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     try:
         job = await ctx.jobs_repo.get_job(ctx.db, job_id)
     except LookupError:
@@ -66,6 +67,6 @@ async def get_job(request: Request, job_id: int):
 
 @router.post("/{job_id}/cancel")
 async def cancel_job(request: Request, job_id: int):
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     await ctx.jobs_repo.update_status(ctx.db, job_id, "cancelled")
     return {"id": job_id, "status": "cancelled"}

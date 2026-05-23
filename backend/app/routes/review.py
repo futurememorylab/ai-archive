@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from backend.app.deps import get_ctx
 from backend.app.services.write_queue import etag_from_snapshot, fps_from_snapshot
 
 router = APIRouter(prefix="/api/review", tags=["review"])
@@ -15,14 +16,14 @@ class Decision(BaseModel):
 
 @router.get("/clips/{clip_id}/items")
 async def list_items_for_clip(request: Request, clip_id: int):
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     items = await ctx.review_items_repo.list_by_clip(ctx.db, clip_id)
     return [it.model_dump() for it in items]
 
 
 @router.post("/items/{item_id}/decision")
 async def set_decision(request: Request, item_id: int, body: Decision):
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     if body.decision not in ("accepted", "rejected", "pending"):
         raise HTTPException(400, "decision must be accepted|rejected|pending")
     await ctx.review_items_repo.set_decision(
@@ -45,7 +46,7 @@ async def apply_clip(request: Request, clip_id: int):
     user-observable behaviour is unchanged ("applied: N"); when offline
     the ops sit in the queue until reconnection.
     """
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     if ctx.write_queue is None:
         raise HTTPException(503, "write queue not initialized")
 

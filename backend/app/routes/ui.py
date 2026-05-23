@@ -12,6 +12,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from backend.app.deps import get_ctx
+
 TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
@@ -20,7 +22,7 @@ router = APIRouter(prefix="/ui", tags=["ui"])
 
 @router.get("/connection-pill", response_class=HTMLResponse)
 async def connection_pill(request: Request):
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     state = "online"
     if getattr(ctx, "connection_monitor", None) is not None:
         state = str(ctx.connection_monitor.current_state().value)
@@ -37,7 +39,7 @@ async def connection_pill(request: Request):
 
 @router.get("/workspace-switcher", response_class=HTMLResponse)
 async def workspace_switcher(request: Request, ws_id: int | None = None):
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     if getattr(ctx, "workspace_manager", None) is None:
         return templates.TemplateResponse(
             request,
@@ -65,7 +67,7 @@ async def workspace_switcher(request: Request, ws_id: int | None = None):
 
 @router.get("/sync-drawer", response_class=HTMLResponse)
 async def sync_drawer(request: Request):
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     rows = await ctx.pending_ops_repo.list_with_clip_names(ctx.db)
     return templates.TemplateResponse(
         request,
@@ -76,7 +78,7 @@ async def sync_drawer(request: Request):
 
 @router.get("/clip-badge/{provider_id}/{provider_clip_id}", response_class=HTMLResponse)
 async def clip_badge(request: Request, provider_id: str, provider_clip_id: str):
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     counts = await ctx.pending_ops_repo.count_pending_by_clip(ctx.db, provider_id=provider_id)
     bucket = counts.get(provider_clip_id, {"pending": 0, "conflict": 0})
     return templates.TemplateResponse(

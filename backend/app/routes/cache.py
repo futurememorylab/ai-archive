@@ -21,6 +21,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from backend.app.archive.model import ClipKey
+from backend.app.deps import get_ctx
 
 TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -63,14 +64,14 @@ class BulkEvictBody(BaseModel):
 
 
 def _inspector(request: Request):
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     if getattr(ctx, "cache_inspector", None) is None:
         raise HTTPException(503, "cache inspector not initialized")
     return ctx.cache_inspector
 
 
 def _actions(request: Request):
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     if getattr(ctx, "cache_actions", None) is None:
         raise HTTPException(503, "cache actions not initialized")
     return ctx.cache_actions
@@ -134,7 +135,7 @@ class PrefetchBody(BaseModel):
 
 @api_router.post("/prefetch")
 async def prefetch_enqueue(request: Request, body: PrefetchBody) -> dict[str, Any]:
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     ids: list[int] = []
     for prov, clip_id in body.clip_keys:
         rid = await ctx.prefetch_queue_repo.enqueue(
@@ -148,7 +149,7 @@ async def prefetch_enqueue(request: Request, body: PrefetchBody) -> dict[str, An
 
 @api_router.get("/prefetch/queue")
 async def prefetch_queue_list(request: Request) -> dict[str, Any]:
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     active = await ctx.prefetch_queue_repo.list_active(ctx.db)
     recent = await ctx.prefetch_queue_repo.list_recent(ctx.db, limit=50)
     counts = await ctx.prefetch_queue_repo.count_by_status(ctx.db)
@@ -157,7 +158,7 @@ async def prefetch_queue_list(request: Request) -> dict[str, Any]:
 
 @api_router.post("/prefetch/{rid}/cancel")
 async def prefetch_cancel(request: Request, rid: int) -> dict[str, Any]:
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     ok = await ctx.prefetch_queue_repo.mark_cancelled(ctx.db, rid)
     if not ok:
         raise HTTPException(
@@ -183,7 +184,7 @@ async def cache_page(
     evictable: int | None = None,
 ) -> HTMLResponse:
     insp = _inspector(request)
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
 
     tab_val = tab if tab in _VALID_TABS else "all"
     is_htmx = request.headers.get("HX-Request") == "true"
@@ -290,7 +291,7 @@ async def cache_badge(request: Request, provider_id: str, clip_id: str) -> HTMLR
 async def cache_popover(request: Request, provider_id: str, clip_id: str) -> HTMLResponse:
     insp = _inspector(request)
     status = await insp.status_for_clip((provider_id, clip_id))
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     host_local_proxies = getattr(getattr(ctx, "proxy_resolver", None), "is_host_local", False)
     return templates.TemplateResponse(
         request,
@@ -304,7 +305,7 @@ async def cache_popover(request: Request, provider_id: str, clip_id: str) -> HTM
 
 @ui_router.get("/cache/queue", response_class=HTMLResponse)
 async def cache_queue_panel(request: Request) -> HTMLResponse:
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     queue_active = await ctx.prefetch_queue_repo.list_active(ctx.db)
     queue_recent = await ctx.prefetch_queue_repo.list_recent(ctx.db, limit=50)
     queue_counts = await ctx.prefetch_queue_repo.count_by_status(ctx.db)

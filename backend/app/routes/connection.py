@@ -17,6 +17,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.templating import Jinja2Templates
 
+from backend.app.deps import get_ctx
+
 router = APIRouter(prefix="/api/connection", tags=["connection"])
 
 _TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "templates"
@@ -35,7 +37,7 @@ def _mode(monitor) -> str:
 
 @router.get("/state")
 async def get_state(request: Request) -> dict:
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     monitor = getattr(ctx, "connection_monitor", None)
     if monitor is None:
         return {"state": "online", "mode": "online"}
@@ -47,7 +49,7 @@ async def get_state(request: Request) -> dict:
 
 @router.post("/retry")
 async def retry_now(request: Request):
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     monitor = getattr(ctx, "connection_monitor", None)
     is_htmx = request.headers.get("HX-Request") == "true"
 
@@ -78,7 +80,7 @@ async def retry_now(request: Request):
 @router.post("/offline")
 async def set_offline(request: Request) -> dict:
     """Manual override: pin state to offline until cleared."""
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     if getattr(ctx, "connection_monitor", None) is None:
         return {"state": "offline"}
     ctx.connection_monitor.set_manual_offline(True)
@@ -88,7 +90,7 @@ async def set_offline(request: Request) -> dict:
 @router.post("/online")
 async def set_online(request: Request) -> dict:
     """Clear the manual-offline override; state reverts to last probe."""
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     if getattr(ctx, "connection_monitor", None) is None:
         return {"state": "online"}
     ctx.connection_monitor.set_manual_offline(False)
@@ -97,7 +99,7 @@ async def set_online(request: Request) -> dict:
 
 @router.get("/events")
 async def stream_events(request: Request) -> StreamingResponse:
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     bus = ctx.event_bus
     queue = bus.subscribe("connection")
 

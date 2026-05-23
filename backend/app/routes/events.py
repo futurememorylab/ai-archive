@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, Request
 from sse_starlette.sse import EventSourceResponse
 
+from backend.app.deps import get_ctx
 from backend.app.services.events import EventBus
 
 router = APIRouter(tags=["events"])
@@ -27,7 +28,7 @@ async def _event_generator(
 
 @router.get("/api/jobs/{job_id}/events")
 async def job_events(request: Request, job_id: int):
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     topic = f"job:{job_id}"
 
     async def stream():

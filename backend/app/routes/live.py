@@ -7,6 +7,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from backend.app.deps import get_ctx
 from backend.app.repositories.live_sessions import LiveSessionsRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.services.live_sessions import (
@@ -44,7 +45,7 @@ async def load_draft_for_live(ctx: Any, clip_id: int) -> dict:
 
 @router.get("/session-config")
 async def session_config(request: Request, clip_id: int) -> dict:
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     settings = ctx.settings
 
     clip = await load_clip_for_live(ctx, clip_id)
@@ -104,7 +105,7 @@ async def post_transcript(
     session_id: str,
     body: TranscriptPayload,
 ) -> dict:
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     repo = LiveSessionsRepo()
     try:
         await repo.get(ctx.db, session_id)
@@ -126,7 +127,7 @@ async def post_transcript(
 
 @router.post("/sessions/{session_id}/summarize")
 async def post_summarize(request: Request, session_id: str) -> dict:
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     repo = LiveSessionsRepo()
     try:
         await repo.get(ctx.db, session_id)
@@ -139,7 +140,7 @@ async def post_summarize(request: Request, session_id: str) -> dict:
 
 @router.get("/sessions")
 async def list_sessions(request: Request, clip_id: int) -> list[dict]:
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     repo = LiveSessionsRepo()
     rows = await repo.list_by_clip(ctx.db, clip_id)
     out = []
@@ -171,7 +172,7 @@ async def list_sessions(request: Request, clip_id: int) -> list[dict]:
 
 @router.get("/sessions/{session_id}")
 async def get_session(request: Request, session_id: str) -> dict:
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     repo = LiveSessionsRepo()
     try:
         s = await repo.get(ctx.db, session_id)

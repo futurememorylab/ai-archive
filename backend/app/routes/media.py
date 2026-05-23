@@ -4,6 +4,8 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 
+from backend.app.deps import get_ctx
+
 router = APIRouter(prefix="/api/media", tags=["media"])
 
 _DEFAULT_CHUNK = 1 << 16
@@ -11,7 +13,7 @@ _DEFAULT_CHUNK = 1 << 16
 
 @router.get("/{clip_id}")
 async def stream_media(request: Request, clip_id: int):
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     if ctx.proxy_resolver is None:
         raise HTTPException(503, "proxy resolver not initialized")
 

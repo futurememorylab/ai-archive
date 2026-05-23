@@ -15,6 +15,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from backend.app.deps import get_ctx
+
 router = APIRouter(prefix="/api/workspaces", tags=["workspaces"])
 
 
@@ -31,7 +33,7 @@ class ClipKeysBody(BaseModel):
 
 
 def _require_manager(request: Request):
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     if getattr(ctx, "workspace_manager", None) is None:
         raise HTTPException(503, "workspace manager not initialized")
     return ctx

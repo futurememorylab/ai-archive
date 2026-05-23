@@ -2,13 +2,14 @@ from fastapi import APIRouter, HTTPException, Request
 
 from backend.app.archive.errors import ProviderError
 from backend.app.archive.model import ClipQuery
+from backend.app.deps import get_ctx
 
 router = APIRouter(prefix="/api/catdv", tags=["catdv"])
 
 
 @router.get("/clips")
 async def list_clips(request: Request, q: str | None = None, offset: int = 0, limit: int = 50):
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     if ctx.archive is None:
         raise HTTPException(503, "archive provider not initialized")
     try:
@@ -26,7 +27,7 @@ async def list_clips(request: Request, q: str | None = None, offset: int = 0, li
 
 @router.get("/clips/{clip_id}")
 async def get_clip(request: Request, clip_id: int):
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     if ctx.archive is None:
         raise HTTPException(503, "archive provider not initialized")
     try:

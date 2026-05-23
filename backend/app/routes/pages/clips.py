@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse
 
 from backend.app.archive.errors import ProviderError
 from backend.app.archive.model import CanonicalClip, ClipQuery
+from backend.app.deps import get_ctx
 from backend.app.repositories.live_sessions import LiveSessionsRepo
 from backend.app.routes.pages.templates import templates
 from backend.app.services.clip_list_filters import (
@@ -61,7 +62,7 @@ async def clips_list(
     cache: str | None = None,
     anno: str | None = None,
 ):
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     if ctx.archive is None:
         raise HTTPException(503, "archive provider not initialized")
 
@@ -335,7 +336,7 @@ async def _build_draft_view_model_for_live(ctx, clip_id: int) -> dict:
 
 @router.get("/clips/{clip_id}", response_class=HTMLResponse)
 async def clip_detail_page(request: Request, clip_id: int):
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     if ctx.archive is None:
         raise HTTPException(503, "archive provider not initialized")
     try:
@@ -372,7 +373,7 @@ async def clip_detail_page(request: Request, clip_id: int):
 
 @router.get("/clips/{clip_id}/draft", response_class=HTMLResponse)
 async def clip_draft_partial(request: Request, clip_id: int):
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     if ctx.archive is None:
         raise HTTPException(503, "archive provider not initialized")
     try:
@@ -389,7 +390,7 @@ async def clip_draft_partial(request: Request, clip_id: int):
 
 @router.get("/clips/{clip_id}/live-history", response_class=HTMLResponse)
 async def clip_live_history(request: Request, clip_id: int):
-    ctx = request.app.state.ctx
+    ctx = get_ctx(request)
     repo = LiveSessionsRepo()
     rows = await repo.list_by_clip(ctx.db, clip_id)
     sessions = []
