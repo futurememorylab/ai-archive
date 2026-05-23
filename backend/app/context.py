@@ -2,8 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING, NamedTuple
 
 import aiosqlite
+
+if TYPE_CHECKING:
+    from backend.app.services.catdv_client import CatdvClient
+    from backend.app.services.gcs import GcsService
+    from backend.app.services.gemini import GeminiService
+    from backend.app.services.proxy_resolver import ProxyResolver
 
 from backend.app.archive.ai_store import AIInputStore
 from backend.app.archive.ai_stores.registry import build_ai_input_store
@@ -64,12 +71,13 @@ class AppContext:
 
     _running_jobs: dict[int, object] = field(default_factory=dict)
 
-    catdv = None
+    catdv: CatdvClient | None = None
     archive: ArchiveProvider | None = None
     ai_store: AIInputStore | None = None
-    gemini = None
-    proxy_resolver = None
-    _gcs_service = None  # low-level GcsService kept only as a wiring detail
+    gemini: GeminiService | None = None
+    proxy_resolver: ProxyResolver | None = None
+    # low-level GcsService kept only as a wiring detail
+    _gcs_service: GcsService | None = None
     write_queue: WriteQueue | None = None
     sync_engine: SyncEngine | None = None
     connection_monitor: ConnectionMonitor | None = None
@@ -81,219 +89,17 @@ class AppContext:
 
     @classmethod
     async def build(cls, settings: Settings, *, init_external: bool = True) -> AppContext:
-        settings.data_dir.mkdir(parents=True, exist_ok=True)
-        db_path = settings.data_dir / "app.db"
-        cm = open_db(db_path)
-        conn = await cm.__aenter__()
-        await apply_migrations(conn, MIGRATIONS)
-        # Crash recovery: any rows left mid-flight from a previous process
-        # become pending again. Idempotent; runs every startup.
-        await conn.execute(
-            "UPDATE pending_operations "
-            "SET status='pending', attempted_at=NULL "
-            "WHERE status='in_flight'"
-        )
-        await conn.commit()
-
-        ctx = cls(settings=settings, db=conn, db_cm=cm)
-
-        # Reconcile the proxy cache against on-disk files. Cheap, idempotent,
-        # touches local disk + SQLite only — safe to run before init_external.
-        # Keeps the cache view honest about what's actually on disk on every
-        # restart (handles files left from older builds or manual downloads).
-        cache_dir = settings.data_dir / "cache" / "proxies"
-        reconciler = ProxyCacheReconciler(
-            cache_dir=cache_dir,
-            proxy_cache_repo=ctx.proxy_cache_repo,
-            db_provider=lambda c=ctx: c.db,
-        )
-        await reconciler.reconcile()
-
-        # WriteQueue has no external deps; always available.
-        ctx.write_queue = WriteQueue(
-            pending_ops_repo=ctx.pending_ops_repo,
-            review_items_repo=ctx.review_items_repo,
-        )
-
-        # CacheInspector + CacheActions are pure-DB; always wire them.
-        cap_bytes = int(settings.media_cache_cap_gb) * 1024**3
-        ctx.cache_inspector = CacheInspector(
-            db_provider=lambda c=ctx: c.db,
-            media_cache_cap_bytes=cap_bytes,
-        )
-        ctx.cache_actions = CacheActions(
-            db_provider=lambda c=ctx: c.db,
-            inspector=ctx.cache_inspector,
-            log_repo=ctx.cache_actions_log_repo,
-            ai_store=None,  # filled in when init_external runs
-        )
-
+        # Build proceeds top-down through four subsystem builders. Each one
+        # mutates the passed-in ctx; many also install closures over ctx so
+        # they can defer-read fields populated by *later* builders (e.g.
+        # ConnectionMonitor's is_online_provider reads ctx.connection_monitor
+        # which the same builder assigns moments later). Keep the same ctx
+        # threaded through so those closures stay valid — see ARCHITECTURE.md.
+        ctx = await _build_core(settings)
+        await _build_cache_subsystem(ctx)
         if init_external:
-            import logging
-
-            from backend.app.services.catdv_client import (
-                CatdvAuthError,
-                CatdvClient,
-            )
-            from backend.app.services.gcs import GcsService
-            from backend.app.services.gemini import GeminiService
-            from backend.app.services.proxy_resolver import (
-                LocalCacheOnlyResolver,
-                build_resolver,
-            )
-
-            use_catdv = settings.archive_provider == "catdv"
-            forced_offline = bool(getattr(settings, "catdv_offline", False)) and use_catdv
-            login_failed = False
-
-            if use_catdv and not forced_offline:
-                ctx.catdv = CatdvClient(
-                    base_url=settings.catdv_base_url,
-                    username=settings.catdv_username or "",
-                    password=settings.catdv_password or "",
-                )
-                await ctx.catdv.__aenter__()
-                # CatdvClient.__aenter__ only opens the httpx pool; auth is
-                # lazy. Force one round-trip so an unreachable host or bad
-                # credentials degrade us to offline cleanly at startup
-                # instead of half-booting and tripping the first request.
-                try:
-                    await ctx.catdv.login()
-                except CatdvAuthError as exc:
-                    logging.getLogger(__name__).warning(
-                        "CatDV login failed at startup (%s); booting offline",
-                        exc,
-                    )
-                    await ctx.catdv.__aexit__(None, None, None)
-                    ctx.catdv = None
-                    login_failed = True
-                except Exception as exc:  # noqa: BLE001 — transport / DNS
-                    logging.getLogger(__name__).warning(
-                        "CatDV unreachable at startup (%s); booting offline",
-                        exc,
-                    )
-                    await ctx.catdv.__aexit__(None, None, None)
-                    ctx.catdv = None
-                    login_failed = True
-
-            # The is_online provider closes over ctx so it can read the
-            # monitor's state once the monitor is constructed below.
-            def _is_online(c=ctx, forced=forced_offline, failed_at_boot=login_failed):
-                if forced or failed_at_boot:
-                    return False
-                if c.connection_monitor is None:
-                    return True
-                from backend.app.services.connection_monitor import ConnectionState
-
-                return c.connection_monitor.current_state() == ConnectionState.online
-
-            ctx.archive = build_archive_provider(
-                settings,
-                catdv_client=ctx.catdv,
-                clip_cache_repo=ctx.clip_cache_repo,
-                field_def_cache_repo=ctx.field_def_cache_repo,
-                clip_list_cache_repo=ctx.clip_list_cache_repo,
-                db_provider=lambda c=ctx: c.db,
-                is_online_provider=_is_online if use_catdv else None,
-            )
-            ctx._gcs_service = GcsService(settings.gcs_bucket_name)
-            ctx.ai_store = build_ai_input_store(
-                settings,
-                gcs_service=ctx._gcs_service,
-                files_repo=ctx.ai_store_files_repo,
-                db_provider=lambda c=ctx: c.db,
-            )
-            ctx.gemini = GeminiService(
-                project=settings.gcp_project_id,
-                location=settings.gcp_location,
-            )
-            if use_catdv and (forced_offline or login_failed):
-                ctx.proxy_resolver = build_resolver(
-                    source="cache-only",
-                    catdv_client=None,
-                    cache_dir=settings.data_dir / "cache" / "proxies",
-                    proxy_cache_repo=ctx.proxy_cache_repo,
-                    db_provider=lambda c=ctx: c.db,
-                )
-            elif use_catdv:
-                media_store_map = None
-                if settings.proxy_source == "filesystem":
-                    from backend.app.services.media_store_map import (
-                        fetch_media_store_map,
-                    )
-
-                    media_store_map = await fetch_media_store_map(ctx.catdv)
-                ctx.proxy_resolver = build_resolver(
-                    source=settings.proxy_source,
-                    catdv_client=ctx.catdv,
-                    cache_dir=settings.data_dir / "cache" / "proxies",
-                    archive=ctx.archive,
-                    media_store_map=media_store_map,
-                    proxy_cache_repo=ctx.proxy_cache_repo,
-                    db_provider=lambda c=ctx: c.db,
-                )
-            else:
-                # FS adapter has media_is_local=True; the workspace
-                # manager skips the proxy-resolver step entirely.
-                ctx.proxy_resolver = None
-            from backend.app.services.connection_monitor import ConnectionState
-
-            ctx.connection_monitor = ConnectionMonitor(
-                provider=ctx.archive,
-                db_provider=lambda c=ctx: c.db,
-                interval_s=float(settings.health_probe_interval_s),
-                timeout_s=float(settings.health_probe_timeout_s),
-                event_bus=ctx.event_bus,
-                forced_offline=forced_offline,
-                initial_state=(ConnectionState.offline if login_failed else ConnectionState.online),
-            )
-            ctx.sync_engine = SyncEngine(
-                provider=ctx.archive,
-                pending_ops_repo=ctx.pending_ops_repo,
-                write_log_repo=ctx.write_log_repo,
-                connection_monitor=ctx.connection_monitor,
-                db_provider=lambda c=ctx: c.db,
-                event_bus=ctx.event_bus,
-                tick_interval_s=float(settings.sync_tick_interval_s),
-                retry_base_s=float(settings.sync_retry_base_s),
-                retry_max_s=float(settings.sync_retry_max_s),
-            )
-            ctx.workspace_manager = WorkspaceManager(
-                workspaces_repo=ctx.workspaces_repo,
-                provider=ctx.archive,
-                proxy_resolver=ctx.proxy_resolver,
-                db_provider=lambda c=ctx: c.db,
-            )
-            # Inspector picks up the provider for deep-orphan checks;
-            # actions pick up the AI store for bucket-side evictions.
-            ctx.cache_inspector = CacheInspector(
-                db_provider=lambda c=ctx: c.db,
-                media_cache_cap_bytes=cap_bytes,
-                provider=ctx.archive,
-                host_local_proxies=getattr(ctx.proxy_resolver, "is_host_local", False),
-            )
-            ctx.cache_actions = CacheActions(
-                db_provider=lambda c=ctx: c.db,
-                inspector=ctx.cache_inspector,
-                log_repo=ctx.cache_actions_log_repo,
-                ai_store=ctx.ai_store,
-            )
-            ctx.lru_eviction = LruEviction(
-                actions=ctx.cache_actions,
-                log_repo=ctx.cache_actions_log_repo,
-                db_provider=lambda c=ctx: c.db,
-                media_cache_cap_bytes=cap_bytes,
-                tick_interval_s=float(settings.lru_tick_interval_s),
-            )
-            if ctx.proxy_resolver is not None and not isinstance(
-                ctx.proxy_resolver, LocalCacheOnlyResolver
-            ):
-                ctx.media_prefetcher = MediaPrefetcher(
-                    queue_repo=ctx.prefetch_queue_repo,
-                    resolver=ctx.proxy_resolver,
-                    db_provider=lambda c=ctx: c.db,
-                    tick_interval_s=float(settings.prefetch_tick_interval_s),
-                )
+            online_flags = await _build_archive_subsystem(ctx)
+            await _build_sync_subsystem(ctx, online_flags)
         return ctx
 
     async def aclose(self) -> None:
@@ -308,3 +114,269 @@ class AppContext:
         if self.catdv is not None:
             await self.catdv.__aexit__(None, None, None)
         await self.db_cm.__aexit__(None, None, None)
+
+
+class _OnlineFlags(NamedTuple):
+    """Boot-time online/offline determination passed from archive to sync builder.
+
+    ``forced_offline`` is set by ``CATDV_OFFLINE=true``; ``login_failed`` is
+    set when the initial CatdvClient.login() round-trip raised. Either flag
+    causes ConnectionMonitor to start in the offline state.
+    """
+
+    forced_offline: bool
+    login_failed: bool
+
+
+async def _build_core(settings: Settings) -> AppContext:
+    """Open the DB, run migrations, recover crashed write rows, instantiate ctx.
+
+    Also wires WriteQueue (no external deps, always available).
+    """
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    db_path = settings.data_dir / "app.db"
+    cm = open_db(db_path)
+    conn = await cm.__aenter__()
+    await apply_migrations(conn, MIGRATIONS)
+    # Crash recovery: any rows left mid-flight from a previous process
+    # become pending again. Idempotent; runs every startup.
+    await conn.execute(
+        "UPDATE pending_operations SET status='pending', attempted_at=NULL WHERE status='in_flight'"
+    )
+    await conn.commit()
+
+    ctx = AppContext(settings=settings, db=conn, db_cm=cm)
+
+    # WriteQueue has no external deps; always available.
+    ctx.write_queue = WriteQueue(
+        pending_ops_repo=ctx.pending_ops_repo,
+        review_items_repo=ctx.review_items_repo,
+    )
+    return ctx
+
+
+async def _build_cache_subsystem(ctx: AppContext) -> None:
+    """Reconcile on-disk proxy cache and wire minimal CacheInspector/Actions.
+
+    These are pure-DB services with no external dependencies, so we wire them
+    up even when init_external=False. When init_external runs, the archive
+    subsystem replaces them with provider/ai_store-aware variants
+    (see _build_sync_subsystem). PR H will revisit this duplication.
+    """
+    settings = ctx.settings
+
+    # Reconcile the proxy cache against on-disk files. Cheap, idempotent,
+    # touches local disk + SQLite only — safe to run before init_external.
+    # Keeps the cache view honest about what's actually on disk on every
+    # restart (handles files left from older builds or manual downloads).
+    cache_dir = settings.data_dir / "cache" / "proxies"
+    reconciler = ProxyCacheReconciler(
+        cache_dir=cache_dir,
+        proxy_cache_repo=ctx.proxy_cache_repo,
+        db_provider=lambda c=ctx: c.db,
+    )
+    await reconciler.reconcile()
+
+    # CacheInspector + CacheActions are pure-DB; always wire them.
+    cap_bytes = int(settings.media_cache_cap_gb) * 1024**3
+    ctx.cache_inspector = CacheInspector(
+        db_provider=lambda c=ctx: c.db,
+        media_cache_cap_bytes=cap_bytes,
+    )
+    ctx.cache_actions = CacheActions(
+        db_provider=lambda c=ctx: c.db,
+        inspector=ctx.cache_inspector,
+        log_repo=ctx.cache_actions_log_repo,
+        ai_store=None,  # filled in when init_external runs
+    )
+
+
+async def _build_archive_subsystem(ctx: AppContext) -> _OnlineFlags:
+    """Log into CatDV (if configured) and wire archive, AI store, gemini, resolver.
+
+    Returns the boot-time online flags so the sync builder can pass them to
+    ConnectionMonitor. Lazy imports here avoid pulling httpx / google libs
+    when init_external=False (tests, CLI tools).
+    """
+    import logging
+
+    from backend.app.services.catdv_client import (
+        CatdvAuthError,
+        CatdvClient,
+    )
+    from backend.app.services.gcs import GcsService
+    from backend.app.services.gemini import GeminiService
+    from backend.app.services.proxy_resolver import build_resolver
+
+    settings = ctx.settings
+    use_catdv = settings.archive_provider == "catdv"
+    forced_offline = bool(getattr(settings, "catdv_offline", False)) and use_catdv
+    login_failed = False
+
+    if use_catdv and not forced_offline:
+        ctx.catdv = CatdvClient(
+            base_url=settings.catdv_base_url,
+            username=settings.catdv_username or "",
+            password=settings.catdv_password or "",
+        )
+        await ctx.catdv.__aenter__()
+        # CatdvClient.__aenter__ only opens the httpx pool; auth is
+        # lazy. Force one round-trip so an unreachable host or bad
+        # credentials degrade us to offline cleanly at startup
+        # instead of half-booting and tripping the first request.
+        try:
+            await ctx.catdv.login()
+        except CatdvAuthError as exc:
+            logging.getLogger(__name__).warning(
+                "CatDV login failed at startup (%s); booting offline",
+                exc,
+            )
+            await ctx.catdv.__aexit__(None, None, None)
+            ctx.catdv = None
+            login_failed = True
+        except Exception as exc:  # noqa: BLE001 — transport / DNS
+            logging.getLogger(__name__).warning(
+                "CatDV unreachable at startup (%s); booting offline",
+                exc,
+            )
+            await ctx.catdv.__aexit__(None, None, None)
+            ctx.catdv = None
+            login_failed = True
+
+    # The is_online provider closes over ctx so it can read the
+    # monitor's state once the monitor is constructed below.
+    def _is_online(c=ctx, forced=forced_offline, failed_at_boot=login_failed):
+        if forced or failed_at_boot:
+            return False
+        if c.connection_monitor is None:
+            return True
+        from backend.app.services.connection_monitor import ConnectionState
+
+        return c.connection_monitor.current_state() == ConnectionState.online
+
+    ctx.archive = build_archive_provider(
+        settings,
+        catdv_client=ctx.catdv,
+        clip_cache_repo=ctx.clip_cache_repo,
+        field_def_cache_repo=ctx.field_def_cache_repo,
+        clip_list_cache_repo=ctx.clip_list_cache_repo,
+        db_provider=lambda c=ctx: c.db,
+        is_online_provider=_is_online if use_catdv else None,
+    )
+    ctx._gcs_service = GcsService(settings.gcs_bucket_name)
+    ctx.ai_store = build_ai_input_store(
+        settings,
+        gcs_service=ctx._gcs_service,
+        files_repo=ctx.ai_store_files_repo,
+        db_provider=lambda c=ctx: c.db,
+    )
+    ctx.gemini = GeminiService(
+        project=settings.gcp_project_id,
+        location=settings.gcp_location,
+    )
+    if use_catdv and (forced_offline or login_failed):
+        ctx.proxy_resolver = build_resolver(
+            source="cache-only",
+            catdv_client=None,
+            cache_dir=settings.data_dir / "cache" / "proxies",
+            proxy_cache_repo=ctx.proxy_cache_repo,
+            db_provider=lambda c=ctx: c.db,
+        )
+    elif use_catdv:
+        media_store_map = None
+        if settings.proxy_source == "filesystem":
+            from backend.app.services.media_store_map import (
+                fetch_media_store_map,
+            )
+
+            media_store_map = await fetch_media_store_map(ctx.catdv)
+        ctx.proxy_resolver = build_resolver(
+            source=settings.proxy_source,
+            catdv_client=ctx.catdv,
+            cache_dir=settings.data_dir / "cache" / "proxies",
+            archive=ctx.archive,
+            media_store_map=media_store_map,
+            proxy_cache_repo=ctx.proxy_cache_repo,
+            db_provider=lambda c=ctx: c.db,
+        )
+    else:
+        # FS adapter has media_is_local=True; the workspace
+        # manager skips the proxy-resolver step entirely.
+        ctx.proxy_resolver = None
+
+    return _OnlineFlags(forced_offline=forced_offline, login_failed=login_failed)
+
+
+async def _build_sync_subsystem(ctx: AppContext, flags: _OnlineFlags) -> None:
+    """Wire ConnectionMonitor, SyncEngine, WorkspaceManager, full cache services,
+    LRU eviction, and (if the resolver supports it) MediaPrefetcher.
+
+    The cache_inspector / cache_actions assigned here *replace* the minimal
+    ones from _build_cache_subsystem so they pick up provider (for deep-orphan
+    checks) and ai_store (for bucket-side evictions). PR H will revisit.
+    """
+    from backend.app.services.connection_monitor import ConnectionState
+    from backend.app.services.proxy_resolver import LocalCacheOnlyResolver
+
+    settings = ctx.settings
+    cap_bytes = int(settings.media_cache_cap_gb) * 1024**3
+
+    # archive is guaranteed populated by _build_archive_subsystem.
+    assert ctx.archive is not None
+
+    ctx.connection_monitor = ConnectionMonitor(
+        provider=ctx.archive,
+        db_provider=lambda c=ctx: c.db,
+        interval_s=float(settings.health_probe_interval_s),
+        timeout_s=float(settings.health_probe_timeout_s),
+        event_bus=ctx.event_bus,
+        forced_offline=flags.forced_offline,
+        initial_state=(ConnectionState.offline if flags.login_failed else ConnectionState.online),
+    )
+    ctx.sync_engine = SyncEngine(
+        provider=ctx.archive,
+        pending_ops_repo=ctx.pending_ops_repo,
+        write_log_repo=ctx.write_log_repo,
+        connection_monitor=ctx.connection_monitor,
+        db_provider=lambda c=ctx: c.db,
+        event_bus=ctx.event_bus,
+        tick_interval_s=float(settings.sync_tick_interval_s),
+        retry_base_s=float(settings.sync_retry_base_s),
+        retry_max_s=float(settings.sync_retry_max_s),
+    )
+    ctx.workspace_manager = WorkspaceManager(
+        workspaces_repo=ctx.workspaces_repo,
+        provider=ctx.archive,
+        proxy_resolver=ctx.proxy_resolver,
+        db_provider=lambda c=ctx: c.db,
+    )
+    # Inspector picks up the provider for deep-orphan checks;
+    # actions pick up the AI store for bucket-side evictions.
+    ctx.cache_inspector = CacheInspector(
+        db_provider=lambda c=ctx: c.db,
+        media_cache_cap_bytes=cap_bytes,
+        provider=ctx.archive,
+        host_local_proxies=getattr(ctx.proxy_resolver, "is_host_local", False),
+    )
+    ctx.cache_actions = CacheActions(
+        db_provider=lambda c=ctx: c.db,
+        inspector=ctx.cache_inspector,
+        log_repo=ctx.cache_actions_log_repo,
+        ai_store=ctx.ai_store,
+    )
+    ctx.lru_eviction = LruEviction(
+        actions=ctx.cache_actions,
+        log_repo=ctx.cache_actions_log_repo,
+        db_provider=lambda c=ctx: c.db,
+        media_cache_cap_bytes=cap_bytes,
+        tick_interval_s=float(settings.lru_tick_interval_s),
+    )
+    if ctx.proxy_resolver is not None and not isinstance(
+        ctx.proxy_resolver, LocalCacheOnlyResolver
+    ):
+        ctx.media_prefetcher = MediaPrefetcher(
+            queue_repo=ctx.prefetch_queue_repo,
+            resolver=ctx.proxy_resolver,
+            db_provider=lambda c=ctx: c.db,
+            tick_interval_s=float(settings.prefetch_tick_interval_s),
+        )

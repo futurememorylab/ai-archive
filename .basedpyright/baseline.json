@@ -126,14 +126,6 @@
         ],
         "./backend/app/context.py": [
             {
-                "code": "reportGeneralTypeIssues",
-                "range": {
-                    "startColumn": 18,
-                    "endColumn": 56,
-                    "lineCount": 1
-                }
-            },
-            {
                 "code": "reportAttributeAccessIssue",
                 "range": {
                     "startColumn": 25,
@@ -386,16 +378,6 @@
                 "range": {
                     "startColumn": 59,
                     "endColumn": 68,
-                    "lineCount": 1
-                }
-            }
-        ],
-        "./backend/app/routes/media.py": [
-            {
-                "code": "reportGeneralTypeIssues",
-                "range": {
-                    "startColumn": 27,
-                    "endColumn": 71,
                     "lineCount": 1
                 }
             }
