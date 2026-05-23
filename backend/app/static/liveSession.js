@@ -203,14 +203,40 @@ function liveSession(clipId, config) {
     },
 
     _handleServerContent(sc) {
-      const transcripts = sc.outputTranscription;
-      if (transcripts?.text) {
-        this.transcript.push({ role: "model", text: transcripts.text, ts: Date.now(), kind: "speech" });
+      if (sc.outputTranscription?.text) {
+        this.transcript.push({ role: "model", text: sc.outputTranscription.text, ts: Date.now(), kind: "speech" });
       }
-      const input = sc.inputTranscription;
-      if (input?.text) {
-        this.transcript.push({ role: "user", text: input.text, ts: Date.now(), kind: "speech" });
+      if (sc.inputTranscription?.text) {
+        this.transcript.push({ role: "user", text: sc.inputTranscription.text, ts: Date.now(), kind: "speech" });
       }
+      const turns = sc.modelTurn?.parts || [];
+      for (const part of turns) {
+        if (part.inlineData && part.inlineData.mimeType?.startsWith("audio/pcm")) {
+          this._enqueueAudio(part.inlineData.data);
+        }
+      }
+    },
+
+    _enqueueAudio(b64) {
+      if (!this._audioCtxOut) {
+        this._audioCtxOut = new AudioContext({ sampleRate: 24000 });
+      }
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const view = new DataView(bytes.buffer);
+      const sampleCount = bytes.length / 2;
+      const buf = this._audioCtxOut.createBuffer(1, sampleCount, 24000);
+      const channel = buf.getChannelData(0);
+      for (let i = 0; i < sampleCount; i++) {
+        channel[i] = view.getInt16(i * 2, true) / 0x8000;
+      }
+      const node = this._audioCtxOut.createBufferSource();
+      node.buffer = buf;
+      node.connect(this._audioCtxOut.destination);
+      const startAt = Math.max(this._audioCtxOut.currentTime, (this._nextPlayAt || 0));
+      node.start(startAt);
+      this._nextPlayAt = startAt + buf.duration;
     },
 
     _handleToolCall(tc) {
