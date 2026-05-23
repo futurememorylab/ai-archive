@@ -1,11 +1,11 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from backend.app.models.prompt import Prompt, PromptVersion, TargetMap
 from backend.app.routes.prompts import _prompt_envelope
 
 
 def _now():
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _prompt():

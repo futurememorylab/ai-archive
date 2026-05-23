@@ -18,7 +18,7 @@ async def stream_media(request: Request, clip_id: int):
     try:
         path: Path = await ctx.proxy_resolver.path_for_clip_id(clip_id)
     except Exception as exc:
-        raise HTTPException(404, f"proxy unavailable: {exc}")
+        raise HTTPException(404, f"proxy unavailable: {exc}") from exc
 
     mime = mimetypes.guess_type(str(path))[0] or "video/quicktime"
     size = path.stat().st_size
@@ -30,7 +30,7 @@ async def stream_media(request: Request, clip_id: int):
             start = int(start_s)
             end = int(end_s) if end_s else size - 1
         except ValueError:
-            raise HTTPException(400, "bad Range header")
+            raise HTTPException(400, "bad Range header") from None
         if start >= size or end >= size or start > end:
             raise HTTPException(416, "Range not satisfiable")
         length = end - start + 1

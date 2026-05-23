@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +17,7 @@ from backend.app.archive.model import (
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _json_default(o: Any) -> Any:
@@ -177,8 +177,7 @@ class ClipCacheRepo:
         provider_clip_id: str,
     ) -> CanonicalClip | None:
         cur = await conn.execute(
-            "SELECT canonical_json FROM clip_cache "
-            "WHERE provider_id = ? AND provider_clip_id = ?",
+            "SELECT canonical_json FROM clip_cache WHERE provider_id = ? AND provider_clip_id = ?",
             (provider_id, provider_clip_id),
         )
         row = await cur.fetchone()
@@ -201,7 +200,7 @@ class ClipCacheRepo:
         row = await cur.fetchone()
         if row is None:
             return None
-        return dict(zip(_ROW_COLS, row))
+        return dict(zip(_ROW_COLS, row, strict=True))
 
     async def list_by_catalog(
         self,
@@ -229,7 +228,7 @@ class ClipCacheRepo:
                 "WHERE provider_id = ? AND catalog_id = ?",
                 (provider_id, catalog_id),
             )
-            return [dict(zip(_ROW_COLS, row)) for row in await cur.fetchall()]
+            return [dict(zip(_ROW_COLS, row, strict=True)) for row in await cur.fetchall()]
 
         params: list = [provider_id, catalog_id]
         where = "provider_id = ? AND catalog_id = ?"
@@ -261,7 +260,7 @@ class ClipCacheRepo:
 
         items: list[CanonicalClip] = []
         for row in rows:
-            row_dict = dict(zip(_ROW_COLS, row))
+            row_dict = dict(zip(_ROW_COLS, row, strict=True))
             blob = row_dict.get("canonical_json")
             if blob:
                 items.append(_clip_from_json(blob))
@@ -275,8 +274,7 @@ class ClipCacheRepo:
         provider_clip_id: str,
     ) -> None:
         await conn.execute(
-            "DELETE FROM clip_cache "
-            "WHERE provider_id = ? AND provider_clip_id = ?",
+            "DELETE FROM clip_cache WHERE provider_id = ? AND provider_clip_id = ?",
             (provider_id, provider_clip_id),
         )
         await conn.commit()

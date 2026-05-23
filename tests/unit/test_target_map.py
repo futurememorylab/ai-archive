@@ -1,6 +1,3 @@
-import pytest
-
-from backend.app.models.annotation import ReviewItem
 from backend.app.models.prompt import TargetMap
 from backend.app.services.target_map import expand
 
@@ -28,15 +25,13 @@ def test_expand_markers_drops_in_secs_past_duration():
     `clip_duration_secs` lets us drop those before they reach the UI."""
     structured = {
         "scenes": [
-            {"name": "in-bounds",  "in": {"secs": 10.0}, "out": {"secs": 20.0}},
+            {"name": "in-bounds", "in": {"secs": 10.0}, "out": {"secs": 20.0}},
             {"name": "starts-at-end", "in": {"secs": 100.0}, "out": {"secs": 110.0}},
-            {"name": "way-past",   "in": {"secs": 200.0}, "out": {"secs": 250.0}},
+            {"name": "way-past", "in": {"secs": 200.0}, "out": {"secs": 250.0}},
         ]
     }
     tm = _tm({"scenes": {"kind": "markers"}})
-    items = expand(
-        structured, tm, annotation_id=1, catdv_clip_id=42, clip_duration_secs=100.0
-    )
+    items = expand(structured, tm, annotation_id=1, catdv_clip_id=42, clip_duration_secs=100.0)
     assert [it.proposed_value["name"] for it in items] == ["in-bounds"]
 
 
@@ -47,9 +42,7 @@ def test_expand_markers_clamps_out_secs_to_duration():
         ]
     }
     tm = _tm({"scenes": {"kind": "markers"}})
-    items = expand(
-        structured, tm, annotation_id=1, catdv_clip_id=42, clip_duration_secs=100.0
-    )
+    items = expand(structured, tm, annotation_id=1, catdv_clip_id=42, clip_duration_secs=100.0)
     assert len(items) == 1
     assert items[0].proposed_value["out"]["secs"] == 100.0
     # Original `in` preserved
@@ -57,9 +50,7 @@ def test_expand_markers_clamps_out_secs_to_duration():
 
 
 def test_expand_markers_no_clamping_when_duration_not_supplied():
-    structured = {
-        "scenes": [{"name": "anything", "in": {"secs": 999.0}, "out": {"secs": 1000.0}}]
-    }
+    structured = {"scenes": [{"name": "anything", "in": {"secs": 999.0}, "out": {"secs": 1000.0}}]}
     tm = _tm({"scenes": {"kind": "markers"}})
     items = expand(structured, tm, annotation_id=1, catdv_clip_id=42)
     assert len(items) == 1

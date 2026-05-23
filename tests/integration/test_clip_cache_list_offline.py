@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -22,7 +22,7 @@ def _clip(name: str, notes: str = "", clip_id: str = "1") -> CanonicalClip:
             upstream_handle=clip_id,
         ),
         provider_data={},
-        fetched_at=datetime.now(timezone.utc),
+        fetched_at=datetime.now(UTC),
     )
 
 
@@ -71,9 +71,7 @@ async def test_search_matches_notes(db):
     await repo.upsert(
         db, clip=_clip("nope", notes="needle in here", clip_id="1"), catalog_id="881507"
     )
-    await repo.upsert(
-        db, clip=_clip("other", notes="haystack", clip_id="2"), catalog_id="881507"
-    )
+    await repo.upsert(db, clip=_clip("other", notes="haystack", clip_id="2"), catalog_id="881507")
 
     items, total = await repo.list_by_catalog(
         db,

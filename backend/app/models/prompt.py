@@ -4,10 +4,10 @@ A Prompt is the long-lived identity (name + description). A PromptVersion
 is a snapshot of editable content (body + target_map + output_schema + model)
 plus a state (draft / production / archived) that gates mutability.
 """
+
 from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, RootModel, model_validator
-
 
 PromptVersionState = Literal["draft", "production", "archived"]
 PROMPT_VERSION_STATES: tuple[str, ...] = get_args(PromptVersionState)

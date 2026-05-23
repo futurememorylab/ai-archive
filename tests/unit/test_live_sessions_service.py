@@ -16,10 +16,16 @@ class _Settings:
 
 def _clip():
     return dict(
-        id=42, name="P1010001", format="9,5 mm", fps=25,
-        duration_secs=120.0, duration_smpte="00:02:00:00",
-        notes="rodinný výlet", big_notes="",
-        markers=[], fields={"pragafilm.dekáda.natočení": "20.léta"},
+        id=42,
+        name="P1010001",
+        format="9,5 mm",
+        fps=25,
+        duration_secs=120.0,
+        duration_smpte="00:02:00:00",
+        notes="rodinný výlet",
+        big_notes="",
+        markers=[],
+        fields={"pragafilm.dekáda.natočení": "20.léta"},
     )
 
 
@@ -32,7 +38,8 @@ def test_setup_payload_top_level_model_and_generation_config():
     # systemInstruction + transcription configs sit at the same level. Only
     # responseModalities/speechConfig nest inside generationConfig.
     p = assemble_setup_payload(
-        clip=_clip(), draft=_draft(),
+        clip=_clip(),
+        draft=_draft(),
         prompt_body="SYSTÉM INSTRUKCE",
         settings=_Settings(),
     )
@@ -50,7 +57,8 @@ def test_setup_payload_top_level_model_and_generation_config():
 
 def test_setup_payload_has_system_instruction_text():
     p = assemble_setup_payload(
-        clip=_clip(), draft=_draft(),
+        clip=_clip(),
+        draft=_draft(),
         prompt_body="MŮJ ČESKÝ SYSTÉM",
         settings=_Settings(),
     )
@@ -60,8 +68,10 @@ def test_setup_payload_has_system_instruction_text():
 
 def test_setup_payload_declares_google_search_and_end_session_tools():
     p = assemble_setup_payload(
-        clip=_clip(), draft=_draft(),
-        prompt_body="x", settings=_Settings(),
+        clip=_clip(),
+        draft=_draft(),
+        prompt_body="x",
+        settings=_Settings(),
     )
     tools = p["tools"]
     assert {"googleSearch": {}} in tools
@@ -73,8 +83,10 @@ def test_setup_payload_declares_google_search_and_end_session_tools():
 
 def test_setup_payload_initial_context_turn_has_text_part():
     p = assemble_setup_payload(
-        clip=_clip(), draft=_draft(),
-        prompt_body="x", settings=_Settings(),
+        clip=_clip(),
+        draft=_draft(),
+        prompt_body="x",
+        settings=_Settings(),
     )
     turn = p["initial_context_turn"]
     assert turn["role"] == "user"
@@ -108,7 +120,8 @@ async def test_mint_ephemeral_token_requires_api_key():
     s.gemini_api_key = None  # type: ignore[attr-defined]
     with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
         await mint_ephemeral_token(
-            setup={"model": "x"}, settings=s,
+            setup={"model": "x"},
+            settings=s,
         )
 
 
@@ -121,9 +134,10 @@ class _SettingsForSummary(_Settings):
 @respx.mock
 async def test_summarize_calls_generate_content_with_czech_prompt(tmp_path):
     import json as _j
+    from pathlib import Path
 
     import aiosqlite
-    from pathlib import Path
+
     from backend.app.migrations_runner import apply_migrations
     from backend.app.repositories.live_sessions import LiveSessionsRepo
 
@@ -140,16 +154,21 @@ async def test_summarize_calls_generate_content_with_czech_prompt(tmp_path):
             {"role": "model", "text": "Vypadá to jako Škoda z 30. let.", "ts": 2},
         ]
         await repo.mark_ended(
-            conn, "abc", end_reason="user_stop",
+            conn,
+            "abc",
+            end_reason="user_stop",
             transcript_json=_j.dumps(transcript, ensure_ascii=False),
         )
 
         route = respx.post(
             "https://generativelanguage.googleapis.com/v1beta/models/"
             "gemini-2.5-flash-lite:generateContent"
-        ).mock(return_value=Response(200, json={
-            "candidates": [{"content": {"parts": [{"text": "Krátké české shrnutí."}]}}]
-        }))
+        ).mock(
+            return_value=Response(
+                200,
+                json={"candidates": [{"content": {"parts": [{"text": "Krátké české shrnutí."}]}}]},
+            )
+        )
 
         ok = await summarize(conn, session_id="abc", settings=_SettingsForSummary())
         assert ok is True
@@ -164,9 +183,10 @@ async def test_summarize_calls_generate_content_with_czech_prompt(tmp_path):
 @respx.mock
 async def test_summarize_is_idempotent(tmp_path):
     import json as _j
+    from pathlib import Path
 
     import aiosqlite
-    from pathlib import Path
+
     from backend.app.migrations_runner import apply_migrations
     from backend.app.repositories.live_sessions import LiveSessionsRepo
 
@@ -179,7 +199,9 @@ async def test_summarize_is_idempotent(tmp_path):
         await repo.insert_pending(conn, id="abc", clip_id=1, prompt_version=None)
         await repo.mark_active(conn, "abc")
         await repo.mark_ended(
-            conn, "abc", end_reason="user_stop",
+            conn,
+            "abc",
+            end_reason="user_stop",
             transcript_json=_j.dumps([{"role": "user", "text": "x", "ts": 1}]),
         )
         await repo.set_summary(conn, "abc", "Již existující shrnutí.")
@@ -187,10 +209,12 @@ async def test_summarize_is_idempotent(tmp_path):
         respx.post(
             "https://generativelanguage.googleapis.com/v1beta/models/"
             "gemini-2.5-flash-lite:generateContent"
-        ).mock(return_value=Response(
-            200,
-            json={"candidates": [{"content": {"parts": [{"text": "new"}]}}]},
-        ))
+        ).mock(
+            return_value=Response(
+                200,
+                json={"candidates": [{"content": {"parts": [{"text": "new"}]}}]},
+            )
+        )
 
         ok = await summarize(conn, session_id="abc", settings=_SettingsForSummary())
         assert ok is False
@@ -200,8 +224,10 @@ async def test_summarize_is_idempotent(tmp_path):
 
 @pytest.mark.asyncio
 async def test_summarize_skips_when_transcript_empty(tmp_path):
-    import aiosqlite
     from pathlib import Path
+
+    import aiosqlite
+
     from backend.app.migrations_runner import apply_migrations
     from backend.app.repositories.live_sessions import LiveSessionsRepo
 
@@ -214,7 +240,10 @@ async def test_summarize_skips_when_transcript_empty(tmp_path):
         await repo.insert_pending(conn, id="abc", clip_id=1, prompt_version=None)
         await repo.mark_active(conn, "abc")
         await repo.mark_ended(
-            conn, "abc", end_reason="error", transcript_json="[]",
+            conn,
+            "abc",
+            end_reason="error",
+            transcript_json="[]",
         )
         ok = await summarize(conn, session_id="abc", settings=_SettingsForSummary())
         assert ok is False

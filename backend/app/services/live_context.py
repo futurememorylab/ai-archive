@@ -10,6 +10,7 @@ Either block may be omitted entirely when nothing of substance is in it.
 All Czech free-text fields are run through `view_models._fix` to repair
 mojibake (see catdv-mojibake-display-fix memory + ui/view_models.py).
 """
+
 from typing import Any
 
 from backend.app.ui.view_models import _fix
@@ -38,7 +39,7 @@ def _v(value: Any) -> str:
 def _render_marker(m: dict) -> str:
     name = _fix(m.get("name", "") or "") or ""
     desc = _fix(m.get("description", "") or "") or ""
-    range_ = f"{m.get('in_smpte','')} – {m.get('out_smpte','')}"
+    range_ = f"{m.get('in_smpte', '')} – {m.get('out_smpte', '')}"
     label = f'„{name}"' if name else ""
     suffix = f" — {desc}" if desc else ""
     return f"- {range_}  {label}{suffix}".rstrip()
@@ -47,10 +48,10 @@ def _render_marker(m: dict) -> str:
 def _render_published(clip: dict) -> str:
     lines = ["=== Publikované anotace (z CatDV) ==="]
     lines.append(
-        f"Název klipu: {_fix(clip.get('name','') or '') or ''}\n"
-        f"Formát: {_fix(clip.get('format','') or '') or ''}   "
-        f"FPS: {clip.get('fps','')}   "
-        f"Délka: {clip.get('duration_smpte','')}"
+        f"Název klipu: {_fix(clip.get('name', '') or '') or ''}\n"
+        f"Formát: {_fix(clip.get('format', '') or '') or ''}   "
+        f"FPS: {clip.get('fps', '')}   "
+        f"Délka: {clip.get('duration_smpte', '')}"
     )
     notes = clip.get("notes")
     if _ne(notes):

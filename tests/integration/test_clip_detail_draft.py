@@ -6,6 +6,7 @@ to the template. The template emits a hidden hook
 `data-draft-empty="true|false"` we can assert against; the real draft
 markup lands in Task 8.
 """
+
 import asyncio
 import importlib
 from datetime import UTC, datetime
@@ -45,8 +46,9 @@ class FakeArchive:
         self._clips = clips
 
     async def list_clips(self, catalog, query):
-        return ClipPage(items=self._clips, total=len(self._clips),
-                        offset=query.offset, limit=query.limit)
+        return ClipPage(
+            items=self._clips, total=len(self._clips), offset=query.offset, limit=query.limit
+        )
 
     async def get_clip(self, clip_id_str):
         for c in self._clips:
@@ -70,6 +72,7 @@ def _setenv(monkeypatch, tmp_path):
 def _make_app(monkeypatch, tmp_path):
     _setenv(monkeypatch, tmp_path)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     return main_mod.app
 
@@ -104,8 +107,7 @@ async def _seed_annotation_with_marker(ctx, clip_id: int = 101) -> int:
             prompt_used="describe scenes",
             raw_response={},
             structured_output={},
-            clip_snapshot={"ID": clip_id, "name": f"Clip_{clip_id}",
-                           "markers": [], "fields": {}},
+            clip_snapshot={"ID": clip_id, "name": f"Clip_{clip_id}", "markers": [], "fields": {}},
         ),
     )
     await ctx.review_items_repo.bulk_insert(
@@ -159,7 +161,8 @@ def test_clips_draft_partial_returns_empty_state(monkeypatch, tmp_path):
 
 
 def test_clips_draft_partial_returns_populated_when_annotation_exists(
-    monkeypatch, tmp_path,
+    monkeypatch,
+    tmp_path,
 ):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:

@@ -28,7 +28,11 @@ AnnoFilter = Literal["any", "for_review", "applied", "none", "has_any"]
 
 CACHE_VALUES: tuple[CacheFilter, ...] = ("any", "none", "local", "ai")
 ANNO_VALUES: tuple[AnnoFilter, ...] = (
-    "any", "for_review", "applied", "none", "has_any",
+    "any",
+    "for_review",
+    "applied",
+    "none",
+    "has_any",
 )
 
 
@@ -44,9 +48,7 @@ def is_active(cache: CacheFilter, anno: AnnoFilter) -> bool:
     return cache != "any" or anno != "any"
 
 
-async def _ids_with_media_local(
-    db: aiosqlite.Connection, provider_id: str
-) -> set[int]:
+async def _ids_with_media_local(db: aiosqlite.Connection, provider_id: str) -> set[int]:
     cur = await db.execute(
         "SELECT DISTINCT catdv_clip_id FROM proxy_cache "
         "WHERE provider_id = ? AND catdv_clip_id IS NOT NULL",
@@ -55,9 +57,7 @@ async def _ids_with_media_local(
     return {int(r[0]) for r in await cur.fetchall()}
 
 
-async def _ids_with_media_ai(
-    db: aiosqlite.Connection, provider_id: str
-) -> set[int]:
+async def _ids_with_media_ai(db: aiosqlite.Connection, provider_id: str) -> set[int]:
     cur = await db.execute(
         "SELECT DISTINCT catdv_clip_id FROM ai_store_files "
         "WHERE provider_id = ? AND catdv_clip_id IS NOT NULL",
@@ -66,14 +66,10 @@ async def _ids_with_media_ai(
     return {int(r[0]) for r in await cur.fetchall()}
 
 
-async def _ids_with_annotation_review_state(
-    db: aiosqlite.Connection, *, applied: bool
-) -> set[int]:
+async def _ids_with_annotation_review_state(db: aiosqlite.Connection, *, applied: bool) -> set[int]:
     """Clip IDs with at least one review_item matching the applied predicate."""
     where = "applied_at IS NOT NULL" if applied else "applied_at IS NULL"
-    cur = await db.execute(
-        f"SELECT DISTINCT catdv_clip_id FROM review_items WHERE {where}"
-    )
+    cur = await db.execute(f"SELECT DISTINCT catdv_clip_id FROM review_items WHERE {where}")
     return {int(r[0]) for r in await cur.fetchall()}
 
 
@@ -116,8 +112,7 @@ async def _known_clip_id_universe(
 
     # clip_cache was added in PR 3 with only (provider_id, provider_clip_id).
     cur = await db.execute(
-        "SELECT DISTINCT provider_clip_id FROM clip_cache "
-        "WHERE provider_id = ?",
+        "SELECT DISTINCT provider_clip_id FROM clip_cache WHERE provider_id = ?",
         (provider_id,),
     )
     for r in await cur.fetchall():
@@ -126,8 +121,7 @@ async def _known_clip_id_universe(
 
     for table in ("proxy_cache", "ai_store_files", "annotations", "review_items"):
         cur = await db.execute(
-            f"SELECT DISTINCT catdv_clip_id FROM {table} "
-            f"WHERE catdv_clip_id IS NOT NULL"
+            f"SELECT DISTINCT catdv_clip_id FROM {table} WHERE catdv_clip_id IS NOT NULL"
         )
         for r in await cur.fetchall():
             ids.add(int(r[0]))

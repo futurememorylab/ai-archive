@@ -9,7 +9,6 @@ from httpx import ASGITransport, AsyncClient, Response
 from backend.app.main import app
 from backend.app.migrations_runner import apply_migrations
 from backend.app.repositories.live_sessions import LiveSessionsRepo
-from backend.app.repositories.prompts import PromptsRepo
 from backend.app.seed import seed_live_system_instruction
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "backend" / "migrations"
@@ -24,19 +23,25 @@ async def client_and_db(tmp_path):
     await apply_migrations(conn, MIGRATIONS)
     # Seed the live system-instruction prompt so session-config can find it.
     await seed_live_system_instruction(
-        conn, seed_path=SEEDS / "live_system_instruction_cs.json",
+        conn,
+        seed_path=SEEDS / "live_system_instruction_cs.json",
     )
 
     class _Ctx:
         db = conn
         mode = "online"
-        settings = type("S", (), {
-            "gemini_api_key": "test-key",
-            "gemini_live_model": "gemini-2.5-flash-native-audio-latest",
-            "gemini_live_voice": "Aoede",
-            "gemini_live_inactivity_s": 60,
-            "gemini_model": "gemini-2.5-flash-lite",
-        })()
+        settings = type(
+            "S",
+            (),
+            {
+                "gemini_api_key": "test-key",
+                "gemini_live_model": "gemini-2.5-flash-native-audio-latest",
+                "gemini_live_voice": "Aoede",
+                "gemini_live_inactivity_s": 60,
+                "gemini_model": "gemini-2.5-flash-lite",
+            },
+        )()
+
     app.state.ctx = _Ctx()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -52,10 +57,16 @@ async def test_session_config_returns_token_and_setup(client_and_db, monkeypatch
 
     async def fake_load_clip(ctx, clip_id):
         return dict(
-            id=clip_id, name="P1010001", format="9,5 mm", fps=25,
-            duration_secs=120.0, duration_smpte="00:02:00:00",
-            notes="rodinný výlet", big_notes="",
-            markers=[], fields={},
+            id=clip_id,
+            name="P1010001",
+            format="9,5 mm",
+            fps=25,
+            duration_secs=120.0,
+            duration_smpte="00:02:00:00",
+            notes="rodinný výlet",
+            big_notes="",
+            markers=[],
+            fields={},
         )
 
     async def fake_load_draft(ctx, clip_id):
@@ -100,10 +111,16 @@ async def test_session_config_works_offline_when_clip_cached(client_and_db, monk
 
     async def fake_load_clip(ctx, clip_id):
         return dict(
-            id=clip_id, name="P1010001", format="9,5 mm", fps=25,
-            duration_secs=120.0, duration_smpte="00:02:00:00",
-            notes="rodinný výlet", big_notes="",
-            markers=[], fields={},
+            id=clip_id,
+            name="P1010001",
+            format="9,5 mm",
+            fps=25,
+            duration_secs=120.0,
+            duration_smpte="00:02:00:00",
+            notes="rodinný výlet",
+            big_notes="",
+            markers=[],
+            fields={},
         )
 
     async def fake_load_draft(ctx, clip_id):
@@ -172,18 +189,30 @@ async def test_summarize_route_happy_path(client_and_db):
     await repo.insert_pending(conn, id="abc", clip_id=42, prompt_version=None)
     await repo.mark_active(conn, "abc")
     await repo.mark_ended(
-        conn, "abc", end_reason="user_stop",
-        transcript_json=json.dumps([
-            {"role": "user", "text": "co je to za auto?", "ts": 1},
-            {"role": "model", "text": "Škoda 30. léta.", "ts": 2},
-        ], ensure_ascii=False),
+        conn,
+        "abc",
+        end_reason="user_stop",
+        transcript_json=json.dumps(
+            [
+                {"role": "user", "text": "co je to za auto?", "ts": 1},
+                {"role": "model", "text": "Škoda 30. léta.", "ts": 2},
+            ],
+            ensure_ascii=False,
+        ),
     )
     respx.post(
         "https://generativelanguage.googleapis.com/v1beta/models/"
         "gemini-2.5-flash-lite:generateContent"
-    ).mock(return_value=Response(200, json={
-        "candidates": [{"content": {"parts": [{"text": "Škoda z 30. let na rodinném záběru."}]}}]
-    }))
+    ).mock(
+        return_value=Response(
+            200,
+            json={
+                "candidates": [
+                    {"content": {"parts": [{"text": "Škoda z 30. let na rodinném záběru."}]}}
+                ]
+            },
+        )
+    )
     r = await ac.post("/api/live/sessions/abc/summarize")
     assert r.status_code == 200, r.text
     assert r.json()["summary_cs"] == "Škoda z 30. let na rodinném záběru."
@@ -198,7 +227,9 @@ async def test_summarize_route_idempotent(client_and_db):
     await repo.insert_pending(conn, id="abc", clip_id=42, prompt_version=None)
     await repo.mark_active(conn, "abc")
     await repo.mark_ended(
-        conn, "abc", end_reason="user_stop",
+        conn,
+        "abc",
+        end_reason="user_stop",
         transcript_json=json.dumps([{"role": "user", "text": "x", "ts": 1}]),
     )
     await repo.set_summary(conn, "abc", "Existující.")
@@ -214,7 +245,9 @@ async def test_list_by_clip(client_and_db):
     await repo.insert_pending(conn, id="a", clip_id=42, prompt_version=None)
     await repo.mark_active(conn, "a")
     await repo.mark_ended(
-        conn, "a", end_reason="user_stop",
+        conn,
+        "a",
+        end_reason="user_stop",
         transcript_json=json.dumps([{"role": "u", "text": "x", "ts": 1}]),
     )
     await repo.insert_pending(conn, id="b", clip_id=99, prompt_version=None)
@@ -235,7 +268,9 @@ async def test_get_detail(client_and_db):
     await repo.insert_pending(conn, id="abc", clip_id=42, prompt_version=None)
     await repo.mark_active(conn, "abc")
     await repo.mark_ended(
-        conn, "abc", end_reason="user_stop",
+        conn,
+        "abc",
+        end_reason="user_stop",
         transcript_json=json.dumps([{"role": "u", "text": "hi", "ts": 1}]),
     )
     await repo.set_summary(conn, "abc", "Shrnutí.")

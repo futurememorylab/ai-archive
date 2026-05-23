@@ -1,0 +1,22 @@
+# Run on every commit. Keep hooks fast — slow hooks get skipped.
+#
+# Type-check uses the baseline at .basedpyright/baseline.json so existing
+# pre-existing type errors don't block commits; only *new* type errors do.
+# Refresh the baseline with: .venv/bin/basedpyright --writebaseline backend/ tests/
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.13
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: basedpyright
+        name: basedpyright (type check, baseline)
+        entry: .venv/bin/basedpyright
+        language: system
+        types: [python]
+        pass_filenames: false
+        args: [backend, tests]

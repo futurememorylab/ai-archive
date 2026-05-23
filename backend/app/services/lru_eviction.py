@@ -71,9 +71,7 @@ class LruEviction:
             except Exception:  # noqa: BLE001 — loop must not die
                 log.exception("lru_eviction tick failed")
             try:
-                await asyncio.wait_for(
-                    self._stop_evt.wait(), timeout=self._tick_interval_s
-                )
+                await asyncio.wait_for(self._stop_evt.wait(), timeout=self._tick_interval_s)
             except TimeoutError:
                 pass
 
@@ -92,7 +90,9 @@ class LruEviction:
         for row in rows:
             key = (row["provider_id"], row["provider_clip_id"])
             out = await self._actions.evict_local_media(
-                key, force=False, who="system",
+                key,
+                force=False,
+                who="system",
             )
             if out.result == "ok":
                 evicted += 1
@@ -127,15 +127,14 @@ class LruEviction:
             )
             log.warning(
                 "lru_eviction left cache over cap: %s bytes remain over %s",
-                to_free, self._cap,
+                to_free,
+                self._cap,
             )
         return evicted
 
     # --- internals ---------------------------------------------------
 
-    async def _candidates_oldest_first(
-        self, db: aiosqlite.Connection
-    ) -> list[dict[str, Any]]:
+    async def _candidates_oldest_first(self, db: aiosqlite.Connection) -> list[dict[str, Any]]:
         """Return non-pinned proxy_cache rows ordered oldest-first.
 
         "Non-pinned" = `(provider_id, provider_clip_id)` does not appear

@@ -1,6 +1,3 @@
-import pytest
-
-
 def test_settings_loads_from_env(monkeypatch):
     monkeypatch.setenv("APP_ENV", "dev")
     monkeypatch.setenv("CATDV_BASE_URL", "http://example.test:8080")

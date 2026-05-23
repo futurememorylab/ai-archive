@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -53,7 +53,7 @@ def test_canonical_clip_is_frozen():
             upstream_handle="1",
         ),
         provider_data={"ID": 1},
-        fetched_at=datetime.now(timezone.utc),
+        fetched_at=datetime.now(UTC),
     )
     with pytest.raises(Exception):
         clip.name = "y"  # type: ignore[misc]

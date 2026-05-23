@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -27,13 +27,20 @@ def test_live_session_invalid_end_reason_rejected():
 
 
 def test_live_session_full_construct_roundtrip():
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     s = LiveSession(
-        id="abc", clip_id=42, prompt_version=3, state="ended",
-        started_at=now, ended_at=now, end_reason="user_stop",
+        id="abc",
+        clip_id=42,
+        prompt_version=3,
+        state="ended",
+        started_at=now,
+        ended_at=now,
+        end_reason="user_stop",
         transcript_json='[{"role":"user","text":"ahoj","ts":1}]',
         summary_cs="Krátký test.",
-        frame_count=2, search_calls=1, created_at=now,
+        frame_count=2,
+        search_calls=1,
+        created_at=now,
     )
     assert s.end_reason == "user_stop"
     assert s.frame_count == 2

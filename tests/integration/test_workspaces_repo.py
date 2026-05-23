@@ -74,9 +74,7 @@ async def test_set_cache_state(db):
     rows = await repo.list_clips(db, ws_id)
     assert rows[0]["cache_state"] == "ready"
     assert rows[0]["cache_error"] is None
-    await repo.set_cache_state(
-        db, ws_id, ("catdv", "1"), "error", error="404 missing proxy"
-    )
+    await repo.set_cache_state(db, ws_id, ("catdv", "1"), "error", error="404 missing proxy")
     rows = await repo.list_clips(db, ws_id)
     assert rows[0]["cache_state"] == "error"
     assert rows[0]["cache_error"] == "404 missing proxy"
@@ -99,6 +97,7 @@ async def test_delete_cascades_workspace_clips(db):
 async def test_set_primary_pin_updates_clip_cache(db):
     # seed a clip_cache row first
     from datetime import UTC, datetime
+
     await db.execute(
         """
         INSERT INTO clip_cache (provider_id, provider_clip_id, name, catalog_id,

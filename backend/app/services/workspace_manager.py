@@ -38,7 +38,7 @@ from backend.app.repositories.workspaces import WorkspacesRepo
 @dataclass(frozen=True)
 class PrepEvent:
     clip_key: ClipKey
-    state: str             # "metadata" | "media" | "ready" | "error"
+    state: str  # "metadata" | "media" | "ready" | "error"
     error: str | None = None
 
 
@@ -89,9 +89,7 @@ class WorkspaceManager:
         # workspace still pins it, point there; otherwise clear.
         for key in clip_keys:
             pinning = await self._repo.workspaces_pinning(db, key)
-            await self._repo.set_primary_pin(
-                db, key, pinning[0] if pinning else None
-            )
+            await self._repo.set_primary_pin(db, key, pinning[0] if pinning else None)
 
     async def list_workspaces(self) -> list[dict[str, Any]]:
         return await self._repo.list(self._db_provider())
@@ -145,7 +143,10 @@ class WorkspaceManager:
                 if not media_local:
                     if self._resolver is None:
                         await self._repo.set_cache_state(
-                            db, ws_id, key, "error",
+                            db,
+                            ws_id,
+                            key,
+                            "error",
                             error="no proxy resolver wired",
                         )
                         yield PrepEvent(
@@ -160,9 +161,7 @@ class WorkspaceManager:
                         await self._repo.set_cache_state(
                             db, ws_id, key, "error", error=f"media: {exc}"
                         )
-                        yield PrepEvent(
-                            clip_key=key, state="error", error=str(exc)
-                        )
+                        yield PrepEvent(clip_key=key, state="error", error=str(exc))
                         continue
                     await self._repo.set_cache_state(db, ws_id, key, "media")
                     yield PrepEvent(clip_key=key, state="media")
@@ -176,9 +175,7 @@ class WorkspaceManager:
 
     # --- release -----------------------------------------------------
 
-    async def release(
-        self, ws_id: int, *, delete_workspace: bool = False
-    ) -> None:
+    async def release(self, ws_id: int, *, delete_workspace: bool = False) -> None:
         """Drop pins. Does NOT evict media or clip_cache rows."""
         db = self._db_provider()
         keys = await self._repo.pinned_clip_keys(db, ws_id)
@@ -188,9 +185,7 @@ class WorkspaceManager:
         # re-point or clear the primary pin per clip
         for key in keys:
             pinning = await self._repo.workspaces_pinning(db, key)
-            await self._repo.set_primary_pin(
-                db, key, pinning[0] if pinning else None
-            )
+            await self._repo.set_primary_pin(db, key, pinning[0] if pinning else None)
         if delete_workspace:
             await self._repo.delete(db, ws_id)
 

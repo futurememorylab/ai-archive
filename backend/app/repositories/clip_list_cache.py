@@ -98,8 +98,7 @@ class ClipListCacheRepo:
         catalog_id: str,
     ) -> int:
         cur = await conn.execute(
-            "DELETE FROM clip_list_cache "
-            "WHERE provider_id = ? AND catalog_id = ?",
+            "DELETE FROM clip_list_cache WHERE provider_id = ? AND catalog_id = ?",
             (provider_id, catalog_id),
         )
         await conn.commit()

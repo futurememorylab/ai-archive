@@ -1,5 +1,3 @@
-import pytest
-
 from backend.app.archive.model import (
     AddMarkers,
     AppendNote,
@@ -58,9 +56,7 @@ def test_add_markers_dedupes_on_existing_in_frm():
             "out": {"frm": 150, "fmt": 25.0, "secs": 6.0, "txt": "0:00:06:00"},
         }
     ]
-    op = AddMarkers(
-        markers=[Marker(name="dup", in_=Timecode(secs=4.0, fps=25.0), out=None)]
-    )
+    op = AddMarkers(markers=[Marker(name="dup", in_=Timecode(secs=4.0, fps=25.0), out=None)])
     payload = build_put_payload(current=_clip(markers=existing), ops=[op])
     assert len(payload["markers"]) == 1
 
@@ -90,9 +86,7 @@ def test_replace_note_overrides_existing():
 
 
 def test_multiple_ops_combined_in_one_payload():
-    op_m = AddMarkers(
-        markers=[Marker(name="m", in_=Timecode(secs=2.0, fps=25.0), out=None)]
-    )
+    op_m = AddMarkers(markers=[Marker(name="m", in_=Timecode(secs=2.0, fps=25.0), out=None)])
     op_f = SetField(identifier="pragafilm.barva", value="true")
     op_n = AppendNote(target="notes", text="x")
     payload = build_put_payload(current=_clip(), ops=[op_m, op_f, op_n])

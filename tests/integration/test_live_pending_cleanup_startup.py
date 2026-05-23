@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import aiosqlite
@@ -18,9 +18,10 @@ async def test_startup_cleanup_drops_stale_pending(tmp_path):
         await apply_migrations(conn, MIGRATIONS)
         repo = LiveSessionsRepo()
         await repo.insert_pending(conn, id="old", clip_id=1, prompt_version=None)
-        two_h_ago = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+        two_h_ago = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
         await conn.execute(
-            "UPDATE live_sessions SET created_at=? WHERE id='old'", (two_h_ago,),
+            "UPDATE live_sessions SET created_at=? WHERE id='old'",
+            (two_h_ago,),
         )
         await conn.commit()
 

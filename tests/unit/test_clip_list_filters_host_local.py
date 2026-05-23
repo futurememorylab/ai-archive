@@ -76,7 +76,7 @@ async def test_cache_filter_ignored_in_host_local_when_anno_active(memdb):
         memdb,
         provider_id="catdv",
         catalog_id="881507",
-        cache="local",          # would normally restrict
+        cache="local",  # would normally restrict
         anno="for_review",
         host_local_proxies=True,
     )

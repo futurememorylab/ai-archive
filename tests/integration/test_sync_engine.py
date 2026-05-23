@@ -94,7 +94,7 @@ async def test_drain_once_batches_ops_per_clip(db):
     provider = FakeProvider()
     engine = _make_engine(db, provider=provider)
     n = await engine.drain_once()
-    assert n == 2   # 2 clips processed
+    assert n == 2  # 2 clips processed
     assert len(provider.calls) == 2
     by_clip = {cs.clip_key[1]: cs for cs in provider.calls}
     assert len(by_clip["1"].ops) == 2
@@ -126,9 +126,7 @@ async def test_drain_once_marks_conflict(db):
         status="conflict",
         upstream_response={},
         new_etag="v2",
-        conflict_detail=ConflictDetail(
-            kind="modified", expected_etag="v1", actual_etag="v2"
-        ),
+        conflict_detail=ConflictDetail(kind="modified", expected_etag="v1", actual_etag="v2"),
     )
     engine = _make_engine(db, provider=provider)
     await engine.drain_once()
@@ -172,8 +170,7 @@ async def test_drain_once_writes_write_log_on_success(db):
     await engine.drain_once()
 
     cur = await db.execute(
-        "SELECT catdv_clip_id, provider_id, provider_clip_id, status "
-        "FROM write_log"
+        "SELECT catdv_clip_id, provider_id, provider_clip_id, status FROM write_log"
     )
     rows = await cur.fetchall()
     assert len(rows) == 1
@@ -210,9 +207,7 @@ async def test_drain_processes_when_backoff_elapsed(db):
     past = (datetime.now(tz=UTC) - timedelta(hours=1)).isoformat()
     await repo.mark_retryable(db, ids, error="x", attempted_at=past)
     provider = FakeProvider()
-    engine = _make_engine(
-        db, provider=provider, retry_base_s=2.0, retry_max_s=300.0
-    )
+    engine = _make_engine(db, provider=provider, retry_base_s=2.0, retry_max_s=300.0)
     n = await engine.drain_once()
     assert n == 1
     rows = await repo.list_pending(db, status="applied")

@@ -26,17 +26,11 @@ _templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 def _mode(monitor) -> str:
     if monitor is None:
         return "online"
-    if getattr(monitor, "is_forced", False) or getattr(
-        monitor, "_forced_offline", False
-    ):
+    if getattr(monitor, "is_forced", False) or getattr(monitor, "_forced_offline", False):
         return "forced_offline"
     from backend.app.services.connection_monitor import ConnectionState
 
-    return (
-        "online"
-        if monitor.current_state() == ConnectionState.online
-        else "offline"
-    )
+    return "online" if monitor.current_state() == ConnectionState.online else "offline"
 
 
 @router.get("/state")
@@ -59,9 +53,7 @@ async def retry_now(request: Request):
 
     if monitor is None:
         body = {"state": "online", "mode": "online"}
-    elif getattr(monitor, "is_forced", False) or getattr(
-        monitor, "_forced_offline", False
-    ):
+    elif getattr(monitor, "is_forced", False) or getattr(monitor, "_forced_offline", False):
         if is_htmx:
             return _templates.TemplateResponse(
                 request,
@@ -69,9 +61,7 @@ async def retry_now(request: Request):
                 {"mode": "forced_offline"},
                 status_code=409,
             )
-        raise HTTPException(
-            status_code=409, detail="forced offline (CATDV_OFFLINE=true)"
-        )
+        raise HTTPException(status_code=409, detail="forced offline (CATDV_OFFLINE=true)")
     else:
         state = await monitor.retry_now()
         body = {"state": str(state.value), "mode": _mode(monitor)}

@@ -93,9 +93,7 @@ async def test_fs_e2e_setfield_applies_to_sidecar(db, tmp_path: Path):
     items = await items_repo.list_by_clip(db, 0, decision="accepted")
 
     version = await prompts.get_version(db, vid)
-    queue = WriteQueue(
-        pending_ops_repo=pending_repo, review_items_repo=items_repo
-    )
+    queue = WriteQueue(pending_ops_repo=pending_repo, review_items_repo=items_repo)
     await queue.enqueue_apply(
         db,
         clip_key=("fs", "cat/clip001"),
@@ -106,9 +104,7 @@ async def test_fs_e2e_setfield_applies_to_sidecar(db, tmp_path: Path):
         fps=25.0,
     )
 
-    cur = await db.execute(
-        "SELECT COUNT(*) FROM pending_operations WHERE status='pending'"
-    )
+    cur = await db.execute("SELECT COUNT(*) FROM pending_operations WHERE status='pending'")
     assert (await cur.fetchone())[0] == 1
 
     # --- drain (no ConnectionMonitor → engine assumes online) ------
@@ -127,15 +123,9 @@ async def test_fs_e2e_setfield_applies_to_sidecar(db, tmp_path: Path):
     sidecar = cat / "clip001.annot.json"
     assert sidecar.exists()
     doc = json.loads(sidecar.read_text())
-    assert (
-        doc["fields"]["pragafilm.dekáda.natočení"]["value"] == "30.léta"
-    )
+    assert doc["fields"]["pragafilm.dekáda.natočení"]["value"] == "30.léta"
 
-    cur = await db.execute(
-        "SELECT COUNT(*) FROM pending_operations WHERE status='applied'"
-    )
+    cur = await db.execute("SELECT COUNT(*) FROM pending_operations WHERE status='applied'")
     assert (await cur.fetchone())[0] == 1
-    cur = await db.execute(
-        "SELECT COUNT(*) FROM write_log WHERE status='ok'"
-    )
+    cur = await db.execute("SELECT COUNT(*) FROM write_log WHERE status='ok'")
     assert (await cur.fetchone())[0] == 1

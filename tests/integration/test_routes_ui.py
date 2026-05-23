@@ -21,6 +21,7 @@ def _setenv(monkeypatch, tmp_path):
 def _make_app(monkeypatch, tmp_path):
     _setenv(monkeypatch, tmp_path)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     return main_mod.app
 

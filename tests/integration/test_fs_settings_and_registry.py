@@ -73,6 +73,7 @@ def test_settings_validator_requires_fs_root_when_fs(monkeypatch, tmp_path: Path
 
     # Import fresh so the new env applies.
     from backend.app.settings import Settings
+
     with pytest.raises(ValidationError):
         Settings()
 
@@ -87,6 +88,7 @@ def test_settings_validator_accepts_fs_with_fs_root(monkeypatch, tmp_path: Path)
     monkeypatch.chdir(tmp_path)
 
     from backend.app.settings import Settings
+
     s = Settings()
     assert s.archive_provider == "fs"
     assert s.fs_root == tmp_path

@@ -45,15 +45,12 @@ def test_queue_list_returns_rows(client):
     assert r.status_code == 200
     body = r.json()
     assert "active" in body and "recent" in body and "counts" in body
-    active_keys = [(row["provider_id"], row["provider_clip_id"])
-                   for row in body["active"]]
+    active_keys = [(row["provider_id"], row["provider_clip_id"]) for row in body["active"]]
     assert ("catdv", "7") in active_keys
 
 
 def test_cancel_queued_row(client):
-    rid = client.post(
-        "/api/cache/prefetch", json={"clip_keys": [["catdv", "99"]]}
-    ).json()["ids"][0]
+    rid = client.post("/api/cache/prefetch", json={"clip_keys": [["catdv", "99"]]}).json()["ids"][0]
     r = client.post(f"/api/cache/prefetch/{rid}/cancel")
     assert r.status_code == 200
     assert r.json()["cancelled"] is True

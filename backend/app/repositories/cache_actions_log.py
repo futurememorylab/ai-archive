@@ -27,8 +27,14 @@ def _now_iso() -> str:
 
 
 _ROW_COLS = (
-    "id", "who", "action", "clip_keys", "result",
-    "detail", "bytes_freed", "at",
+    "id",
+    "who",
+    "action",
+    "clip_keys",
+    "result",
+    "detail",
+    "bytes_freed",
+    "at",
 )
 
 
@@ -46,9 +52,7 @@ class CacheActionsLogRepo:
         at: str | None = None,
     ) -> int:
         ts = at or _now_iso()
-        payload = json.dumps(
-            [[k[0], k[1]] for k in clip_keys], ensure_ascii=False
-        )
+        payload = json.dumps([[k[0], k[1]] for k in clip_keys], ensure_ascii=False)
         cur = await conn.execute(
             """
             INSERT INTO cache_actions_log
@@ -64,8 +68,7 @@ class CacheActionsLogRepo:
         self, conn: aiosqlite.Connection, *, limit: int = 100
     ) -> list[dict[str, Any]]:
         cur = await conn.execute(
-            f"SELECT {', '.join(_ROW_COLS)} FROM cache_actions_log "
-            "ORDER BY id DESC LIMIT ?",
+            f"SELECT {', '.join(_ROW_COLS)} FROM cache_actions_log ORDER BY id DESC LIMIT ?",
             (limit,),
         )
         rows = await cur.fetchall()

@@ -96,9 +96,7 @@ def test_clip_detail_includes_markers_with_secs():
 
 
 def test_clip_detail_marker_without_out_has_none():
-    markers = (
-        Marker(name="point", in_=Timecode(secs=10.0, fps=25.0), out=None),
-    )
+    markers = (Marker(name="point", in_=Timecode(secs=10.0, fps=25.0), out=None),)
     d = clip_detail(_canonical(markers=markers))
     assert d["clip"]["markers"][0]["out_secs"] is None
 
@@ -146,13 +144,13 @@ def test_clip_detail_fixes_mojibake_in_markers_and_notes():
     # (c3 84 c2 8d) → mangled again to (c3 83 c2 84 c3 82 c2 8d). Same for 'á'.
     bad_desc = (
         b"matka s ko"
-        b"\xc3\x83\xc2\x84\xc3\x82\xc2\x8d"   # č
-        b"\xc3\x83\xc2\x83\xc3\x82\xc2\xa1"   # á
+        b"\xc3\x83\xc2\x84\xc3\x82\xc2\x8d"  # č
+        b"\xc3\x83\xc2\x83\xc3\x82\xc2\xa1"  # á
         b"rkem"
     ).decode("utf-8")
     # 'Žena pomáhá' SINGLE-mojibaked: Ž (c5 bd) → (c3 85 c2 bd), á → (c3 82 c2 a1).
     bad_name = (
-        b"\xc3\x85\xc2\xbd"                   # Ž
+        b"\xc3\x85\xc2\xbd"  # Ž
         b"ena pom"
         b"\xc3\x83\xc2\xa1h\xc3\x83\xc2\xa1"  # á…á
         b" batoleti"
@@ -169,12 +167,7 @@ def test_clip_detail_fixes_mojibake_in_markers_and_notes():
         "ID": 1,
         "name": "x",
         # Single-mojibaked 'Žena s dítětem'
-        "notes": (
-            b"\xc3\x85\xc2\xbdena s d"
-            b"\xc3\x83\xc2\xadt"
-            b"\xc3\x84\xc2\x9bte"
-            b"m"
-        ).decode("utf-8"),
+        "notes": (b"\xc3\x85\xc2\xbdena s d\xc3\x83\xc2\xadt\xc3\x84\xc2\x9btem").decode("utf-8"),
         "bigNotes": None,
     }
     d = clip_detail(_canonical(markers=markers, provider_data=provider_data))

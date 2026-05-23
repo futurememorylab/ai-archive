@@ -68,16 +68,12 @@ async def get_workspace(request: Request, ws_id: int) -> dict:
 @router.post("/{ws_id}/clips")
 async def add_clips(request: Request, ws_id: int, body: ClipKeysBody) -> dict:
     ctx = _require_manager(request)
-    await ctx.workspace_manager.add_clips(
-        ws_id, [(p, c) for p, c in body.clip_keys]
-    )
+    await ctx.workspace_manager.add_clips(ws_id, [(p, c) for p, c in body.clip_keys])
     return {"id": ws_id, "added": len(body.clip_keys)}
 
 
 @router.delete("/{ws_id}/clips/{provider_id}/{clip_id}")
-async def remove_clip(
-    request: Request, ws_id: int, provider_id: str, clip_id: str
-) -> dict:
+async def remove_clip(request: Request, ws_id: int, provider_id: str, clip_id: str) -> dict:
     ctx = _require_manager(request)
     await ctx.workspace_manager.remove_clips(ws_id, [(provider_id, clip_id)])
     return {"id": ws_id, "removed": 1}
@@ -104,9 +100,7 @@ async def prepare_workspace(request: Request, ws_id: int) -> StreamingResponse:
 
 
 @router.post("/{ws_id}/release")
-async def release_workspace(
-    request: Request, ws_id: int, delete: bool = False
-) -> dict:
+async def release_workspace(request: Request, ws_id: int, delete: bool = False) -> dict:
     ctx = _require_manager(request)
     await ctx.workspace_manager.release(ws_id, delete_workspace=delete)
     return {"id": ws_id, "released": True, "deleted": delete}

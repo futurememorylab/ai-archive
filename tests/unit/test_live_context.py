@@ -21,9 +21,12 @@ def _make_clip(**overrides):
         big_notes="dlouhý popis...",
         markers=[
             dict(
-                in_secs=0.0, out_secs=10.0,
-                in_smpte="00:00:00:00", out_smpte="00:00:10:00",
-                name="Otevírací záběr", description="auto u domu",
+                in_secs=0.0,
+                out_secs=10.0,
+                in_smpte="00:00:00:00",
+                out_smpte="00:00:10:00",
+                name="Otevírací záběr",
+                description="auto u domu",
             ),
         ],
         fields={
@@ -40,9 +43,12 @@ def _make_draft(**overrides):
     base = dict(
         markers=[
             dict(
-                in_secs=5.0, out_secs=8.0,
-                in_smpte="00:00:05:00", out_smpte="00:00:08:00",
-                name="možná Praha?", description="ulice s tramvají",
+                in_secs=5.0,
+                out_secs=8.0,
+                in_smpte="00:00:05:00",
+                out_smpte="00:00:08:00",
+                name="možná Praha?",
+                description="ulice s tramvají",
             ),
         ],
         fields={"pragafilm.popis.materialu": "rodinné video, ulice"},
@@ -76,7 +82,10 @@ def test_omits_empty_draft_block():
 
 def test_omits_empty_published_block():
     clip = _make_clip(
-        notes="", big_notes="", markers=[], fields={},
+        notes="",
+        big_notes="",
+        markers=[],
+        fields={},
     )
     out = build_context_text(clip, _make_draft())
     assert _published_block_present(out)
@@ -88,7 +97,10 @@ def test_omits_empty_published_block():
 
 def test_minimal_clip_no_draft():
     clip = _make_clip(
-        notes="", big_notes="", markers=[], fields={},
+        notes="",
+        big_notes="",
+        markers=[],
+        fields={},
     )
     out = build_context_text(clip, dict(markers=[], fields={}, notes=""))
     assert _published_block_present(out)
@@ -109,9 +121,12 @@ def test_mojibake_in_draft_marker_description_is_fixed():
     draft = _make_draft(
         markers=[
             dict(
-                in_secs=0, out_secs=1,
-                in_smpte="00:00:00:00", out_smpte="00:00:01:00",
-                name="x", description="ulice s tramvajÃ­",
+                in_secs=0,
+                out_secs=1,
+                in_smpte="00:00:00:00",
+                out_smpte="00:00:01:00",
+                name="x",
+                description="ulice s tramvajÃ­",
             ),
         ],
     )
@@ -120,12 +135,14 @@ def test_mojibake_in_draft_marker_description_is_fixed():
 
 
 def test_pragafilm_fields_only_listed_when_value_non_empty():
-    clip = _make_clip(fields={
-        "pragafilm.barva": "",
-        "pragafilm.dekáda.natočení": "20.léta",
-        "pragafilm.rok.natočení": [],
-        "pragafilm.popis.materialu": None,
-    })
+    clip = _make_clip(
+        fields={
+            "pragafilm.barva": "",
+            "pragafilm.dekáda.natočení": "20.léta",
+            "pragafilm.rok.natočení": [],
+            "pragafilm.popis.materialu": None,
+        }
+    )
     out = build_context_text(clip, dict(markers=[], fields={}, notes=""))
     assert "pragafilm.dekáda.natočení: 20.léta" in out
     assert "pragafilm.barva" not in out

@@ -1,15 +1,12 @@
 """Tests for the local-first clip-list filter resolver."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
 from backend.app.archive.model import (
     CanonicalClip,
-    FieldValue,
-    Marker,
     MediaRef,
-    Timecode,
 )
 from backend.app.repositories.clip_list_cache import ClipListCacheRepo
 from backend.app.services.clip_list_filters import (
@@ -18,7 +15,6 @@ from backend.app.services.clip_list_filters import (
     normalize_cache,
     resolve,
 )
-
 
 PROVIDER = "catdv"
 CATALOG = "881507"
@@ -40,7 +36,7 @@ def _clip(clip_id: str, *, name: str = "Clip") -> CanonicalClip:
             upstream_handle=clip_id,
         ),
         provider_data={"ID": int(clip_id)},
-        fetched_at=datetime(2026, 5, 22, tzinfo=timezone.utc),
+        fetched_at=datetime(2026, 5, 22, tzinfo=UTC),
     )
 
 
@@ -125,9 +121,7 @@ async def _insert_annotation(db, clip_id: int) -> int:
     return cur.lastrowid
 
 
-async def _insert_review_item(
-    db, *, annotation_id: int, clip_id: int, applied: bool
-) -> None:
+async def _insert_review_item(db, *, annotation_id: int, clip_id: int, applied: bool) -> None:
     await db.execute(
         """
         INSERT INTO review_items

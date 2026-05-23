@@ -8,6 +8,7 @@ from backend.app.services.proxy_resolver import RestProxyResolver
 
 class _FakeCatdv:
     """Minimal CatDV client stub: writes a 9-byte file."""
+
     def __init__(self):
         self.calls = []
 
@@ -47,7 +48,7 @@ async def test_resolver_does_not_redownload_or_redouble_record(db, tmp_path):
     )
     await resolver.path_for_clip_id(1234)
     await resolver.path_for_clip_id(1234)
-    assert len(catdv.calls) == 1   # cache hit on second call
+    assert len(catdv.calls) == 1  # cache hit on second call
 
 
 @pytest.mark.asyncio
@@ -64,8 +65,7 @@ async def test_resolver_writes_provider_columns(db, tmp_path):
     )
     await resolver.path_for_clip_id(1234)
     cur = await db.execute(
-        "SELECT provider_id, provider_clip_id FROM proxy_cache "
-        "WHERE catdv_clip_id = ?",
+        "SELECT provider_id, provider_clip_id FROM proxy_cache WHERE catdv_clip_id = ?",
         (1234,),
     )
     assert await cur.fetchone() == ("catdv", "1234")
@@ -85,8 +85,13 @@ async def test_resolver_backfills_legacy_row_with_null_provider(db, tmp_path):
         "INSERT INTO proxy_cache "
         "(catdv_clip_id, file_path, size_bytes, etag, downloaded_at, last_used_at) "
         "VALUES (?, ?, ?, NULL, ?, ?)",
-        (7777, str(cache_dir / "7777.mov"), 42,
-         "2026-05-20T09:00:00+00:00", "2026-05-20T09:00:00+00:00"),
+        (
+            7777,
+            str(cache_dir / "7777.mov"),
+            42,
+            "2026-05-20T09:00:00+00:00",
+            "2026-05-20T09:00:00+00:00",
+        ),
     )
     await db.commit()
     repo = ProxyCacheRepo()
@@ -99,8 +104,7 @@ async def test_resolver_backfills_legacy_row_with_null_provider(db, tmp_path):
     await resolver.path_for_clip_id(7777)
     assert catdv.calls == []
     cur = await db.execute(
-        "SELECT provider_id, provider_clip_id FROM proxy_cache "
-        "WHERE catdv_clip_id = ?",
+        "SELECT provider_id, provider_clip_id FROM proxy_cache WHERE catdv_clip_id = ?",
         (7777,),
     )
     assert await cur.fetchone() == ("catdv", "7777")
@@ -122,13 +126,12 @@ async def test_resolver_backfills_preexisting_file(db, tmp_path):
         db_provider=lambda: db,
     )
     await resolver.path_for_clip_id(5555)
-    assert catdv.calls == []      # no re-download
+    assert catdv.calls == []  # no re-download
     row = await repo.get(db, 5555)
     assert row is not None
     assert row["size_bytes"] == 15
     cur = await db.execute(
-        "SELECT provider_id, provider_clip_id FROM proxy_cache "
-        "WHERE catdv_clip_id = ?",
+        "SELECT provider_id, provider_clip_id FROM proxy_cache WHERE catdv_clip_id = ?",
         (5555,),
     )
     assert await cur.fetchone() == ("catdv", "5555")

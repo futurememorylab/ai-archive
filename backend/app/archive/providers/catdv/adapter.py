@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from backend.app.archive.errors import (
@@ -63,7 +63,7 @@ class CatdvArchiveAdapter:
         self._db_provider = db_provider
         self._ttl = timedelta(hours=clip_cache_ttl_hours)
         self._list_ttl = timedelta(minutes=clip_list_cache_ttl_minutes)
-        self._clock = clock or (lambda: datetime.now(timezone.utc))
+        self._clock = clock or (lambda: datetime.now(UTC))
         self._default_catalog_id = default_catalog_id
         self._is_online_provider = is_online_provider
 
@@ -76,6 +76,7 @@ class CatdvArchiveAdapter:
 
     async def health(self) -> ProviderHealth:
         from time import perf_counter
+
         if not self._is_online() or self._client is None:
             return ProviderHealth(ok=False, detail="offline")
         t0 = perf_counter()
@@ -127,9 +128,7 @@ class CatdvArchiveAdapter:
         await self._write_list_through(catalog, query, page, fetched_at=now)
         return page
 
-    async def _list_clips_from_cache(
-        self, catalog: str, query: ClipQuery
-    ) -> ClipPage:
+    async def _list_clips_from_cache(self, catalog: str, query: ClipQuery) -> ClipPage:
         if not self._cache_enabled():
             return ClipPage(items=(), total=0, offset=query.offset, limit=query.limit)
         items, total = await self._clip_cache.list_by_catalog(
@@ -141,9 +140,7 @@ class CatdvArchiveAdapter:
             q=query.text,
             canonical=True,
         )
-        return ClipPage(
-            items=items, total=total, offset=query.offset, limit=query.limit
-        )
+        return ClipPage(items=items, total=total, offset=query.offset, limit=query.limit)
 
     async def get_clip(self, clip: str) -> CanonicalClip:
         cached = await self._read_clip_from_cache(clip)
@@ -237,9 +234,7 @@ class CatdvArchiveAdapter:
 
         payload = build_put_payload(current=current, ops=list(change_set.ops))
         if not payload:
-            return WriteResult(
-                status="ok", upstream_response={}, new_etag=live_etag
-            )
+            return WriteResult(status="ok", upstream_response={}, new_etag=live_etag)
 
         try:
             response = await self._client.put_clip(int(clip_id_str), payload)
@@ -251,9 +246,7 @@ class CatdvArchiveAdapter:
             raise FatalProviderError(str(exc)) from exc
 
         new_etag = self._etag_from_raw(response) or live_etag
-        return WriteResult(
-            status="ok", upstream_response=response, new_etag=new_etag
-        )
+        return WriteResult(status="ok", upstream_response=response, new_etag=new_etag)
 
     @staticmethod
     def _etag_from_raw(raw: dict[str, Any] | None) -> str | None:
@@ -274,16 +267,12 @@ class CatdvArchiveAdapter:
         if not self._cache_enabled():
             return None
         db = self._db_provider()
-        row = await self._clip_cache.get_row(
-            db, provider_id=self.id, provider_clip_id=clip_id
-        )
+        row = await self._clip_cache.get_row(db, provider_id=self.id, provider_clip_id=clip_id)
         if row is None:
             return None
         if self._is_expired(row.get("fetched_at")):
             return None
-        return await self._clip_cache.get_by_key(
-            db, provider_id=self.id, provider_clip_id=clip_id
-        )
+        return await self._clip_cache.get_by_key(db, provider_id=self.id, provider_clip_id=clip_id)
 
     async def _read_clip_from_cache_stale(self, clip_id: str) -> CanonicalClip | None:
         if not self._cache_enabled():
@@ -300,9 +289,7 @@ class CatdvArchiveAdapter:
         )
         return defs if defs else None
 
-    async def _write_clip_through(
-        self, canonical: CanonicalClip, raw: dict[str, Any]
-    ) -> None:
+    async def _write_clip_through(self, canonical: CanonicalClip, raw: dict[str, Any]) -> None:
         if not self._cache_enabled():
             return
         catalog_id = self._catalog_id_for_clip(raw)
@@ -330,14 +317,10 @@ class CatdvArchiveAdapter:
         if not self._field_def_cache_enabled():
             return None
         db = self._db_provider()
-        latest = await self._field_def_cache.latest_fetched_at(
-            db, provider_id=self.id
-        )
+        latest = await self._field_def_cache.latest_fetched_at(db, provider_id=self.id)
         if latest is None or self._is_expired(latest):
             return None
-        return await self._field_def_cache.list_for_provider(
-            db, provider_id=self.id
-        )
+        return await self._field_def_cache.list_for_provider(db, provider_id=self.id)
 
     async def _write_field_defs_through(self, defs: list[FieldDef]) -> None:
         if not self._field_def_cache_enabled():
@@ -351,9 +334,7 @@ class CatdvArchiveAdapter:
     def _list_cache_enabled(self) -> bool:
         return self._clip_list_cache is not None and self._db_provider is not None
 
-    async def _read_list_from_cache(
-        self, catalog: str, query: ClipQuery
-    ) -> ClipPage | None:
+    async def _read_list_from_cache(self, catalog: str, query: ClipQuery) -> ClipPage | None:
         if not self._list_cache_enabled():
             return None
         db = self._db_provider()
@@ -398,9 +379,7 @@ class CatdvArchiveAdapter:
             fetched_at_iso=fetched_at.isoformat(),
         )
 
-    def _is_expired(
-        self, fetched_at_iso: str | None, *, ttl: timedelta | None = None
-    ) -> bool:
+    def _is_expired(self, fetched_at_iso: str | None, *, ttl: timedelta | None = None) -> bool:
         if fetched_at_iso is None:
             return True
         try:
@@ -408,5 +387,5 @@ class CatdvArchiveAdapter:
         except (TypeError, ValueError):
             return True
         if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
+            ts = ts.replace(tzinfo=UTC)
         return (self._clock() - ts) > (ttl or self._ttl)

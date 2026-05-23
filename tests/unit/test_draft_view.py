@@ -4,9 +4,15 @@ from backend.app.services.draft_view import build_draft_view
 
 def _annotation(**overrides):
     base = dict(
-        id=42, catdv_clip_id=101, catdv_clip_name="Clip_101",
-        prompt_version_id=7, job_id=1, model="gemini-2.5-pro",
-        prompt_used="p", raw_response={}, structured_output={},
+        id=42,
+        catdv_clip_id=101,
+        catdv_clip_name="Clip_101",
+        prompt_version_id=7,
+        job_id=1,
+        model="gemini-2.5-pro",
+        prompt_used="p",
+        raw_response={},
+        structured_output={},
         clip_snapshot={},
     )
     base.update(overrides)
@@ -32,7 +38,9 @@ def test_build_draft_view_maps_marker_review_items():
     ann = _annotation()
     items = [
         ReviewItem(
-            annotation_id=42, catdv_clip_id=101, kind="marker",
+            annotation_id=42,
+            catdv_clip_id=101,
+            kind="marker",
             proposed_value={
                 "name": "Scene 1",
                 "category": "Event",
@@ -42,7 +50,9 @@ def test_build_draft_view_maps_marker_review_items():
             },
         ),
         ReviewItem(
-            annotation_id=42, catdv_clip_id=101, kind="marker",
+            annotation_id=42,
+            catdv_clip_id=101,
+            kind="marker",
             proposed_value={
                 "name": "Scene 2",
                 "category": None,
@@ -78,7 +88,9 @@ def test_build_draft_view_applies_mojibake_fix_to_marker_name_and_description():
     ann = _annotation()
     items = [
         ReviewItem(
-            annotation_id=42, catdv_clip_id=101, kind="marker",
+            annotation_id=42,
+            catdv_clip_id=101,
+            kind="marker",
             proposed_value={
                 "name": "DÄ\x9btsk\xc3\xa9 hry",
                 "category": None,
@@ -100,7 +112,9 @@ def test_build_draft_view_maps_string_field():
     ann = _annotation()
     items = [
         ReviewItem(
-            annotation_id=42, catdv_clip_id=101, kind="field",
+            annotation_id=42,
+            catdv_clip_id=101,
+            kind="field",
             target_identifier="pragafilm.dekáda.natočení",
             proposed_value="30.léta",
         ),
@@ -119,7 +133,9 @@ def test_build_draft_view_maps_list_field_by_joining():
     ann = _annotation()
     items = [
         ReviewItem(
-            annotation_id=42, catdv_clip_id=101, kind="field",
+            annotation_id=42,
+            catdv_clip_id=101,
+            kind="field",
             target_identifier="pragafilm.rok.natočení",
             proposed_value=["1932", "1933"],
         ),
@@ -138,12 +154,18 @@ def test_build_draft_view_fields_sorted_by_identifier():
     ann = _annotation()
     items = [
         ReviewItem(
-            annotation_id=42, catdv_clip_id=101, kind="field",
-            target_identifier="pragafilm.rok.natočení", proposed_value="1932",
+            annotation_id=42,
+            catdv_clip_id=101,
+            kind="field",
+            target_identifier="pragafilm.rok.natočení",
+            proposed_value="1932",
         ),
         ReviewItem(
-            annotation_id=42, catdv_clip_id=101, kind="field",
-            target_identifier="pragafilm.barva", proposed_value="true",
+            annotation_id=42,
+            catdv_clip_id=101,
+            kind="field",
+            target_identifier="pragafilm.barva",
+            proposed_value="true",
         ),
     ]
     result = build_draft_view(annotation=ann, review_items=items)
@@ -155,8 +177,11 @@ def test_build_draft_view_maps_single_note():
     ann = _annotation()
     items = [
         ReviewItem(
-            annotation_id=42, catdv_clip_id=101, kind="note",
-            target_identifier="notes", proposed_value="A summary of the clip.",
+            annotation_id=42,
+            catdv_clip_id=101,
+            kind="note",
+            target_identifier="notes",
+            proposed_value="A summary of the clip.",
         ),
     ]
     result = build_draft_view(annotation=ann, review_items=items)
@@ -167,12 +192,18 @@ def test_build_draft_view_joins_multiple_notes_with_blank_lines():
     ann = _annotation()
     items = [
         ReviewItem(
-            annotation_id=42, catdv_clip_id=101, kind="note",
-            target_identifier="notes", proposed_value="Line one.",
+            annotation_id=42,
+            catdv_clip_id=101,
+            kind="note",
+            target_identifier="notes",
+            proposed_value="Line one.",
         ),
         ReviewItem(
-            annotation_id=42, catdv_clip_id=101, kind="note",
-            target_identifier="bigNotes", proposed_value="Line two.",
+            annotation_id=42,
+            catdv_clip_id=101,
+            kind="note",
+            target_identifier="bigNotes",
+            proposed_value="Line two.",
         ),
     ]
     result = build_draft_view(annotation=ann, review_items=items)

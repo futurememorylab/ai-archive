@@ -24,6 +24,7 @@ def test_factory_returns_rest_resolver(tmp_path: Path):
 
 def test_factory_returns_filesystem_resolver():
     from backend.app.services.media_store_map import MediaStoreMap
+
     resolver = build_resolver(
         source="filesystem",
         catdv_client=None,

@@ -93,9 +93,7 @@ async def get_orphans(request: Request, deep: bool = False) -> list[dict]:
 
 
 @api_router.get("/clip/{provider_id}/{clip_id}")
-async def get_clip_status(
-    request: Request, provider_id: str, clip_id: str
-) -> dict[str, Any]:
+async def get_clip_status(request: Request, provider_id: str, clip_id: str) -> dict[str, Any]:
     insp = _inspector(request)
     key: ClipKey = (provider_id, clip_id)
     return (await insp.status_for_clip(key)).to_dict()
@@ -117,9 +115,7 @@ async def evict_clip_layers(
 
 
 @api_router.post("/bulk-evict")
-async def bulk_evict(
-    request: Request, body: BulkEvictBody
-) -> dict[str, Any]:
+async def bulk_evict(request: Request, body: BulkEvictBody) -> dict[str, Any]:
     actions = _actions(request)
     keys = [(p, c) for p, c in body.clip_keys]
     result = await actions.bulk_evict(keys, body.layers, force=body.force)
@@ -137,14 +133,14 @@ class PrefetchBody(BaseModel):
 
 
 @api_router.post("/prefetch")
-async def prefetch_enqueue(
-    request: Request, body: PrefetchBody
-) -> dict[str, Any]:
+async def prefetch_enqueue(request: Request, body: PrefetchBody) -> dict[str, Any]:
     ctx = request.app.state.ctx
     ids: list[int] = []
     for prov, clip_id in body.clip_keys:
         rid = await ctx.prefetch_queue_repo.enqueue(
-            ctx.db, key=(prov, clip_id), who="request",
+            ctx.db,
+            key=(prov, clip_id),
+            who="request",
         )
         ids.append(rid)
     return {"enqueued": len(body.clip_keys), "ids": ids}
@@ -160,9 +156,7 @@ async def prefetch_queue_list(request: Request) -> dict[str, Any]:
 
 
 @api_router.post("/prefetch/{rid}/cancel")
-async def prefetch_cancel(
-    request: Request, rid: int
-) -> dict[str, Any]:
+async def prefetch_cancel(request: Request, rid: int) -> dict[str, Any]:
     ctx = request.app.state.ctx
     ok = await ctx.prefetch_queue_repo.mark_cancelled(ctx.db, rid)
     if not ok:
@@ -281,11 +275,8 @@ async def cache_page(
     return templates.TemplateResponse(request, "cache_page.html", ctx_dict)
 
 
-@ui_router.get("/cache-badge/{provider_id}/{clip_id}",
-               response_class=HTMLResponse)
-async def cache_badge(
-    request: Request, provider_id: str, clip_id: str
-) -> HTMLResponse:
+@ui_router.get("/cache-badge/{provider_id}/{clip_id}", response_class=HTMLResponse)
+async def cache_badge(request: Request, provider_id: str, clip_id: str) -> HTMLResponse:
     insp = _inspector(request)
     status = await insp.status_for_clip((provider_id, clip_id))
     return templates.TemplateResponse(
@@ -295,17 +286,12 @@ async def cache_badge(
     )
 
 
-@ui_router.get("/cache-popover/{provider_id}/{clip_id}",
-               response_class=HTMLResponse)
-async def cache_popover(
-    request: Request, provider_id: str, clip_id: str
-) -> HTMLResponse:
+@ui_router.get("/cache-popover/{provider_id}/{clip_id}", response_class=HTMLResponse)
+async def cache_popover(request: Request, provider_id: str, clip_id: str) -> HTMLResponse:
     insp = _inspector(request)
     status = await insp.status_for_clip((provider_id, clip_id))
     ctx = request.app.state.ctx
-    host_local_proxies = getattr(
-        getattr(ctx, "proxy_resolver", None), "is_host_local", False
-    )
+    host_local_proxies = getattr(getattr(ctx, "proxy_resolver", None), "is_host_local", False)
     return templates.TemplateResponse(
         request,
         "cache_popover.html",
@@ -339,19 +325,13 @@ async def cache_queue_panel(request: Request) -> HTMLResponse:
 async def _all_cached_keys(db) -> list[ClipKey]:
     """Union of (provider_id, provider_clip_id) across the three layers."""
     keys: set[ClipKey] = set()
-    cur = await db.execute(
-        "SELECT provider_id, provider_clip_id FROM clip_cache"
-    )
+    cur = await db.execute("SELECT provider_id, provider_clip_id FROM clip_cache")
     for r in await cur.fetchall():
         keys.add((r[0], r[1]))
-    cur = await db.execute(
-        "SELECT provider_id, provider_clip_id FROM proxy_cache"
-    )
+    cur = await db.execute("SELECT provider_id, provider_clip_id FROM proxy_cache")
     for r in await cur.fetchall():
         keys.add((r[0], r[1]))
-    cur = await db.execute(
-        "SELECT DISTINCT provider_id, provider_clip_id FROM ai_store_files"
-    )
+    cur = await db.execute("SELECT DISTINCT provider_id, provider_clip_id FROM ai_store_files")
     for r in await cur.fetchall():
         keys.add((r[0], r[1]))
     return sorted(keys)

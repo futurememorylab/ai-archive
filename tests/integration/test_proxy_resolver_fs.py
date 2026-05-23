@@ -30,9 +30,7 @@ async def test_returns_existing_proxy_path(tmp_path: Path):
     proxy_file = proxy_root / "sub" / "clip.mov"
     proxy_file.write_bytes(b"x")
 
-    archive = _FakeArchive({
-        42: {"media": {"filePath": str(hires_root / "sub" / "clip.mov")}}
-    })
+    archive = _FakeArchive({42: {"media": {"filePath": str(hires_root / "sub" / "clip.mov")}}})
     resolver = FilesystemProxyResolver(
         archive=archive,
         media_store_map=_map_with(hires_root, proxy_root),
@@ -55,9 +53,7 @@ async def test_raises_when_clip_has_no_media_filepath(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_raises_when_hires_path_unknown_to_mediastore(tmp_path: Path):
-    archive = _FakeArchive({
-        42: {"media": {"filePath": "/some/unmapped/path.mov"}}
-    })
+    archive = _FakeArchive({42: {"media": {"filePath": "/some/unmapped/path.mov"}}})
     resolver = FilesystemProxyResolver(
         archive=archive,
         media_store_map=_map_with(tmp_path / "h", tmp_path / "p"),
@@ -71,9 +67,7 @@ async def test_raises_when_proxy_file_missing_on_disk(tmp_path: Path):
     hires_root = tmp_path / "hires"
     proxy_root = tmp_path / "proxy"
     proxy_root.mkdir()
-    archive = _FakeArchive({
-        42: {"media": {"filePath": str(hires_root / "sub" / "clip.mov")}}
-    })
+    archive = _FakeArchive({42: {"media": {"filePath": str(hires_root / "sub" / "clip.mov")}}})
     resolver = FilesystemProxyResolver(
         archive=archive,
         media_store_map=_map_with(hires_root, proxy_root),
@@ -90,9 +84,7 @@ async def test_raises_when_proxy_unreadable(tmp_path: Path):
     proxy_file = proxy_root / "clip.mov"
     proxy_file.write_bytes(b"x")
     proxy_file.chmod(0)
-    archive = _FakeArchive({
-        42: {"media": {"filePath": str(hires_root / "clip.mov")}}
-    })
+    archive = _FakeArchive({42: {"media": {"filePath": str(hires_root / "clip.mov")}}})
     resolver = FilesystemProxyResolver(
         archive=archive,
         media_store_map=_map_with(hires_root, proxy_root),

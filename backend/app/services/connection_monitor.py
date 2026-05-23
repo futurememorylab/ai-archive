@@ -70,9 +70,7 @@ class ConnectionMonitor:
             detail = "manual offline" if enabled else "manual offline cleared"
             # fire-and-forget; persist is awaitable but ok to schedule.
             try:
-                asyncio.get_running_loop().create_task(
-                    self._persist_and_publish(target, detail)
-                )
+                asyncio.get_running_loop().create_task(self._persist_and_publish(target, detail))
             except RuntimeError:
                 # no running loop (rare; e.g. setup-time); skip.
                 pass
@@ -84,9 +82,7 @@ class ConnectionMonitor:
         new_state: ConnectionState
         detail: str | None = None
         try:
-            health = await asyncio.wait_for(
-                self._provider.health(), timeout=self._timeout_s
-            )
+            health = await asyncio.wait_for(self._provider.health(), timeout=self._timeout_s)
         except TimeoutError:
             new_state = ConnectionState.offline
             detail = "health probe timeout"
@@ -106,9 +102,7 @@ class ConnectionMonitor:
             await self._persist_and_publish(new_state, detail or f"{old} → {new_state}")
         return self.current_state()
 
-    async def _persist_and_publish(
-        self, state: ConnectionState, detail: str | None
-    ) -> None:
+    async def _persist_and_publish(self, state: ConnectionState, detail: str | None) -> None:
         conn = self._db_provider()
         await conn.execute(
             "INSERT INTO connection_events (state, detail, at) VALUES (?, ?, ?)",
@@ -157,8 +151,6 @@ class ConnectionMonitor:
                 # halt — user must explicitly retry_now() to resume
                 return
             try:
-                await asyncio.wait_for(
-                    self._stop_evt.wait(), timeout=self._interval_s
-                )
+                await asyncio.wait_for(self._stop_evt.wait(), timeout=self._interval_s)
             except TimeoutError:
                 pass

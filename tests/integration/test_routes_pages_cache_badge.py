@@ -64,7 +64,7 @@ def test_list_page_bulk_toolbar_actions_present(client):
 
 def test_list_page_filter_form_renders_with_dropdowns(client):
     """Search button + cache/anno filter dropdowns are present in the toolbar."""
-    from backend.app.archive.model import CanonicalClip, ClipPage, MediaRef
+    from backend.app.archive.model import ClipPage
 
     class _Archive:
         async def list_clips(self, catalog_id, q):
@@ -132,6 +132,7 @@ def test_list_page_filter_path_uses_local_first(client, tmp_path):
             await db.commit()
 
         import asyncio
+
         asyncio.run(_seed())
         r = c.get("/?cache=local")
 

@@ -4,6 +4,7 @@ Boots a DB at the pre-0009 schema (migrations 0001-0008 only), seeds two
 templates rows with referencing annotations + jobs, then applies 0009 and
 asserts the new shape end-to-end.
 """
+
 import json
 from pathlib import Path
 
@@ -11,7 +12,6 @@ import aiosqlite
 import pytest
 
 from backend.app.db import open_db
-from backend.app.migrations_runner import apply_migrations
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "backend" / "migrations"
 
@@ -82,7 +82,8 @@ async def test_migration_0009_creates_tables_and_backfills(tmp_path: Path):
 
         # Assert prompt_versions table — each prompt has v1@production.
         cur = await db.execute(
-            "SELECT prompt_id, version_num, state, body, model FROM prompt_versions ORDER BY prompt_id"
+            "SELECT prompt_id, version_num, state, body, model "
+            "FROM prompt_versions ORDER BY prompt_id"
         )
         rows = await cur.fetchall()
         assert rows == [
@@ -130,9 +131,7 @@ async def test_migration_0009_creates_tables_and_backfills(tmp_path: Path):
         assert (await cur.fetchone()) is None
 
         # Pre-migration annotations must still be searchable.
-        cur = await db.execute(
-            "SELECT rowid FROM annotations_fts WHERE annotations_fts MATCH 'c'"
-        )
+        cur = await db.execute("SELECT rowid FROM annotations_fts WHERE annotations_fts MATCH 'c'")
         assert await cur.fetchone() is not None
 
         # annotations_fts still works after the rebuild.
@@ -144,7 +143,9 @@ async def test_migration_0009_creates_tables_and_backfills(tmp_path: Path):
             (version_id,),
         )
         await db.commit()
-        cur = await db.execute("SELECT rowid FROM annotations_fts WHERE annotations_fts MATCH 'searchable'")
+        cur = await db.execute(
+            "SELECT rowid FROM annotations_fts WHERE annotations_fts MATCH 'searchable'"
+        )
         assert await cur.fetchone() is not None
 
 

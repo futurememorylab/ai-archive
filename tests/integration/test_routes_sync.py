@@ -29,6 +29,7 @@ def _setenv(monkeypatch, tmp_path):
 def _make_app(monkeypatch, tmp_path):
     _setenv(monkeypatch, tmp_path)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     return main_mod.app
 
@@ -50,6 +51,7 @@ def _enqueue_one(client, *, clip_id="1"):
         }
     ]
     import asyncio
+
     loop = asyncio.new_event_loop()
     try:
         return loop.run_until_complete(repo.insert_many(ctx.db, rows=rows))
@@ -86,13 +88,11 @@ def test_post_retry_resets_row(monkeypatch, tmp_path: Path):
         ctx = client.app.state.ctx
         # mark a couple of retries first
         import asyncio
+
         async def _bump():
-            await ctx.pending_ops_repo.mark_retryable(
-                ctx.db, [op_id], error="x"
-            )
-            await ctx.pending_ops_repo.mark_retryable(
-                ctx.db, [op_id], error="x"
-            )
+            await ctx.pending_ops_repo.mark_retryable(ctx.db, [op_id], error="x")
+            await ctx.pending_ops_repo.mark_retryable(ctx.db, [op_id], error="x")
+
         loop = asyncio.new_event_loop()
         try:
             loop.run_until_complete(_bump())
@@ -113,6 +113,7 @@ def test_run_drain_invokes_engine(monkeypatch, tmp_path: Path):
 
         class FakeArchive:
             id = "catdv"
+
             async def apply_changes(self, change_set):
                 return WriteResult(
                     status="ok",

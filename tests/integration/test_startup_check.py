@@ -1,10 +1,9 @@
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
 from backend.app.archive.ai_store_model import StoreHealth
-from backend.app.startup import StartupCheckResult, run_checks
+from backend.app.startup import run_checks
 
 
 class FakeCatdv:

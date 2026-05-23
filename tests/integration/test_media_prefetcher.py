@@ -79,7 +79,8 @@ async def test_loop_processes_one_at_a_time(db):
         async def path_for_clip_id(self, clip_id):
             overlap["current"] += 1
             overlap["max_concurrent"] = max(
-                overlap["max_concurrent"], overlap["current"],
+                overlap["max_concurrent"],
+                overlap["current"],
             )
             await asyncio.sleep(0.05)
             overlap["current"] -= 1

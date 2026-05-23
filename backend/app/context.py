@@ -5,14 +5,14 @@ from pathlib import Path
 
 import aiosqlite
 
+from backend.app.archive.ai_store import AIInputStore
+from backend.app.archive.ai_stores.registry import build_ai_input_store
 from backend.app.archive.provider import ArchiveProvider
 from backend.app.archive.registry import build_archive_provider
 from backend.app.db import open_db
 from backend.app.migrations_runner import apply_migrations
-from backend.app.archive.ai_store import AIInputStore
-from backend.app.archive.ai_stores.registry import build_ai_input_store
-from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.ai_store_files import AIStoreFilesRepo
+from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.cache_actions_log import CacheActionsLogRepo
 from backend.app.repositories.clip_cache import ClipCacheRepo
 from backend.app.repositories.clip_list_cache import ClipListCacheRepo
@@ -20,9 +20,9 @@ from backend.app.repositories.field_def_cache import FieldDefCacheRepo
 from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.pending_operations import PendingOperationsRepo
 from backend.app.repositories.prefetch_queue import PrefetchQueueRepo
+from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.proxy_cache import ProxyCacheRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
-from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.workspaces import WorkspacesRepo
 from backend.app.repositories.write_log import WriteLogRepo
 from backend.app.services.cache_actions import CacheActions
@@ -62,14 +62,14 @@ class AppContext:
     prefetch_queue_repo: PrefetchQueueRepo = field(default_factory=PrefetchQueueRepo)
     event_bus: EventBus = field(default_factory=EventBus)
 
-    _running_jobs: dict[int, "object"] = field(default_factory=dict)
+    _running_jobs: dict[int, object] = field(default_factory=dict)
 
     catdv = None
     archive: ArchiveProvider | None = None
     ai_store: AIInputStore | None = None
     gemini = None
     proxy_resolver = None
-    _gcs_service = None   # low-level GcsService kept only as a wiring detail
+    _gcs_service = None  # low-level GcsService kept only as a wiring detail
     write_queue: WriteQueue | None = None
     sync_engine: SyncEngine | None = None
     connection_monitor: ConnectionMonitor | None = None
@@ -80,7 +80,7 @@ class AppContext:
     media_prefetcher: MediaPrefetcher | None = None
 
     @classmethod
-    async def build(cls, settings: Settings, *, init_external: bool = True) -> "AppContext":
+    async def build(cls, settings: Settings, *, init_external: bool = True) -> AppContext:
         settings.data_dir.mkdir(parents=True, exist_ok=True)
         db_path = settings.data_dir / "app.db"
         cm = open_db(db_path)
@@ -116,7 +116,7 @@ class AppContext:
         )
 
         # CacheInspector + CacheActions are pure-DB; always wire them.
-        cap_bytes = int(settings.media_cache_cap_gb) * 1024 ** 3
+        cap_bytes = int(settings.media_cache_cap_gb) * 1024**3
         ctx.cache_inspector = CacheInspector(
             db_provider=lambda c=ctx: c.db,
             media_cache_cap_bytes=cap_bytes,
@@ -221,6 +221,7 @@ class AppContext:
                     from backend.app.services.media_store_map import (
                         fetch_media_store_map,
                     )
+
                     media_store_map = await fetch_media_store_map(ctx.catdv)
                 ctx.proxy_resolver = build_resolver(
                     source=settings.proxy_source,
@@ -244,11 +245,7 @@ class AppContext:
                 timeout_s=float(settings.health_probe_timeout_s),
                 event_bus=ctx.event_bus,
                 forced_offline=forced_offline,
-                initial_state=(
-                    ConnectionState.offline
-                    if login_failed
-                    else ConnectionState.online
-                ),
+                initial_state=(ConnectionState.offline if login_failed else ConnectionState.online),
             )
             ctx.sync_engine = SyncEngine(
                 provider=ctx.archive,
@@ -273,9 +270,7 @@ class AppContext:
                 db_provider=lambda c=ctx: c.db,
                 media_cache_cap_bytes=cap_bytes,
                 provider=ctx.archive,
-                host_local_proxies=getattr(
-                    ctx.proxy_resolver, "is_host_local", False
-                ),
+                host_local_proxies=getattr(ctx.proxy_resolver, "is_host_local", False),
             )
             ctx.cache_actions = CacheActions(
                 db_provider=lambda c=ctx: c.db,

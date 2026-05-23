@@ -64,6 +64,7 @@ def _make_client(monkeypatch, tmp_path):
     monkeypatch.setenv("PROXY_SOURCE", "rest")
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     return TestClient(main_mod.app)
 
@@ -79,7 +80,8 @@ class FakeArchive:
         return ClipPage(
             items=self._clips,
             total=self._total if self._total is not None else len(self._clips),
-            offset=query.offset, limit=query.limit,
+            offset=query.offset,
+            limit=query.limit,
         )
 
     async def get_clip(self, clip_id_str):
@@ -200,8 +202,9 @@ def test_cache_age_displayed_when_entry_present(monkeypatch, tmp_path):
         ctx.archive = FakeArchive((_canonical(),))
         spy = SpyListCacheRepo()
         # Pretend the list cache has a row 2 minutes old.
-        from datetime import datetime, timedelta, timezone
-        two_min_ago = (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat()
+        from datetime import datetime, timedelta
+
+        two_min_ago = (datetime.now(UTC) - timedelta(minutes=2)).isoformat()
         spy.entry = {"fetched_at": two_min_ago, "total": 1, "items": ()}
         ctx.clip_list_cache_repo = spy
 
@@ -219,10 +222,10 @@ def test_clips_page_marks_clips_rail_active(monkeypatch, tmp_path):
         r = client.get("/")
         assert r.status_code == 200
         # exactly one rail button should be active; the first one is Clips
-        assert 'rail-btn active' in r.text
+        assert "rail-btn active" in r.text
         assert 'title="Clips"' in r.text
         # all three icons present
-        assert 'rail-preview' in r.text
+        assert "rail-preview" in r.text
         assert 'title="Cache"' in r.text
 
 
@@ -232,7 +235,7 @@ def test_clip_detail_marks_preview_rail_active(monkeypatch, tmp_path):
         client.app.state.ctx.archive = FakeArchive((_canonical(),))
         r = client.get("/clips/12041")
         assert r.status_code == 200
-        assert 'rail-btn active' in r.text
+        assert "rail-btn active" in r.text
         assert 'localStorage.setItem("catdv:lastClipId", "12041")' in r.text
 
 

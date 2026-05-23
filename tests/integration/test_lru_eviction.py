@@ -19,8 +19,12 @@ async def _seed_proxy_cache(db, *, key, file_path, size_bytes, last_used_at):
         """,
         (
             int(key[1]) if key[1].isdigit() else 0,
-            key[0], key[1], file_path, size_bytes,
-            last_used_at, last_used_at,
+            key[0],
+            key[1],
+            file_path,
+            size_bytes,
+            last_used_at,
+            last_used_at,
         ),
     )
     await db.commit()
@@ -56,7 +60,8 @@ def _make_lru(db, *, cap_bytes):
         who_provider=lambda: "system",
     )
     return LruEviction(
-        actions=actions, log_repo=log_repo,
+        actions=actions,
+        log_repo=log_repo,
         db_provider=lambda: db,
         media_cache_cap_bytes=cap_bytes,
         tick_interval_s=0.01,
@@ -69,7 +74,10 @@ async def test_under_cap_is_no_op(db, tmp_path: Path):
 
     p.write_bytes(b"x" * 5)
     await _seed_proxy_cache(
-        db, key=("catdv", "1"), file_path=str(p), size_bytes=5,
+        db,
+        key=("catdv", "1"),
+        file_path=str(p),
+        size_bytes=5,
         last_used_at=datetime.now(UTC).isoformat(),
     )
     lru = _make_lru(db, cap_bytes=1000)
@@ -89,7 +97,10 @@ async def test_over_cap_evicts_oldest_first(db, tmp_path: Path):
         p.write_bytes(b"x" * 100)
         proxies.append(p)
         await _seed_proxy_cache(
-            db, key=("catdv", str(i)), file_path=str(p), size_bytes=100,
+            db,
+            key=("catdv", str(i)),
+            file_path=str(p),
+            size_bytes=100,
             last_used_at=(now - timedelta(minutes=age_min)).isoformat(),
         )
     # cap = 150 bytes; total = 300 → must evict 2 (200 freed)
@@ -102,8 +113,7 @@ async def test_over_cap_evicts_oldest_first(db, tmp_path: Path):
     assert not proxies[1].exists()
     # lru_evict log rows written
     cur = await db.execute(
-        "SELECT COUNT(*) FROM cache_actions_log "
-        "WHERE action='lru_evict' AND result='ok'"
+        "SELECT COUNT(*) FROM cache_actions_log WHERE action='lru_evict' AND result='ok'"
     )
     assert (await cur.fetchone())[0] == 2
 
@@ -119,11 +129,17 @@ async def test_pinned_rows_never_evicted(db, tmp_path: Path):
 
     free1.write_bytes(b"a" * 200)
     await _seed_proxy_cache(
-        db, key=("catdv", "1"), file_path=str(pinned), size_bytes=200,
+        db,
+        key=("catdv", "1"),
+        file_path=str(pinned),
+        size_bytes=200,
         last_used_at=(now - timedelta(hours=2)).isoformat(),
     )
     await _seed_proxy_cache(
-        db, key=("catdv", "2"), file_path=str(free1), size_bytes=200,
+        db,
+        key=("catdv", "2"),
+        file_path=str(free1),
+        size_bytes=200,
         last_used_at=(now - timedelta(minutes=10)).isoformat(),
     )
     await _seed_workspace_pin(db, ws_id=1, key=("catdv", "1"))
@@ -143,7 +159,10 @@ async def test_partial_logged_when_pins_keep_over_cap(db, tmp_path):
 
     pin.write_bytes(b"x" * 500)
     await _seed_proxy_cache(
-        db, key=("catdv", "1"), file_path=str(pin), size_bytes=500,
+        db,
+        key=("catdv", "1"),
+        file_path=str(pin),
+        size_bytes=500,
         last_used_at=now.isoformat(),
     )
     await _seed_workspace_pin(db, ws_id=1, key=("catdv", "1"))
@@ -156,7 +175,10 @@ async def test_partial_logged_when_pins_keep_over_cap(db, tmp_path):
 
     other.write_bytes(b"y" * 200)
     await _seed_proxy_cache(
-        db, key=("catdv", "2"), file_path=str(other), size_bytes=200,
+        db,
+        key=("catdv", "2"),
+        file_path=str(other),
+        size_bytes=200,
         last_used_at=now.isoformat(),
     )
     n = await lru.tick_once()
@@ -171,6 +193,7 @@ async def test_start_stop_lifecycle(db, tmp_path):
     lru = _make_lru(db, cap_bytes=1024 * 1024)
     await lru.start()
     import asyncio
+
     await asyncio.sleep(0.05)
     await lru.stop()
     # stop is idempotent

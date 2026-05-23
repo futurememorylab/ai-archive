@@ -40,7 +40,6 @@ from backend.app.archive.model import (
     Timecode,
 )
 
-
 SIDECAR_TOP_KEYS = {"markers", "fields", "notes", "provider_data"}
 
 
@@ -101,11 +100,7 @@ def parse_sidecar(
         return (), {}, {}, {}
 
     raw_markers = raw.get("markers") or []
-    markers = tuple(
-        _marker_from_dict(m, default_fps)
-        for m in raw_markers
-        if isinstance(m, dict)
-    )
+    markers = tuple(_marker_from_dict(m, default_fps) for m in raw_markers if isinstance(m, dict))
 
     raw_fields = raw.get("fields") or {}
     fields: dict[str, FieldValue] = {}

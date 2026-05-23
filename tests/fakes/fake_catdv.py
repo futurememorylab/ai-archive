@@ -3,7 +3,7 @@ import re
 import socket
 import threading
 import time
-from typing import Iterator
+from collections.abc import Iterator
 
 import uvicorn
 from fastapi import FastAPI, Request, Response

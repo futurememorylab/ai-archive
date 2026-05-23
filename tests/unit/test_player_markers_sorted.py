@@ -3,6 +3,7 @@
 The frontend player's prev/next-marker navigation depends on this ordering;
 sorting in the view-model keeps the template + JS simple.
 """
+
 from datetime import UTC, datetime
 
 from backend.app.archive.model import CanonicalClip, Marker, MediaRef, Timecode

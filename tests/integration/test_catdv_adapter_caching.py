@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -27,7 +27,7 @@ def _adapter(
         db_provider=lambda: db,
         clip_cache_ttl_hours=ttl_hours,
         clip_list_cache_ttl_minutes=list_ttl_minutes,
-        clock=now or (lambda: datetime.now(timezone.utc)),
+        clock=now or (lambda: datetime.now(UTC)),
     )
 
 
@@ -41,8 +41,7 @@ async def test_get_clip_writes_through_to_cache(db):
             assert clip.name == "Clip_A"
 
         cur = await db.execute(
-            "SELECT name FROM clip_cache WHERE provider_id='catdv' "
-            "AND provider_clip_id='1'"
+            "SELECT name FROM clip_cache WHERE provider_id='catdv' AND provider_clip_id='1'"
         )
         row = await cur.fetchone()
         assert row is not None and row[0] == "Clip_A"
@@ -68,12 +67,10 @@ async def test_get_clip_bypasses_cache_when_expired(db):
     with running_fake_catdv() as (base_url, fake):
         fake.clips[3] = {"ID": 3, "name": "Old", "fps": 25.0, "markers": []}
         # Mutable clock holder.
-        now_holder = {"t": datetime(2026, 1, 1, tzinfo=timezone.utc)}
+        now_holder = {"t": datetime(2026, 1, 1, tzinfo=UTC)}
 
         async with CatdvClient(base_url, "klientAI", "secret") as client:
-            adapter = _adapter(
-                client, db, ttl_hours=1, now=lambda: now_holder["t"]
-            )
+            adapter = _adapter(client, db, ttl_hours=1, now=lambda: now_holder["t"])
             await adapter.get_clip("3")
 
             # Advance clock past TTL and mutate upstream.
@@ -102,9 +99,7 @@ async def test_list_field_definitions_writes_through(db):
         ids = {fd.identifier for fd in fds}
         assert ids == {"pragafilm.barva", "pragafilm.theme"}
 
-        cur = await db.execute(
-            "SELECT COUNT(*) FROM field_def_cache WHERE provider_id='catdv'"
-        )
+        cur = await db.execute("SELECT COUNT(*) FROM field_def_cache WHERE provider_id='catdv'")
         assert (await cur.fetchone())[0] == 2
 
 
@@ -164,12 +159,10 @@ async def test_list_clips_serves_from_cache_within_ttl(db):
 async def test_list_clips_bypasses_cache_when_expired(db):
     with running_fake_catdv() as (base_url, fake):
         fake.clips[3] = {"ID": 3, "name": "Old", "fps": 25.0, "markers": []}
-        now_holder = {"t": datetime(2026, 1, 1, tzinfo=timezone.utc)}
+        now_holder = {"t": datetime(2026, 1, 1, tzinfo=UTC)}
 
         async with CatdvClient(base_url, "klientAI", "secret") as client:
-            adapter = _adapter(
-                client, db, list_ttl_minutes=5, now=lambda: now_holder["t"]
-            )
+            adapter = _adapter(client, db, list_ttl_minutes=5, now=lambda: now_holder["t"])
             await adapter.list_clips("881507", ClipQuery(offset=0, limit=50))
 
             now_holder["t"] = now_holder["t"] + timedelta(minutes=10)
@@ -189,9 +182,7 @@ async def test_list_clips_separate_keys_per_query_and_page(db):
             await adapter.list_clips("881507", ClipQuery(text="A", offset=0, limit=50))
             await adapter.list_clips("881507", ClipQuery(offset=50, limit=50))
 
-        cur = await db.execute(
-            "SELECT COUNT(*) FROM clip_list_cache WHERE catalog_id='881507'"
-        )
+        cur = await db.execute("SELECT COUNT(*) FROM clip_list_cache WHERE catalog_id='881507'")
         assert (await cur.fetchone())[0] == 3
 
 

@@ -26,12 +26,8 @@ class GeminiFilesInputStore:
         max_file_bytes=2 * 1024 * 1024 * 1024,  # 2 GB, per Files API docs
     )
 
-    async def ensure_uploaded(
-        self, clip_key: ClipKey, local_path: Path, mime: str
-    ) -> UploadedRef:
-        raise NotImplementedError(
-            "GeminiFilesInputStore is a stub; wire it in a follow-on PR."
-        )
+    async def ensure_uploaded(self, clip_key: ClipKey, local_path: Path, mime: str) -> UploadedRef:
+        raise NotImplementedError("GeminiFilesInputStore is a stub; wire it in a follow-on PR.")
 
     async def status(self, clip_key: ClipKey) -> UploadedRef | None:
         raise NotImplementedError

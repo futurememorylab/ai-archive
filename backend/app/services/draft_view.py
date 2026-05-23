@@ -4,6 +4,7 @@ The result is a dict with the same `markers / fields / notes` shapes the
 existing Published view renders, so the Markers / Fields / Notes panels
 can render Draft or Published through the same Jinja partial.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -21,7 +22,9 @@ def _marker_from_review(item: ReviewItem) -> dict[str, Any]:
         "category": pv.get("category"),
         "description": _fix(pv.get("description")),
         "in_secs": float(in_part.get("secs", 0.0)),
-        "out_secs": float(out_part["secs"]) if isinstance(out_part, dict) and "secs" in out_part else None,
+        "out_secs": float(out_part["secs"])
+        if isinstance(out_part, dict) and "secs" in out_part
+        else None,
         "color": pv.get("color"),
     }
 
@@ -62,13 +65,9 @@ def build_draft_view(
             "fields": [],
             "notes": None,
         }
-    markers = [
-        _marker_from_review(it) for it in review_items if it.kind == "marker"
-    ]
+    markers = [_marker_from_review(it) for it in review_items if it.kind == "marker"]
     markers.sort(key=lambda m: m["in_secs"])
-    fields = [
-        _field_from_review(it) for it in review_items if it.kind == "field"
-    ]
+    fields = [_field_from_review(it) for it in review_items if it.kind == "field"]
     fields.sort(key=lambda f: f["identifier"])
     note_texts = [
         _fix(str(it.proposed_value)) or ""

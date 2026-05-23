@@ -1,11 +1,11 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import aiosqlite
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class AIStoreFilesRepo:
@@ -49,9 +49,19 @@ class AIStoreFilesRepo:
               last_used_at     = excluded.last_used_at,
               expires_at       = excluded.expires_at
             """,
-            (store_id, clip_id, provider_id, pcid,
-             gcs_uri, mime_type, size_bytes, sha256,
-             now, now, expires_at),
+            (
+                store_id,
+                clip_id,
+                provider_id,
+                pcid,
+                gcs_uri,
+                mime_type,
+                size_bytes,
+                sha256,
+                now,
+                now,
+                expires_at,
+            ),
         )
         await conn.commit()
 
@@ -84,22 +94,18 @@ class AIStoreFilesRepo:
                     "expires_at",
                 ),
                 row,
+                strict=True,
             )
         )
 
-    async def touch(
-        self, conn: aiosqlite.Connection, *, store_id: str, clip_id: int
-    ) -> None:
+    async def touch(self, conn: aiosqlite.Connection, *, store_id: str, clip_id: int) -> None:
         await conn.execute(
-            "UPDATE ai_store_files SET last_used_at = ? "
-            "WHERE store_id = ? AND catdv_clip_id = ?",
+            "UPDATE ai_store_files SET last_used_at = ? WHERE store_id = ? AND catdv_clip_id = ?",
             (_now_iso(), store_id, clip_id),
         )
         await conn.commit()
 
-    async def delete(
-        self, conn: aiosqlite.Connection, *, store_id: str, clip_id: int
-    ) -> None:
+    async def delete(self, conn: aiosqlite.Connection, *, store_id: str, clip_id: int) -> None:
         await conn.execute(
             "DELETE FROM ai_store_files WHERE store_id = ? AND catdv_clip_id = ?",
             (store_id, clip_id),

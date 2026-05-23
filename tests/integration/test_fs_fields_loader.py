@@ -6,7 +6,6 @@ from pathlib import Path
 
 from backend.app.archive.providers.fs.fields import load_field_defs
 
-
 FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures" / "fs_archive"
 
 

@@ -133,9 +133,7 @@ class ProxyCacheReconciler:
         conn: aiosqlite.Connection,
         counters: dict[str, int],
     ) -> None:
-        cur = await conn.execute(
-            "SELECT catdv_clip_id, file_path FROM proxy_cache"
-        )
+        cur = await conn.execute("SELECT catdv_clip_id, file_path FROM proxy_cache")
         rows = await cur.fetchall()
         for clip_id, file_path in rows:
             p = Path(file_path)

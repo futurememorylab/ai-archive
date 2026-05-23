@@ -1,6 +1,7 @@
 import hashlib
+from datetime import UTC
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -33,8 +34,11 @@ class FakeRepo:
 
     async def upsert(self, db, *, store_id: str, clip_id: int, **kwargs):
         self.rows[(store_id, clip_id)] = {
-            "store_id": store_id, "catdv_clip_id": clip_id, **kwargs,
-            "uploaded_at": "now", "last_used_at": "now",
+            "store_id": store_id,
+            "catdv_clip_id": clip_id,
+            **kwargs,
+            "uploaded_at": "now",
+            "last_used_at": "now",
         }
 
     async def touch(self, db, *, store_id: str, clip_id: int):
@@ -69,10 +73,9 @@ def adapter_factory(tmp_path):
         gcs = FakeGcsService(bucket_name=bucket)
         repo = FakeRepo()
         db = _make_fake_db()
-        adapter = GcsInputStore(
-            gcs=gcs, files_repo=repo, db_provider=lambda: db
-        )
+        adapter = GcsInputStore(gcs=gcs, files_repo=repo, db_provider=lambda: db)
         return adapter, gcs, repo, db
+
     return _factory
 
 
@@ -216,7 +219,7 @@ async def test_evict_is_noop_when_no_row(adapter_factory):
 
 @pytest.mark.asyncio
 async def test_reference_for_gemini_returns_file_data_shape(adapter_factory):
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     adapter, _, _, _ = adapter_factory()
     ref = UploadedRef(
@@ -224,7 +227,7 @@ async def test_reference_for_gemini_returns_file_data_shape(adapter_factory):
         mime_type="video/quicktime",
         size_bytes=10,
         sha256="x",
-        uploaded_at=datetime.now(timezone.utc),
+        uploaded_at=datetime.now(UTC),
         expires_at=None,
     )
     out = await adapter.reference_for_gemini(ref)

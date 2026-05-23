@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
 ProviderId = str
 ProviderClipId = str
@@ -88,7 +88,7 @@ class ReplaceNote:
     text: str
 
 
-ChangeOp = Union[AddMarkers, SetField, AppendNote, ReplaceNote]
+ChangeOp = AddMarkers | SetField | AppendNote | ReplaceNote
 
 
 @dataclass(frozen=True)
@@ -142,8 +142,13 @@ class FieldDef:
     identifier: str
     name: str
     type: Literal[
-        "text", "integer", "decimal", "date",
-        "picklist", "multi-picklist", "bool",
+        "text",
+        "integer",
+        "decimal",
+        "date",
+        "picklist",
+        "multi-picklist",
+        "bool",
     ]
     is_multi: bool
     is_editable: bool

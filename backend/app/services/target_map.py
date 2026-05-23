@@ -55,9 +55,7 @@ def expand(
         if key not in structured or structured[key] is None:
             continue
         value = structured[key]
-        items.extend(
-            _expand_one(entry, value, annotation_id, catdv_clip_id, clip_duration_secs)
-        )
+        items.extend(_expand_one(entry, value, annotation_id, catdv_clip_id, clip_duration_secs))
     return items
 
 
@@ -72,9 +70,7 @@ def _expand_one(
         if not isinstance(value, list):
             return []
         markers = (
-            _filter_markers(value, clip_duration_secs)
-            if clip_duration_secs is not None
-            else value
+            _filter_markers(value, clip_duration_secs) if clip_duration_secs is not None else value
         )
         return [
             ReviewItem(

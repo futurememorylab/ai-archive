@@ -1,4 +1,5 @@
 """Pydantic models for Prompt + PromptVersion."""
+
 import pytest
 
 from backend.app.models.prompt import (
@@ -6,14 +7,17 @@ from backend.app.models.prompt import (
     PromptVersion,
     PromptVersionState,
     TargetMap,
-    TargetEntry,
 )
 
 
 def test_prompt_minimal():
-    p = Prompt(name="Scenes", description="d", archived=False,
-               created_at="2026-05-01T00:00:00+00:00",
-               updated_at="2026-05-01T00:00:00+00:00")
+    p = Prompt(
+        name="Scenes",
+        description="d",
+        archived=False,
+        created_at="2026-05-01T00:00:00+00:00",
+        updated_at="2026-05-01T00:00:00+00:00",
+    )
     assert p.name == "Scenes"
     assert p.archived is False
 
@@ -37,9 +41,15 @@ def test_prompt_version_minimal():
 def test_prompt_version_state_invalid_rejected():
     with pytest.raises(ValueError):
         PromptVersion(
-            prompt_id=1, version_num=1, state="bogus", body="x",
-            target_map={}, output_schema={}, model="m",
-            created_at="t", updated_at="t",
+            prompt_id=1,
+            version_num=1,
+            state="bogus",
+            body="x",
+            target_map={},
+            output_schema={},
+            model="m",
+            created_at="t",
+            updated_at="t",
         )
 
 

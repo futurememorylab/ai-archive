@@ -1,4 +1,5 @@
 """Live session API — session-config, transcript persistence, summarize, history."""
+
 import json
 import uuid
 from typing import Any, Literal
@@ -31,11 +32,13 @@ WSS_URL_TEMPLATE = (
 # Indirection points so tests can monkeypatch without touching pages.py internals.
 async def load_clip_for_live(ctx: Any, clip_id: int) -> dict:
     from backend.app.routes.pages import _build_clip_view_model_for_live
+
     return await _build_clip_view_model_for_live(ctx, clip_id)
 
 
 async def load_draft_for_live(ctx: Any, clip_id: int) -> dict:
     from backend.app.routes.pages import _build_draft_view_model_for_live
+
     return await _build_draft_view_model_for_live(ctx, clip_id)
 
 
@@ -56,14 +59,20 @@ async def session_config(request: Request, clip_id: int) -> dict:
         raise HTTPException(500, detail="live system instruction has no production version")
 
     setup_payload = assemble_setup_payload(
-        clip=clip, draft=draft, prompt_body=version.body, settings=settings,
+        clip=clip,
+        draft=draft,
+        prompt_body=version.body,
+        settings=settings,
     )
     token = await mint_ephemeral_token(setup=setup_payload, settings=settings)
 
     session_id = uuid.uuid4().hex
     repo = LiveSessionsRepo()
     await repo.insert_pending(
-        ctx.db, id=session_id, clip_id=clip_id, prompt_version=version.id,
+        ctx.db,
+        id=session_id,
+        clip_id=clip_id,
+        prompt_version=version.id,
     )
 
     return {
@@ -91,19 +100,23 @@ class TranscriptPayload(BaseModel):
 
 @router.post("/sessions/{session_id}/transcript")
 async def post_transcript(
-    request: Request, session_id: str, body: TranscriptPayload,
+    request: Request,
+    session_id: str,
+    body: TranscriptPayload,
 ) -> dict:
     ctx = request.app.state.ctx
     repo = LiveSessionsRepo()
     try:
         await repo.get(ctx.db, session_id)
     except LookupError:
-        raise HTTPException(404, detail="session not found")
+        raise HTTPException(404, detail="session not found") from None
     await repo.mark_ended(
-        ctx.db, session_id,
+        ctx.db,
+        session_id,
         end_reason=body.end_reason,
         transcript_json=json.dumps(
-            [t.model_dump() for t in body.transcript], ensure_ascii=False,
+            [t.model_dump() for t in body.transcript],
+            ensure_ascii=False,
         ),
         frame_count=body.frame_count,
         search_calls=body.search_calls,
@@ -118,7 +131,7 @@ async def post_summarize(request: Request, session_id: str) -> dict:
     try:
         await repo.get(ctx.db, session_id)
     except LookupError:
-        raise HTTPException(404, detail="session not found")
+        raise HTTPException(404, detail="session not found") from None
     await summarize(ctx.db, session_id=session_id, settings=ctx.settings)
     session = await repo.get(ctx.db, session_id)
     return {"summary_cs": session.summary_cs}
@@ -134,23 +147,25 @@ async def list_sessions(request: Request, clip_id: int) -> list[dict]:
         duration_s = None
         if s.started_at and s.ended_at:
             from datetime import datetime
+
             try:
                 duration_s = (
-                    datetime.fromisoformat(s.ended_at)
-                    - datetime.fromisoformat(s.started_at)
+                    datetime.fromisoformat(s.ended_at) - datetime.fromisoformat(s.started_at)
                 ).total_seconds()
             except ValueError:
                 duration_s = None
-        out.append({
-            "id": s.id,
-            "started_at": s.started_at,
-            "ended_at": s.ended_at,
-            "duration_s": duration_s,
-            "end_reason": s.end_reason,
-            "state": s.state,
-            "has_summary": s.summary_cs is not None,
-            "frame_count": s.frame_count,
-        })
+        out.append(
+            {
+                "id": s.id,
+                "started_at": s.started_at,
+                "ended_at": s.ended_at,
+                "duration_s": duration_s,
+                "end_reason": s.end_reason,
+                "state": s.state,
+                "has_summary": s.summary_cs is not None,
+                "frame_count": s.frame_count,
+            }
+        )
     return out
 
 
@@ -161,7 +176,7 @@ async def get_session(request: Request, session_id: str) -> dict:
     try:
         s = await repo.get(ctx.db, session_id)
     except LookupError:
-        raise HTTPException(404, detail="session not found")
+        raise HTTPException(404, detail="session not found") from None
     return {
         "id": s.id,
         "clip_id": s.clip_id,

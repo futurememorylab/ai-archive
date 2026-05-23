@@ -49,9 +49,7 @@ async def test_migration_0003_backfills_existing_rows(tmp_path):
             """
         )
         for name in ("0001_initial.sql", "0002_ai_store_files.sql"):
-            await conn.execute(
-                "INSERT INTO schema_migrations(name) VALUES (?)", (name,)
-            )
+            await conn.execute("INSERT INTO schema_migrations(name) VALUES (?)", (name,))
 
         # Seed: one row in each clip-keyed table.
         await conn.execute(
@@ -124,9 +122,7 @@ async def test_migration_0003_backfills_existing_rows(tmp_path):
             ("review_items", "14"),
             ("write_log", "15"),
         ]:
-            cur = await conn.execute(
-                f"SELECT provider_id, provider_clip_id FROM {table}"
-            )
+            cur = await conn.execute(f"SELECT provider_id, provider_clip_id FROM {table}")
             row = await cur.fetchone()
             assert row is not None, f"no row in {table}"
             assert row[0] == "catdv", f"provider_id wrong in {table}: {row}"
@@ -152,8 +148,7 @@ async def test_migration_0003_creates_clip_cache_table(tmp_path):
             "pinned_to_workspace_id",
         }.issubset(cols)
         cur = await conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='index' "
-            "AND tbl_name='clip_cache'"
+            "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='clip_cache'"
         )
         idx = {row[0] for row in await cur.fetchall()}
         assert "idx_clip_cache_catalog" in idx

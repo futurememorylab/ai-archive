@@ -53,19 +53,26 @@ def mgr(db, tmp_path):
     repo = WorkspacesRepo()
     provider = FakeProvider()
     resolver = FakeResolver(tmp_path / "proxies")
-    return WorkspaceManager(
-        workspaces_repo=repo,
-        provider=provider,
-        proxy_resolver=resolver,
-        db_provider=lambda: db,
-    ), provider, resolver, repo
+    return (
+        WorkspaceManager(
+            workspaces_repo=repo,
+            provider=provider,
+            proxy_resolver=resolver,
+            db_provider=lambda: db,
+        ),
+        provider,
+        resolver,
+        repo,
+    )
 
 
 @pytest.mark.asyncio
 async def test_create_with_clips(db, mgr):
     m, provider, resolver, repo = mgr
     ws_id = await m.create_workspace(
-        name="w", provider_id="catdv", catalog_id="1",
+        name="w",
+        provider_id="catdv",
+        catalog_id="1",
         clip_keys=[("catdv", "1"), ("catdv", "2")],
     )
     ws = await m.get(ws_id)
@@ -78,7 +85,9 @@ async def test_create_with_clips(db, mgr):
 async def test_prepare_walks_to_ready(db, mgr):
     m, provider, resolver, repo = mgr
     ws_id = await m.create_workspace(
-        name="w", provider_id="catdv", catalog_id="1",
+        name="w",
+        provider_id="catdv",
+        catalog_id="1",
         clip_keys=[("catdv", "1"), ("catdv", "2")],
     )
     evs: list[PrepEvent] = []
@@ -118,7 +127,9 @@ async def test_prepare_partial_error_per_clip(db, tmp_path):
         db_provider=lambda: db,
     )
     ws_id = await m.create_workspace(
-        name="w", provider_id="catdv", catalog_id="1",
+        name="w",
+        provider_id="catdv",
+        catalog_id="1",
         clip_keys=[("catdv", "1"), ("catdv", "99"), ("catdv", "2")],
     )
     evs = []
@@ -150,7 +161,9 @@ async def test_prepare_skips_media_when_provider_local(db, tmp_path):
         db_provider=lambda: db,
     )
     ws_id = await m.create_workspace(
-        name="w", provider_id="catdv", catalog_id="1",
+        name="w",
+        provider_id="catdv",
+        catalog_id="1",
         clip_keys=[("catdv", "1")],
     )
     evs = []
@@ -165,7 +178,9 @@ async def test_prepare_skips_media_when_provider_local(db, tmp_path):
 async def test_prepare_is_resumable_skips_ready(db, mgr):
     m, *_ = mgr
     ws_id = await m.create_workspace(
-        name="w", provider_id="catdv", catalog_id="1",
+        name="w",
+        provider_id="catdv",
+        catalog_id="1",
         clip_keys=[("catdv", "1")],
     )
     async for _ in m.prepare(ws_id):
@@ -180,6 +195,7 @@ async def test_prepare_is_resumable_skips_ready(db, mgr):
 @pytest.mark.asyncio
 async def test_release_clears_pin_does_not_evict(db, mgr, tmp_path):
     from datetime import UTC, datetime
+
     m, provider, resolver, repo = mgr
     # seed a clip_cache row so primary-pin update is observable
     await db.execute(
@@ -193,7 +209,9 @@ async def test_release_clears_pin_does_not_evict(db, mgr, tmp_path):
     await db.commit()
 
     ws_id = await m.create_workspace(
-        name="w", provider_id="catdv", catalog_id="1",
+        name="w",
+        provider_id="catdv",
+        catalog_id="1",
         clip_keys=[("catdv", "1")],
     )
     async for _ in m.prepare(ws_id):
@@ -224,7 +242,9 @@ async def test_release_clears_pin_does_not_evict(db, mgr, tmp_path):
 async def test_release_with_delete_workspace_removes_row(db, mgr):
     m, *_ = mgr
     ws_id = await m.create_workspace(
-        name="w", provider_id="catdv", catalog_id="1",
+        name="w",
+        provider_id="catdv",
+        catalog_id="1",
         clip_keys=[("catdv", "1")],
     )
     await m.release(ws_id, delete_workspace=True)
@@ -234,6 +254,7 @@ async def test_release_with_delete_workspace_removes_row(db, mgr):
 @pytest.mark.asyncio
 async def test_remove_clips_repoints_to_other_workspace(db, mgr):
     from datetime import UTC, datetime
+
     m, *_ = mgr
     # seed a clip_cache row
     await db.execute(
@@ -247,11 +268,15 @@ async def test_remove_clips_repoints_to_other_workspace(db, mgr):
     await db.commit()
 
     a = await m.create_workspace(
-        name="a", provider_id="catdv", catalog_id="1",
+        name="a",
+        provider_id="catdv",
+        catalog_id="1",
         clip_keys=[("catdv", "7")],
     )
     b = await m.create_workspace(
-        name="b", provider_id="catdv", catalog_id="1",
+        name="b",
+        provider_id="catdv",
+        catalog_id="1",
         clip_keys=[("catdv", "7")],
     )
     async for _ in m.prepare(a):

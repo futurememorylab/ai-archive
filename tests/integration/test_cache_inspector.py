@@ -29,7 +29,10 @@ async def _seed_proxy_cache(db, key, *, file_path, size_bytes):
         """,
         (
             int(key[1]) if key[1].isdigit() else 0,
-            key[0], key[1], file_path, size_bytes,
+            key[0],
+            key[1],
+            file_path,
+            size_bytes,
             datetime.now(UTC).isoformat(),
             datetime.now(UTC).isoformat(),
         ),
@@ -48,8 +51,12 @@ async def _seed_ai_store_files(db, key, *, store_id, size_bytes, gcs_uri):
                 ?, ?, NULL)
         """,
         (
-            store_id, int(key[1]) if key[1].isdigit() else 0,
-            key[0], key[1], gcs_uri, size_bytes,
+            store_id,
+            int(key[1]) if key[1].isdigit() else 0,
+            key[0],
+            key[1],
+            gcs_uri,
+            size_bytes,
             datetime.now(UTC).isoformat(),
             datetime.now(UTC).isoformat(),
         ),
@@ -178,8 +185,7 @@ async def test_summary_totals(db, tmp_path):
 async def test_list_orphans_proxy_without_clip_cache(db, tmp_path):
     proxy = tmp_path / "33.mov"
     proxy.write_bytes(b"y")
-    await _seed_proxy_cache(db, ("catdv", "33"),
-                            file_path=str(proxy), size_bytes=1)
+    await _seed_proxy_cache(db, ("catdv", "33"), file_path=str(proxy), size_bytes=1)
     insp = CacheInspector(db_provider=lambda: db)
     orphans = await insp.list_orphans()
     assert len(orphans) == 1
@@ -188,8 +194,9 @@ async def test_list_orphans_proxy_without_clip_cache(db, tmp_path):
 
 @pytest.mark.asyncio
 async def test_list_orphans_ai_without_clip_cache(db):
-    await _seed_ai_store_files(db, ("catdv", "55"),
-                               store_id="gcs:b", size_bytes=1, gcs_uri="gs://b/55")
+    await _seed_ai_store_files(
+        db, ("catdv", "55"), store_id="gcs:b", size_bytes=1, gcs_uri="gs://b/55"
+    )
     insp = CacheInspector(db_provider=lambda: db)
     orphans = await insp.list_orphans()
     assert len(orphans) == 1

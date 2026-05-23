@@ -99,7 +99,9 @@ class MediaPrefetcher:
             clip_id_int = int(clip_id_str)
         except ValueError:
             await self._queue.mark_error(
-                db, rid, f"non-integer clip id: {clip_id_str!r}",
+                db,
+                rid,
+                f"non-integer clip id: {clip_id_str!r}",
             )
             return clip_id_int if clip_id_str.isdigit() else 0
 

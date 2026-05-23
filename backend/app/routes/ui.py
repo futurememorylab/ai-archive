@@ -50,9 +50,7 @@ async def workspace_switcher(request: Request, ws_id: int | None = None):
             },
         )
     workspaces = await ctx.workspace_manager.list_workspaces()
-    active = (
-        await ctx.workspace_manager.get(ws_id) if ws_id is not None else None
-    )
+    active = await ctx.workspace_manager.get(ws_id) if ws_id is not None else None
     return templates.TemplateResponse(
         request,
         "workspace_switcher.html",
@@ -76,13 +74,10 @@ async def sync_drawer(request: Request):
     )
 
 
-@router.get("/clip-badge/{provider_id}/{provider_clip_id}",
-            response_class=HTMLResponse)
+@router.get("/clip-badge/{provider_id}/{provider_clip_id}", response_class=HTMLResponse)
 async def clip_badge(request: Request, provider_id: str, provider_clip_id: str):
     ctx = request.app.state.ctx
-    counts = await ctx.pending_ops_repo.count_pending_by_clip(
-        ctx.db, provider_id=provider_id
-    )
+    counts = await ctx.pending_ops_repo.count_pending_by_clip(ctx.db, provider_id=provider_id)
     bucket = counts.get(provider_clip_id, {"pending": 0, "conflict": 0})
     return templates.TemplateResponse(
         request,

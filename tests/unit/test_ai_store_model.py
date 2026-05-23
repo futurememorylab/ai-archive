@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -15,7 +15,7 @@ def test_uploaded_ref_holds_handle_and_metadata():
         mime_type="video/quicktime",
         size_bytes=12345,
         sha256="deadbeef",
-        uploaded_at=datetime.now(timezone.utc),
+        uploaded_at=datetime.now(UTC),
         expires_at=None,
     )
     assert ref.handle == "gs://bucket/clips/1.mov"
@@ -28,7 +28,7 @@ def test_uploaded_ref_is_frozen():
         mime_type="video/quicktime",
         size_bytes=1,
         sha256="a",
-        uploaded_at=datetime.now(timezone.utc),
+        uploaded_at=datetime.now(UTC),
         expires_at=None,
     )
     with pytest.raises(Exception):

@@ -21,7 +21,9 @@ async def test_clip_live_history_partial_renders(tmp_path):
     await repo.insert_pending(conn, id="abc", clip_id=42, prompt_version=None)
     await repo.mark_active(conn, "abc")
     await repo.mark_ended(
-        conn, "abc", end_reason="user_stop",
+        conn,
+        "abc",
+        end_reason="user_stop",
         transcript_json=json.dumps([{"role": "user", "text": "ahoj", "ts": 1}]),
     )
     await repo.set_summary(conn, "abc", "Krátké shrnutí.")
@@ -30,6 +32,7 @@ async def test_clip_live_history_partial_renders(tmp_path):
         db = conn
         mode = "online"
         settings = type("S", (), {})()
+
     app.state.ctx = _Ctx()
 
     transport = ASGITransport(app=app)

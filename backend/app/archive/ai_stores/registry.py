@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from backend.app.archive.ai_store import AIInputStore
 from backend.app.archive.ai_stores.gcs.adapter import GcsInputStore
@@ -24,9 +25,7 @@ def build_ai_input_store(
     if name == "gcs":
         if gcs_service is None:
             raise ValueError("ai_input_store=gcs requires a gcs_service")
-        return GcsInputStore(
-            gcs=gcs_service, files_repo=files_repo, db_provider=db_provider
-        )
+        return GcsInputStore(gcs=gcs_service, files_repo=files_repo, db_provider=db_provider)
     if name == "gemini-files":
         return GeminiFilesInputStore()
     raise ValueError(f"unknown ai_input_store: {name!r}")

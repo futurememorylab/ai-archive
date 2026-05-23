@@ -38,9 +38,7 @@ async def test_probe_once_records_transition_back_to_online(db):
     state = await mon.probe_once()
     assert state == ConnectionState.online
 
-    cur = await db.execute(
-        "SELECT state FROM connection_events ORDER BY id"
-    )
+    cur = await db.execute("SELECT state FROM connection_events ORDER BY id")
     states = [r[0] for r in await cur.fetchall()]
     assert states[-1] == "online"
 
@@ -52,7 +50,7 @@ async def test_manual_offline_pins_state(db):
     mon.set_manual_offline(True)
     state = await mon.probe_once()
     assert state == ConnectionState.offline
-    assert p.calls == 0   # probe is skipped while manual offline is set
+    assert p.calls == 0  # probe is skipped while manual offline is set
 
     mon.set_manual_offline(False)
     state = await mon.probe_once()

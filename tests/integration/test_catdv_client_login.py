@@ -1,6 +1,6 @@
 import pytest
 
-from backend.app.services.catdv_client import CatdvClient, CatdvAuthError
+from backend.app.services.catdv_client import CatdvAuthError, CatdvClient
 from tests.fakes.fake_catdv import running_fake_catdv
 
 

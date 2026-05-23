@@ -1,4 +1,7 @@
+import pytest
+
 from backend.app.archive.ai_store import AIInputStore
+from backend.app.archive.ai_stores.gemini_files.adapter import GeminiFilesInputStore
 
 
 def test_ai_input_store_protocol_exposes_expected_names():
@@ -12,14 +15,6 @@ def test_ai_input_store_protocol_exposes_expected_names():
         "reference_for_gemini",
     }
     assert expected.issubset(set(dir(AIInputStore)))
-
-
-import pytest
-
-from backend.app.archive.ai_store import AIInputStore as _AIInputStore  # noqa: F401
-from backend.app.archive.ai_stores.gemini_files.adapter import (
-    GeminiFilesInputStore,
-)
 
 
 def test_gemini_files_stub_advertises_correct_id_and_capabilities():

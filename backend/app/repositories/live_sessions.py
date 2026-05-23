@@ -6,7 +6,8 @@ State transitions:
 
 `set_summary` is idempotent — once non-null it never overwrites.
 """
-from datetime import datetime, timedelta, timezone
+
+from datetime import UTC, datetime, timedelta
 
 import aiosqlite
 
@@ -14,7 +15,7 @@ from backend.app.models.live_session import LiveSession
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 _COLS = (
@@ -25,17 +26,29 @@ _COLS = (
 
 def _row(r) -> LiveSession:
     return LiveSession(
-        id=r[0], clip_id=r[1], prompt_version=r[2], state=r[3],
-        started_at=r[4], ended_at=r[5], end_reason=r[6],
-        transcript_json=r[7], summary_cs=r[8],
-        frame_count=r[9], search_calls=r[10], created_at=r[11],
+        id=r[0],
+        clip_id=r[1],
+        prompt_version=r[2],
+        state=r[3],
+        started_at=r[4],
+        ended_at=r[5],
+        end_reason=r[6],
+        transcript_json=r[7],
+        summary_cs=r[8],
+        frame_count=r[9],
+        search_calls=r[10],
+        created_at=r[11],
     )
 
 
 class LiveSessionsRepo:
     async def insert_pending(
-        self, conn: aiosqlite.Connection,
-        *, id: str, clip_id: int, prompt_version: int | None,
+        self,
+        conn: aiosqlite.Connection,
+        *,
+        id: str,
+        clip_id: int,
+        prompt_version: int | None,
     ) -> None:
         await conn.execute(
             "INSERT INTO live_sessions (id, clip_id, prompt_version, state, created_at) "
@@ -52,9 +65,14 @@ class LiveSessionsRepo:
         await conn.commit()
 
     async def mark_ended(
-        self, conn: aiosqlite.Connection, id: str,
-        *, end_reason: str, transcript_json: str,
-        frame_count: int = 0, search_calls: int = 0,
+        self,
+        conn: aiosqlite.Connection,
+        id: str,
+        *,
+        end_reason: str,
+        transcript_json: str,
+        frame_count: int = 0,
+        search_calls: int = 0,
     ) -> None:
         await conn.execute(
             "UPDATE live_sessions SET state='ended', ended_at=?, end_reason=?, "
@@ -80,22 +98,23 @@ class LiveSessionsRepo:
         return _row(row)
 
     async def list_by_clip(
-        self, conn: aiosqlite.Connection, clip_id: int,
+        self,
+        conn: aiosqlite.Connection,
+        clip_id: int,
     ) -> list[LiveSession]:
         cur = await conn.execute(
-            f"SELECT {_COLS} FROM live_sessions WHERE clip_id=? "
-            "ORDER BY created_at DESC",
+            f"SELECT {_COLS} FROM live_sessions WHERE clip_id=? ORDER BY created_at DESC",
             (clip_id,),
         )
         return [_row(r) for r in await cur.fetchall()]
 
     async def cleanup_stale_pending(
-        self, conn: aiosqlite.Connection, older_than_hours: int = 1,
+        self,
+        conn: aiosqlite.Connection,
+        older_than_hours: int = 1,
     ) -> int:
         """Delete pending rows older than `older_than_hours`. Returns rows deleted."""
-        cutoff_iso = (
-            datetime.now(timezone.utc) - timedelta(hours=older_than_hours)
-        ).isoformat()
+        cutoff_iso = (datetime.now(UTC) - timedelta(hours=older_than_hours)).isoformat()
         cur = await conn.execute(
             "DELETE FROM live_sessions WHERE state='pending' AND created_at < ?",
             (cutoff_iso,),

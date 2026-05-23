@@ -23,9 +23,7 @@ async def test_migration_0002_renames_gcs_files_and_backfills_store_id(tmp_path)
             )
             """
         )
-        await conn.execute(
-            "INSERT INTO schema_migrations(name) VALUES ('0001_initial.sql')"
-        )
+        await conn.execute("INSERT INTO schema_migrations(name) VALUES ('0001_initial.sql')")
         await conn.commit()
 
         # Seed a row in the old shape.

@@ -15,18 +15,33 @@ def _now_iso() -> str:
 
 def _row_to_dict(row) -> dict[str, Any]:
     keys = (
-        "id", "provider_id", "provider_clip_id", "status",
-        "requested_by", "requested_at", "started_at", "finished_at",
-        "error", "bytes_downloaded",
+        "id",
+        "provider_id",
+        "provider_clip_id",
+        "status",
+        "requested_by",
+        "requested_at",
+        "started_at",
+        "finished_at",
+        "error",
+        "bytes_downloaded",
     )
     return dict(zip(keys, row, strict=False))
 
 
 def _row_to_dict_with_name(row) -> dict[str, Any]:
     keys = (
-        "id", "provider_id", "provider_clip_id", "status",
-        "requested_by", "requested_at", "started_at", "finished_at",
-        "error", "bytes_downloaded", "clip_name",
+        "id",
+        "provider_id",
+        "provider_clip_id",
+        "status",
+        "requested_by",
+        "requested_at",
+        "started_at",
+        "finished_at",
+        "error",
+        "bytes_downloaded",
+        "clip_name",
     )
     return dict(zip(keys, row, strict=False))
 
@@ -74,9 +89,7 @@ class PrefetchQueueRepo:
         assert cur.lastrowid is not None
         return int(cur.lastrowid)
 
-    async def claim_next(
-        self, conn: aiosqlite.Connection
-    ) -> dict[str, Any] | None:
+    async def claim_next(self, conn: aiosqlite.Connection) -> dict[str, Any] | None:
         """Atomically take the oldest queued row and mark it downloading.
 
         Returns the claimed row (with status now `downloading`) or None
@@ -114,9 +127,7 @@ class PrefetchQueueRepo:
         # Re-read so callers see the updated status/started_at.
         return await self.get(conn, rid)
 
-    async def get(
-        self, conn: aiosqlite.Connection, rid: int
-    ) -> dict[str, Any] | None:
+    async def get(self, conn: aiosqlite.Connection, rid: int) -> dict[str, Any] | None:
         cur = await conn.execute(
             """
             SELECT id, provider_id, provider_clip_id, status,
@@ -151,16 +162,12 @@ class PrefetchQueueRepo:
         message: str,
     ) -> None:
         await conn.execute(
-            "UPDATE prefetch_queue "
-            "   SET status='error', finished_at=?, error=? "
-            " WHERE id=?",
+            "UPDATE prefetch_queue    SET status='error', finished_at=?, error=?  WHERE id=?",
             (_now_iso(), message[:500], rid),
         )
         await conn.commit()
 
-    async def mark_cancelled(
-        self, conn: aiosqlite.Connection, rid: int
-    ) -> bool:
+    async def mark_cancelled(self, conn: aiosqlite.Connection, rid: int) -> bool:
         """Cancel a queued/error row. Returns False (without mutating)
         if the row is `downloading` or already terminal."""
         cur = await conn.execute(
@@ -172,9 +179,7 @@ class PrefetchQueueRepo:
         await conn.commit()
         return cur.rowcount > 0
 
-    async def list_active(
-        self, conn: aiosqlite.Connection
-    ) -> list[dict[str, Any]]:
+    async def list_active(self, conn: aiosqlite.Connection) -> list[dict[str, Any]]:
         cur = await conn.execute(
             f"""
             SELECT {_LIST_COLUMNS_WITH_NAME}
@@ -208,10 +213,6 @@ class PrefetchQueueRepo:
         )
         return [_row_to_dict_with_name(r) for r in await cur.fetchall()]
 
-    async def count_by_status(
-        self, conn: aiosqlite.Connection
-    ) -> dict[str, int]:
-        cur = await conn.execute(
-            "SELECT status, COUNT(*) FROM prefetch_queue GROUP BY status"
-        )
+    async def count_by_status(self, conn: aiosqlite.Connection) -> dict[str, int]:
+        cur = await conn.execute("SELECT status, COUNT(*) FROM prefetch_queue GROUP BY status")
         return {row[0]: int(row[1]) for row in await cur.fetchall()}

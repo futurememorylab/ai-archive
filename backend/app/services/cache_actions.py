@@ -39,7 +39,7 @@ log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class EvictOutcome:
-    result: str            # "ok" | "skipped" | "error"
+    result: str  # "ok" | "skipped" | "error"
     detail: str | None
     bytes_freed: int
     log_id: int
@@ -89,7 +89,9 @@ class CacheActions:
         who: str | None = None,
     ) -> EvictOutcome:
         return await self._evict_local_media_impl(
-            key, force=force, who=who or self._who_provider(),
+            key,
+            force=force,
+            who=who or self._who_provider(),
             action="evict_local_media",
         )
 
@@ -101,7 +103,9 @@ class CacheActions:
         who: str | None = None,
     ) -> EvictOutcome:
         return await self._evict_ai_media_impl(
-            key, force=force, who=who or self._who_provider(),
+            key,
+            force=force,
+            who=who or self._who_provider(),
             action="evict_ai_media",
         )
 
@@ -113,7 +117,9 @@ class CacheActions:
         who: str | None = None,
     ) -> EvictOutcome:
         return await self._evict_metadata_impl(
-            key, force=force, who=who or self._who_provider(),
+            key,
+            force=force,
+            who=who or self._who_provider(),
             action="evict_metadata",
         )
 
@@ -136,17 +142,26 @@ class CacheActions:
         who = who or self._who_provider()
         outcomes: list[EvictOutcome] = []
         a = await self._evict_ai_media_impl(
-            key, force=force, who=who, action="evict_clip_everywhere",
+            key,
+            force=force,
+            who=who,
+            action="evict_clip_everywhere",
         )
         outcomes.append(a)
         if force or a.result != "skipped":
             b = await self._evict_local_media_impl(
-                key, force=force, who=who, action="evict_clip_everywhere",
+                key,
+                force=force,
+                who=who,
+                action="evict_clip_everywhere",
             )
             outcomes.append(b)
             if force or b.result != "skipped":
                 c = await self._evict_metadata_impl(
-                    key, force=force, who=who, action="evict_clip_everywhere",
+                    key,
+                    force=force,
+                    who=who,
+                    action="evict_clip_everywhere",
                 )
                 outcomes.append(c)
 
@@ -179,21 +194,27 @@ class CacheActions:
                 if layer == "media-local":
                     outcomes.append(
                         await self._evict_local_media_impl(
-                            key, force=force, who=who,
+                            key,
+                            force=force,
+                            who=who,
                             action="bulk_evict",
                         )
                     )
                 elif layer == "media-ai":
                     outcomes.append(
                         await self._evict_ai_media_impl(
-                            key, force=force, who=who,
+                            key,
+                            force=force,
+                            who=who,
                             action="bulk_evict",
                         )
                     )
                 elif layer == "metadata":
                     outcomes.append(
                         await self._evict_metadata_impl(
-                            key, force=force, who=who,
+                            key,
+                            force=force,
+                            who=who,
                             action="bulk_evict",
                         )
                     )
@@ -202,9 +223,7 @@ class CacheActions:
                 # crash a bulk-evict run.
         return _summarise(outcomes)
 
-    async def evict_orphans(
-        self, *, who: str | None = None
-    ) -> BulkEvictResult:
+    async def evict_orphans(self, *, who: str | None = None) -> BulkEvictResult:
         who = who or self._who_provider()
         orphans = await self._inspector.list_orphans()
         outcomes: list[EvictOutcome] = []
@@ -215,14 +234,18 @@ class CacheActions:
                 if layer.layer == "media-local":
                     outcomes.append(
                         await self._evict_local_media_impl(
-                            status.clip_key, force=False, who=who,
+                            status.clip_key,
+                            force=False,
+                            who=who,
                             action="evict_orphans",
                         )
                     )
                 elif layer.layer == "media-ai":
                     outcomes.append(
                         await self._evict_ai_media_impl(
-                            status.clip_key, force=False, who=who,
+                            status.clip_key,
+                            force=False,
+                            who=who,
                             action="evict_orphans",
                         )
                     )
@@ -250,8 +273,12 @@ class CacheActions:
         row = await cur.fetchone()
         if row is None:
             log_id = await self._log_repo.append(
-                db, who=who, action=action, clip_keys=[key],
-                result="skipped", detail="absent",
+                db,
+                who=who,
+                action=action,
+                clip_keys=[key],
+                result="skipped",
+                detail="absent",
             )
             return EvictOutcome("skipped", "absent", 0, log_id)
 
@@ -267,8 +294,12 @@ class CacheActions:
         if pins and not force:
             detail = f"pinned_by_workspaces={pins}"
             log_id = await self._log_repo.append(
-                db, who=who, action=action, clip_keys=[key],
-                result="skipped", detail=detail,
+                db,
+                who=who,
+                action=action,
+                clip_keys=[key],
+                result="skipped",
+                detail=detail,
             )
             return EvictOutcome("skipped", detail, 0, log_id)
 
@@ -284,21 +315,29 @@ class CacheActions:
         except OSError as exc:
             unlink_detail = f"unlink_failed: {exc}"
             log_id = await self._log_repo.append(
-                db, who=who, action=action, clip_keys=[key],
-                result="error", detail=unlink_detail,
+                db,
+                who=who,
+                action=action,
+                clip_keys=[key],
+                result="error",
+                detail=unlink_detail,
             )
             return EvictOutcome("error", unlink_detail, 0, log_id)
 
         await db.execute(
-            "DELETE FROM proxy_cache "
-            "WHERE provider_id = ? AND provider_clip_id = ?",
+            "DELETE FROM proxy_cache WHERE provider_id = ? AND provider_clip_id = ?",
             (key[0], key[1]),
         )
         await db.commit()
 
         log_id = await self._log_repo.append(
-            db, who=who, action=action, clip_keys=[key],
-            result="ok", detail=unlink_detail, bytes_freed=size_bytes,
+            db,
+            who=who,
+            action=action,
+            clip_keys=[key],
+            result="ok",
+            detail=unlink_detail,
+            bytes_freed=size_bytes,
         )
         return EvictOutcome("ok", unlink_detail, size_bytes, log_id)
 
@@ -319,8 +358,12 @@ class CacheActions:
         rows = await cur.fetchall()
         if not rows:
             log_id = await self._log_repo.append(
-                db, who=who, action=action, clip_keys=[key],
-                result="skipped", detail="absent",
+                db,
+                who=who,
+                action=action,
+                clip_keys=[key],
+                result="skipped",
+                detail="absent",
             )
             return EvictOutcome("skipped", "absent", 0, log_id)
 
@@ -336,8 +379,12 @@ class CacheActions:
         if n_pending and not force:
             detail = f"pending_ops={n_pending}"
             log_id = await self._log_repo.append(
-                db, who=who, action=action, clip_keys=[key],
-                result="skipped", detail=detail,
+                db,
+                who=who,
+                action=action,
+                clip_keys=[key],
+                result="skipped",
+                detail=detail,
             )
             return EvictOutcome("skipped", detail, 0, log_id)
 
@@ -350,8 +397,12 @@ class CacheActions:
             except Exception as exc:  # noqa: BLE001
                 detail = f"ai_store_evict_failed: {exc}"
                 log_id = await self._log_repo.append(
-                    db, who=who, action=action, clip_keys=[key],
-                    result="error", detail=detail,
+                    db,
+                    who=who,
+                    action=action,
+                    clip_keys=[key],
+                    result="error",
+                    detail=detail,
                 )
                 return EvictOutcome("error", detail, 0, log_id)
 
@@ -359,14 +410,18 @@ class CacheActions:
         # this via its files_repo, but PR 6 doesn't assume — clear here
         # regardless so the inspector sees consistent state).
         await db.execute(
-            "DELETE FROM ai_store_files "
-            "WHERE provider_id = ? AND provider_clip_id = ?",
+            "DELETE FROM ai_store_files WHERE provider_id = ? AND provider_clip_id = ?",
             (key[0], key[1]),
         )
         await db.commit()
         log_id = await self._log_repo.append(
-            db, who=who, action=action, clip_keys=[key],
-            result="ok", detail=detail, bytes_freed=total_bytes,
+            db,
+            who=who,
+            action=action,
+            clip_keys=[key],
+            result="ok",
+            detail=detail,
+            bytes_freed=total_bytes,
         )
         return EvictOutcome("ok", detail, total_bytes, log_id)
 
@@ -387,8 +442,12 @@ class CacheActions:
         row = await cur.fetchone()
         if row is None:
             log_id = await self._log_repo.append(
-                db, who=who, action=action, clip_keys=[key],
-                result="skipped", detail="absent",
+                db,
+                who=who,
+                action=action,
+                clip_keys=[key],
+                result="skipped",
+                detail="absent",
             )
             return EvictOutcome("skipped", "absent", 0, log_id)
         bytes_freed = int(row[0] or 0)
@@ -402,8 +461,12 @@ class CacheActions:
         if pins and not force:
             detail = f"pinned_by_workspaces={pins}"
             log_id = await self._log_repo.append(
-                db, who=who, action=action, clip_keys=[key],
-                result="skipped", detail=detail,
+                db,
+                who=who,
+                action=action,
+                clip_keys=[key],
+                result="skipped",
+                detail=detail,
             )
             return EvictOutcome("skipped", detail, 0, log_id)
 
@@ -419,20 +482,27 @@ class CacheActions:
         if n_pending and not force:
             detail = f"pending_ops={n_pending}"
             log_id = await self._log_repo.append(
-                db, who=who, action=action, clip_keys=[key],
-                result="skipped", detail=detail,
+                db,
+                who=who,
+                action=action,
+                clip_keys=[key],
+                result="skipped",
+                detail=detail,
             )
             return EvictOutcome("skipped", detail, 0, log_id)
 
         await db.execute(
-            "DELETE FROM clip_cache "
-            "WHERE provider_id = ? AND provider_clip_id = ?",
+            "DELETE FROM clip_cache WHERE provider_id = ? AND provider_clip_id = ?",
             (key[0], key[1]),
         )
         await db.commit()
         log_id = await self._log_repo.append(
-            db, who=who, action=action, clip_keys=[key],
-            result="ok", bytes_freed=bytes_freed,
+            db,
+            who=who,
+            action=action,
+            clip_keys=[key],
+            result="ok",
+            bytes_freed=bytes_freed,
         )
         return EvictOutcome("ok", None, bytes_freed, log_id)
 
@@ -444,6 +514,9 @@ def _summarise(outcomes: Sequence[EvictOutcome]) -> BulkEvictResult:
     bytes_freed = sum(o.bytes_freed for o in outcomes)
     log_ids = tuple(o.log_id for o in outcomes)
     return BulkEvictResult(
-        ok=ok, skipped=skipped, errors=errors,
-        bytes_freed=bytes_freed, log_ids=log_ids,
+        ok=ok,
+        skipped=skipped,
+        errors=errors,
+        bytes_freed=bytes_freed,
+        log_ids=log_ids,
     )

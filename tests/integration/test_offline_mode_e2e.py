@@ -21,9 +21,7 @@ import backend.app.services.gemini as gemini_mod
 class _StubGcs:
     def __init__(self, *args, **kwargs):
         self.bucket_name = "b"
-        self._bucket = type(
-            "FakeBucket", (), {"exists": staticmethod(lambda: True)}
-        )()
+        self._bucket = type("FakeBucket", (), {"exists": staticmethod(lambda: True)})()
 
 
 class _StubGemini:
@@ -105,8 +103,6 @@ async def test_offline_clip_list_serves_empty_when_no_cache(tmp_path, monkeypatc
         ctx = c.app.state.ctx
         from backend.app.archive.model import ClipQuery
 
-        page = await ctx.archive.list_clips(
-            "881507", ClipQuery(text=None, offset=0, limit=10)
-        )
+        page = await ctx.archive.list_clips("881507", ClipQuery(text=None, offset=0, limit=10))
         assert page.total == 0
         assert page.items == ()

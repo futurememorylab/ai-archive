@@ -5,10 +5,10 @@ contents of the WSS `setup` message it will send to Gemini Live) and the
 ephemeral token to authenticate the WSS connection. Audio bytes never
 flow through this process — see docs/decisions.md 2026-05-23.
 """
+
 from __future__ import annotations
 
 import json as _json
-from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import aiosqlite
@@ -30,7 +30,11 @@ SUMMARY_PROMPT_CS = (
 
 
 def assemble_setup_payload(
-    *, clip: dict, draft: dict, prompt_body: str, settings: Any,
+    *,
+    clip: dict,
+    draft: dict,
+    prompt_body: str,
+    settings: Any,
 ) -> dict:
     """Return the dict the browser sends as the WSS `setup` message + a
     pre-built initial user turn carrying the Czech context.
@@ -63,17 +67,19 @@ def assemble_setup_payload(
         "systemInstruction": {"parts": [{"text": prompt_body}]},
         "tools": [
             {"googleSearch": {}},
-            {"functionDeclarations": [
-                {
-                    "name": "end_session",
-                    "description": "Ukončit aktuální živou relaci na žádost uživatele.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {"reason": {"type": "string"}},
-                        "required": ["reason"],
+            {
+                "functionDeclarations": [
+                    {
+                        "name": "end_session",
+                        "description": "Ukončit aktuální živou relaci na žádost uživatele.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {"reason": {"type": "string"}},
+                            "required": ["reason"],
+                        },
                     },
-                },
-            ]},
+                ]
+            },
         ],
         "initial_context_turn": {
             "role": "user",
@@ -99,9 +105,7 @@ async def mint_ephemeral_token(*, setup: dict, settings: Any) -> str:
     fixes the Vertex AI Live story).
     """
     if not getattr(settings, "gemini_api_key", None):
-        raise RuntimeError(
-            "GEMINI_API_KEY is not configured; Live audio cannot connect"
-        )
+        raise RuntimeError("GEMINI_API_KEY is not configured; Live audio cannot connect")
     # Touch the unused `setup` arg to keep call-sites stable while we
     # decide between this and a real ephemeral-token mint.
     _ = setup
@@ -113,7 +117,10 @@ def _generate_content_url(model: str) -> str:
 
 
 async def summarize(
-    conn: aiosqlite.Connection, *, session_id: str, settings: Any,
+    conn: aiosqlite.Connection,
+    *,
+    session_id: str,
+    settings: Any,
 ) -> bool:
     """Generate + store the Czech summary for a finished session.
 
@@ -127,10 +134,7 @@ async def summarize(
     transcript = _json.loads(session.transcript_json or "[]")
     if not transcript:
         return False
-    lines = [
-        f"{t.get('role','?')}: {t.get('text','')}"
-        for t in transcript if t.get("text")
-    ]
+    lines = [f"{t.get('role', '?')}: {t.get('text', '')}" for t in transcript if t.get("text")]
     full_prompt = SUMMARY_PROMPT_CS + "\n".join(lines)
     body = {"contents": [{"role": "user", "parts": [{"text": full_prompt}]}]}
     async with httpx.AsyncClient(timeout=30.0) as client:

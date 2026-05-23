@@ -1,4 +1,5 @@
 """REST routes for /api/prompts."""
+
 import importlib
 from pathlib import Path
 
@@ -15,6 +16,7 @@ def _setenv(monkeypatch, tmp_path):
 def _make_app(monkeypatch, tmp_path):
     _setenv(monkeypatch, tmp_path)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     return main_mod.app
 
@@ -155,42 +157,67 @@ def test_404_unknown_ids(monkeypatch, tmp_path: Path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         assert client.get("/api/prompts/999").status_code == 404
-        assert client.put(
-            "/api/prompts/1/versions/999",
-            json={"body": "x", "target_map": {}, "output_schema": {}, "model": "m"},
-        ).status_code == 404
+        assert (
+            client.put(
+                "/api/prompts/1/versions/999",
+                json={"body": "x", "target_map": {}, "output_schema": {}, "model": "m"},
+            ).status_code
+            == 404
+        )
 
 
 def test_create_with_invalid_target_map_shape_returns_422(client):
-    r = client.post("/api/prompts", json={
-        "name": "BAD", "description": "",
-        "body": "p",
-        "target_map": {"x": {"kind": "field"}},  # missing required 'identifier'
-        "output_schema": {}, "model": "gemini-2.5-pro",
-    })
+    r = client.post(
+        "/api/prompts",
+        json={
+            "name": "BAD",
+            "description": "",
+            "body": "p",
+            "target_map": {"x": {"kind": "field"}},  # missing required 'identifier'
+            "output_schema": {},
+            "model": "gemini-2.5-pro",
+        },
+    )
     assert r.status_code == 422, r.text
 
 
 def test_put_version_with_invalid_target_map_shape_returns_422(client):
-    pid = client.post("/api/prompts", json={
-        "name": "P", "description": "",
-        "body": "p", "target_map": {"x": {"kind": "markers"}},
-        "output_schema": {}, "model": "gemini-2.5-pro",
-    }).json()["id"]
+    pid = client.post(
+        "/api/prompts",
+        json={
+            "name": "P",
+            "description": "",
+            "body": "p",
+            "target_map": {"x": {"kind": "markers"}},
+            "output_schema": {},
+            "model": "gemini-2.5-pro",
+        },
+    ).json()["id"]
     vid = client.get(f"/api/prompts/{pid}").json()["versions"][0]["id"]
-    r = client.put(f"/api/prompts/{pid}/versions/{vid}", json={
-        "body": "p", "target_map": {"x": {"kind": "note"}},  # missing 'target'
-        "output_schema": {}, "model": "m",
-    })
+    r = client.put(
+        f"/api/prompts/{pid}/versions/{vid}",
+        json={
+            "body": "p",
+            "target_map": {"x": {"kind": "note"}},  # missing 'target'
+            "output_schema": {},
+            "model": "m",
+        },
+    )
     assert r.status_code == 422, r.text
 
 
 def test_promote_archived_returns_409(client):
-    pid = client.post("/api/prompts", json={
-        "name": "PR2", "description": "",
-        "body": "p", "target_map": {"x": {"kind": "markers"}},
-        "output_schema": {}, "model": "gemini-2.5-pro",
-    }).json()["id"]
+    pid = client.post(
+        "/api/prompts",
+        json={
+            "name": "PR2",
+            "description": "",
+            "body": "p",
+            "target_map": {"x": {"kind": "markers"}},
+            "output_schema": {},
+            "model": "gemini-2.5-pro",
+        },
+    ).json()["id"]
     v1 = client.get(f"/api/prompts/{pid}").json()["versions"][0]["id"]
     client.post(f"/api/prompts/{pid}/versions/{v1}:promote")
     v2 = client.post(f"/api/prompts/{pid}/versions", json={}).json()["id"]

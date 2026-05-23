@@ -25,8 +25,14 @@ def _now_iso() -> str:
 
 
 _WS_COLS = ("id", "name", "provider_id", "catalog_id", "created_at", "description")
-_WC_COLS = ("workspace_id", "provider_id", "provider_clip_id",
-            "added_at", "cache_state", "cache_error")
+_WC_COLS = (
+    "workspace_id",
+    "provider_id",
+    "provider_clip_id",
+    "added_at",
+    "cache_state",
+    "cache_error",
+)
 
 
 class WorkspacesRepo:
@@ -54,9 +60,7 @@ class WorkspacesRepo:
         await conn.commit()
         return cur.lastrowid
 
-    async def get(
-        self, conn: aiosqlite.Connection, ws_id: int
-    ) -> dict[str, Any] | None:
+    async def get(self, conn: aiosqlite.Connection, ws_id: int) -> dict[str, Any] | None:
         cur = await conn.execute(
             f"SELECT {', '.join(_WS_COLS)} FROM workspaces WHERE id = ?",
             (ws_id,),
@@ -65,9 +69,7 @@ class WorkspacesRepo:
         return dict(zip(_WS_COLS, row, strict=True)) if row else None
 
     async def list(self, conn: aiosqlite.Connection) -> list[dict[str, Any]]:
-        cur = await conn.execute(
-            f"SELECT {', '.join(_WS_COLS)} FROM workspaces ORDER BY id"
-        )
+        cur = await conn.execute(f"SELECT {', '.join(_WS_COLS)} FROM workspaces ORDER BY id")
         return [dict(zip(_WS_COLS, r, strict=True)) for r in await cur.fetchall()]
 
     async def delete(self, conn: aiosqlite.Connection, ws_id: int) -> None:
@@ -127,9 +129,7 @@ class WorkspacesRepo:
         await conn.commit()
         return removed
 
-    async def list_clips(
-        self, conn: aiosqlite.Connection, ws_id: int
-    ) -> list[dict[str, Any]]:
+    async def list_clips(self, conn: aiosqlite.Connection, ws_id: int) -> list[dict[str, Any]]:
         cur = await conn.execute(
             f"SELECT {', '.join(_WC_COLS)} FROM workspace_clips "
             "WHERE workspace_id = ? ORDER BY added_at, provider_clip_id",
@@ -160,19 +160,14 @@ class WorkspacesRepo:
 
     # --- views the cache layer cares about ----------------------------
 
-    async def pinned_clip_keys(
-        self, conn: aiosqlite.Connection, ws_id: int
-    ) -> list[ClipKey]:
+    async def pinned_clip_keys(self, conn: aiosqlite.Connection, ws_id: int) -> list[ClipKey]:
         cur = await conn.execute(
-            "SELECT provider_id, provider_clip_id FROM workspace_clips "
-            "WHERE workspace_id = ?",
+            "SELECT provider_id, provider_clip_id FROM workspace_clips WHERE workspace_id = ?",
             (ws_id,),
         )
         return [(r[0], r[1]) for r in await cur.fetchall()]
 
-    async def workspaces_pinning(
-        self, conn: aiosqlite.Connection, clip_key: ClipKey
-    ) -> list[int]:
+    async def workspaces_pinning(self, conn: aiosqlite.Connection, clip_key: ClipKey) -> list[int]:
         """Workspace IDs that include this clip in their workspace_clips."""
         cur = await conn.execute(
             """

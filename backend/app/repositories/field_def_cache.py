@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-from typing import Iterable
+from collections.abc import Iterable
+from datetime import UTC, datetime
 
 import aiosqlite
 
@@ -10,7 +10,7 @@ from backend.app.archive.model import FieldDef
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _field_def_to_json(fd: FieldDef) -> str:
@@ -21,9 +21,7 @@ def _field_def_to_json(fd: FieldDef) -> str:
             "type": fd.type,
             "is_multi": fd.is_multi,
             "is_editable": fd.is_editable,
-            "picklist_values": list(fd.picklist_values)
-            if fd.picklist_values is not None
-            else None,
+            "picklist_values": list(fd.picklist_values) if fd.picklist_values is not None else None,
             "provider_data": fd.provider_data,
         }
     )
@@ -73,8 +71,7 @@ class FieldDefCacheRepo:
         identifier: str,
     ) -> FieldDef | None:
         cur = await conn.execute(
-            "SELECT json FROM field_def_cache "
-            "WHERE provider_id = ? AND identifier = ?",
+            "SELECT json FROM field_def_cache WHERE provider_id = ? AND identifier = ?",
             (provider_id, identifier),
         )
         row = await cur.fetchone()
@@ -86,8 +83,7 @@ class FieldDefCacheRepo:
         self, conn: aiosqlite.Connection, *, provider_id: str
     ) -> list[FieldDef]:
         cur = await conn.execute(
-            "SELECT json FROM field_def_cache WHERE provider_id = ? "
-            "ORDER BY identifier",
+            "SELECT json FROM field_def_cache WHERE provider_id = ? ORDER BY identifier",
             (provider_id,),
         )
         return [_field_def_from_json(row[0]) for row in await cur.fetchall()]
@@ -99,9 +95,7 @@ class FieldDefCacheRepo:
         provider_id: str,
         field_defs: Iterable[FieldDef],
     ) -> None:
-        await conn.execute(
-            "DELETE FROM field_def_cache WHERE provider_id = ?", (provider_id,)
-        )
+        await conn.execute("DELETE FROM field_def_cache WHERE provider_id = ?", (provider_id,))
         now = _now_iso()
         for fd in field_defs:
             await conn.execute(
@@ -119,8 +113,7 @@ class FieldDefCacheRepo:
         identifier: str,
     ) -> None:
         await conn.execute(
-            "DELETE FROM field_def_cache "
-            "WHERE provider_id = ? AND identifier = ?",
+            "DELETE FROM field_def_cache WHERE provider_id = ? AND identifier = ?",
             (provider_id, identifier),
         )
         await conn.commit()

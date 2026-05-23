@@ -118,9 +118,7 @@ def clip_detail(
     """Single-clip page view model."""
     clip_id = int(clip.key[1])
     fields_view = [
-        _field_view(fv)
-        for ident, fv in clip.fields.items()
-        if ident.startswith(_PRAGAFILM_PREFIX)
+        _field_view(fv) for ident, fv in clip.fields.items() if ident.startswith(_PRAGAFILM_PREFIX)
     ]
     fields_view.sort(key=lambda f: f["identifier"])
 
@@ -132,10 +130,7 @@ def clip_detail(
             "fps": clip.fps or 25.0,
             "format": _format_summary(clip.provider_data),
             "media_url": f"/api/media/{clip_id}",
-            "markers": [
-                _marker_view(m)
-                for m in sorted(clip.markers, key=lambda m: m.in_.secs)
-            ],
+            "markers": [_marker_view(m) for m in sorted(clip.markers, key=lambda m: m.in_.secs)],
             "fields": fields_view,
             "notes": _fix(clip.provider_data.get("notes")) or None,
             "big_notes": _fix(clip.provider_data.get("bigNotes")) or None,

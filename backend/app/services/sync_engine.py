@@ -133,9 +133,7 @@ class SyncEngine:
             except Exception:  # noqa: BLE001 — engine loop must not die
                 log.exception("sync_engine tick failed")
             try:
-                await asyncio.wait_for(
-                    self._notify_evt.wait(), timeout=self._tick_interval_s
-                )
+                await asyncio.wait_for(self._notify_evt.wait(), timeout=self._tick_interval_s)
             except TimeoutError:
                 pass
             self._notify_evt.clear()
@@ -162,9 +160,7 @@ class SyncEngine:
             if attempted_at is None:
                 eligible.append(r)
                 continue
-            delay = min(
-                self._retry_max_s, self._retry_base_s * (2 ** (attempts - 1))
-            )
+            delay = min(self._retry_max_s, self._retry_base_s * (2 ** (attempts - 1)))
             if (now - attempted_at).total_seconds() >= delay:
                 eligible.append(r)
         if not eligible:

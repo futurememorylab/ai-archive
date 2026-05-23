@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -28,7 +28,7 @@ def _make_clip(clip_id: str, *, name: str = "Clip") -> CanonicalClip:
             upstream_handle=clip_id,
         ),
         provider_data={"ID": int(clip_id)},
-        fetched_at=datetime(2026, 5, 19, tzinfo=timezone.utc),
+        fetched_at=datetime(2026, 5, 19, tzinfo=UTC),
     )
 
 
@@ -77,36 +77,73 @@ async def test_get_misses_on_different_key(db):
         items=(),
         fetched_at_iso="2026-05-19T10:00:00+00:00",
     )
-    assert await repo.get(
-        db, provider_id="catdv", catalog_id="881507",
-        query_text="foo", offset=0, limit=50,
-    ) is None
-    assert await repo.get(
-        db, provider_id="catdv", catalog_id="881507",
-        query_text=None, offset=50, limit=50,
-    ) is None
-    assert await repo.get(
-        db, provider_id="catdv", catalog_id="OTHER",
-        query_text=None, offset=0, limit=50,
-    ) is None
+    assert (
+        await repo.get(
+            db,
+            provider_id="catdv",
+            catalog_id="881507",
+            query_text="foo",
+            offset=0,
+            limit=50,
+        )
+        is None
+    )
+    assert (
+        await repo.get(
+            db,
+            provider_id="catdv",
+            catalog_id="881507",
+            query_text=None,
+            offset=50,
+            limit=50,
+        )
+        is None
+    )
+    assert (
+        await repo.get(
+            db,
+            provider_id="catdv",
+            catalog_id="OTHER",
+            query_text=None,
+            offset=0,
+            limit=50,
+        )
+        is None
+    )
 
 
 @pytest.mark.asyncio
 async def test_upsert_replaces_same_key(db):
     repo = ClipListCacheRepo()
     await repo.upsert(
-        db, provider_id="catdv", catalog_id="881507", query_text=None,
-        offset=0, limit=50, total=1, items=(_make_clip("1", name="v1"),),
+        db,
+        provider_id="catdv",
+        catalog_id="881507",
+        query_text=None,
+        offset=0,
+        limit=50,
+        total=1,
+        items=(_make_clip("1", name="v1"),),
         fetched_at_iso="2026-05-19T10:00:00+00:00",
     )
     await repo.upsert(
-        db, provider_id="catdv", catalog_id="881507", query_text=None,
-        offset=0, limit=50, total=1, items=(_make_clip("1", name="v2"),),
+        db,
+        provider_id="catdv",
+        catalog_id="881507",
+        query_text=None,
+        offset=0,
+        limit=50,
+        total=1,
+        items=(_make_clip("1", name="v2"),),
         fetched_at_iso="2026-05-19T11:00:00+00:00",
     )
     page = await repo.get(
-        db, provider_id="catdv", catalog_id="881507",
-        query_text=None, offset=0, limit=50,
+        db,
+        provider_id="catdv",
+        catalog_id="881507",
+        query_text=None,
+        offset=0,
+        limit=50,
     )
     assert page is not None
     assert page["items"][0].name == "v2"
@@ -117,30 +154,60 @@ async def test_upsert_replaces_same_key(db):
 async def test_invalidate_catalog_wipes_only_that_catalog(db):
     repo = ClipListCacheRepo()
     await repo.upsert(
-        db, provider_id="catdv", catalog_id="A", query_text=None,
-        offset=0, limit=50, total=0, items=(),
+        db,
+        provider_id="catdv",
+        catalog_id="A",
+        query_text=None,
+        offset=0,
+        limit=50,
+        total=0,
+        items=(),
         fetched_at_iso="2026-05-19T10:00:00+00:00",
     )
     await repo.upsert(
-        db, provider_id="catdv", catalog_id="A", query_text="q",
-        offset=0, limit=50, total=0, items=(),
+        db,
+        provider_id="catdv",
+        catalog_id="A",
+        query_text="q",
+        offset=0,
+        limit=50,
+        total=0,
+        items=(),
         fetched_at_iso="2026-05-19T10:00:00+00:00",
     )
     await repo.upsert(
-        db, provider_id="catdv", catalog_id="B", query_text=None,
-        offset=0, limit=50, total=0, items=(),
+        db,
+        provider_id="catdv",
+        catalog_id="B",
+        query_text=None,
+        offset=0,
+        limit=50,
+        total=0,
+        items=(),
         fetched_at_iso="2026-05-19T10:00:00+00:00",
     )
 
-    removed = await repo.invalidate_catalog(
-        db, provider_id="catdv", catalog_id="A"
-    )
+    removed = await repo.invalidate_catalog(db, provider_id="catdv", catalog_id="A")
     assert removed == 2
-    assert await repo.get(
-        db, provider_id="catdv", catalog_id="A",
-        query_text=None, offset=0, limit=50,
-    ) is None
-    assert await repo.get(
-        db, provider_id="catdv", catalog_id="B",
-        query_text=None, offset=0, limit=50,
-    ) is not None
+    assert (
+        await repo.get(
+            db,
+            provider_id="catdv",
+            catalog_id="A",
+            query_text=None,
+            offset=0,
+            limit=50,
+        )
+        is None
+    )
+    assert (
+        await repo.get(
+            db,
+            provider_id="catdv",
+            catalog_id="B",
+            query_text=None,
+            offset=0,
+            limit=50,
+        )
+        is not None
+    )

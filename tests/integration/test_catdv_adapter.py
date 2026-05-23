@@ -1,5 +1,3 @@
-from datetime import datetime, timezone
-
 import pytest
 
 from backend.app.archive.errors import FatalProviderError
@@ -133,7 +131,11 @@ async def test_adapter_health_returns_ok_on_live_fake():
 async def test_apply_changes_returns_ok_with_new_etag_on_success():
     with running_fake_catdv() as (base_url, fake):
         fake.clips[11] = {
-            "ID": 11, "name": "c", "fps": 25.0, "markers": [], "fields": {},
+            "ID": 11,
+            "name": "c",
+            "fps": 25.0,
+            "markers": [],
+            "fields": {},
             "modifyDate": "2026-05-19",
         }
         async with CatdvClient(base_url, "klientAI", "secret") as client:
@@ -152,7 +154,11 @@ async def test_apply_changes_returns_ok_with_new_etag_on_success():
 async def test_apply_changes_returns_conflict_when_expected_etag_mismatches():
     with running_fake_catdv() as (base_url, fake):
         fake.clips[12] = {
-            "ID": 12, "name": "c", "fps": 25.0, "markers": [], "fields": {},
+            "ID": 12,
+            "name": "c",
+            "fps": 25.0,
+            "markers": [],
+            "fields": {},
             "modifyDate": "2026-05-19T12:00:00",
         }
         async with CatdvClient(base_url, "klientAI", "secret") as client:
@@ -167,14 +173,18 @@ async def test_apply_changes_returns_conflict_when_expected_etag_mismatches():
     assert result.conflict_detail is not None
     assert result.conflict_detail.expected_etag == "2026-01-01T00:00:00"
     assert result.conflict_detail.actual_etag == "2026-05-19T12:00:00"
-    assert fake.put_log == []   # no PUT issued on conflict
+    assert fake.put_log == []  # no PUT issued on conflict
 
 
 @pytest.mark.asyncio
 async def test_apply_changes_proceeds_when_expected_etag_is_none():
     with running_fake_catdv() as (base_url, fake):
         fake.clips[13] = {
-            "ID": 13, "name": "c", "fps": 25.0, "markers": [], "fields": {},
+            "ID": 13,
+            "name": "c",
+            "fps": 25.0,
+            "markers": [],
+            "fields": {},
             "modifyDate": "v-anything",
         }
         async with CatdvClient(base_url, "klientAI", "secret") as client:

@@ -1,7 +1,7 @@
 """PromptsRepo — prompt-level + version-level CRUD with invariants."""
+
 import pytest
 
-from backend.app.models.prompt import Prompt, PromptVersion
 from backend.app.repositories.prompts import (
     PromptsRepo,
     VersionImmutableError,
@@ -84,6 +84,7 @@ async def test_update_metadata_unique_name_collision_raises(db):
     await repo.create_with_initial_version(db, name="A", description=None, **_vbody())
     pid, _ = await repo.create_with_initial_version(db, name="B", description=None, **_vbody())
     import aiosqlite
+
     with pytest.raises(aiosqlite.IntegrityError):
         await repo.update_metadata(db, pid, name="A", description=None)
 
@@ -140,8 +141,14 @@ async def test_create_version_explicit_from_version_id(db):
     await repo.update_version(db, v1, **body2)  # still draft, mutate
     await repo.promote_version(db, pid, v1)  # v1 production
     v2_id = await repo.create_version(db, pid)
-    await repo.update_version(db, v2_id, body="v2-edited", target_map=body2["target_map"],
-                              output_schema=body2["output_schema"], model=body2["model"])
+    await repo.update_version(
+        db,
+        v2_id,
+        body="v2-edited",
+        target_map=body2["target_map"],
+        output_schema=body2["output_schema"],
+        model=body2["model"],
+    )
     v3_id = await repo.create_version(db, pid, from_version_id=v1)
     assert (await repo.get_version(db, v3_id)).body == "v2 body"
 
@@ -150,9 +157,14 @@ async def test_create_version_explicit_from_version_id(db):
 async def test_update_version_on_draft_persists(db):
     repo = PromptsRepo()
     _, vid = await repo.create_with_initial_version(db, name="P", description=None, **_vbody())
-    await repo.update_version(db, vid, body="new body",
-                              target_map={"s": {"kind": "markers"}},
-                              output_schema={"type": "object"}, model="gemini-2.5-flash")
+    await repo.update_version(
+        db,
+        vid,
+        body="new body",
+        target_map={"s": {"kind": "markers"}},
+        output_schema={"type": "object"},
+        model="gemini-2.5-flash",
+    )
     v = await repo.get_version(db, vid)
     assert v.body == "new body"
     assert v.model == "gemini-2.5-flash"
@@ -164,8 +176,7 @@ async def test_update_version_on_production_raises(db):
     pid, vid = await repo.create_with_initial_version(db, name="P", description=None, **_vbody())
     await repo.promote_version(db, pid, vid)
     with pytest.raises(VersionImmutableError) as excinfo:
-        await repo.update_version(db, vid, body="x", target_map={},
-                                  output_schema={}, model="m")
+        await repo.update_version(db, vid, body="x", target_map={}, output_schema={}, model="m")
     assert excinfo.value.state == "production"
 
 
@@ -179,8 +190,7 @@ async def test_update_version_on_archived_raises(db):
     v1_state = (await repo.get_version(db, v1)).state
     assert v1_state == "archived"
     with pytest.raises(VersionImmutableError):
-        await repo.update_version(db, v1, body="x", target_map={},
-                                  output_schema={}, model="m")
+        await repo.update_version(db, v1, body="x", target_map={}, output_schema={}, model="m")
 
 
 @pytest.mark.asyncio
@@ -239,7 +249,7 @@ async def test_duplicate_copies_current_production_into_new_prompt_draft(db):
 async def test_duplicate_walks_past_existing_copy_names(db):
     repo = PromptsRepo()
     pid, _ = await repo.create_with_initial_version(db, name="P", description=None, **_vbody())
-    await repo.duplicate(db, pid)   # creates "Copy of P"
+    await repo.duplicate(db, pid)  # creates "Copy of P"
     pid2, _ = await repo.duplicate(db, pid)
     p, _ = await repo.get_with_versions(db, pid2)
     assert p.name == "Copy of P (2)"
@@ -271,6 +281,7 @@ async def test_duplicate_with_explicit_name_and_description(db):
 @pytest.mark.asyncio
 async def test_duplicate_with_explicit_name_collision_raises(db):
     import aiosqlite
+
     repo = PromptsRepo()
     pid, _ = await repo.create_with_initial_version(db, name="P", description=None, **_vbody())
     await repo.create_with_initial_version(db, name="Taken", description=None, **_vbody())
@@ -303,7 +314,9 @@ async def test_promote_on_already_production_is_noop(db):
 @pytest.mark.asyncio
 async def test_create_version_cross_prompt_from_version_id_raises(db):
     repo = PromptsRepo()
-    pid_a, vid_a = await repo.create_with_initial_version(db, name="A", description=None, **_vbody())
+    pid_a, vid_a = await repo.create_with_initial_version(
+        db, name="A", description=None, **_vbody()
+    )
     pid_b, _ = await repo.create_with_initial_version(db, name="B", description=None, **_vbody())
     with pytest.raises(LookupError):
         await repo.create_version(db, pid_b, from_version_id=vid_a)

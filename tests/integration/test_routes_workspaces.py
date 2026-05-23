@@ -31,6 +31,7 @@ def _setenv(monkeypatch, tmp_path):
 def _make_app(monkeypatch, tmp_path):
     _setenv(monkeypatch, tmp_path)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     return main_mod.app
 
@@ -42,7 +43,7 @@ class _FakeProvider:
         supports_notes=frozenset({"notes"}),
         supports_field_create=False,
         supports_etag=False,
-        media_is_local=True,   # skip resolver in routes tests
+        media_is_local=True,  # skip resolver in routes tests
         write_atomicity="per-clip",
     )
 

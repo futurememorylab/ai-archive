@@ -41,12 +41,8 @@ def build_archive_provider(
             field_def_cache_repo=field_def_cache_repo,
             clip_list_cache_repo=clip_list_cache_repo,
             db_provider=db_provider,
-            clip_cache_ttl_hours=int(
-                getattr(settings, "clip_cache_ttl_hours", 168)
-            ),
-            clip_list_cache_ttl_minutes=int(
-                getattr(settings, "clip_list_cache_ttl_minutes", 10)
-            ),
+            clip_cache_ttl_hours=int(getattr(settings, "clip_cache_ttl_hours", 168)),
+            clip_list_cache_ttl_minutes=int(getattr(settings, "clip_list_cache_ttl_minutes", 10)),
             default_catalog_id=str(getattr(settings, "catdv_catalog_id", "")),
             is_online_provider=is_online_provider,
         )
@@ -56,9 +52,7 @@ def build_archive_provider(
             raise ValueError("archive_provider=fs requires fs_root")
         exts_setting = getattr(settings, "fs_media_exts", None)
         if isinstance(exts_setting, str) and exts_setting.strip():
-            media_exts = tuple(
-                e for e in (s.strip() for s in exts_setting.split(",")) if e
-            )
+            media_exts = tuple(e for e in (s.strip() for s in exts_setting.split(",")) if e)
         elif isinstance(exts_setting, (list, tuple)) and exts_setting:
             media_exts = tuple(exts_setting)
         else:

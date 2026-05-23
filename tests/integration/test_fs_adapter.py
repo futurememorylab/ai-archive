@@ -21,7 +21,6 @@ from backend.app.archive.model import (
 from backend.app.archive.providers.fs import media_probe
 from backend.app.archive.providers.fs.adapter import FilesystemArchiveProvider
 
-
 FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "fixtures" / "fs_archive"
 
 
@@ -197,18 +196,22 @@ async def test_apply_changes_add_markers_is_additive(tmp_path: Path):
     cat = tmp_path / "c"
     cat.mkdir()
     (cat / "v.mov").write_bytes(b"")
-    (cat / "v.annot.json").write_text(json.dumps({
-        "markers": [{"name": "first", "in": {"secs": 0.0, "frm": 0, "fps": 25.0}, "out": None}],
-        "fields": {},
-        "notes": {},
-        "provider_data": {},
-    }))
+    (cat / "v.annot.json").write_text(
+        json.dumps(
+            {
+                "markers": [
+                    {"name": "first", "in": {"secs": 0.0, "frm": 0, "fps": 25.0}, "out": None}
+                ],
+                "fields": {},
+                "notes": {},
+                "provider_data": {},
+            }
+        )
+    )
     p = FilesystemArchiveProvider(fs_root=tmp_path)
     cs = ChangeSet(
         clip_key=("fs", "c/v"),
-        ops=(
-            AddMarkers(markers=(Marker(name="m2", in_=Timecode(secs=1.0, fps=25.0), out=None),)),
-        ),
+        ops=(AddMarkers(markers=(Marker(name="m2", in_=Timecode(secs=1.0, fps=25.0), out=None),)),),
     )
     result = await p.apply_changes(cs)
     assert result.status == "ok"

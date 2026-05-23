@@ -59,7 +59,7 @@ async def get_job(request: Request, job_id: int):
     try:
         job = await ctx.jobs_repo.get_job(ctx.db, job_id)
     except LookupError:
-        raise HTTPException(404, "job not found")
+        raise HTTPException(404, "job not found") from None
     items = await ctx.jobs_repo.list_items(ctx.db, job_id)
     return {**job.model_dump(), "items": [it.model_dump() for it in items]}
 

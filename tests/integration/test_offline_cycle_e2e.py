@@ -180,24 +180,18 @@ async def test_offline_cycle_full(db, tmp_path: Path):
             assert (cache_dir / "101.mov").exists()
             assert (cache_dir / "102.mov").exists()
             # clip_cache populated
-            cur = await db.execute(
-                "SELECT COUNT(*) FROM clip_cache WHERE provider_id='catdv'"
-            )
+            cur = await db.execute("SELECT COUNT(*) FROM clip_cache WHERE provider_id='catdv'")
             assert (await cur.fetchone())[0] == 2
 
             # --- 2. enqueue applies (with engine offline) --------
             monitor.set_manual_offline(True)
             assert monitor.current_state().value == "offline"
 
-            vid, items_by_clip = await _seed_prompt_and_annotations(
-                db, [101, 102]
-            )
+            vid, items_by_clip = await _seed_prompt_and_annotations(db, [101, 102])
             prompts_repo = PromptsRepo()
             version = await prompts_repo.get_version(db, vid)
             for clip_id, items in items_by_clip.items():
-                ann = await AnnotationsRepo().get(
-                    db, items[0].annotation_id
-                )
+                ann = await AnnotationsRepo().get(db, items[0].annotation_id)
                 await queue.enqueue_apply(
                     db,
                     clip_key=("catdv", str(clip_id)),
@@ -208,9 +202,7 @@ async def test_offline_cycle_full(db, tmp_path: Path):
                     fps=fps_from_snapshot(ann.clip_snapshot),
                 )
 
-            cur = await db.execute(
-                "SELECT COUNT(*) FROM pending_operations WHERE status='pending'"
-            )
+            cur = await db.execute("SELECT COUNT(*) FROM pending_operations WHERE status='pending'")
             assert (await cur.fetchone())[0] == 2
 
             # --- 3. drain while offline → no PUT -----------------
@@ -220,9 +212,7 @@ async def test_offline_cycle_full(db, tmp_path: Path):
             assert fake.put_log == []
 
             # ops still pending
-            cur = await db.execute(
-                "SELECT COUNT(*) FROM pending_operations WHERE status='pending'"
-            )
+            cur = await db.execute("SELECT COUNT(*) FROM pending_operations WHERE status='pending'")
             assert (await cur.fetchone())[0] == 2
 
             # --- 4. go back online, drain ------------------------
@@ -239,15 +229,11 @@ async def test_offline_cycle_full(db, tmp_path: Path):
             assert put_clip_ids == [101, 102]
 
             # ops applied
-            cur = await db.execute(
-                "SELECT COUNT(*) FROM pending_operations WHERE status='applied'"
-            )
+            cur = await db.execute("SELECT COUNT(*) FROM pending_operations WHERE status='applied'")
             assert (await cur.fetchone())[0] == 2
 
             # write_log has two ok rows
-            cur = await db.execute(
-                "SELECT COUNT(*) FROM write_log WHERE status='ok'"
-            )
+            cur = await db.execute("SELECT COUNT(*) FROM write_log WHERE status='ok'")
             assert (await cur.fetchone())[0] == 2
 
             # silence unused-import in some envs

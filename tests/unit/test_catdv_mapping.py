@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -19,19 +19,19 @@ def raw() -> dict:
 
 
 def test_from_catdv_clip_sets_key(raw):
-    clip = from_catdv_clip(raw, fetched_at=datetime.now(timezone.utc))
+    clip = from_catdv_clip(raw, fetched_at=datetime.now(UTC))
     assert clip.key == ("catdv", "12345")
     assert clip.name == "Abramcukova_Anna_09"
 
 
 def test_from_catdv_clip_extracts_fps_and_duration(raw):
-    clip = from_catdv_clip(raw, fetched_at=datetime.now(timezone.utc))
+    clip = from_catdv_clip(raw, fetched_at=datetime.now(UTC))
     assert clip.fps == 25.0
     assert clip.duration_secs == 330.0
 
 
 def test_from_catdv_clip_extracts_markers(raw):
-    clip = from_catdv_clip(raw, fetched_at=datetime.now(timezone.utc))
+    clip = from_catdv_clip(raw, fetched_at=datetime.now(UTC))
     assert len(clip.markers) == 1
     m = clip.markers[0]
     assert m.name == "Anna na zahradě"
@@ -42,18 +42,18 @@ def test_from_catdv_clip_extracts_markers(raw):
 
 
 def test_from_catdv_clip_preserves_provider_data_verbatim(raw):
-    clip = from_catdv_clip(raw, fetched_at=datetime.now(timezone.utc))
+    clip = from_catdv_clip(raw, fetched_at=datetime.now(UTC))
     assert clip.provider_data == raw  # exact round-trip pointer
 
 
 def test_from_catdv_clip_extracts_notes(raw):
-    clip = from_catdv_clip(raw, fetched_at=datetime.now(timezone.utc))
+    clip = from_catdv_clip(raw, fetched_at=datetime.now(UTC))
     assert clip.notes["notes"] == "Czech home movie, 9.5mm"
     assert clip.notes["bigNotes"] == "Longer description here."
 
 
 def test_from_catdv_clip_extracts_pragafilm_fields(raw):
-    clip = from_catdv_clip(raw, fetched_at=datetime.now(timezone.utc))
+    clip = from_catdv_clip(raw, fetched_at=datetime.now(UTC))
     assert "pragafilm.dekáda.natočení" in clip.fields
     fv = clip.fields["pragafilm.dekáda.natočení"]
     assert fv.value == "30.léta"

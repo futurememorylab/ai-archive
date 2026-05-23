@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import aiosqlite
@@ -15,8 +15,12 @@ from backend.app.repositories.live_sessions import LiveSessionsRepo
 from backend.app.repositories.prompts import VersionImmutableError
 from backend.app.services.clip_list_filters import (
     is_active as filters_active,
+)
+from backend.app.services.clip_list_filters import (
     normalize_anno,
     normalize_cache,
+)
+from backend.app.services.clip_list_filters import (
     resolve as resolve_filters,
 )
 from backend.app.ui.view_models import clip_detail, clip_summary
@@ -30,8 +34,8 @@ def _humanize_age(fetched_at_iso: str | None) -> str | None:
     except ValueError:
         return None
     if ts.tzinfo is None:
-        ts = ts.replace(tzinfo=timezone.utc)
-    delta = datetime.now(timezone.utc) - ts
+        ts = ts.replace(tzinfo=UTC)
+    delta = datetime.now(UTC) - ts
     secs = int(delta.total_seconds())
     if secs < 5:
         return "just now"
@@ -45,6 +49,7 @@ def _humanize_age(fetched_at_iso: str | None) -> str | None:
         return f"{hours}h ago"
     days = hours // 24
     return f"{days}d ago"
+
 
 TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "templates"
 from backend.app.timecode import secs_to_smpte  # noqa: E402
@@ -72,9 +77,7 @@ async def clips_list(
     catalog_id = str(ctx.settings.catdv_catalog_id)
     cache_f = normalize_cache(cache)
     anno_f = normalize_anno(anno)
-    host_local_proxies = getattr(
-        getattr(ctx, "proxy_resolver", None), "is_host_local", False
-    )
+    host_local_proxies = getattr(getattr(ctx, "proxy_resolver", None), "is_host_local", False)
 
     # `?refresh=1` lets the user bypass the list cache when they suspect
     # upstream changed. Wipe every cached page for this catalog so the next
@@ -142,10 +145,7 @@ async def clips_list(
             "id": ctx.settings.catdv_catalog_id,
             "name": "AI katalog",
         },
-        "clips": [
-            clip_summary(c, cache_status=statuses.get(c.key))
-            for c in clips
-        ],
+        "clips": [clip_summary(c, cache_status=statuses.get(c.key)) for c in clips],
         "prev_offset": max(0, offset - limit) if offset > 0 else None,
         "next_offset": offset + limit if offset + limit < total else None,
         "cache_fetched_at": cache_fetched_at,
@@ -261,19 +261,19 @@ async def _build_clip_view_model_for_live(ctx, clip_id: int) -> dict:
     for m in sorted(clip.markers, key=lambda x: x.in_.secs):
         in_secs = m.in_.secs
         out_secs = m.out.secs if m.out is not None else None
-        markers.append({
-            "name": _fix(m.name) or "",
-            "description": _fix(m.description) or "",
-            "in_secs": in_secs,
-            "out_secs": out_secs,
-            "in_smpte": secs_to_smpte(in_secs, fps),
-            "out_smpte": secs_to_smpte(out_secs, fps) if out_secs is not None else "",
-            "category": m.category,
-        })
+        markers.append(
+            {
+                "name": _fix(m.name) or "",
+                "description": _fix(m.description) or "",
+                "in_secs": in_secs,
+                "out_secs": out_secs,
+                "in_smpte": secs_to_smpte(in_secs, fps),
+                "out_smpte": secs_to_smpte(out_secs, fps) if out_secs is not None else "",
+                "category": m.category,
+            }
+        )
     fields = {
-        ident: fv.value
-        for ident, fv in clip.fields.items()
-        if ident.startswith(_PRAGAFILM_PREFIX)
+        ident: fv.value for ident, fv in clip.fields.items() if ident.startswith(_PRAGAFILM_PREFIX)
     }
     return {
         "id": int(clip.key[1]),
@@ -311,16 +311,22 @@ async def _build_draft_view_model_for_live(ctx, clip_id: int) -> dict:
             pv = it.proposed_value if isinstance(it.proposed_value, dict) else {}
             in_secs = float((pv.get("in") or {}).get("secs", 0.0))
             out_part = pv.get("out") or {}
-            out_secs = float(out_part["secs"]) if isinstance(out_part, dict) and "secs" in out_part else None
-            markers.append({
-                "name": _fix(pv.get("name")) or "",
-                "description": _fix(pv.get("description")) or "",
-                "in_secs": in_secs,
-                "out_secs": out_secs,
-                "in_smpte": secs_to_smpte(in_secs, fps),
-                "out_smpte": secs_to_smpte(out_secs, fps) if out_secs is not None else "",
-                "category": pv.get("category"),
-            })
+            out_secs = (
+                float(out_part["secs"])
+                if isinstance(out_part, dict) and "secs" in out_part
+                else None
+            )
+            markers.append(
+                {
+                    "name": _fix(pv.get("name")) or "",
+                    "description": _fix(pv.get("description")) or "",
+                    "in_secs": in_secs,
+                    "out_secs": out_secs,
+                    "in_smpte": secs_to_smpte(in_secs, fps),
+                    "out_smpte": secs_to_smpte(out_secs, fps) if out_secs is not None else "",
+                    "category": pv.get("category"),
+                }
+            )
         elif it.kind == "field":
             ident = it.target_identifier or ""
             if ident:
@@ -366,7 +372,9 @@ async def clip_detail_page(request: Request, clip_id: int):
         getattr(ctx, "proxy_resolver", None), "is_host_local", False
     )
     ctx_dict["gemini_live_inactivity_s"] = getattr(
-        ctx.settings, "gemini_live_inactivity_s", 60,
+        ctx.settings,
+        "gemini_live_inactivity_s",
+        60,
     )
     return templates.TemplateResponse(request, "pages/clip_detail.html", ctx_dict)
 
@@ -401,7 +409,8 @@ async def prompts_page(request: Request, archived: int = 0):
         selected, versions = await repo.get_with_versions(ctx.db, first_id)
         selected_version = _pick_default_version(versions)
     return templates.TemplateResponse(
-        request, "pages/prompts.html",
+        request,
+        "pages/prompts.html",
         {
             "prompts": [p.model_dump() for p in prompts],
             "selected": selected.model_dump() if selected else None,
@@ -423,14 +432,20 @@ async def prompt_new_page(request: Request):
     ctx = request.app.state.ctx
     prompts = await ctx.prompts_repo.list_active(ctx.db)
     return templates.TemplateResponse(
-        request, "pages/_prompt_new.html",
+        request,
+        "pages/_prompt_new.html",
         {
             "prompts": [p.model_dump() for p in prompts],
             "rail_active": "prompts",
             "error": None,
-            "form": {"name": "", "description": "", "body": "",
-                     "target_map_text": "{}", "output_schema_text": "{}",
-                     "model": "gemini-2.5-flash-lite"},
+            "form": {
+                "name": "",
+                "description": "",
+                "body": "",
+                "target_map_text": "{}",
+                "output_schema_text": "{}",
+                "model": "gemini-2.5-flash-lite",
+            },
         },
     )
 
@@ -463,34 +478,50 @@ async def action_create_prompt(request: Request):
     if error:
         prompts = await ctx.prompts_repo.list_active(ctx.db)
         return templates.TemplateResponse(
-            request, "pages/_prompt_new.html",
+            request,
+            "pages/_prompt_new.html",
             {
                 "prompts": [p.model_dump() for p in prompts],
                 "rail_active": "prompts",
                 "error": error,
-                "form": {"name": name, "description": description or "",
-                         "body": body, "target_map_text": target_map_text,
-                         "output_schema_text": output_schema_text, "model": model},
+                "form": {
+                    "name": name,
+                    "description": description or "",
+                    "body": body,
+                    "target_map_text": target_map_text,
+                    "output_schema_text": output_schema_text,
+                    "model": model,
+                },
             },
             status_code=400,
         )
     try:
         pid, _ = await ctx.prompts_repo.create_with_initial_version(
-            ctx.db, name=name, description=description,
-            body=body, target_map=target_map,
-            output_schema=output_schema, model=model,
+            ctx.db,
+            name=name,
+            description=description,
+            body=body,
+            target_map=target_map,
+            output_schema=output_schema,
+            model=model,
         )
     except aiosqlite.IntegrityError as exc:
         prompts = await ctx.prompts_repo.list_active(ctx.db)
         return templates.TemplateResponse(
-            request, "pages/_prompt_new.html",
+            request,
+            "pages/_prompt_new.html",
             {
                 "prompts": [p.model_dump() for p in prompts],
                 "rail_active": "prompts",
                 "error": f"name already exists: {exc}",
-                "form": {"name": name, "description": description or "",
-                         "body": body, "target_map_text": target_map_text,
-                         "output_schema_text": output_schema_text, "model": model},
+                "form": {
+                    "name": name,
+                    "description": description or "",
+                    "body": body,
+                    "target_map_text": target_map_text,
+                    "output_schema_text": output_schema_text,
+                    "model": model,
+                },
             },
             status_code=400,
         )
@@ -504,7 +535,7 @@ async def prompt_detail_page(request: Request, prompt_id: int, version_id: int |
     try:
         selected, versions = await repo.get_with_versions(ctx.db, prompt_id)
     except LookupError as exc:
-        raise HTTPException(404, str(exc))
+        raise HTTPException(404, str(exc)) from exc
     if selected.archived:
         prompts = await repo.list_archived(ctx.db)
         archived_view = True
@@ -512,11 +543,13 @@ async def prompt_detail_page(request: Request, prompt_id: int, version_id: int |
         prompts = await repo.list_active(ctx.db)
         archived_view = False
     selected_version = (
-        await repo.get_version(ctx.db, version_id) if version_id is not None
+        await repo.get_version(ctx.db, version_id)
+        if version_id is not None
         else _pick_default_version(versions)
     )
     return templates.TemplateResponse(
-        request, "pages/prompts.html",
+        request,
+        "pages/prompts.html",
         {
             "prompts": [p.model_dump() for p in prompts],
             "selected": selected.model_dump(),
@@ -534,10 +567,8 @@ async def action_new_version(request: Request, prompt_id: int):
     try:
         new_vid = await ctx.prompts_repo.create_version(ctx.db, prompt_id)
     except LookupError as exc:
-        raise HTTPException(404, str(exc))
-    return RedirectResponse(
-        f"/prompts/{prompt_id}?version_id={new_vid}", status_code=303
-    )
+        raise HTTPException(404, str(exc)) from exc
+    return RedirectResponse(f"/prompts/{prompt_id}?version_id={new_vid}", status_code=303)
 
 
 @router.post("/prompts/{prompt_id}/versions/{version_id}/_promote")
@@ -546,16 +577,14 @@ async def action_promote_version(request: Request, prompt_id: int, version_id: i
     try:
         v = await ctx.prompts_repo.get_version(ctx.db, version_id)
     except LookupError as exc:
-        raise HTTPException(404, str(exc))
+        raise HTTPException(404, str(exc)) from exc
     if v.prompt_id != prompt_id:
         raise HTTPException(404, "version does not belong to prompt")
     try:
         await ctx.prompts_repo.promote_version(ctx.db, prompt_id, version_id)
     except VersionImmutableError:
         pass  # silent no-op for page action; promote button only shown for drafts
-    return RedirectResponse(
-        f"/prompts/{prompt_id}?version_id={version_id}", status_code=303
-    )
+    return RedirectResponse(f"/prompts/{prompt_id}?version_id={version_id}", status_code=303)
 
 
 @router.post("/prompts/{prompt_id}/_duplicate")
@@ -576,7 +605,7 @@ async def action_duplicate_prompt(
             description=cleaned_desc,
         )
     except LookupError as exc:
-        raise HTTPException(404, str(exc))
+        raise HTTPException(404, str(exc)) from exc
     except aiosqlite.IntegrityError:
         return JSONResponse(
             status_code=409,
@@ -594,7 +623,7 @@ async def action_archive_prompt(request: Request, prompt_id: int):
     try:
         await ctx.prompts_repo.archive(ctx.db, prompt_id)
     except LookupError as exc:
-        raise HTTPException(404, str(exc))
+        raise HTTPException(404, str(exc)) from exc
     return RedirectResponse("/prompts", status_code=303)
 
 
@@ -604,7 +633,7 @@ async def action_restore_prompt(request: Request, prompt_id: int):
     try:
         await ctx.prompts_repo.restore(ctx.db, prompt_id)
     except LookupError as exc:
-        raise HTTPException(404, str(exc))
+        raise HTTPException(404, str(exc)) from exc
     return RedirectResponse(f"/prompts/{prompt_id}", status_code=303)
 
 
@@ -626,7 +655,8 @@ def _version_view(v) -> dict:
         "body": v.body,
         "target_map_text": json.dumps(
             v.target_map.model_dump() if hasattr(v.target_map, "model_dump") else v.target_map,
-            indent=2, ensure_ascii=False,
+            indent=2,
+            ensure_ascii=False,
         ),
         "output_schema_text": json.dumps(v.output_schema, indent=2, ensure_ascii=False),
         "model": v.model,
@@ -642,22 +672,30 @@ async def clip_live_history(request: Request, clip_id: int):
     rows = await repo.list_by_clip(ctx.db, clip_id)
     sessions = []
     from datetime import datetime as _dt
+
     for s in rows:
         duration_s = None
         if s.started_at and s.ended_at:
             try:
                 duration_s = (
-                    _dt.fromisoformat(s.ended_at)
-                    - _dt.fromisoformat(s.started_at)
+                    _dt.fromisoformat(s.ended_at) - _dt.fromisoformat(s.started_at)
                 ).total_seconds()
             except ValueError:
                 pass
-        sessions.append({
-            "id": s.id, "started_at": s.started_at, "created_at": s.created_at,
-            "duration_s": duration_s, "end_reason": s.end_reason,
-            "state": s.state, "has_summary": s.summary_cs is not None,
-            "frame_count": s.frame_count,
-        })
+        sessions.append(
+            {
+                "id": s.id,
+                "started_at": s.started_at,
+                "created_at": s.created_at,
+                "duration_s": duration_s,
+                "end_reason": s.end_reason,
+                "state": s.state,
+                "has_summary": s.summary_cs is not None,
+                "frame_count": s.frame_count,
+            }
+        )
     return templates.TemplateResponse(
-        request, "pages/_anno_live_history.html", {"sessions": sessions},
+        request,
+        "pages/_anno_live_history.html",
+        {"sessions": sessions},
     )

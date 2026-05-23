@@ -1,8 +1,7 @@
 import json
 from pathlib import Path
 
-from backend.app.models.catdv import Clip, Envelope, Marker, TimecodeQuad
-
+from backend.app.models.catdv import Clip, Envelope, Marker
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "clip_sample.json"
 

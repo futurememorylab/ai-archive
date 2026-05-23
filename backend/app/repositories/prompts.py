@@ -6,8 +6,9 @@ Invariants (enforced here + by partial unique index `idx_one_prod_per_prompt`):
   * Promoting a draft demotes the previous production to 'archived'
     atomically.
 """
+
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import aiosqlite
@@ -16,7 +17,7 @@ from backend.app.models.prompt import Prompt, PromptVersion
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class VersionImmutableError(RuntimeError):
@@ -43,17 +44,27 @@ def _target_map_to_json(target_map: Any) -> str:
 
 def _row_to_prompt(row) -> Prompt:
     return Prompt(
-        id=row[0], name=row[1], description=row[2],
-        archived=bool(row[3]), created_at=row[4], updated_at=row[5],
+        id=row[0],
+        name=row[1],
+        description=row[2],
+        archived=bool(row[3]),
+        created_at=row[4],
+        updated_at=row[5],
     )
 
 
 def _row_to_version(row) -> PromptVersion:
     return PromptVersion(
-        id=row[0], prompt_id=row[1], version_num=row[2], state=row[3],
-        body=row[4], target_map=json.loads(row[5]),
-        output_schema=json.loads(row[6]), model=row[7],
-        created_at=row[8], updated_at=row[9],
+        id=row[0],
+        prompt_id=row[1],
+        version_num=row[2],
+        state=row[3],
+        body=row[4],
+        target_map=json.loads(row[5]),
+        output_schema=json.loads(row[6]),
+        model=row[7],
+        created_at=row[8],
+        updated_at=row[9],
     )
 
 
@@ -93,9 +104,14 @@ class PromptsRepo:
             "output_schema, model, created_at, updated_at) "
             "VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?)",
             (
-                prompt_id, initial_state, body,
-                _target_map_to_json(target_map), json.dumps(output_schema),
-                model, now, now,
+                prompt_id,
+                initial_state,
+                body,
+                _target_map_to_json(target_map),
+                json.dumps(output_schema),
+                model,
+                now,
+                now,
             ),
         )
         version_id = cur.lastrowid
@@ -106,9 +122,7 @@ class PromptsRepo:
     async def get_with_versions(
         self, conn: aiosqlite.Connection, prompt_id: int
     ) -> tuple[Prompt, list[PromptVersion]]:
-        cur = await conn.execute(
-            f"SELECT {_PROMPT_COLS} FROM prompts WHERE id = ?", (prompt_id,)
-        )
+        cur = await conn.execute(f"SELECT {_PROMPT_COLS} FROM prompts WHERE id = ?", (prompt_id,))
         prow = await cur.fetchone()
         if prow is None:
             raise LookupError(f"prompt {prompt_id} not found")
@@ -133,17 +147,19 @@ class PromptsRepo:
         return [_row_to_prompt(r) for r in await cur.fetchall()]
 
     async def get_by_name(
-        self, conn: aiosqlite.Connection, name: str,
+        self,
+        conn: aiosqlite.Connection,
+        name: str,
     ) -> Prompt | None:
         """Fetch a single prompt by unique `name`, or None if missing."""
-        cur = await conn.execute(
-            f"SELECT {_PROMPT_COLS} FROM prompts WHERE name = ?", (name,)
-        )
+        cur = await conn.execute(f"SELECT {_PROMPT_COLS} FROM prompts WHERE name = ?", (name,))
         row = await cur.fetchone()
         return _row_to_prompt(row) if row else None
 
     async def get_production_version(
-        self, conn: aiosqlite.Connection, prompt_id: int,
+        self,
+        conn: aiosqlite.Connection,
+        prompt_id: int,
     ) -> PromptVersion | None:
         """Return the current production version of a prompt, or None."""
         cur = await conn.execute(
@@ -193,9 +209,7 @@ class PromptsRepo:
 
     # ── version-level ───────────────────────────────────────────────────────
 
-    async def get_version(
-        self, conn: aiosqlite.Connection, version_id: int
-    ) -> PromptVersion:
+    async def get_version(self, conn: aiosqlite.Connection, version_id: int) -> PromptVersion:
         cur = await conn.execute(
             f"SELECT {_VERSION_COLS} FROM prompt_versions WHERE id = ?",
             (version_id,),
@@ -209,27 +223,21 @@ class PromptsRepo:
         self, conn: aiosqlite.Connection, prompt_id: int
     ) -> int | None:
         cur = await conn.execute(
-            "SELECT id FROM prompt_versions "
-            "WHERE prompt_id = ? AND state = 'production' LIMIT 1",
+            "SELECT id FROM prompt_versions WHERE prompt_id = ? AND state = 'production' LIMIT 1",
             (prompt_id,),
         )
         row = await cur.fetchone()
         return row[0] if row else None
 
-    async def _latest_version_id(
-        self, conn: aiosqlite.Connection, prompt_id: int
-    ) -> int | None:
+    async def _latest_version_id(self, conn: aiosqlite.Connection, prompt_id: int) -> int | None:
         cur = await conn.execute(
-            "SELECT id FROM prompt_versions WHERE prompt_id = ? "
-            "ORDER BY version_num DESC LIMIT 1",
+            "SELECT id FROM prompt_versions WHERE prompt_id = ? ORDER BY version_num DESC LIMIT 1",
             (prompt_id,),
         )
         row = await cur.fetchone()
         return row[0] if row else None
 
-    async def _max_version_num(
-        self, conn: aiosqlite.Connection, prompt_id: int
-    ) -> int:
+    async def _max_version_num(self, conn: aiosqlite.Connection, prompt_id: int) -> int:
         cur = await conn.execute(
             "SELECT COALESCE(MAX(version_num), 0) FROM prompt_versions WHERE prompt_id = ?",
             (prompt_id,),
@@ -249,17 +257,14 @@ class PromptsRepo:
         Source selection: explicit from_version_id > current production > latest.
         """
         if from_version_id is None:
-            from_version_id = (
-                await self._current_production_id(conn, prompt_id)
-                or await self._latest_version_id(conn, prompt_id)
-            )
+            from_version_id = await self._current_production_id(
+                conn, prompt_id
+            ) or await self._latest_version_id(conn, prompt_id)
         if from_version_id is None:
             raise LookupError(f"prompt {prompt_id} has no versions to clone from")
         src = await self.get_version(conn, from_version_id)
         if src.prompt_id != prompt_id:
-            raise LookupError(
-                f"version {from_version_id} does not belong to prompt {prompt_id}"
-            )
+            raise LookupError(f"version {from_version_id} does not belong to prompt {prompt_id}")
         next_num = (await self._max_version_num(conn, prompt_id)) + 1
         now = _now_iso()
         cur = await conn.execute(
@@ -267,9 +272,14 @@ class PromptsRepo:
             "target_map, output_schema, model, created_at, updated_at) "
             "VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?)",
             (
-                prompt_id, next_num, src.body,
+                prompt_id,
+                next_num,
+                src.body,
                 _target_map_to_json(src.target_map),
-                json.dumps(src.output_schema), src.model, now, now,
+                json.dumps(src.output_schema),
+                src.model,
+                now,
+                now,
             ),
         )
         new_id = cur.lastrowid
@@ -294,8 +304,12 @@ class PromptsRepo:
             "UPDATE prompt_versions SET body = ?, target_map = ?, output_schema = ?, "
             "model = ?, updated_at = ? WHERE id = ?",
             (
-                body, _target_map_to_json(target_map), json.dumps(output_schema),
-                model, _now_iso(), version_id,
+                body,
+                _target_map_to_json(target_map),
+                json.dumps(output_schema),
+                model,
+                _now_iso(),
+                version_id,
             ),
         )
         await conn.commit()
@@ -350,10 +364,9 @@ class PromptsRepo:
         Returns (new_prompt_id, new_version_id).
         """
         src_prompt, _ = await self.get_with_versions(conn, prompt_id)
-        src_version_id = (
-            await self._current_production_id(conn, prompt_id)
-            or await self._latest_version_id(conn, prompt_id)
-        )
+        src_version_id = await self._current_production_id(
+            conn, prompt_id
+        ) or await self._latest_version_id(conn, prompt_id)
         assert src_version_id is not None  # invariant: every prompt has >=1 version
         src_version = await self.get_version(conn, src_version_id)
         new_name = name if name is not None else await self._next_copy_name(conn, src_prompt.name)

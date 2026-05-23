@@ -17,7 +17,7 @@ async def list_clips(request: Request, q: str | None = None, offset: int = 0, li
             ClipQuery(text=q, offset=offset, limit=limit),
         )
     except ProviderError as exc:
-        raise HTTPException(502, f"archive error: {exc}")
+        raise HTTPException(502, f"archive error: {exc}") from exc
     return {
         "total": page.total,
         "clips": [c.provider_data for c in page.items],
@@ -32,5 +32,5 @@ async def get_clip(request: Request, clip_id: int):
     try:
         clip = await ctx.archive.get_clip(str(clip_id))
     except ProviderError as exc:
-        raise HTTPException(502, f"archive error: {exc}")
+        raise HTTPException(502, f"archive error: {exc}") from exc
     return clip.provider_data

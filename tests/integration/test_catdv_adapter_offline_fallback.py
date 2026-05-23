@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -20,7 +20,7 @@ def _adapter(client, db, *, is_online, ttl_hours=1, now=None):
         db_provider=lambda: db,
         clip_cache_ttl_hours=ttl_hours,
         clip_list_cache_ttl_minutes=1,
-        clock=now or (lambda: datetime.now(timezone.utc)),
+        clock=now or (lambda: datetime.now(UTC)),
         is_online_provider=is_online,
         default_catalog_id="881507",
     )
@@ -30,7 +30,7 @@ def _adapter(client, db, *, is_online, ttl_hours=1, now=None):
 async def test_get_clip_serves_stale_cache_when_offline(db):
     with running_fake_catdv() as (base_url, fake):
         fake.clips[7] = {"ID": 7, "name": "Cached", "fps": 25.0, "markers": []}
-        now_holder = {"t": datetime(2026, 1, 1, tzinfo=timezone.utc)}
+        now_holder = {"t": datetime(2026, 1, 1, tzinfo=UTC)}
         async with CatdvClient(base_url, "klientAI", "secret") as client:
             adapter = _adapter(
                 client,
@@ -69,7 +69,7 @@ async def test_get_clip_retryable_falls_back_to_stale_cache(db):
     """Online but CatDV is unreachable mid-session → stale cache wins."""
     with running_fake_catdv() as (base_url, fake):
         fake.clips[8] = {"ID": 8, "name": "Saved", "fps": 25.0, "markers": []}
-        now_holder = {"t": datetime(2026, 1, 1, tzinfo=timezone.utc)}
+        now_holder = {"t": datetime(2026, 1, 1, tzinfo=UTC)}
         async with CatdvClient(base_url, "klientAI", "secret") as client:
             warm = _adapter(client, db, is_online=lambda: True, now=lambda: now_holder["t"])
             await warm.get_clip("8")
@@ -77,9 +77,7 @@ async def test_get_clip_retryable_falls_back_to_stale_cache(db):
         # Cache is stale; CatDV is now unreachable.
         now_holder["t"] = now_holder["t"] + timedelta(hours=2)
         async with CatdvClient(base_url, "klientAI", "secret") as dead_client:
-            adapter = _adapter(
-                dead_client, db, is_online=lambda: True, now=lambda: now_holder["t"]
-            )
+            adapter = _adapter(dead_client, db, is_online=lambda: True, now=lambda: now_holder["t"])
 
             from backend.app.services.catdv_client import CatdvBusyError
 
@@ -153,7 +151,7 @@ async def test_list_clips_offline_paginates_from_cache(db):
                 upstream_handle=str(i),
             ),
             provider_data={},
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=datetime.now(UTC),
         )
         await repo.upsert(db, clip=clip, catalog_id="881507")
 
@@ -192,7 +190,7 @@ async def test_list_clips_offline_search_q(db):
                 upstream_handle=cid,
             ),
             provider_data={},
-            fetched_at=datetime.now(timezone.utc),
+            fetched_at=datetime.now(UTC),
         )
         await repo.upsert(db, clip=clip, catalog_id="881507")
 

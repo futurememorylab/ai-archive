@@ -1,9 +1,6 @@
 from pathlib import Path
 
-import pytest
-
 from backend.app.services.media_store_map import MediaStoreMap
-
 
 FIXTURE = [
     {
@@ -45,16 +42,16 @@ FIXTURE = [
 def test_parses_two_prefix_rules_from_fixture():
     m = MediaStoreMap.from_json(FIXTURE)
     assert m.rules == [
-        ("/Volumes/ARECA/ARCHIV_SOUKROME_FILMOVE_HISTORIE",
-         "/Volumes/ARECA/CatDV_Proxy"),
-        ("/Volumes/ARECA2/ARCHIV_SOUKROME_FILMOVE_HISTORIE",
-         "/Volumes/ARECA2/CatDV_Proxy"),
+        ("/Volumes/ARECA/ARCHIV_SOUKROME_FILMOVE_HISTORIE", "/Volumes/ARECA/CatDV_Proxy"),
+        ("/Volumes/ARECA2/ARCHIV_SOUKROME_FILMOVE_HISTORIE", "/Volumes/ARECA2/CatDV_Proxy"),
     ]
 
 
 def test_resolve_swaps_prefix_keeps_relative_path():
     m = MediaStoreMap.from_json(FIXTURE)
-    hires = "/Volumes/ARECA/ARCHIV_SOUKROME_FILMOVE_HISTORIE/ABRAMCUKOVA Anna/ABRAMCUKOVA Anna 01.mov"
+    hires = (
+        "/Volumes/ARECA/ARCHIV_SOUKROME_FILMOVE_HISTORIE/ABRAMCUKOVA Anna/ABRAMCUKOVA Anna 01.mov"
+    )
     assert m.resolve_proxy(hires) == Path(
         "/Volumes/ARECA/CatDV_Proxy/ABRAMCUKOVA Anna/ABRAMCUKOVA Anna 01.mov"
     )

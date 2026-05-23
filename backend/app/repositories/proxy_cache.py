@@ -1,11 +1,11 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import aiosqlite
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class ProxyCacheRepo:
@@ -66,6 +66,7 @@ class ProxyCacheRepo:
                     "last_used_at",
                 ),
                 row,
+                strict=True,
             )
         )
 
@@ -95,7 +96,13 @@ class ProxyCacheRepo:
         accum = 0
         for row in await cur.fetchall():
             victims.append(
-                dict(zip(("catdv_clip_id", "file_path", "size_bytes", "last_used_at"), row))
+                dict(
+                    zip(
+                        ("catdv_clip_id", "file_path", "size_bytes", "last_used_at"),
+                        row,
+                        strict=True,
+                    )
+                )
             )
             accum += row[2]
             if accum >= max_bytes:

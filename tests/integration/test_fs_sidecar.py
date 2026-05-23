@@ -92,7 +92,5 @@ def test_marker_in_dict_defaults_frm_from_secs_and_fps():
         in_=Timecode(secs=2.0, fps=25.0, frm=None),
         out=None,
     )
-    doc = render_sidecar(
-        markers=(m,), fields={}, notes={}, provider_data={}
-    )
+    doc = render_sidecar(markers=(m,), fields={}, notes={}, provider_data={})
     assert doc["markers"][0]["in"]["frm"] == 50

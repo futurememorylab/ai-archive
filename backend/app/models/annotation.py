@@ -2,7 +2,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
-
 ReviewKind = Literal["markers", "marker", "field", "note"]
 
 

@@ -26,7 +26,7 @@ import logging
 import os
 import tempfile
 from collections.abc import Callable, Iterable, Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -110,7 +110,7 @@ class FilesystemArchiveProvider:
     ) -> None:
         self._root = Path(fs_root).resolve()
         self._exts = _normalise_exts(media_exts or DEFAULT_MEDIA_EXTS)
-        self._clock = clock or (lambda: datetime.now(timezone.utc))
+        self._clock = clock or (lambda: datetime.now(UTC))
         # Unused but stored to match the CatDV adapter's interface for
         # any future cache-aware FS feature.
         self._clip_cache = clip_cache_repo
@@ -171,9 +171,7 @@ class FilesystemArchiveProvider:
             try:
                 fields_path.read_text(encoding="utf-8")
             except OSError as exc:
-                return ProviderHealth(
-                    ok=False, detail=f"fields.json unreadable: {exc}"
-                )
+                return ProviderHealth(ok=False, detail=f"fields.json unreadable: {exc}")
         latency_ms = (perf_counter() - t0) * 1000.0
         return ProviderHealth(ok=True, latency_ms=latency_ms)
 
@@ -205,9 +203,7 @@ class FilesystemArchiveProvider:
 
         text = (query.text or "").strip().lower()
         if text:
-            media_files = [
-                p for p in media_files if text in p.stem.lower()
-            ]
+            media_files = [p for p in media_files if text in p.stem.lower()]
 
         total = len(media_files)
         page_slice = media_files[query.offset : query.offset + query.limit]
@@ -227,9 +223,7 @@ class FilesystemArchiveProvider:
         clip_id = self._clip_id_for_media(media_path)
         duration_secs, fps = media_probe.probe(media_path)
         sidecar = self._read_sidecar(self._sidecar_path(media_path))
-        markers, fields, notes, provider_data = parse_sidecar(
-            sidecar, default_fps=fps
-        )
+        markers, fields, notes, provider_data = parse_sidecar(sidecar, default_fps=fps)
 
         try:
             size_bytes: int | None = media_path.stat().st_size
@@ -248,6 +242,7 @@ class FilesystemArchiveProvider:
         # round-trip slots reserved for unknown sidecar keys.
         if "ffprobe_present" not in provider_data:
             import shutil as _shutil
+
             provider_data = {
                 **provider_data,
                 "ffprobe_present": _shutil.which("ffprobe") is not None,
@@ -276,9 +271,7 @@ class FilesystemArchiveProvider:
     async def apply_changes(self, change_set: ChangeSet) -> WriteResult:
         provider_id, clip_id = change_set.clip_key
         if provider_id != self.id:
-            raise FatalProviderError(
-                f"ChangeSet for provider {provider_id!r} sent to fs adapter"
-            )
+            raise FatalProviderError(f"ChangeSet for provider {provider_id!r} sent to fs adapter")
         media_path = self._media_path_for_clip_id(clip_id)
         sidecar_path = self._sidecar_path(media_path)
 
@@ -286,10 +279,7 @@ class FilesystemArchiveProvider:
         live_bytes = self._read_sidecar_bytes(sidecar_path)
         live_etag = _etag_for_bytes(live_bytes)
 
-        if (
-            change_set.expected_etag is not None
-            and live_etag != change_set.expected_etag
-        ):
+        if change_set.expected_etag is not None and live_etag != change_set.expected_etag:
             return WriteResult(
                 status="conflict",
                 upstream_response={},
@@ -320,9 +310,7 @@ class FilesystemArchiveProvider:
                 )
             elif isinstance(op, AppendNote):
                 existing = notes_dict.get(op.target, "")
-                notes_dict[op.target] = (
-                    existing + ("\n" if existing else "") + op.text
-                )
+                notes_dict[op.target] = existing + ("\n" if existing else "") + op.text
             elif isinstance(op, ReplaceNote):
                 notes_dict[op.target] = op.text
             else:  # pragma: no cover — exhaustive ChangeOp union

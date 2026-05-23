@@ -43,8 +43,7 @@ async def test_pending_operations_index_on_status_enqueued_at_exists(tmp_path):
     async with open_db(db) as conn:
         await apply_migrations(conn, MIGRATIONS)
         cur = await conn.execute(
-            "SELECT name FROM sqlite_master "
-            "WHERE type='index' AND tbl_name='pending_operations'"
+            "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='pending_operations'"
         )
         names = {r[0] for r in await cur.fetchall()}
     assert "idx_pending_ops_status" in names

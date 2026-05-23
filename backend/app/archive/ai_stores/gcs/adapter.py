@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from backend.app.archive.ai_store_model import (
     AIStoreCapabilities,
@@ -32,8 +33,8 @@ class GcsInputStore:
     def __init__(
         self,
         *,
-        gcs: Any,                     # GcsService duck-typed for testability
-        files_repo: Any,              # AIStoreFilesRepo
+        gcs: Any,  # GcsService duck-typed for testability
+        files_repo: Any,  # AIStoreFilesRepo
         db_provider: Callable[[], Any],
     ) -> None:
         self._gcs = gcs
@@ -41,9 +42,7 @@ class GcsInputStore:
         self._db_provider = db_provider
         self.id = f"gcs:{gcs.bucket_name}"
 
-    async def ensure_uploaded(
-        self, clip_key: ClipKey, local_path: Path, mime: str
-    ) -> UploadedRef:
+    async def ensure_uploaded(self, clip_key: ClipKey, local_path: Path, mime: str) -> UploadedRef:
         clip_id = int(clip_key[1])
         db = self._db_provider()
         sha = _sha256(local_path)
@@ -53,9 +52,7 @@ class GcsInputStore:
             await self._repo.touch(db, store_id=self.id, clip_id=clip_id)
             return self._row_to_ref(existing)
 
-        gcs_uri = self._gcs.upload_if_absent(
-            clip_id=clip_id, local_path=local_path, mime=mime
-        )
+        gcs_uri = self._gcs.upload_if_absent(clip_id=clip_id, local_path=local_path, mime=mime)
         size = local_path.stat().st_size
 
         await self._repo.upsert(
@@ -76,15 +73,13 @@ class GcsInputStore:
             mime_type=mime,
             size_bytes=size,
             sha256=sha,
-            uploaded_at=datetime.now(timezone.utc),
+            uploaded_at=datetime.now(UTC),
             expires_at=None,
         )
 
     async def status(self, clip_key: ClipKey) -> UploadedRef | None:
         clip_id = int(clip_key[1])
-        row = await self._repo.get(
-            self._db_provider(), store_id=self.id, clip_id=clip_id
-        )
+        row = await self._repo.get(self._db_provider(), store_id=self.id, clip_id=clip_id)
         if row is None:
             return None
         return self._row_to_ref(row)
@@ -107,9 +102,7 @@ class GcsInputStore:
         except Exception as exc:  # noqa: BLE001
             return StoreHealth(ok=False, detail=str(exc))
         if not ok:
-            return StoreHealth(
-                ok=False, detail=f"bucket not found: {self._gcs.bucket_name}"
-            )
+            return StoreHealth(ok=False, detail=f"bucket not found: {self._gcs.bucket_name}")
         return StoreHealth(ok=True)
 
     async def reference_for_gemini(self, ref: UploadedRef) -> dict:

@@ -47,6 +47,7 @@ class ProviderCase:
 
 # ----- catdv builder ------------------------------------------------------
 
+
 class _CatdvCaseManager:
     def __init__(self) -> None:
         self._stack = ExitStack()
@@ -87,6 +88,7 @@ class _CatdvCaseManager:
 
 
 # ----- fs builder ---------------------------------------------------------
+
 
 class _FsCaseManager:
     def __init__(self, tmp_path: Path) -> None:
@@ -187,9 +189,7 @@ async def test_add_markers_is_additive(provider_case: ProviderCase):
         clip_key=key,
         ops=(
             AddMarkers(
-                markers=(
-                    Marker(name="addM", in_=Timecode(secs=0.5, fps=25.0), out=None),
-                ),
+                markers=(Marker(name="addM", in_=Timecode(secs=0.5, fps=25.0), out=None),),
             ),
         ),
     )

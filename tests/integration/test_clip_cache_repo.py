@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -28,7 +28,7 @@ def _make_clip(clip_id: str = "1", *, name: str = "Clip_1") -> CanonicalClip:
             upstream_handle=clip_id,
         ),
         provider_data={"ID": int(clip_id), "fps": 25.0},
-        fetched_at=datetime(2026, 5, 19, tzinfo=timezone.utc),
+        fetched_at=datetime(2026, 5, 19, tzinfo=UTC),
     )
 
 
@@ -52,9 +52,7 @@ async def test_upsert_and_get_round_trips_canonical_clip(db):
 @pytest.mark.asyncio
 async def test_get_returns_none_when_absent(db):
     repo = ClipCacheRepo()
-    assert await repo.get_by_key(
-        db, provider_id="catdv", provider_clip_id="404"
-    ) is None
+    assert await repo.get_by_key(db, provider_id="catdv", provider_clip_id="404") is None
 
 
 @pytest.mark.asyncio
@@ -94,6 +92,4 @@ async def test_delete_by_key(db):
     repo = ClipCacheRepo()
     await repo.upsert(db, clip=_make_clip("7"), catalog_id="A")
     await repo.delete_by_key(db, provider_id="catdv", provider_clip_id="7")
-    assert await repo.get_by_key(
-        db, provider_id="catdv", provider_clip_id="7"
-    ) is None
+    assert await repo.get_by_key(db, provider_id="catdv", provider_clip_id="7") is None

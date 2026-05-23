@@ -54,11 +54,7 @@ class RestProxyResolver:
             # legacy rows with NULL provider_* columns (written by the
             # initial PR 8 record() that didn't populate them).
             existing = await self._repo.get(conn, clip_id)
-            needs_record = (
-                downloaded_now
-                or existing is None
-                or not existing.get("provider_id")
-            )
+            needs_record = downloaded_now or existing is None or not existing.get("provider_id")
             if needs_record:
                 await self._repo.record(
                     conn,
@@ -107,9 +103,7 @@ class FilesystemProxyResolver:
             raise ProxyNotFound(f"clip {clip_id}: no media.filePath")
         proxy = self._map.resolve_proxy(hires)
         if proxy is None:
-            raise ProxyNotFound(
-                f"clip {clip_id}: no mediastore rule for {hires!r}"
-            )
+            raise ProxyNotFound(f"clip {clip_id}: no mediastore rule for {hires!r}")
         if not proxy.exists():
             raise ProxyNotFound(f"clip {clip_id}: proxy not on disk: {proxy}")
         if not os.access(proxy, os.R_OK):
@@ -147,9 +141,7 @@ class LocalCacheOnlyResolver:
             raise ProxyNotFound(f"clip {clip_id} not cached locally")
         file_path = Path(row["file_path"])
         if not file_path.exists() or file_path.stat().st_size == 0:
-            raise ProxyNotFound(
-                f"clip {clip_id} cache row present but file missing: {file_path}"
-            )
+            raise ProxyNotFound(f"clip {clip_id} cache row present but file missing: {file_path}")
         return file_path
 
     def is_managed(self, path: Path) -> bool:
@@ -174,9 +166,7 @@ def build_resolver(
 ) -> ProxyResolver:
     if source == "cache-only":
         if proxy_cache_repo is None or db_provider is None:
-            raise ValueError(
-                "cache-only source requires proxy_cache_repo and db_provider"
-            )
+            raise ValueError("cache-only source requires proxy_cache_repo and db_provider")
         return LocalCacheOnlyResolver(
             repo=proxy_cache_repo,
             db_provider=db_provider,
@@ -193,10 +183,6 @@ def build_resolver(
         )
     if source == "filesystem":
         if archive is None or media_store_map is None:
-            raise ValueError(
-                "filesystem source requires archive provider and media_store_map"
-            )
-        return FilesystemProxyResolver(
-            archive=archive, media_store_map=media_store_map
-        )
+            raise ValueError("filesystem source requires archive provider and media_store_map")
+        return FilesystemProxyResolver(archive=archive, media_store_map=media_store_map)
     raise ValueError(f"unknown PROXY_SOURCE: {source!r}")

@@ -48,9 +48,7 @@ class LayerStatus:
             "size_bytes": self.size_bytes,
             "location": self.location,
             "fetched_at": self.fetched_at.isoformat() if self.fetched_at else None,
-            "last_used_at": (
-                self.last_used_at.isoformat() if self.last_used_at else None
-            ),
+            "last_used_at": (self.last_used_at.isoformat() if self.last_used_at else None),
             "pinned_by_workspaces": list(self.pinned_by_workspaces),
             "evictable": self.evictable,
         }
@@ -90,9 +88,7 @@ class CacheSummary:
             "total_local_bytes": self.total_local_bytes,
             "total_ai_bytes": self.total_ai_bytes,
             "counts_by_store": dict(self.counts_by_store),
-            "counts_by_workspace": {
-                str(k): v for k, v in self.counts_by_workspace.items()
-            },
+            "counts_by_workspace": {str(k): v for k, v in self.counts_by_workspace.items()},
             "metadata_clip_count": self.metadata_clip_count,
             "media_local_clip_count": self.media_local_clip_count,
             "pending_ops_count": self.pending_ops_count,
@@ -129,18 +125,14 @@ class CacheInspector:
         results = await self.status_for_clips([key])
         return results[0]
 
-    async def status_for_clips(
-        self, keys: Sequence[ClipKey]
-    ) -> list[ClipCacheStatus]:
+    async def status_for_clips(self, keys: Sequence[ClipKey]) -> list[ClipCacheStatus]:
         db = self._db_provider()
         if not keys:
             return []
 
         # Fetch per-layer rows in one batched pass each.
         metadata = await self._load_metadata(db, keys)
-        media_local = (
-            {} if self._host_local else await self._load_media_local(db, keys)
-        )
+        media_local = {} if self._host_local else await self._load_media_local(db, keys)
         media_ai = await self._load_media_ai(db, keys)
         pins = await self._load_pins(db, keys)
         pending = await self._load_pending_counts(db, keys)
@@ -156,9 +148,7 @@ class CacheInspector:
             md_layer = LayerStatus(
                 layer="metadata",
                 present=md_row is not None,
-                size_bytes=(
-                    len(md_row["canonical_json"]) if md_row is not None else None
-                ),
+                size_bytes=(len(md_row["canonical_json"]) if md_row is not None else None),
                 location="clip_cache" if md_row is not None else None,
                 fetched_at=_parse_iso(md_row["fetched_at"]) if md_row else None,
                 last_used_at=_parse_iso(md_row["fetched_at"]) if md_row else None,
@@ -183,12 +173,8 @@ class CacheInspector:
                     present=ml_row is not None,
                     size_bytes=ml_row["size_bytes"] if ml_row else None,
                     location=ml_row["file_path"] if ml_row else None,
-                    fetched_at=(
-                        _parse_iso(ml_row["downloaded_at"]) if ml_row else None
-                    ),
-                    last_used_at=(
-                        _parse_iso(ml_row["last_used_at"]) if ml_row else None
-                    ),
+                    fetched_at=(_parse_iso(ml_row["downloaded_at"]) if ml_row else None),
+                    last_used_at=(_parse_iso(ml_row["last_used_at"]) if ml_row else None),
                     pinned_by_workspaces=ws_ids,
                     evictable=(ml_row is not None and not ws_ids),
                 )
@@ -201,11 +187,7 @@ class CacheInspector:
                 ai_loc = ai_rows[0]["gcs_uri"]
                 ai_fetched = _parse_iso(ai_rows[0]["uploaded_at"])
                 ai_last = max(
-                    (
-                        _parse_iso(r["last_used_at"])
-                        for r in ai_rows
-                        if r["last_used_at"]
-                    ),
+                    (_parse_iso(r["last_used_at"]) for r in ai_rows if r["last_used_at"]),
                     default=None,
                 )
             ai_layer = LayerStatus(
@@ -241,14 +223,11 @@ class CacheInspector:
         # metadata bytes ~ length of canonical_json column; cheaper to
         # sum length() in SQL than fetch JSON blobs.
         cur = await db.execute(
-            "SELECT COUNT(*), COALESCE(SUM(length(canonical_json)), 0) "
-            "FROM clip_cache"
+            "SELECT COUNT(*), COALESCE(SUM(length(canonical_json)), 0) FROM clip_cache"
         )
         md_count, md_bytes = await cur.fetchone()
 
-        cur = await db.execute(
-            "SELECT COUNT(*), COALESCE(SUM(size_bytes), 0) FROM proxy_cache"
-        )
+        cur = await db.execute("SELECT COUNT(*), COALESCE(SUM(size_bytes), 0) FROM proxy_cache")
         ml_count, ml_bytes = await cur.fetchone()
 
         cur = await db.execute(
@@ -262,8 +241,7 @@ class CacheInspector:
             ai_total += int(total)
 
         cur = await db.execute(
-            "SELECT workspace_id, COUNT(*) FROM workspace_clips "
-            "GROUP BY workspace_id"
+            "SELECT workspace_id, COUNT(*) FROM workspace_clips GROUP BY workspace_id"
         )
         by_ws = {int(r[0]): int(r[1]) for r in await cur.fetchall()}
 
@@ -284,9 +262,7 @@ class CacheInspector:
             media_cache_cap_bytes=self._cap,
         )
 
-    async def list_orphans(
-        self, *, deep: bool = False
-    ) -> list[ClipCacheStatus]:
+    async def list_orphans(self, *, deep: bool = False) -> list[ClipCacheStatus]:
         """Cached items without a live archive entry.
 
         Cheap leg: rows in `proxy_cache` or `ai_store_files` whose
@@ -326,9 +302,7 @@ class CacheInspector:
             orphans.add((r[0], r[1]))
 
         if deep and self._provider is not None:
-            cur = await db.execute(
-                "SELECT provider_id, provider_clip_id FROM clip_cache"
-            )
+            cur = await db.execute("SELECT provider_id, provider_clip_id FROM clip_cache")
             for prov, pcid in await cur.fetchall():
                 try:
                     await self._provider.get_clip(pcid)

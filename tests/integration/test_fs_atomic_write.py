@@ -43,8 +43,7 @@ async def test_failed_serialise_leaves_sidecar_unchanged(tmp_path: Path, monkeyp
     assert sidecar.read_bytes() == original
     # No tempfile left lying around.
     leftover = [
-        x for x in cat.iterdir()
-        if x.name.startswith("v.annot.json.") and x.name.endswith(".tmp")
+        x for x in cat.iterdir() if x.name.startswith("v.annot.json.") and x.name.endswith(".tmp")
     ]
     assert leftover == []
 
@@ -67,8 +66,7 @@ async def test_failed_os_replace_cleans_up_tmp(tmp_path: Path, monkeypatch):
         )
 
     leftover = [
-        x for x in cat.iterdir()
-        if x.name.startswith("v.annot.json.") and x.name.endswith(".tmp")
+        x for x in cat.iterdir() if x.name.startswith("v.annot.json.") and x.name.endswith(".tmp")
     ]
     assert leftover == []
 

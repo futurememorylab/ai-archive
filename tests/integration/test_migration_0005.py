@@ -25,8 +25,7 @@ async def test_workspaces_table_columns(tmp_path: Path):
     async with open_db(db) as conn:
         await apply_migrations(conn, MIGRATIONS)
         cols = await _columns(conn, "workspaces")
-    assert cols == {"id", "name", "provider_id", "catalog_id",
-                    "created_at", "description"}
+    assert cols == {"id", "name", "provider_id", "catalog_id", "created_at", "description"}
 
 
 @pytest.mark.asyncio
@@ -35,8 +34,14 @@ async def test_workspace_clips_table_columns(tmp_path: Path):
     async with open_db(db) as conn:
         await apply_migrations(conn, MIGRATIONS)
         cols = await _columns(conn, "workspace_clips")
-    assert cols == {"workspace_id", "provider_id", "provider_clip_id",
-                    "added_at", "cache_state", "cache_error"}
+    assert cols == {
+        "workspace_id",
+        "provider_id",
+        "provider_clip_id",
+        "added_at",
+        "cache_state",
+        "cache_error",
+    }
 
 
 @pytest.mark.asyncio
@@ -99,8 +104,7 @@ async def test_clip_cache_catalog_index_recreated(tmp_path: Path):
     async with open_db(db) as conn:
         await apply_migrations(conn, MIGRATIONS)
         cur = await conn.execute(
-            "SELECT name FROM sqlite_master "
-            "WHERE type='index' AND tbl_name='clip_cache'"
+            "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='clip_cache'"
         )
         idx_names = {r[0] for r in await cur.fetchall()}
     assert "idx_clip_cache_catalog" in idx_names

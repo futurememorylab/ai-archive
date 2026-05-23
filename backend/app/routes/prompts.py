@@ -4,6 +4,7 @@ Verb-style sub-paths (`:archive`, `:promote`, `:duplicate`, `:restore`) keep
 state mutations visually distinct from RESTful CRUD; FastAPI maps them as
 literal path strings.
 """
+
 from typing import Any
 
 import aiosqlite
@@ -93,11 +94,13 @@ async def list_prompts(request: Request, archived: int = 0):
     for p in rows:
         _, versions = await ctx.prompts_repo.get_with_versions(ctx.db, p.id)
         prod = next((v for v in versions if v.state == "production"), None)
-        results.append({
-            **p.model_dump(),
-            "current_production_version_id": prod.id if prod else None,
-            "current_production_version_num": prod.version_num if prod else None,
-        })
+        results.append(
+            {
+                **p.model_dump(),
+                "current_production_version_id": prod.id if prod else None,
+                "current_production_version_num": prod.version_num if prod else None,
+            }
+        )
     return results
 
 
@@ -107,7 +110,7 @@ async def get_prompt(request: Request, prompt_id: int):
     try:
         prompt, versions = await ctx.prompts_repo.get_with_versions(ctx.db, prompt_id)
     except LookupError as exc:
-        raise HTTPException(404, str(exc))
+        raise HTTPException(404, str(exc)) from exc
     return _prompt_envelope(prompt, versions)
 
 
@@ -125,7 +128,7 @@ async def create_prompt(request: Request, body: PromptCreate):
             model=body.model,
         )
     except aiosqlite.IntegrityError as exc:
-        raise HTTPException(409, f"name collision: {exc}")
+        raise HTTPException(409, f"name collision: {exc}") from exc
     return {"id": pid}
 
 
@@ -137,7 +140,7 @@ async def patch_prompt(request: Request, prompt_id: int, body: PromptPatch):
             ctx.db, prompt_id, name=body.name, description=body.description
         )
     except aiosqlite.IntegrityError as exc:
-        raise HTTPException(409, f"name collision: {exc}")
+        raise HTTPException(409, f"name collision: {exc}") from exc
     return {"id": prompt_id}
 
 
@@ -156,9 +159,7 @@ async def restore_prompt(request: Request, prompt_id: int):
 
 
 @router.post("/{prompt_id}:duplicate", status_code=status.HTTP_201_CREATED)
-async def duplicate_prompt(
-    request: Request, prompt_id: int, body: PromptDuplicate | None = None
-):
+async def duplicate_prompt(request: Request, prompt_id: int, body: PromptDuplicate | None = None):
     ctx = request.app.state.ctx
     name = (body.name.strip() if body and body.name else None) or None
     description = body.description if body else None
@@ -167,9 +168,9 @@ async def duplicate_prompt(
             ctx.db, prompt_id, name=name, description=description
         )
     except LookupError as exc:
-        raise HTTPException(404, str(exc))
-    except aiosqlite.IntegrityError:
-        raise HTTPException(409, f"A prompt named {name!r} already exists.")
+        raise HTTPException(404, str(exc)) from exc
+    except aiosqlite.IntegrityError as exc:
+        raise HTTPException(409, f"A prompt named {name!r} already exists.") from exc
     return {"id": new_pid}
 
 
@@ -182,7 +183,7 @@ async def get_version(request: Request, prompt_id: int, version_id: int):
     try:
         v = await ctx.prompts_repo.get_version(ctx.db, version_id)
     except LookupError as exc:
-        raise HTTPException(404, str(exc))
+        raise HTTPException(404, str(exc)) from exc
     if v.prompt_id != prompt_id:
         raise HTTPException(404, "version does not belong to prompt")
     return _version_envelope(v)
@@ -196,19 +197,17 @@ async def create_version(request: Request, prompt_id: int, body: VersionCreate):
             ctx.db, prompt_id, from_version_id=body.from_version_id
         )
     except LookupError as exc:
-        raise HTTPException(404, str(exc))
+        raise HTTPException(404, str(exc)) from exc
     return {"id": new_vid}
 
 
 @router.put("/{prompt_id}/versions/{version_id}")
-async def update_version(
-    request: Request, prompt_id: int, version_id: int, body: VersionEdit
-):
+async def update_version(request: Request, prompt_id: int, version_id: int, body: VersionEdit):
     ctx = request.app.state.ctx
     try:
         v = await ctx.prompts_repo.get_version(ctx.db, version_id)
     except LookupError as exc:
-        raise HTTPException(404, str(exc))
+        raise HTTPException(404, str(exc)) from exc
     if v.prompt_id != prompt_id:
         raise HTTPException(404, "version does not belong to prompt")
     try:
@@ -234,7 +233,7 @@ async def promote_version(request: Request, prompt_id: int, version_id: int):
     try:
         v = await ctx.prompts_repo.get_version(ctx.db, version_id)
     except LookupError as exc:
-        raise HTTPException(404, str(exc))
+        raise HTTPException(404, str(exc)) from exc
     if v.prompt_id != prompt_id:
         raise HTTPException(404, "version does not belong to prompt")
     try:
@@ -254,7 +253,7 @@ async def export_version(request: Request, prompt_id: int, version_id: int):
         prompt, _ = await ctx.prompts_repo.get_with_versions(ctx.db, prompt_id)
         v = await ctx.prompts_repo.get_version(ctx.db, version_id)
     except LookupError as exc:
-        raise HTTPException(404, str(exc))
+        raise HTTPException(404, str(exc)) from exc
     if v.prompt_id != prompt_id:
         raise HTTPException(404, "version does not belong to prompt")
     return {

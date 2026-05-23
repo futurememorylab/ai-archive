@@ -20,9 +20,7 @@ def _fd(identifier: str = "pragafilm.barva", *, name: str = "Barva") -> FieldDef
 async def test_upsert_and_get_round_trip(db):
     repo = FieldDefCacheRepo()
     await repo.upsert(db, provider_id="catdv", field_def=_fd())
-    got = await repo.get_by_key(
-        db, provider_id="catdv", identifier="pragafilm.barva"
-    )
+    got = await repo.get_by_key(db, provider_id="catdv", identifier="pragafilm.barva")
     assert got is not None
     assert got.identifier == "pragafilm.barva"
     assert got.name == "Barva"

@@ -48,9 +48,7 @@ async def test_list_pending_for_clip_filters(db):
     a = _row()
     b = {**_row(), "provider_clip_id": "2"}
     await repo.insert_many(db, rows=[a, b])
-    rows = await repo.list_pending_for_clip(
-        db, provider_id="catdv", provider_clip_id="1"
-    )
+    rows = await repo.list_pending_for_clip(db, provider_id="catdv", provider_clip_id="1")
     assert [r["provider_clip_id"] for r in rows] == ["1"]
 
 
@@ -157,6 +155,7 @@ async def test_count_pending_by_clip(db):
 @pytest.mark.asyncio
 async def test_list_with_clip_names_joins_clip_cache(db):
     from datetime import UTC, datetime
+
     # seed a clip_cache row so we can join
     await db.execute(
         """

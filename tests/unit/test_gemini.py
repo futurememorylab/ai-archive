@@ -1,12 +1,12 @@
 import pytest
 
 from backend.app.services.gemini import (
-    GeminiService,
+    GeminiPermissionError,
     GeminiQuotaError,
     GeminiSafetyError,
-    GeminiPermissionError,
+    GeminiService,
 )
-from tests.fakes.fake_gemini import FakeGenAIClient, FakeModels, FakeResponse
+from tests.fakes.fake_gemini import FakeGenAIClient, FakeResponse
 
 
 def _service_with_fake_client() -> tuple[GeminiService, FakeGenAIClient]:

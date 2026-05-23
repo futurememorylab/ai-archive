@@ -108,9 +108,14 @@ async def test_list_by_clip_returns_created_at(db):
     aid = await repo.insert(
         db,
         Annotation(
-            catdv_clip_id=999, catdv_clip_name="x",
-            prompt_version_id=vid, job_id=None, model="m",
-            prompt_used="p", raw_response={}, structured_output=None,
+            catdv_clip_id=999,
+            catdv_clip_name="x",
+            prompt_version_id=vid,
+            job_id=None,
+            model="m",
+            prompt_used="p",
+            raw_response={},
+            structured_output=None,
             clip_snapshot={},
         ),
     )

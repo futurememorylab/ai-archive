@@ -1,8 +1,9 @@
+from pathlib import Path
+
 import aiosqlite
 import pytest
 
 from backend.app.migrations_runner import apply_migrations
-from pathlib import Path
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "backend" / "migrations"
 
@@ -26,10 +27,18 @@ async def test_live_sessions_columns(tmp_path):
         cur = await conn.execute("PRAGMA table_info(live_sessions)")
         cols = {row[1] for row in await cur.fetchall()}
     assert cols == {
-        "id", "clip_id", "prompt_version", "state",
-        "started_at", "ended_at", "end_reason",
-        "transcript_json", "summary_cs",
-        "frame_count", "search_calls", "created_at",
+        "id",
+        "clip_id",
+        "prompt_version",
+        "state",
+        "started_at",
+        "ended_at",
+        "end_reason",
+        "transcript_json",
+        "summary_cs",
+        "frame_count",
+        "search_calls",
+        "created_at",
     }
 
 

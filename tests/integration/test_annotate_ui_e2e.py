@@ -11,6 +11,7 @@ build a ``TestClient`` (which sets up ``ctx.db`` against a tmp ``DATA_DIR``),
 do all seeding + ``run_job`` against that same ``ctx.db`` via an
 ``asyncio.new_event_loop`` helper, then GET ``/clips/101`` and assert.
 """
+
 import asyncio
 import importlib
 import json
@@ -52,6 +53,7 @@ def _setenv(monkeypatch, tmp_path):
 def _make_app(monkeypatch, tmp_path):
     _setenv(monkeypatch, tmp_path)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     return main_mod.app
 
@@ -81,13 +83,9 @@ async def _seed_and_run(ctx, archive, proxy_path):
         output_schema={"type": "object"},
         model="gemini-2.5-pro",
     )
-    await ctx.prompts_repo.promote_version(
-        ctx.db, prompt_id=prompt_id, version_id=vid
-    )
+    await ctx.prompts_repo.promote_version(ctx.db, prompt_id=prompt_id, version_id=vid)
 
-    job_id = await ctx.jobs_repo.create_job(
-        ctx.db, prompt_version_id=vid, clip_ids=[101]
-    )
+    job_id = await ctx.jobs_repo.create_job(ctx.db, prompt_version_id=vid, clip_ids=[101])
 
     structured = {
         "scenes": [
@@ -119,9 +117,7 @@ def test_end_to_end_renders_draft_with_gemini_output(monkeypatch, tmp_path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         ctx = client.app.state.ctx
-        archive = FakeArchive(
-            {101: {"ID": 101, "name": "Clip_101", "markers": []}}
-        )
+        archive = FakeArchive({101: {"ID": 101, "name": "Clip_101", "markers": []}})
         ctx.archive = archive
 
         proxy = tmp_path / "101.mov"

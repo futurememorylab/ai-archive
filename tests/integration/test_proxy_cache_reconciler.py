@@ -45,8 +45,11 @@ async def test_creates_row_for_orphan_file(db, cache_dir):
 async def test_deletes_phantom_row(db, cache_dir):
     repo = ProxyCacheRepo()
     await repo.record(
-        db, clip_id=99, file_path=str(cache_dir / "99.mov"),
-        size_bytes=1000, etag=None,
+        db,
+        clip_id=99,
+        file_path=str(cache_dir / "99.mov"),
+        size_bytes=1000,
+        etag=None,
     )
 
     counters = await _reconciler(cache_dir, repo, db).reconcile()
@@ -61,8 +64,11 @@ async def test_updates_drifted_size(db, cache_dir):
     file_path = cache_dir / "555.mov"
     _write_file(file_path, size=8000)
     await repo.record(
-        db, clip_id=555, file_path=str(file_path),
-        size_bytes=1000, etag=None,  # stale size
+        db,
+        clip_id=555,
+        file_path=str(file_path),
+        size_bytes=1000,
+        etag=None,  # stale size
     )
 
     counters = await _reconciler(cache_dir, repo, db).reconcile()

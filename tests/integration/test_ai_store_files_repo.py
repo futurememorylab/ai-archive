@@ -102,12 +102,9 @@ async def test_touch_updates_last_used_at(db):
         size_bytes=100,
         sha256="abc",
     )
-    before = (await repo.get(db, store_id="gcs:b", clip_id=42))["last_used_at"]
-
     # Force a different timestamp by writing it directly. (We don't sleep.)
     await db.execute(
-        "UPDATE ai_store_files SET last_used_at = ? "
-        "WHERE store_id = ? AND catdv_clip_id = ?",
+        "UPDATE ai_store_files SET last_used_at = ? WHERE store_id = ? AND catdv_clip_id = ?",
         ("2020-01-01T00:00:00+00:00", "gcs:b", 42),
     )
     await db.commit()

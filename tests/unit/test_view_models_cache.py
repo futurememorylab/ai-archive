@@ -21,9 +21,9 @@ class _Status:
     def __init__(self, ml_present, ml_pinned=()):
         self.clip_key = ("catdv", "1")
         self.layers = (
-            _Layer(True, True),                              # metadata
+            _Layer(True, True),  # metadata
             _Layer(ml_present, not ml_pinned, 1024 * 1024, ml_pinned),
-            _Layer(False, False),                            # media-ai
+            _Layer(False, False),  # media-ai
         )
 
 

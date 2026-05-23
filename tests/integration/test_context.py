@@ -31,14 +31,13 @@ async def test_build_context_from_settings(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_context_exposes_archive_provider_when_external_initialized(tmp_path, monkeypatch):
-    from backend.app.context import AppContext
-    from backend.app.settings import Settings
-    from tests.fakes.fake_catdv import running_fake_catdv
-
     # GCS / Gemini need real credentials; stub them so we can exercise the
     # archive-wiring branch without ADC.
     import backend.app.services.gcs as gcs_mod
     import backend.app.services.gemini as gemini_mod
+    from backend.app.context import AppContext
+    from backend.app.settings import Settings
+    from tests.fakes.fake_catdv import running_fake_catdv
 
     class _StubGcs:
         def __init__(self, *args, **kwargs):

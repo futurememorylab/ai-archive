@@ -35,8 +35,10 @@ async def test_busy_envelope_raises_catdv_busy_error():
     with running_fake_catdv() as (base_url, fake):
         client = CatdvClient(base_url=base_url, username="klientAI", password="secret")
         async with client:
+
             async def fake_post(*args, **kwargs):
                 return BusyResponse()
+
             client._client.post = fake_post  # type: ignore[assignment]
             with pytest.raises(CatdvBusyError):
                 await client.login()

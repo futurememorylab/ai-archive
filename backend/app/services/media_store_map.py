@@ -6,6 +6,7 @@ paths with the `mediaType=proxy, target=web` paths by matching
 `pathOrder` — that mirrors how CatDV's own web client resolves a
 proxy URL.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -20,7 +21,7 @@ class MediaStoreMap:
     rules: list[tuple[str, str]] = field(default_factory=list)
 
     @classmethod
-    def from_json(cls, stores: list[dict[str, Any]]) -> "MediaStoreMap":
+    def from_json(cls, stores: list[dict[str, Any]]) -> MediaStoreMap:
         rules: list[tuple[str, str]] = []
         for store in stores:
             hires_by_order: dict[int, str] = {}
@@ -33,10 +34,7 @@ class MediaStoreMap:
                     continue
                 if ptype.get("mediaType") == "hires":
                     hires_by_order[order] = path.rstrip("/")
-                elif (
-                    ptype.get("mediaType") == "proxy"
-                    and ptype.get("target") == "web"
-                ):
+                elif ptype.get("mediaType") == "proxy" and ptype.get("target") == "web":
                     proxy_by_order[order] = path.rstrip("/")
             for order in sorted(hires_by_order):
                 if order in proxy_by_order:

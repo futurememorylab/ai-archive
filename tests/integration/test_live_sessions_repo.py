@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import aiosqlite
@@ -46,10 +46,12 @@ async def test_mark_ended_persists_transcript_and_reason(conn):
     await repo.mark_active(conn, "abc")
     transcript = [{"role": "user", "text": "ahoj", "ts": 1}]
     await repo.mark_ended(
-        conn, "abc",
+        conn,
+        "abc",
         end_reason="user_stop",
         transcript_json=json.dumps(transcript, ensure_ascii=False),
-        frame_count=2, search_calls=1,
+        frame_count=2,
+        search_calls=1,
     )
     s = await repo.get(conn, "abc")
     assert s.state == "ended"
@@ -99,7 +101,7 @@ async def test_cleanup_stale_pending_reaps_only_old_pending(conn):
     await repo.insert_pending(conn, id="active-old", clip_id=1, prompt_version=None)
     await repo.mark_active(conn, "active-old")
 
-    two_h_ago = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    two_h_ago = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
     await conn.execute(
         "UPDATE live_sessions SET created_at = ? WHERE id IN ('old','active-old')",
         (two_h_ago,),

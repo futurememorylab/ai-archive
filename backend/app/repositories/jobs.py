@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import aiosqlite
 
@@ -6,7 +6,7 @@ from backend.app.models.job import ItemStatus, Job, JobItem, JobStatus
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 TRANSIENT_STATUSES = ("resolving", "uploading", "prompting")
@@ -41,11 +41,14 @@ class JobsRepo:
         row = await cur.fetchone()
         if row is None:
             raise LookupError(f"job {job_id} not found")
-        return Job(id=row[0], prompt_version_id=row[1], status=row[2], total_clips=row[3], notes=row[4])
+        return Job(
+            id=row[0], prompt_version_id=row[1], status=row[2], total_clips=row[3], notes=row[4]
+        )
 
     async def list_jobs(self, conn: aiosqlite.Connection, *, limit: int = 50) -> list[Job]:
         cur = await conn.execute(
-            "SELECT id, prompt_version_id, status, total_clips, notes FROM jobs ORDER BY id DESC LIMIT ?",
+            "SELECT id, prompt_version_id, status, total_clips, notes "
+            "FROM jobs ORDER BY id DESC LIMIT ?",
             (limit,),
         )
         return [

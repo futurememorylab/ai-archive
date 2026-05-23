@@ -63,9 +63,7 @@ def test_probe_returns_defaults_on_malformed_json(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(media_probe.shutil, "which", lambda _name: "/usr/bin/ffprobe")
 
     def fake_run(*_args, **_kwargs):
-        return subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="not json", stderr=""
-        )
+        return subprocess.CompletedProcess(args=[], returncode=0, stdout="not json", stderr="")
 
     monkeypatch.setattr(media_probe.subprocess, "run", fake_run)
     assert media_probe.probe(tmp_path / "x.mov") == (0.0, 25.0)
@@ -75,9 +73,7 @@ def test_probe_returns_defaults_on_nonzero_exit(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(media_probe.shutil, "which", lambda _name: "/usr/bin/ffprobe")
 
     def fake_run(*_args, **_kwargs):
-        return subprocess.CompletedProcess(
-            args=[], returncode=2, stdout="", stderr="err"
-        )
+        return subprocess.CompletedProcess(args=[], returncode=2, stdout="", stderr="err")
 
     monkeypatch.setattr(media_probe.subprocess, "run", fake_run)
     assert media_probe.probe(tmp_path / "x.mov") == (0.0, 25.0)

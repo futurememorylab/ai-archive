@@ -28,16 +28,17 @@ def _setenv(monkeypatch, tmp_path):
 def _make_app(monkeypatch, tmp_path):
     _setenv(monkeypatch, tmp_path)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     return main_mod.app
 
 
-def _seed_clip(client, *, key, proxy_path=None, proxy_size=0,
-               ai_size=0):
+def _seed_clip(client, *, key, proxy_path=None, proxy_size=0, ai_size=0):
     """Seed test data via the running app's DB connection."""
     ctx = client.app.state.ctx
     db = ctx.db
     import asyncio
+
     now = datetime.now(UTC).isoformat()
 
     async def _run():
@@ -58,8 +59,15 @@ def _seed_clip(client, *, key, proxy_path=None, proxy_size=0,
                    size_bytes, etag, downloaded_at, last_used_at)
                 VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
                 """,
-                (int(key[1]) if key[1].isdigit() else 0, key[0], key[1],
-                 proxy_path, proxy_size, now, now),
+                (
+                    int(key[1]) if key[1].isdigit() else 0,
+                    key[0],
+                    key[1],
+                    proxy_path,
+                    proxy_size,
+                    now,
+                    now,
+                ),
             )
         if ai_size:
             await db.execute(
@@ -71,8 +79,7 @@ def _seed_clip(client, *, key, proxy_path=None, proxy_size=0,
                 VALUES ('gcs:b', ?, ?, ?, 'gs://b/x', 'video/mp4', ?, 'abc',
                         ?, ?, NULL)
                 """,
-                (int(key[1]) if key[1].isdigit() else 0, key[0], key[1],
-                 ai_size, now, now),
+                (int(key[1]) if key[1].isdigit() else 0, key[0], key[1], ai_size, now, now),
             )
         await db.commit()
 
@@ -90,7 +97,7 @@ async def test_cache_summary_empty(monkeypatch, tmp_path: Path):
     assert data["total_ai_bytes"] == 0
     assert data["pending_ops_count"] == 0
     # media_cache_cap_bytes follows the env default (50 GB)
-    assert data["media_cache_cap_bytes"] == 50 * 1024 ** 3
+    assert data["media_cache_cap_bytes"] == 50 * 1024**3
 
 
 def test_cache_clip_status_and_evict(monkeypatch, tmp_path: Path):
@@ -99,8 +106,7 @@ def test_cache_clip_status_and_evict(monkeypatch, tmp_path: Path):
 
     proxy.write_bytes(b"x" * 100)
     with TestClient(app) as client:
-        _seed_clip(client, key=("catdv", "1"),
-                   proxy_path=str(proxy), proxy_size=100)
+        _seed_clip(client, key=("catdv", "1"), proxy_path=str(proxy), proxy_size=100)
         r = client.get("/api/cache/clip/catdv/1")
         assert r.status_code == 200
         data = r.json()
@@ -136,8 +142,7 @@ def test_cache_badge_partial(monkeypatch, tmp_path: Path):
 
     proxy.write_bytes(b"y" * 5)
     with TestClient(app) as client:
-        _seed_clip(client, key=("catdv", "2"),
-                   proxy_path=str(proxy), proxy_size=5)
+        _seed_clip(client, key=("catdv", "2"), proxy_path=str(proxy), proxy_size=5)
         r = client.get("/ui/cache-badge/catdv/2")
     assert r.status_code == 200
     assert "cache-badge" in r.text
@@ -161,6 +166,7 @@ def test_cache_orphans_endpoint(monkeypatch, tmp_path: Path):
     with TestClient(app) as client:
         ctx = client.app.state.ctx
         import asyncio
+
         proxy = tmp_path / "33.mov"
 
         proxy.write_bytes(b"o")
@@ -177,6 +183,7 @@ def test_cache_orphans_endpoint(monkeypatch, tmp_path: Path):
                 (str(proxy), now, now),
             )
             await ctx.db.commit()
+
         asyncio.get_event_loop().run_until_complete(_seed())
 
         r = client.get("/api/cache/orphans")
@@ -213,6 +220,7 @@ def test_cache_page_orphans_tile(monkeypatch, tmp_path: Path):
     with TestClient(app) as client:
         ctx = client.app.state.ctx
         import asyncio
+
         now = datetime.now(UTC).isoformat()
 
         async def _seed():
@@ -226,6 +234,7 @@ def test_cache_page_orphans_tile(monkeypatch, tmp_path: Path):
                 (str(proxy), now, now),
             )
             await ctx.db.commit()
+
         asyncio.get_event_loop().run_until_complete(_seed())
 
         r = client.get("/cache")
@@ -244,8 +253,7 @@ def test_cache_tab_local_filters_rows(monkeypatch, tmp_path: Path):
     proxy.write_bytes(b"x" * 10)
     with TestClient(app) as client:
         # 1) Has media_local
-        _seed_clip(client, key=("catdv", "1001"),
-                   proxy_path=str(proxy), proxy_size=10)
+        _seed_clip(client, key=("catdv", "1001"), proxy_path=str(proxy), proxy_size=10)
         # 2) Metadata only
         _seed_clip(client, key=("catdv", "1002"))
         r = client.get("/cache?tab=local")
@@ -295,8 +303,7 @@ def test_bulk_evict_route(monkeypatch, tmp_path: Path):
 
     proxy.write_bytes(b"z" * 20)
     with TestClient(app) as client:
-        _seed_clip(client, key=("catdv", "4"),
-                   proxy_path=str(proxy), proxy_size=20)
+        _seed_clip(client, key=("catdv", "4"), proxy_path=str(proxy), proxy_size=20)
         r = client.post(
             "/api/cache/bulk-evict",
             json={

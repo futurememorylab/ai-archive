@@ -49,9 +49,7 @@ async def apply_clip(request: Request, clip_id: int):
     if ctx.write_queue is None:
         raise HTTPException(503, "write queue not initialized")
 
-    accepted = await ctx.review_items_repo.list_by_clip(
-        ctx.db, clip_id, decision="accepted"
-    )
+    accepted = await ctx.review_items_repo.list_by_clip(ctx.db, clip_id, decision="accepted")
     if not accepted:
         return {"queued": 0, "applied": 0}
 

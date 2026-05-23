@@ -22,8 +22,14 @@ async def test_cache_actions_log_columns(tmp_path: Path):
         await apply_migrations(conn, MIGRATIONS)
         cols = await _columns(conn, "cache_actions_log")
     assert set(cols) == {
-        "id", "who", "action", "clip_keys", "result",
-        "detail", "bytes_freed", "at",
+        "id",
+        "who",
+        "action",
+        "clip_keys",
+        "result",
+        "detail",
+        "bytes_freed",
+        "at",
     }
     assert cols["id"]["pk"] == 1
     assert cols["who"]["notnull"] == 1
@@ -40,8 +46,7 @@ async def test_cache_actions_log_index_on_at(tmp_path: Path):
     async with open_db(db) as conn:
         await apply_migrations(conn, MIGRATIONS)
         cur = await conn.execute(
-            "SELECT name FROM sqlite_master "
-            "WHERE type='index' AND tbl_name='cache_actions_log'"
+            "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='cache_actions_log'"
         )
         names = {r[0] for r in await cur.fetchall()}
     assert "idx_cache_actions_log_at" in names

@@ -66,9 +66,7 @@ class PendingOperationsRepo:
         for r in rows:
             origin_ids = r.get("origin_review_item_ids")
             origin_ids_json = (
-                json.dumps(list(origin_ids), ensure_ascii=False)
-                if origin_ids is not None
-                else None
+                json.dumps(list(origin_ids), ensure_ascii=False) if origin_ids is not None else None
             )
             cur = await conn.execute(
                 """
@@ -94,9 +92,7 @@ class PendingOperationsRepo:
             await conn.commit()
         return ids
 
-    async def get(
-        self, conn: aiosqlite.Connection, op_id: int
-    ) -> dict[str, Any] | None:
+    async def get(self, conn: aiosqlite.Connection, op_id: int) -> dict[str, Any] | None:
         cur = await conn.execute(
             f"SELECT {', '.join(_ROW_COLS)} FROM pending_operations WHERE id = ?",
             (op_id,),
@@ -141,16 +137,12 @@ class PendingOperationsRepo:
             )
         return [_row_to_dict(r) for r in await cur.fetchall()]
 
-    async def mark_in_flight(
-        self, conn: aiosqlite.Connection, op_ids: list[int]
-    ) -> None:
+    async def mark_in_flight(self, conn: aiosqlite.Connection, op_ids: list[int]) -> None:
         if not op_ids:
             return
         now = _now_iso()
         await conn.executemany(
-            "UPDATE pending_operations "
-            "SET status = 'in_flight', attempted_at = ? "
-            "WHERE id = ?",
+            "UPDATE pending_operations SET status = 'in_flight', attempted_at = ? WHERE id = ?",
             [(now, oid) for oid in op_ids],
         )
         await conn.commit()
@@ -185,9 +177,7 @@ class PendingOperationsRepo:
             return
         ts = attempted_at or _now_iso()
         detail_json = (
-            json.dumps(conflict_detail, ensure_ascii=False)
-            if conflict_detail is not None
-            else None
+            json.dumps(conflict_detail, ensure_ascii=False) if conflict_detail is not None else None
         )
         await conn.executemany(
             "UPDATE pending_operations "
@@ -235,9 +225,7 @@ class PendingOperationsRepo:
         )
         await conn.commit()
 
-    async def reset_in_flight_to_pending(
-        self, conn: aiosqlite.Connection
-    ) -> int:
+    async def reset_in_flight_to_pending(self, conn: aiosqlite.Connection) -> int:
         """Crash-recovery: rows stuck in_flight become pending again.
 
         Returns the number of rows reset.
@@ -258,15 +246,11 @@ class PendingOperationsRepo:
         as-is — re-applying the same items would no-op via the WriteQueue
         dedup.
         """
-        cur = await conn.execute(
-            "DELETE FROM pending_operations WHERE id = ?", (op_id,)
-        )
+        cur = await conn.execute("DELETE FROM pending_operations WHERE id = ?", (op_id,))
         await conn.commit()
         return cur.rowcount or 0
 
-    async def reset_for_retry(
-        self, conn: aiosqlite.Connection, op_id: int
-    ) -> int:
+    async def reset_for_retry(self, conn: aiosqlite.Connection, op_id: int) -> int:
         """Reset a row back to a fresh `pending` state for the sync drawer.
 
         Zeros attempts, clears last_error and attempted_at, regardless of
@@ -339,8 +323,16 @@ class PendingOperationsRepo:
             statuses,
         )
         cols = (
-            "id", "provider_id", "provider_clip_id", "op_kind", "status",
-            "attempts", "last_error", "enqueued_at", "attempted_at",
-            "applied_at", "clip_name",
+            "id",
+            "provider_id",
+            "provider_clip_id",
+            "op_kind",
+            "status",
+            "attempts",
+            "last_error",
+            "enqueued_at",
+            "attempted_at",
+            "applied_at",
+            "clip_name",
         )
         return [dict(zip(cols, r, strict=True)) for r in await cur.fetchall()]

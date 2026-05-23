@@ -31,7 +31,10 @@ async def _seed_proxy_cache(db, key, *, file_path, size_bytes):
         """,
         (
             int(key[1]) if key[1].isdigit() else 0,
-            key[0], key[1], file_path, size_bytes,
+            key[0],
+            key[1],
+            file_path,
+            size_bytes,
             datetime.now(UTC).isoformat(),
             datetime.now(UTC).isoformat(),
         ),
@@ -51,7 +54,9 @@ async def _seed_ai(db, key, *, size_bytes=10):
         """,
         (
             int(key[1]) if key[1].isdigit() else 0,
-            key[0], key[1], size_bytes,
+            key[0],
+            key[1],
+            size_bytes,
             datetime.now(UTC).isoformat(),
             datetime.now(UTC).isoformat(),
         ),
@@ -123,13 +128,10 @@ async def test_evict_local_media_happy_path(db, tmp_path: Path):
     assert out.bytes_freed == 100
     assert not proxy.exists()
     cur = await db.execute(
-        "SELECT COUNT(*) FROM proxy_cache "
-        "WHERE provider_id='catdv' AND provider_clip_id='1'"
+        "SELECT COUNT(*) FROM proxy_cache WHERE provider_id='catdv' AND provider_clip_id='1'"
     )
     assert (await cur.fetchone())[0] == 0
-    cur = await db.execute(
-        "SELECT COUNT(*) FROM cache_actions_log WHERE result='ok'"
-    )
+    cur = await db.execute("SELECT COUNT(*) FROM cache_actions_log WHERE result='ok'")
     assert (await cur.fetchone())[0] == 1
 
 
@@ -149,9 +151,7 @@ async def test_invariant_local_media_pinned_blocks_without_force(db, tmp_path):
     assert proxy.exists()
 
     # log row written for the skip
-    cur = await db.execute(
-        "SELECT COUNT(*) FROM cache_actions_log WHERE result='skipped'"
-    )
+    cur = await db.execute("SELECT COUNT(*) FROM cache_actions_log WHERE result='skipped'")
     assert (await cur.fetchone())[0] == 1
 
     # force=True bypasses the pin
@@ -219,22 +219,15 @@ async def test_evict_everywhere_force_evicts_all(db, tmp_path):
     assert result.errors == 0
     assert result.ok >= 3
     assert not proxy.exists()
-    cur = await db.execute(
-        "SELECT COUNT(*) FROM clip_cache WHERE provider_clip_id='9'"
-    )
+    cur = await db.execute("SELECT COUNT(*) FROM clip_cache WHERE provider_clip_id='9'")
     assert (await cur.fetchone())[0] == 0
-    cur = await db.execute(
-        "SELECT COUNT(*) FROM proxy_cache WHERE provider_clip_id='9'"
-    )
+    cur = await db.execute("SELECT COUNT(*) FROM proxy_cache WHERE provider_clip_id='9'")
     assert (await cur.fetchone())[0] == 0
-    cur = await db.execute(
-        "SELECT COUNT(*) FROM ai_store_files WHERE provider_clip_id='9'"
-    )
+    cur = await db.execute("SELECT COUNT(*) FROM ai_store_files WHERE provider_clip_id='9'")
     assert (await cur.fetchone())[0] == 0
     # prominent log row written
     cur = await db.execute(
-        "SELECT COUNT(*) FROM cache_actions_log "
-        "WHERE action='evict_clip_everywhere_force'"
+        "SELECT COUNT(*) FROM cache_actions_log WHERE action='evict_clip_everywhere_force'"
     )
     assert (await cur.fetchone())[0] == 1
 
@@ -258,9 +251,7 @@ async def test_evict_everywhere_without_force_short_circuits(db, tmp_path):
     assert result.ok == 0
     # proxy file still on disk; clip_cache row still there
     assert proxy.exists()
-    cur = await db.execute(
-        "SELECT COUNT(*) FROM clip_cache WHERE provider_clip_id='10'"
-    )
+    cur = await db.execute("SELECT COUNT(*) FROM clip_cache WHERE provider_clip_id='10'")
     assert (await cur.fetchone())[0] == 1
 
 
@@ -292,11 +283,9 @@ async def test_evict_orphans_drops_only_orphans(db, tmp_path):
     proxy_orphan.write_bytes(b"o")
     proxy_real = tmp_path / "1.mov"
     proxy_real.write_bytes(b"r")
-    await _seed_proxy_cache(db, ("catdv", "33"),
-                            file_path=str(proxy_orphan), size_bytes=1)
+    await _seed_proxy_cache(db, ("catdv", "33"), file_path=str(proxy_orphan), size_bytes=1)
     await _seed_clip_cache(db, ("catdv", "1"))
-    await _seed_proxy_cache(db, ("catdv", "1"),
-                            file_path=str(proxy_real), size_bytes=1)
+    await _seed_proxy_cache(db, ("catdv", "1"), file_path=str(proxy_real), size_bytes=1)
     actions = _actions(db)
     result = await actions.evict_orphans()
     assert result.ok == 1
@@ -316,9 +305,7 @@ async def test_log_row_written_for_skips(db, tmp_path):
     # five attempted skips
     for _ in range(5):
         await actions.evict_local_media(key, force=False)
-    cur = await db.execute(
-        "SELECT COUNT(*) FROM cache_actions_log WHERE result='skipped'"
-    )
+    cur = await db.execute("SELECT COUNT(*) FROM cache_actions_log WHERE result='skipped'")
     assert (await cur.fetchone())[0] == 5
 
 
@@ -337,7 +324,5 @@ async def test_who_provider_used(db, tmp_path):
         who_provider=lambda: "system",
     )
     await actions.evict_local_media(key)
-    cur = await db.execute(
-        "SELECT who FROM cache_actions_log ORDER BY id DESC LIMIT 1"
-    )
+    cur = await db.execute("SELECT who FROM cache_actions_log ORDER BY id DESC LIMIT 1")
     assert (await cur.fetchone())[0] == "system"

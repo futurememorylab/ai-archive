@@ -26,6 +26,8 @@ dev = [
   "pytest-asyncio>=0.24",
   "ruff>=0.7",
   "respx>=0.21",
+  "basedpyright>=1.18",
+  "pre-commit>=3.7",
 ]
 
 [tool.setuptools.packages.find]
@@ -41,3 +43,23 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "ASYNC"]
+# ASYNC240 fires on Path.exists()/stat() inside async functions and pushes
+# users toward anyio.path/trio.Path. We don't use anyio/trio, and the calls
+# in question are on local SSD where blocking time is sub-millisecond — the
+# to_thread hop costs more than it saves. The one legitimate blocking-I/O
+# case (large proxy download) is handled with asyncio.to_thread explicitly.
+ignore = ["ASYNC240"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests sometimes assert against the broad exception surface a contract
+# raises, so `pytest.raises(Exception)` is intentional, not a bug.
+"tests/**/*.py" = ["B017"]
+
+[tool.basedpyright]
+include = ["backend", "tests"]
+pythonVersion = "3.12"
+# Start non-strict — we want a baseline number, not a wall of warnings.
+# Ratchet up by promoting specific rules to "error" as code gets clean.
+typeCheckingMode = "basic"
+reportMissingImports = "error"
+reportMissingTypeStubs = "none"
