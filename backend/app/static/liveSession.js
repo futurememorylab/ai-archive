@@ -169,17 +169,16 @@ function liveSession(clipId, config) {
         this._resetInactivity();
       };
       ws.onmessage = (evt) => {
-        // Log all inbound frames so we can see error messages Google sends
-        // before closing the socket. Binary frames are rare here (audio
-        // arrives as base64 inside JSON), but log size if so.
-        if (typeof evt.data === "string") {
-          console.log("[live] WSS msg:", evt.data.length > 800
-            ? evt.data.slice(0, 800) + "…(+" + (evt.data.length - 800) + " bytes)"
-            : evt.data);
-        } else {
-          console.log("[live] WSS msg (binary):", evt.data.byteLength, "bytes");
-        }
-        this._onWsMessage(evt);
+        // Live API actually delivers JSON over BINARY WebSocket frames
+        // (arrayBuffer because we set ws.binaryType="arraybuffer"). Decode
+        // here so the rest of the pipeline sees text.
+        const text = typeof evt.data === "string"
+          ? evt.data
+          : new TextDecoder("utf-8").decode(new Uint8Array(evt.data));
+        console.log("[live] WSS msg:", text.length > 600
+          ? text.slice(0, 600) + "…(+" + (text.length - 600) + " bytes)"
+          : text);
+        this._onWsMessage({ data: text });
       };
       ws.onerror = (e) => {
         console.warn("[live] WSS error event:", e);
@@ -206,10 +205,17 @@ function liveSession(clipId, config) {
     },
 
     _sendInitialClientContent(initialTurn) {
+      // Append a short Czech greeting cue so the model speaks immediately on
+      // session start — useful for verifying voice output is wired before
+      // the operator says anything. Set turnComplete: true so Gemini
+      // responds right away instead of waiting for more user content.
       const parts = [...(initialTurn?.parts || [])];
       const frame = this._captureFrameJpegB64();
       if (frame) parts.push({ inlineData: { mimeType: "image/jpeg", data: frame } });
-      const msg = { clientContent: { turns: [{ role: "user", parts }], turnComplete: false } };
+      parts.push({ text:
+        "Pozdrav mě prosím krátce česky („Dobrý den") a v jedné větě popiš, "
+        + "co vidíš na aktuálním snímku. Pak počkej na moji další otázku." });
+      const msg = { clientContent: { turns: [{ role: "user", parts }], turnComplete: true } };
       try { this._ws.send(JSON.stringify(msg)); } catch {}
       this._frameCount += frame ? 1 : 0;
     },
