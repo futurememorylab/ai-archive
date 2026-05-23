@@ -66,15 +66,15 @@ async def test_session_config_returns_token_and_setup(client_and_db, monkeypatch
 
     respx.post(
         "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
-    ).mock(return_value=Response(200, json={"name": "tokens/xyz"}))
+    ).mock(return_value=Response(200, json={"name": "auth_tokens/xyz"}))
 
     r = await ac.get("/api/live/session-config", params={"clip_id": 42})
     assert r.status_code == 200, r.text
     data = r.json()
-    assert data["token"] == "tokens/xyz"
+    assert data["token"] == "xyz"
     assert data["session_id"]
     assert data["ws_url"].startswith("wss://generativelanguage.googleapis.com/ws/")
-    assert "key=tokens/xyz" in data["ws_url"]
+    assert "key=xyz" in data["ws_url"]
     assert data["setup_payload"]["model"].endswith("native-audio-dialog")
     assert data["setup_payload"]["initial_context_turn"]["parts"][0]["text"].startswith(
         "=== Publikované anotace"
@@ -113,11 +113,11 @@ async def test_session_config_works_offline_when_clip_cached(client_and_db, monk
 
     respx.post(
         "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
-    ).mock(return_value=Response(200, json={"name": "tokens/xyz"}))
+    ).mock(return_value=Response(200, json={"name": "auth_tokens/xyz"}))
 
     r = await ac.get("/api/live/session-config", params={"clip_id": 42})
     assert r.status_code == 200, r.text
-    assert r.json()["token"] == "tokens/xyz"
+    assert r.json()["token"] == "xyz"
 
 
 @pytest.mark.asyncio

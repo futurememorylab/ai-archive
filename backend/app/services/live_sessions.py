@@ -110,7 +110,12 @@ async def mint_ephemeral_token(*, setup: dict, settings: Any) -> str:
         )
     if r.status_code != 200:
         raise RuntimeError(f"auth_tokens.create failed: {r.status_code} {r.text}")
-    return r.json()["name"]
+    # The `name` field is the resource identifier ("auth_tokens/<hex>"),
+    # but the WSS endpoint expects just the bare token value as the API
+    # key. Passing the full resource name returns close code 1007
+    # "API key not valid". Verified empirically: stripping the prefix
+    # makes both `?key=<hex>` and `?access_token=<hex>` open cleanly.
+    return r.json()["name"].split("/", 1)[-1]
 
 
 def _generate_content_url(model: str) -> str:

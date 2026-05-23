@@ -94,14 +94,16 @@ class _SettingsWithKey(_Settings):
 async def test_mint_ephemeral_token_posts_to_auth_tokens_create_endpoint():
     route = respx.post(
         "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
-    ).mock(return_value=Response(200, json={"name": "tokens/abc123"}))
+    ).mock(return_value=Response(200, json={"name": "auth_tokens/abc123"}))
     setup = {
         "model": "models/x",
         "config": {"responseModalities": ["AUDIO"]},
         "initial_context_turn": {"role": "user", "parts": [{"text": "hi"}]},
     }
     tok = await mint_ephemeral_token(setup=setup, settings=_SettingsWithKey())
-    assert tok == "tokens/abc123"
+    # mint_ephemeral_token strips the "auth_tokens/" resource prefix so the
+    # returned value is the bare token suitable for `?key=` in the WSS URL.
+    assert tok == "abc123"
     assert route.called
     sent = route.calls[0].request
     assert sent.url.params["key"] == "test-key-XYZ"
