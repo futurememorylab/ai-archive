@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     gcs_bucket_name: str
     google_application_credentials: Path | None = None
     gemini_model: str = "gemini-2.5-flash-lite"
+    gemini_api_key: str | None = None
+    gemini_live_model: str = "gemini-2.5-flash-preview-native-audio-dialog"
+    gemini_live_voice: str = "Aoede"
+    gemini_live_inactivity_s: int = 60
 
     archive_provider: str = "catdv"
     ai_input_store: str = "gcs"
