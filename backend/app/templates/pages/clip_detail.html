@@ -40,7 +40,7 @@
           {% if mode == "online" or (clip.cache and clip.cache.media_local.present) %}
             {% include "pages/_annotate_dropdown.html" %}
           {% endif %}
-          {% if mode == "online" and clip.duration_secs %}
+          {% if (mode == "online" or (clip.cache and clip.cache.media_local.present)) and clip.duration_secs %}
             <button type="button" class="ca-btn ca-btn-live"
                     @click="liveSession.start()">🎤 Live</button>
           {% endif %}

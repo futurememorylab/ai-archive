@@ -85,11 +85,39 @@ async def test_session_config_returns_token_and_setup(client_and_db, monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_session_config_404_when_offline(client_and_db):
-    ac, _ = client_and_db
+@respx.mock
+async def test_session_config_works_offline_when_clip_cached(client_and_db, monkeypatch):
+    """Mirrors annotate-button visibility: when CatDV is offline but the
+    clip's proxy is cached locally, the Live route still works. Audio is
+    browser↔Google direct (Gemini Developer API, not VPN-dependent) and the
+    clip view-model is served from clip_cache by the offline-fallback path.
+    """
+    ac, conn = client_and_db
     app.state.ctx.mode = "offline"
+
+    import backend.app.routes.live as live_routes
+
+    async def fake_load_clip(ctx, clip_id):
+        return dict(
+            id=clip_id, name="P1010001", format="9,5 mm", fps=25,
+            duration_secs=120.0, duration_smpte="00:02:00:00",
+            notes="rodinný výlet", big_notes="",
+            markers=[], fields={},
+        )
+
+    async def fake_load_draft(ctx, clip_id):
+        return dict(markers=[], fields={}, notes="")
+
+    monkeypatch.setattr(live_routes, "load_clip_for_live", fake_load_clip)
+    monkeypatch.setattr(live_routes, "load_draft_for_live", fake_load_draft)
+
+    respx.post(
+        "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
+    ).mock(return_value=Response(200, json={"name": "tokens/xyz"}))
+
     r = await ac.get("/api/live/session-config", params={"clip_id": 42})
-    assert r.status_code == 404
+    assert r.status_code == 200, r.text
+    assert r.json()["token"] == "tokens/xyz"
 
 
 @pytest.mark.asyncio

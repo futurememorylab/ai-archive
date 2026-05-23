@@ -3,7 +3,7 @@ import json
 import uuid
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from backend.app.repositories.live_sessions import LiveSessionsRepo
@@ -34,15 +34,9 @@ async def load_draft_for_live(ctx: Any, clip_id: int) -> dict:
     return await _build_draft_view_model_for_live(ctx, clip_id)
 
 
-def _require_online(ctx: Any) -> None:
-    if getattr(ctx, "mode", "online") != "online":
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Live is online-only")
-
-
 @router.get("/session-config")
 async def session_config(request: Request, clip_id: int) -> dict:
     ctx = request.app.state.ctx
-    _require_online(ctx)
     settings = ctx.settings
 
     clip = await load_clip_for_live(ctx, clip_id)
@@ -95,7 +89,6 @@ async def post_transcript(
     request: Request, session_id: str, body: TranscriptPayload,
 ) -> dict:
     ctx = request.app.state.ctx
-    _require_online(ctx)
     repo = LiveSessionsRepo()
     try:
         await repo.get(ctx.db, session_id)
@@ -116,7 +109,6 @@ async def post_transcript(
 @router.post("/sessions/{session_id}/summarize")
 async def post_summarize(request: Request, session_id: str) -> dict:
     ctx = request.app.state.ctx
-    _require_online(ctx)
     repo = LiveSessionsRepo()
     try:
         await repo.get(ctx.db, session_id)
@@ -130,7 +122,6 @@ async def post_summarize(request: Request, session_id: str) -> dict:
 @router.get("/sessions")
 async def list_sessions(request: Request, clip_id: int) -> list[dict]:
     ctx = request.app.state.ctx
-    _require_online(ctx)
     repo = LiveSessionsRepo()
     rows = await repo.list_by_clip(ctx.db, clip_id)
     out = []
@@ -161,7 +152,6 @@ async def list_sessions(request: Request, clip_id: int) -> list[dict]:
 @router.get("/sessions/{session_id}")
 async def get_session(request: Request, session_id: str) -> dict:
     ctx = request.app.state.ctx
-    _require_online(ctx)
     repo = LiveSessionsRepo()
     try:
         s = await repo.get(ctx.db, session_id)
