@@ -248,7 +248,13 @@ function liveSession(clipId, config) {
         }
       }
     },
-    _resetInactivity() { /* Task 22 */ },
+    _resetInactivity() {
+      clearTimeout(this._inactivityTimer);
+      const ms = (this.inactivityS || 60) * 1000;
+      this._inactivityTimer = setTimeout(() => {
+        if (this.state === "active") this.close("inactivity");
+      }, ms);
+    },
 
     async _persistAndSummarize() {
       if (!this.sessionId) return;
