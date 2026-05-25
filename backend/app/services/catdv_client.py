@@ -4,6 +4,7 @@ API. Handles login/relogin, session lifecycle, and the busy-server
 resolver."""
 
 import asyncio
+import logging
 from pathlib import Path
 from typing import Any, Self
 
@@ -74,11 +75,21 @@ class CatdvClient:
             self._logged_in = True
 
     async def logout(self) -> None:
-        """Best-effort DELETE /session so we don't orphan a server-side slot."""
+        """Best-effort DELETE /session so we don't orphan a server-side slot.
+
+        Logs a WARNING (rather than failing silently) if the call errors, so
+        a possibly-leaked license seat is at least diagnosable in the journal.
+        """
         if self._client is None or not self._logged_in:
             return
         try:
             await self.http.delete(f"{self._base}/catdv/api/9/session")
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "CatDV logout (DELETE /session) failed; the license seat may "
+                "remain held until the server times it out",
+                exc_info=True,
+            )
         finally:
             self._logged_in = False
 

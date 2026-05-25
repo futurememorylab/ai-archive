@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 from backend.app.services.catdv_client import CatdvBusyError, CatdvClient
@@ -44,3 +46,22 @@ async def test_busy_envelope_raises_catdv_busy_error():
                 await client.login()
         assert fake.logout_count == 0
         assert client._logged_in is False
+
+
+@pytest.mark.asyncio
+async def test_logout_logs_warning_on_delete_failure(caplog):
+    with running_fake_catdv() as (base_url, _fake):
+        client = CatdvClient(base_url=base_url, username="klientAI", password="secret")
+        async with client:
+            await client.login()
+
+            async def boom(*args, **kwargs):
+                raise RuntimeError("network down")
+
+            client._client.delete = boom  # type: ignore[assignment]
+            with caplog.at_level(logging.WARNING):
+                await client.logout()
+        assert client._logged_in is False
+        assert any(
+            "seat" in r.message.lower() or "logout" in r.message.lower() for r in caplog.records
+        )

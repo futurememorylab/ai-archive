@@ -4,6 +4,20 @@
 {% set _settings = request.app.state.ctx.settings %}
 <span class="pillset">
   {% include "_connection_chip.html" %}
+  {% if _settings.dev_reload %}
+    <button type="button" class="shutdown-btn" disabled
+            title="Reload mode — stop with Ctrl-C in the terminal">
+      {% include "icons/_power.svg" %}<span>Shut down</span>
+    </button>
+  {% else %}
+    <button type="button" class="shutdown-btn"
+            hx-post="/api/connection/shutdown"
+            hx-target="body" hx-swap="innerHTML"
+            hx-confirm="Shut down the annotator and release the CatDV seat?"
+            title="Stop the server and release the CatDV seat">
+      {% include "icons/_power.svg" %}<span>Shut down</span>
+    </button>
+  {% endif %}
   <span class="env-pill ok"><span class="led"></span>DEV · {{ request.url.netloc }}</span>
   <span class="env-pill">CATALOG {{ _settings.catdv_catalog_id }}</span>
   <span class="env-pill">READ-ONLY</span>

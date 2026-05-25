@@ -1,0 +1,36 @@
+{# Full-screen takeover shown after the shutdown POST. Polls /api/health
+   until the connection is refused (process gone), then reports the seat
+   released. window.close() only works for script-opened tabs/PWAs; the
+   message is the reliable fallback. #}
+<div class="shutdown-screen" id="shutdown-screen">
+  <div class="shutdown-card">
+    <div class="shutdown-spinner" aria-hidden="true"></div>
+    <h1 id="shutdown-title">Shutting down…</h1>
+    <p id="shutdown-msg">Releasing the CatDV seat and stopping the server.</p>
+  </div>
+  <script>
+    (function () {
+      var title = document.getElementById('shutdown-title');
+      var msg = document.getElementById('shutdown-msg');
+      var screen = document.getElementById('shutdown-screen');
+      var start = Date.now();
+      function stopped() {
+        screen.classList.add('shutdown-screen--done');
+        title.textContent = 'Stopped';
+        msg.textContent = 'CatDV seat released. You can close this tab.';
+        try { window.close(); } catch (e) {}
+      }
+      function poll() {
+        fetch('/api/health', { cache: 'no-store' })
+          .then(function () {
+            if (Date.now() - start > 15000) {
+              msg.textContent = 'Taking longer than expected — still shutting down…';
+            }
+            setTimeout(poll, 500);
+          })
+          .catch(function () { stopped(); });
+      }
+      setTimeout(poll, 500);
+    })();
+  </script>
+</div>

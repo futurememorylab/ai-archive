@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     # connection monitor
     health_probe_interval_s: int = 30
     health_probe_timeout_s: int = 5
+    # set by run.sh when launching uvicorn with --reload; disables the
+    # in-app shutdown button (the reloader supervisor may respawn the worker)
+    dev_reload: bool = False
 
     # sync engine
     sync_retry_base_s: int = 2
