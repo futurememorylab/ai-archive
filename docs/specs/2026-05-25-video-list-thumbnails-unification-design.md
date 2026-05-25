@@ -85,12 +85,30 @@ A `404` is the placeholder trigger: the cell's `<img onerror>` swaps to
 the gradient/icon placeholder. The HTML table never blocks on thumbnails
 — `<img loading="lazy">` lets the browser fetch per visible row.
 
-**CatDV client:** add a `download_thumbnail(...)` method. The exact
-CatDV REST endpoint for poster image bytes must be confirmed first (see
-Open question + first implementation task) — candidates are
-`/catdv/api/9/thumbnails/{posterID}/data` and
-`/catdv/api/9/clips/{clip_id}/thumbnail`. Auth reuses the existing
-`JSESSIONID` session, same as `download_proxy`.
+**CatDV client:** add a `download_thumbnail(...)` method hitting the
+**resolved** endpoint:
+
+```
+GET /catdv/api/9/thumbnail/{id}        # singular — image renderer
+    ?width=&height=&fmt=jpg&bgcolor=   # all optional
+```
+
+- Returns image bytes (`image/jpeg` by default; `fmt=png` for PNG).
+- `{id}` = the clip's `posterID` (fallback: first entry of
+  `thumbnailIDs`).
+- Auth reuses the existing `JSESSIONID` session, same as
+  `download_proxy`.
+- **Gotcha:** the *plural* `/catdv/api/9/thumbnails/{id}` is the JSON
+  metadata endpoint (returns an envelope, not an image) — do not use it.
+
+Verified during brainstorming: the path exists under `/catdv/api/9/`
+(an unauthenticated probe returns the `AUTH` envelope, not `404`),
+matching the official SquareBox docs and this repo's original design
+note (`docs/specs/2026-05-18-catdv-annotator-design.md`). Not yet
+verified: the authenticated image response and whether `posterID` or
+`thumbnailIDs[0]` is the better source — confirmed by a free smoke test
+in the first implementation task (the running dev server already holds a
+session), not by taking a second CatDV seat.
 
 ### Shared list component
 
@@ -161,9 +179,9 @@ decisions: shared list component (approach A over B), CatDV-poster
 thumbnail caching, and dropping the exact-bytes subline. Update
 `docs/decisions.md`.
 
-## Open question (resolve in first implementation task)
+## Resolved: CatDV thumbnail endpoint
 
-Confirm the exact CatDV REST endpoint that returns poster image bytes
-for a `posterID` (or clip), and its content type, with a quick spike
-against the live server. Everything else in the thumbnail path is
-endpoint-agnostic.
+`GET /catdv/api/9/thumbnail/{id}` (singular) — see CatDV client section
+above. Remaining confirmation (authenticated image response; `posterID`
+vs `thumbnailIDs[0]`) is a free smoke test in the first implementation
+task, not a blocker.
