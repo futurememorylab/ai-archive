@@ -1,0 +1,60 @@
+{# Shared "list of videos" scaffold. Owns the chrome both lists must share:
+   select-all + per-row checkbox, the cache-layer badge, and the
+   thumbnail+name cell. Each page injects its own trailing columns.
+
+   Params:
+     rows         iterable of row view-models. Per-row keys consumed here:
+                    select_value  (str)  checkbox value, e.g. "catdv/42"
+                    cache         (dict) cache_status_view shape, or None
+                    thumb_url     (str)  e.g. "/api/media/42/thumb"
+                    name          (str)
+                    name_sub      (str|None) optional muted subline
+                    row_href      (str|None) clickable-row target
+                    row_class     (str|None) extra <tr> class (e.g. "orphan")
+                    row_bytes     (int|None) -> data-bytes on the checkbox
+                  plus any keys the page's row_cells partial reads.
+     head_cells   template path for the trailing <th>s
+     row_cells    template path for the trailing <td>s (gets `row` in context)
+     cache_label  badge-column header label (default "Cache")
+     colspan      total column count for the empty-state row
+     empty_msg    empty-state text (default "No clips match.")
+#}
+<table class="vlist">
+  <thead>
+    <tr>
+      <th class="col-sel"><input type="checkbox" id="row-select-all" aria-label="Select all"></th>
+      <th class="col-cache" title="metadata · media-local · media-ai">{{ cache_label | default("Cache") }}</th>
+      <th class="col-name">Clip</th>
+      {% include head_cells %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr class="vrow{% if row.row_class %} {{ row.row_class }}{% endif %}"
+        {% if row.row_href %}onclick="location.href='{{ row.row_href }}'"{% endif %}>
+      <td class="col-sel" onclick="event.stopPropagation()">
+        <input type="checkbox" class="row-check" name="clip_keys"
+               value="{{ row.select_value }}"
+               {% if row.row_bytes is not none %}data-bytes="{{ row.row_bytes }}"{% endif %}
+               aria-label="Select {{ row.name }}">
+      </td>
+      <td class="cell-cache" onclick="event.stopPropagation()">
+        {% with cache = row.cache %}{% include "pages/_cache_badge.html" %}{% endwith %}
+      </td>
+      <td class="cell-name">
+        <span class="namecell">
+          <img class="thumb" loading="lazy" src="{{ row.thumb_url }}" alt=""
+               onerror="this.classList.add('thumb--empty'); this.removeAttribute('src');">
+          <span class="name-wrap">
+            <span class="name">{{ row.name }}</span>
+            {% if row.name_sub %}<span class="name-sub mono">{{ row.name_sub }}</span>{% endif %}
+          </span>
+        </span>
+      </td>
+      {% include row_cells %}
+    </tr>
+    {% else %}
+    <tr><td colspan="{{ colspan | default(7) }}" class="empty">{{ empty_msg | default("No clips match.") }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
