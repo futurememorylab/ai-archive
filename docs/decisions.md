@@ -34,3 +34,4 @@ available number. See any existing ADR for the template.
 | 0022 | 2026-05-24 | [Tier 2 architecture execution](./adr/0022-tier-2-architecture-execution.md) |
 | 0023 | 2026-05-25 | [Boot-time login failures keep the CatDV client alive for retry](./adr/0023-boot-login-failures-keep-client-for-retry.md) |
 | 0024 | 2026-05-25 | [Browser-triggered graceful shutdown (shutdown button)](./adr/0024-shutdown-button.md) |
+| 0025 | 2026-05-25 | [Unified video-list component + CatDV poster thumbnails](./adr/0025-video-list-thumbnails-and-shared-component.md) |
