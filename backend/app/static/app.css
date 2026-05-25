@@ -341,8 +341,13 @@ a { color: inherit; text-decoration: none; }
 
 .clips-region { display: flex; flex-direction: column; min-height: 0; flex: 1; }
 .tbl-scroll { overflow: auto; flex: 1; min-height: 0; }
-.tbl { width: 100%; border-collapse: collapse; }
-.tbl thead th {
+
+/* ─── shared video list (.vlist) ─────────────────────────────────────── */
+/* Fixed layout so the declared column widths are binding (not content-
+   driven) — that's what makes the clips and cache lists line up identically.
+   Every column except the flexible name column gets an explicit width. */
+.vlist { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.vlist thead th {
   position: sticky; top: 0;
   background: var(--panel);
   text-align: left;
@@ -350,23 +355,68 @@ a { color: inherit; text-decoration: none; }
   color: var(--text-3); font-weight: 600;
   padding: 8px 12px;
   border-bottom: 1px solid var(--line);
+  white-space: nowrap;
 }
-.tbl tbody td {
-  padding: 0 12px; height: 36px;
+.vlist thead th.num { text-align: right; }
+.vlist tbody td {
+  padding: 0 12px; height: 48px;
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
   white-space: nowrap;
   font-size: 13px;
 }
-.tbl tbody tr.row { cursor: pointer; }
-.tbl tbody tr.row:hover { background: var(--hover); }
-.tbl .col-year, .tbl .col-decade, .tbl .col-dur, .tbl .col-mk { width: 90px; }
-.tbl .clip-name { display: flex; align-items: center; gap: 10px; }
-.tbl .thumb {
-  width: 36px; height: 22px; flex: none; border-radius: 3px;
+.vlist tbody td.num { text-align: right; }
+.vlist tbody tr.vrow { cursor: default; }
+.vlist tbody tr.vrow[onclick] { cursor: pointer; }
+.vlist tbody tr.vrow:hover { background: var(--hover); }
+/* Explicit widths (border-box, so they include the 12px cell padding).
+   The Clip name column has no width — it absorbs the remaining space on
+   both lists. All compact data columns share one width so the two lists
+   line up the same way (clips: year/decade/dur/mk · cache: workspace/
+   local/ai); the cache-only actions column is a touch wider for its
+   buttons. */
+.vlist .col-sel { width: 40px; }
+.vlist .col-cache, .vlist .cell-cache { width: 64px; }
+.vlist .col-year, .vlist .col-decade, .vlist .col-dur, .vlist .col-mk,
+.vlist .col-ws, .vlist .col-local, .vlist .col-ai { width: 100px; }
+.vlist .namecell { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.vlist .name-wrap { display: flex; flex-direction: column; min-width: 0; }
+.vlist .name { overflow: hidden; text-overflow: ellipsis; }
+.vlist .name-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+.vlist .empty { text-align: center; color: var(--text-3); padding: 32px 0; }
+
+.vlist .thumb {
+  width: 64px; height: 36px; flex: none; border-radius: 4px;
+  object-fit: cover; background: #211e19;
+}
+/* loading shimmer while the <img> has a src but no pixels yet;
+   stops matching once the image resolves (--ready) or fails (--empty) */
+.vlist .thumb:not(.thumb--ready):not(.thumb--empty) {
+  background: linear-gradient(90deg, #221f1a 0%, #2c2820 50%, #221f1a 100%);
+  background-size: 200% 100%;
+  animation: thumb-shimmer 1.2s ease-in-out infinite;
+}
+@keyframes thumb-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+/* loaded image overrides the shimmer background with its own pixels;
+   onerror adds .thumb--empty to show the quiet placeholder gradient */
+/* once the real image has loaded, stop the shimmer (its opaque pixels cover the box) */
+.vlist .thumb--ready { animation: none; background: transparent; }
+.vlist .thumb--empty {
+  animation: none;
   background: linear-gradient(135deg, #2a221a, #4a3826 60%, #6b4d2e);
 }
-.tbl .empty { text-align: center; color: var(--text-3); padding: 32px 0; }
+
+/* cache-list specifics carried onto the shared scaffold */
+.vlist tr.vrow.orphan { background: color-mix(in oklab, var(--bad) 5%, transparent); }
+.vlist .col-actions { width: 100px; text-align: right; }
+/* stack the two hover buttons so the actions column fits the same 100px
+   as every other data column (keeps both lists' columns identical width) */
+.vlist .row-actions { opacity: 0; transition: opacity 80ms;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.vlist .row-actions .ra-btn { margin-left: 0; }
+.vlist tr.vrow:hover .row-actions,
+.vlist tr.vrow:focus-within .row-actions { opacity: 1; }
+.vlist .col-ws { overflow: hidden; text-overflow: ellipsis; }
 
 .pager {
   display: flex; align-items: center; gap: 12px;
@@ -931,18 +981,6 @@ a { color: inherit; text-decoration: none; }
 .cache-tbl .col-sel, .cache-tbl .col-actions { width: 36px; }
 .cache-tbl .col-actions { width: auto; text-align: right; white-space: nowrap; }
 .cache-tbl .clip-id { margin-top: 2px; }
-.cache-tbl .exact { margin-top: 2px; font-size: 10.5px; }
-.cache-tbl tr.cache-row.orphan {
-  background: color-mix(in oklab, var(--bad) 5%, transparent);
-}
-.orphan-mark {
-  display: inline-block;
-  margin-left: 6px; padding: 1px 6px;
-  border-radius: 8px; font-size: 10px;
-  text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--bad);
-  border: 1px solid color-mix(in oklab, var(--bad) 30%, transparent);
-}
 .empty { padding: 24px; text-align: center; color: var(--text-3); }
 
 .row-actions { opacity: 0; transition: opacity 80ms; }
@@ -1003,7 +1041,8 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 .panel-h .right { display: flex; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0; font-weight: 400; }
 
 /* ─── flex helpers ───────────────────────────────────────────────────── */
-.row { display: flex; align-items: center; gap: 8px; }
+/* flex helper for non-table layouts; never targets table rows (see .vlist) */
+.row:not(tr) { display: flex; align-items: center; gap: 8px; }
 
 /* ─── btn.primary ────────────────────────────────────────────────────── */
 .btn.primary {

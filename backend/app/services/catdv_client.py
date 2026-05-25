@@ -12,6 +12,8 @@ import httpx
 
 from backend.app.models.catdv import Envelope
 
+_DEFAULT_CHUNK = 1 << 16
+
 
 class CatdvAuthError(RuntimeError):
     """Raised when the CatDV server rejects credentials."""
@@ -127,6 +129,10 @@ class CatdvClient:
             "query": "and".join(clauses),
             "skip": str(offset),
             "take": str(limit),
+            # The bulk endpoint omits user-defined fields and markers by
+            # default; request them so the clips list can show year/decade
+            # and the marker count without a per-clip round-trip.
+            "include": "clip.fields,markers",
         }
         url = "/catdv/api/9/clips"
         env = await self._call_json_with_params("GET", url, params=params)
@@ -169,6 +175,35 @@ class CatdvClient:
                     return
             resp.raise_for_status()
             await self._stream_to_file(resp, dest, append=existing_size > 0, chunk_size=chunk_size)
+
+    async def download_thumbnail(
+        self, thumb_id: int, dest: Path, *, width: int | None = None, fmt: str = "jpg"
+    ) -> None:
+        """Stream a thumbnail/poster image to `dest`.
+
+        Hits the singular image renderer `GET /api/9/thumbnail/{id}` (the
+        plural `/thumbnails/{id}` is the JSON metadata endpoint — do not use
+        it). When the session is missing CatDV answers HTTP 200 with a JSON
+        AUTH envelope instead of image bytes; `_is_auth_envelope` catches that
+        via the content-type so we re-login rather than writing JSON into a
+        .jpg.
+        """
+        if not self._logged_in:
+            await self.login()
+        url = f"{self._base}/catdv/api/9/thumbnail/{thumb_id}"
+        params: dict[str, str] = {"fmt": fmt}
+        if width:
+            params["width"] = str(width)
+
+        async with self.http.stream("GET", url, params=params) as resp:
+            if resp.status_code == 401 or _is_auth_envelope(resp):
+                await self.login()
+                async with self.http.stream("GET", url, params=params) as resp2:
+                    resp2.raise_for_status()
+                    await self._stream_to_file(resp2, dest, append=False, chunk_size=_DEFAULT_CHUNK)
+                    return
+            resp.raise_for_status()
+            await self._stream_to_file(resp, dest, append=False, chunk_size=_DEFAULT_CHUNK)
 
     async def _stream_to_file(
         self, resp: httpx.Response, dest: Path, *, append: bool, chunk_size: int

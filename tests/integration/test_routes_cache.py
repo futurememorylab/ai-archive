@@ -83,7 +83,7 @@ def _seed_clip(client, *, key, proxy_path=None, proxy_size=0, ai_size=0):
             )
         await db.commit()
 
-    asyncio.get_event_loop().run_until_complete(_run())
+    asyncio.run(_run())
 
 
 @pytest.mark.asyncio
@@ -184,7 +184,7 @@ def test_cache_orphans_endpoint(monkeypatch, tmp_path: Path):
             )
             await ctx.db.commit()
 
-        asyncio.get_event_loop().run_until_complete(_seed())
+        asyncio.run(_seed())
 
         r = client.get("/api/cache/orphans")
     assert r.status_code == 200
@@ -235,7 +235,7 @@ def test_cache_page_orphans_tile(monkeypatch, tmp_path: Path):
             )
             await ctx.db.commit()
 
-        asyncio.get_event_loop().run_until_complete(_seed())
+        asyncio.run(_seed())
 
         r = client.get("/cache")
     assert r.status_code == 200
@@ -260,6 +260,8 @@ def test_cache_tab_local_filters_rows(monkeypatch, tmp_path: Path):
     assert r.status_code == 200
     assert "catdv/1001" in r.text
     assert "catdv/1002" not in r.text
+    assert 'class="vlist"' in r.text  # cache list uses the shared scaffold
+    assert "/api/media/1001/thumb" in r.text  # thumbnail wired on cache rows
 
 
 def test_cache_tab_ai_filters_rows(monkeypatch, tmp_path: Path):

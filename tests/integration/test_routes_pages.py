@@ -101,6 +101,8 @@ def test_clips_list_returns_full_page(monkeypatch, tmp_path):
         assert "Abramcukova_Anna_09" in r.text
         assert "1932" in r.text
         assert "30.léta" in r.text
+        assert 'class="vlist"' in r.text
+        assert '/api/media/12041/thumb' in r.text  # thumbnail img wired (clip id from _canonical)
 
 
 def test_clips_list_htmx_returns_partial(monkeypatch, tmp_path):

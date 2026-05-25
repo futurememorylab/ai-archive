@@ -59,3 +59,36 @@ def test_media_serves_range(monkeypatch, tmp_path):
         assert r.status_code == 206
         assert r.content == b"Y" * 100
         assert r.headers["content-range"] == "bytes 100-199/200"
+
+
+def test_thumb_serves_jpeg(monkeypatch, tmp_path):
+    app = _app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        thumb = tmp_path / "42.jpg"
+        thumb.write_bytes(b"\xff\xd8\xffJPEG")
+
+        async def get_or_fetch(clip_id):
+            assert clip_id == 42
+            return thumb
+
+        ctx.thumbnail_service = MagicMock(get_or_fetch=get_or_fetch)
+
+        r = client.get("/api/media/42/thumb")
+        assert r.status_code == 200
+        assert r.headers["content-type"] == "image/jpeg"
+        assert r.content == b"\xff\xd8\xffJPEG"
+
+
+def test_thumb_404_when_unavailable(monkeypatch, tmp_path):
+    app = _app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+
+        async def get_or_fetch(clip_id):
+            return None
+
+        ctx.thumbnail_service = MagicMock(get_or_fetch=get_or_fetch)
+
+        r = client.get("/api/media/42/thumb")
+        assert r.status_code == 404

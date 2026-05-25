@@ -39,3 +39,6 @@ backend/app/static/dist/
 
 # Dev server logs
 logs/
+
+# Superpowers brainstorm scratch
+.superpowers/

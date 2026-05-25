@@ -24,10 +24,12 @@ class FakeCatdv:
         self.valid_creds = {"klientAI": "secret"}
         self.clips: dict[int, dict] = {}
         self.proxies: dict[int, bytes] = {}
+        self.thumbnails: dict[int, bytes] = {}
         self.force_auth_until: float = 0.0
         self.put_log: list[tuple[int, dict]] = []
         self.logout_count: int = 0
         self.field_defs: list[dict] = []
+        self.last_list_params: dict[str, str] = {}
         self._register_routes()
 
     def _envelope(self, status: str, data=None, msg: str | None = None) -> dict:
@@ -88,6 +90,7 @@ class FakeCatdv:
         async def list_clips(request: Request):
             if request.cookies.get("JSESSIONID") != "fake-session":
                 return self._envelope("AUTH")
+            self.last_list_params = dict(request.query_params)
             # Mirror real CatDV: paging via skip/take, search via the
             # parenthesised query language (e.g. "((clip.name)contains(X))").
             # We only need to parse the clip.name contains-clause for tests.
@@ -136,6 +139,19 @@ class FakeCatdv:
                 media_type="video/quicktime",
                 headers={"Accept-Ranges": "bytes", "Content-Length": str(len(blob))},
             )
+
+        @self.app.get("/catdv/api/9/thumbnail/{thumb_id}")
+        async def get_thumbnail(thumb_id: int, request: Request):
+            if (
+                time.time() < self.force_auth_until
+                or request.cookies.get("JSESSIONID") != "fake-session"
+            ):
+                # Mirror CatDV: HTTP 200 with a JSON AUTH envelope, not 401.
+                return self._envelope("AUTH")
+            blob = self.thumbnails.get(thumb_id)
+            if blob is None:
+                return Response(status_code=404)
+            return Response(content=blob, media_type="image/jpeg")
 
 
 @contextlib.contextmanager

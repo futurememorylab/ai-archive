@@ -14,6 +14,22 @@ router = APIRouter(prefix="/api/media", tags=["media"])
 _DEFAULT_CHUNK = 1 << 16
 
 
+@router.get("/{clip_id}/thumb")
+async def stream_thumbnail(request: Request, clip_id: int):
+    ctx = get_ctx(request)
+    svc = getattr(ctx, "thumbnail_service", None)
+    if svc is None:
+        raise HTTPException(404, "thumbnails unavailable")
+    path = await svc.get_or_fetch(clip_id)
+    if path is None:
+        raise HTTPException(404, "no thumbnail")
+    return FileResponse(
+        path,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
 @router.get("/{clip_id}")
 async def stream_media(request: Request, clip_id: int):
     ctx = get_ctx(request)

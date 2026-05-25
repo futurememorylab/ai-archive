@@ -1,0 +1,13 @@
+<td class="mono muted-2 col-ws">{{ row.workspace }}</td>
+<td class="num mono col-local">
+  {% if row.local_bytes %}{{ row.local_bytes | bytes_human }}{% else %}<span class="muted-2">—</span>{% endif %}
+</td>
+<td class="num mono col-ai">
+  {% if row.ai_bytes %}{{ row.ai_bytes | bytes_human }}{% else %}<span class="muted-2">—</span>{% endif %}
+</td>
+<td class="row-actions col-actions" onclick="event.stopPropagation()">
+  <button type="button" class="ra-btn"
+          @click="bulkPrefetch([['{{ row.clip_pid }}','{{ row.clip_cid }}']])">Re-fetch</button>
+  <button type="button" class="ra-btn ra-btn-danger"
+          @click="bulkEvict([['{{ row.clip_pid }}','{{ row.clip_cid }}']])">Purge</button>
+</td>

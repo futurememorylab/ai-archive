@@ -22,6 +22,7 @@ from pydantic import BaseModel
 
 from backend.app.archive.model import ClipKey
 from backend.app.deps import get_ctx
+from backend.app.ui.view_models import cache_status_view
 
 TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -222,7 +223,7 @@ async def cache_page(
             if tab_val == "ai" and not status.layers[2].present:
                 continue
             rows.append(status)
-        rows_for_template = [_status_for_template(s) for s in rows]
+        rows_for_template = [_cache_row(s) for s in rows]
 
     summary = await insp.summary()
 
@@ -336,6 +337,33 @@ async def _all_cached_keys(db) -> list[ClipKey]:
     for r in await cur.fetchall():
         keys.add((r[0], r[1]))
     return sorted(keys)
+
+
+def _cache_row(status) -> dict:
+    """Build a cache-inventory row in the shared _video_list shape, plus the
+    cache-specific columns the cache row_cells partial reads."""
+    pid, cid = status.clip_key
+    md, local, ai = status.layers
+    is_orphan = not md.present
+    local_bytes = int(local.size_bytes or 0)
+    ai_bytes = int(ai.size_bytes or 0)
+    return {
+        "select_value": f"{pid}/{cid}",
+        "cache": cache_status_view(status),
+        "thumb_url": f"/api/media/{cid}/thumb",
+        "name": status.name,
+        "name_sub": f"{pid}/{cid}",
+        "row_href": None,
+        "row_class": "orphan" if is_orphan else None,
+        "row_bytes": local_bytes + ai_bytes,
+        "clip_pid": pid,
+        "clip_cid": cid,
+        "workspace": ", ".join(str(w) for w in md.pinned_by_workspaces)
+        if md.pinned_by_workspaces
+        else "—",
+        "local_bytes": local_bytes,
+        "ai_bytes": ai_bytes,
+    }
 
 
 def _status_for_template(status) -> dict[str, Any]:

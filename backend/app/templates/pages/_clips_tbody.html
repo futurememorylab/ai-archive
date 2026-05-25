@@ -1,46 +1,13 @@
 <div id="clips-region" class="clips-region">
   <div class="tbl-scroll">
-    <table class="tbl">
-      <thead>
-        <tr>
-          <th class="col-sel"><input type="checkbox" id="row-select-all" aria-label="Select all"></th>
-          <th class="col-cache" title="metadata · media-local · media-ai">Cache</th>
-          <th class="col-name">Clip</th>
-          <th class="col-year">Year</th>
-          <th class="col-decade">Decade</th>
-          <th class="col-dur">Duration</th>
-          <th class="col-mk">Markers</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for c in clips %}
-        <tr class="row" data-clip-id="{{ c.id }}">
-          <td class="row-select" onclick="event.stopPropagation()">
-            <input type="checkbox"
-                   class="row-check"
-                   name="clip_keys"
-                   value="catdv/{{ c.id }}"
-                   aria-label="Select clip {{ c.id }}">
-          </td>
-          <td class="cell-cache" onclick="event.stopPropagation()">
-            {% with cache = c.cache %}
-              {% include "pages/_cache_badge.html" %}
-            {% endwith %}
-          </td>
-          <td class="clip-name" onclick="location.href='/clips/{{ c.id }}'">
-            <span class="thumb"></span>
-            <span class="name">{{ c.name }}</span>
-          </td>
-          <td class="mono" onclick="location.href='/clips/{{ c.id }}'">{{ c.year or "—" }}</td>
-          <td onclick="location.href='/clips/{{ c.id }}'">{{ c.decade or "—" }}</td>
-          <td class="mono" onclick="location.href='/clips/{{ c.id }}'">{{ "%d:%02d"|format((c.duration_secs|int)//60, (c.duration_secs|int)%60) }}</td>
-          <td class="mono" onclick="location.href='/clips/{{ c.id }}'">{{ c.marker_count }}</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="7" class="empty">No clips match.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    {% with rows = clips,
+            head_cells = "pages/_clips_head_cells.html",
+            row_cells = "pages/_clips_row_cells.html",
+            cache_label = "Cache",
+            colspan = 7,
+            empty_msg = "No clips match." %}
+      {% include "pages/_video_list.html" %}
+    {% endwith %}
   </div>
   {% set _pq = 'q=' ~ (q|urlencode) ~ '&limit=' ~ limit %}
   {% if cache_filter and cache_filter != 'any' %}{% set _pq = _pq ~ '&cache=' ~ cache_filter %}{% endif %}
