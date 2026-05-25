@@ -23,8 +23,9 @@ def request_graceful_shutdown() -> None:
 def schedule_graceful_shutdown(delay_s: float = 0.5) -> None:
     """Defer the SIGTERM by `delay_s` so the HTTP response flushes first.
 
-    The trigger is looked up as a module global at fire time, so tests that
-    swap `request_graceful_shutdown` are honoured.
+    Tests generally swap the whole function at the route's import site; the
+    unit test instead swaps `request_graceful_shutdown` *before* calling this,
+    so the reference captured below is the test's stub.
     """
     loop = asyncio.get_running_loop()
     loop.call_later(delay_s, request_graceful_shutdown)
