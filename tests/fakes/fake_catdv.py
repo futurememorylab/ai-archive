@@ -29,6 +29,7 @@ class FakeCatdv:
         self.put_log: list[tuple[int, dict]] = []
         self.logout_count: int = 0
         self.field_defs: list[dict] = []
+        self.last_list_params: dict[str, str] = {}
         self._register_routes()
 
     def _envelope(self, status: str, data=None, msg: str | None = None) -> dict:
@@ -89,6 +90,7 @@ class FakeCatdv:
         async def list_clips(request: Request):
             if request.cookies.get("JSESSIONID") != "fake-session":
                 return self._envelope("AUTH")
+            self.last_list_params = dict(request.query_params)
             # Mirror real CatDV: paging via skip/take, search via the
             # parenthesised query language (e.g. "((clip.name)contains(X))").
             # We only need to parse the clip.name contains-clause for tests.

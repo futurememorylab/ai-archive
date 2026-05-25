@@ -129,6 +129,10 @@ class CatdvClient:
             "query": "and".join(clauses),
             "skip": str(offset),
             "take": str(limit),
+            # The bulk endpoint omits user-defined fields and markers by
+            # default; request them so the clips list can show year/decade
+            # and the marker count without a per-clip round-trip.
+            "include": "clip.fields,markers",
         }
         url = "/catdv/api/9/clips"
         env = await self._call_json_with_params("GET", url, params=params)
