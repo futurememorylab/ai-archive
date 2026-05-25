@@ -377,8 +377,9 @@ a { color: inherit; text-decoration: none; }
   width: 64px; height: 36px; flex: none; border-radius: 4px;
   object-fit: cover; background: #211e19;
 }
-/* loading shimmer while the <img> has a src but no pixels yet */
-.vlist .thumb:not(.thumb--empty) {
+/* loading shimmer while the <img> has a src but no pixels yet;
+   stops matching once the image resolves (--ready) or fails (--empty) */
+.vlist .thumb:not(.thumb--ready):not(.thumb--empty) {
   background: linear-gradient(90deg, #221f1a 0%, #2c2820 50%, #221f1a 100%);
   background-size: 200% 100%;
   animation: thumb-shimmer 1.2s ease-in-out infinite;
