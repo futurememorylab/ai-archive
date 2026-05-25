@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from backend.app.services.gcs import GcsService
     from backend.app.services.gemini import GeminiService
     from backend.app.services.proxy_resolver import ProxyResolver
+    from backend.app.services.thumbnail_service import ThumbnailService
 
 from backend.app.archive.ai_store import AIInputStore
 from backend.app.archive.ai_stores.registry import build_ai_input_store
@@ -80,6 +81,7 @@ class AppContext:
     ai_store: AIInputStore | None = None
     gemini: GeminiService | None = None
     proxy_resolver: ProxyResolver | None = None
+    thumbnail_service: ThumbnailService | None = None
     # low-level GcsService kept only as a wiring detail
     _gcs_service: GcsService | None = None
     write_queue: WriteQueue | None = None
@@ -216,6 +218,7 @@ async def _build_archive_subsystem(ctx: AppContext) -> _OnlineFlags:
     from backend.app.services.gcs import GcsService
     from backend.app.services.gemini import GeminiService
     from backend.app.services.proxy_resolver import build_resolver
+    from backend.app.services.thumbnail_service import ThumbnailService
 
     settings = ctx.settings
     use_catdv = settings.archive_provider == "catdv"
@@ -330,6 +333,16 @@ async def _build_archive_subsystem(ctx: AppContext) -> _OnlineFlags:
         # FS adapter has media_is_local=True; the workspace
         # manager skips the proxy-resolver step entirely.
         ctx.proxy_resolver = None
+
+    # Thumbnail cache: plain JPEG files alongside the proxy cache. Pass the
+    # CatDV client only when we actually have one (online or seat-recoverable);
+    # in cache-only / fs modes the service still serves already-cached files.
+    if use_catdv:
+        ctx.thumbnail_service = ThumbnailService(
+            cache_dir=settings.data_dir / "cache" / "thumbs",
+            archive=ctx.archive,
+            catdv=ctx.catdv,
+        )
 
     return _OnlineFlags(forced_offline=forced_offline, login_failed=login_failed)
 

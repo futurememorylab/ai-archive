@@ -75,3 +75,44 @@ async def test_context_exposes_archive_provider_when_external_initialized(tmp_pa
             assert not hasattr(ctx, "gcs") or ctx.gcs is None
         finally:
             await ctx.aclose()
+
+
+@pytest.mark.asyncio
+async def test_context_wires_thumbnail_service_when_external_initialized(tmp_path, monkeypatch):
+    # ThumbnailService is built inside _build_archive_subsystem, which only
+    # runs with init_external=True and archive_provider="catdv". Stub GCS /
+    # Gemini and use the fake CatDV server, mirroring the archive-wiring test.
+    import backend.app.services.gcs as gcs_mod
+    import backend.app.services.gemini as gemini_mod
+    from backend.app.context import AppContext
+    from backend.app.settings import Settings
+    from tests.fakes.fake_catdv import running_fake_catdv
+
+    class _StubGcs:
+        def __init__(self, *args, **kwargs):
+            self.bucket_name = "b"
+            self._bucket = type("FakeBucket", (), {"exists": staticmethod(lambda: True)})()
+
+    class _StubGemini:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr(gcs_mod, "GcsService", _StubGcs)
+    monkeypatch.setattr(gemini_mod, "GeminiService", _StubGemini)
+
+    with running_fake_catdv() as (base_url, _):
+        monkeypatch.setenv("CATDV_BASE_URL", base_url)
+        monkeypatch.setenv("CATDV_USERNAME", "klientAI")
+        monkeypatch.setenv("CATDV_PASSWORD", "secret")
+        monkeypatch.setenv("CATDV_CATALOG_ID", "881507")
+        monkeypatch.setenv("GCP_PROJECT_ID", "p")
+        monkeypatch.setenv("GCS_BUCKET_NAME", "b")
+        monkeypatch.setenv("GCP_LOCATION", "europe-west3")
+        monkeypatch.setenv("DATA_DIR", str(tmp_path))
+        s = Settings()
+        ctx = await AppContext.build(s, init_external=True)
+        try:
+            assert ctx.thumbnail_service is not None
+            assert ctx.thumbnail_service.path_for(42).name == "42.jpg"
+        finally:
+            await ctx.aclose()
