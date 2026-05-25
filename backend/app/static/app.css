@@ -341,32 +341,6 @@ a { color: inherit; text-decoration: none; }
 
 .clips-region { display: flex; flex-direction: column; min-height: 0; flex: 1; }
 .tbl-scroll { overflow: auto; flex: 1; min-height: 0; }
-.tbl { width: 100%; border-collapse: collapse; }
-.tbl thead th {
-  position: sticky; top: 0;
-  background: var(--panel);
-  text-align: left;
-  font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase;
-  color: var(--text-3); font-weight: 600;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--line);
-}
-.tbl tbody td {
-  padding: 0 12px; height: 36px;
-  border-bottom: 1px solid var(--line);
-  vertical-align: middle;
-  white-space: nowrap;
-  font-size: 13px;
-}
-.tbl tbody tr.row { cursor: pointer; }
-.tbl tbody tr.row:hover { background: var(--hover); }
-.tbl .col-year, .tbl .col-decade, .tbl .col-dur, .tbl .col-mk { width: 90px; }
-.tbl .clip-name { display: flex; align-items: center; gap: 10px; }
-.tbl .thumb {
-  width: 36px; height: 22px; flex: none; border-radius: 3px;
-  background: linear-gradient(135deg, #2a221a, #4a3826 60%, #6b4d2e);
-}
-.tbl .empty { text-align: center; color: var(--text-3); padding: 32px 0; }
 
 /* ─── shared video list (.vlist) ─────────────────────────────────────── */
 .vlist { width: 100%; border-collapse: collapse; }
@@ -990,18 +964,6 @@ a { color: inherit; text-decoration: none; }
 .cache-tbl .col-sel, .cache-tbl .col-actions { width: 36px; }
 .cache-tbl .col-actions { width: auto; text-align: right; white-space: nowrap; }
 .cache-tbl .clip-id { margin-top: 2px; }
-.cache-tbl .exact { margin-top: 2px; font-size: 10.5px; }
-.cache-tbl tr.cache-row.orphan {
-  background: color-mix(in oklab, var(--bad) 5%, transparent);
-}
-.orphan-mark {
-  display: inline-block;
-  margin-left: 6px; padding: 1px 6px;
-  border-radius: 8px; font-size: 10px;
-  text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--bad);
-  border: 1px solid color-mix(in oklab, var(--bad) 30%, transparent);
-}
 .empty { padding: 24px; text-align: center; color: var(--text-3); }
 
 .row-actions { opacity: 0; transition: opacity 80ms; }
