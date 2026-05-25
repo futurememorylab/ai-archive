@@ -81,7 +81,12 @@ class CatdvArchiveAdapter:
     async def health(self) -> ProviderHealth:
         from time import perf_counter
 
-        if not self._is_online() or self._client is None:
+        # Health is the recovery path: the ConnectionMonitor calls this
+        # to decide whether to flip back online after a probe. Gating
+        # on the cached `_is_online()` would make recovery impossible —
+        # we'd always answer "offline" and the monitor would stay
+        # offline forever. Only the absent-client case short-circuits.
+        if self._client is None:
             return ProviderHealth(ok=False, detail="offline")
         t0 = perf_counter()
         try:

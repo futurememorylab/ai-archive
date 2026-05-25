@@ -210,6 +210,7 @@ async def _build_archive_subsystem(ctx: AppContext) -> _OnlineFlags:
 
     from backend.app.services.catdv_client import (
         CatdvAuthError,
+        CatdvBusyError,
         CatdvClient,
     )
     from backend.app.services.gcs import GcsService
@@ -235,26 +236,44 @@ async def _build_archive_subsystem(ctx: AppContext) -> _OnlineFlags:
         try:
             await ctx.catdv.login()
         except CatdvAuthError as exc:
+            # Bad credentials — retry won't help. Tear down the client
+            # so the monitor cannot misread "client present" as
+            # "reauthable" later.
             logging.getLogger(__name__).warning(
-                "CatDV login failed at startup (%s); booting offline",
+                "CatDV login rejected at startup (%s); booting offline",
                 exc,
             )
             await ctx.catdv.__aexit__(None, None, None)
             ctx.catdv = None
             login_failed = True
-        except Exception as exc:  # noqa: BLE001 — transport / DNS
+        except CatdvBusyError as exc:
+            # Seat limit reached — recoverable. Keep the client alive so
+            # ConnectionMonitor.retry_now() can re-probe once the stale
+            # session times out or the admin frees the seat.
             logging.getLogger(__name__).warning(
-                "CatDV unreachable at startup (%s); booting offline",
+                "CatDV seat limit reached at startup (%s); booting offline — "
+                "click Reconnect once a seat frees up",
                 exc,
             )
-            await ctx.catdv.__aexit__(None, None, None)
-            ctx.catdv = None
+            login_failed = True
+        except Exception as exc:  # noqa: BLE001 — transport / DNS / parse
+            # Network-side failure. Could be VPN flap, server stop, or a
+            # non-JSON 5xx body (the seat-limit web servlet sometimes
+            # answers with HTML). Keep the client alive for retry.
+            logging.getLogger(__name__).warning(
+                "CatDV unreachable at startup (%s); booting offline — "
+                "click Reconnect once the server is reachable",
+                exc,
+            )
             login_failed = True
 
     # The is_online provider closes over ctx so it can read the
-    # monitor's state once the monitor is constructed below.
-    def _is_online(c=ctx, forced=forced_offline, failed_at_boot=login_failed):
-        if forced or failed_at_boot:
+    # monitor's state once the monitor is constructed below. We delegate
+    # to the monitor instead of latching `login_failed` here, so that a
+    # successful retry_now() (e.g. after a seat frees up) actually flips
+    # the app back to online for routes and services.
+    def _is_online(c=ctx, forced=forced_offline):
+        if forced:
             return False
         if c.connection_monitor is None:
             return True

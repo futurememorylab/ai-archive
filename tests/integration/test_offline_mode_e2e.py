@@ -86,7 +86,10 @@ async def test_catdv_unreachable_at_startup_boots_offline(tmp_path, monkeypatch)
     app = _reload_app()
     with TestClient(app) as c:
         ctx = c.app.state.ctx
-        assert ctx.catdv is None  # login attempt failed → context degraded
+        # Transport-level failures at boot are recoverable: the client is
+        # preserved so ConnectionMonitor.retry_now() can re-probe once
+        # the network is back. The monitor reports offline until then.
+        assert ctx.catdv is not None
         body = c.get("/api/health").json()
         assert body["mode"] == "offline"
 
