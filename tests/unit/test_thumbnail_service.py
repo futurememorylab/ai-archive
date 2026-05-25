@@ -27,7 +27,9 @@ class _FakeCatdv:
 async def test_cache_hit_skips_fetch(tmp_path: Path):
     (tmp_path / "42.jpg").write_bytes(b"cached")
     catdv = _FakeCatdv()
-    svc = ThumbnailService(cache_dir=tmp_path, archive=_FakeArchive({"posterID": 9000}), catdv=catdv)
+    svc = ThumbnailService(
+        cache_dir=tmp_path, archive=_FakeArchive({"posterID": 9000}), catdv=catdv
+    )
     out = await svc.get_or_fetch(42)
     assert out == tmp_path / "42.jpg"
     assert catdv.calls == []  # no fetch on hit
@@ -36,7 +38,9 @@ async def test_cache_hit_skips_fetch(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_online_miss_fetches_posterid(tmp_path: Path):
     catdv = _FakeCatdv()
-    svc = ThumbnailService(cache_dir=tmp_path, archive=_FakeArchive({"posterID": 9000}), catdv=catdv)
+    svc = ThumbnailService(
+        cache_dir=tmp_path, archive=_FakeArchive({"posterID": 9000}), catdv=catdv
+    )
     out = await svc.get_or_fetch(42)
     assert out == tmp_path / "42.jpg"
     assert out.read_bytes() == b"\xff\xd8\xffJPEG"
@@ -64,4 +68,32 @@ async def test_no_poster_returns_none(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_offline_no_client_returns_none(tmp_path: Path):
     svc = ThumbnailService(cache_dir=tmp_path, archive=_FakeArchive({"posterID": 9000}), catdv=None)
+    assert await svc.get_or_fetch(42) is None
+
+
+class _FailingCatdv:
+    async def download_thumbnail(self, thumb_id, dest, **kw):
+        Path(dest).write_bytes(b"")
+        raise RuntimeError("boom")
+
+
+class _EmptyBodyCatdv:
+    async def download_thumbnail(self, thumb_id, dest, **kw):
+        Path(dest).write_bytes(b"")
+
+
+@pytest.mark.asyncio
+async def test_download_failure_unlinks_zero_byte_file(tmp_path: Path):
+    svc = ThumbnailService(
+        cache_dir=tmp_path, archive=_FakeArchive({"posterID": 9000}), catdv=_FailingCatdv()
+    )
+    assert await svc.get_or_fetch(42) is None
+    assert not svc.path_for(42).exists()
+
+
+@pytest.mark.asyncio
+async def test_empty_body_returns_none(tmp_path: Path):
+    svc = ThumbnailService(
+        cache_dir=tmp_path, archive=_FakeArchive({"posterID": 9000}), catdv=_EmptyBodyCatdv()
+    )
     assert await svc.get_or_fetch(42) is None

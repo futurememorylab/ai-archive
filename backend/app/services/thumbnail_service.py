@@ -24,8 +24,8 @@ class ThumbnailService:
         self,
         *,
         cache_dir: Path,
-        archive: "ArchiveProvider",
-        catdv: "CatdvClient | None" = None,
+        archive: ArchiveProvider,
+        catdv: CatdvClient | None = None,
     ) -> None:
         self._cache_dir = cache_dir
         self._cache_dir.mkdir(parents=True, exist_ok=True)
