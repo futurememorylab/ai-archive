@@ -44,6 +44,7 @@
       <td class="cell-name">
         <span class="namecell">
           <img class="thumb" loading="lazy" src="{{ row.thumb_url }}" alt=""
+               onload="this.classList.add('thumb--ready');"
                onerror="this.classList.add('thumb--empty'); this.removeAttribute('src');">
           <span class="name-wrap">
             <span class="name">{{ row.name }}</span>

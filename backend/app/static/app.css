@@ -412,7 +412,8 @@ a { color: inherit; text-decoration: none; }
 @keyframes thumb-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 /* loaded image overrides the shimmer background with its own pixels;
    onerror adds .thumb--empty to show the quiet placeholder gradient */
-.vlist .thumb[src] { animation: none; background: transparent; }
+/* once the real image has loaded, stop the shimmer (its opaque pixels cover the box) */
+.vlist .thumb--ready { animation: none; background: transparent; }
 .vlist .thumb--empty {
   animation: none;
   background: linear-gradient(135deg, #2a221a, #4a3826 60%, #6b4d2e);
