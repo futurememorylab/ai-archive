@@ -7,8 +7,43 @@
   either fails to start or auto-degrades to offline mode (see below).
 - A **GCP service-account key** with permission to write to the project
   GCS bucket and call Vertex AI (path stored in
-  `GOOGLE_APPLICATION_CREDENTIALS`). One-time setup is
-  `scripts/setup-gcp.sh`.
+  `GOOGLE_APPLICATION_CREDENTIALS`). Per-dev minting steps below;
+  one-time project bootstrap is `scripts/setup-gcp.sh`.
+
+## GCP service-account key
+
+The app uploads proxies to GCS and calls Vertex AI as the shared
+`catdv-annotator` service account. Each dev mints their own key JSON
+from that SA — the bucket and project already exist (created once by
+`scripts/setup-gcp.sh`).
+
+```bash
+# 1. Authenticate gcloud (browser flow) and pick the project
+gcloud auth login
+gcloud config set project <project-id>     # e.g. pragafilm-catdv-annotator
+
+# 2. Mint a key for the shared SA
+mkdir -p ~/.gcp
+gcloud iam service-accounts keys create ~/.gcp/catdv-annotator-key.json \
+  --iam-account=catdv-annotator@<project-id>.iam.gserviceaccount.com
+
+# 3. Point the app at it
+echo 'GOOGLE_APPLICATION_CREDENTIALS=/Users/<you>/.gcp/catdv-annotator-key.json' >> .env
+```
+
+Notes:
+
+- The SA email pattern is fixed by `scripts/setup-gcp.sh`:
+  `catdv-annotator@<project-id>.iam.gserviceaccount.com`.
+- Keys are **sensitive**. Keep them outside the repo (`~/.gcp/` is a
+  fine convention), `chmod 600`, never commit, never paste into chat.
+- GCP enforces a hard cap of **10 active keys per service account**.
+  List with `gcloud iam service-accounts keys list --iam-account=<sa>`
+  and delete old ones with
+  `gcloud iam service-accounts keys delete <key-id> --iam-account=<sa>`.
+- If the project / bucket / SA don't exist yet, run
+  `scripts/setup-gcp.sh` first — that's the one-time bootstrap, not a
+  per-dev step.
 
 ## First run
 
@@ -25,6 +60,31 @@ in editable mode with the `[dev]` extras, exports `.env` into the
 process environment, then `exec`s `uvicorn backend.app.main:app`.
 
 Set `DEV_RELOAD=1 ./run.sh` to enable `--reload --reload-dir backend`.
+
+### Manual venv setup (no server launch)
+
+If you just want the environment ready — to run tests, scripts, or
+poke around in a REPL — without starting uvicorn and taking a CatDV
+seat:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install --upgrade pip
+.venv/bin/pip install -e ".[dev]"
+```
+
+This is exactly the first three steps of `run.sh` minus the `.env`
+export and the `exec uvicorn`. After this you can:
+
+```bash
+.venv/bin/pytest -q                       # run tests
+.venv/bin/python -m backend.app.<module>  # one-off scripts
+.venv/bin/python                          # REPL with deps available
+```
+
+Re-run `pip install -e ".[dev]"` after a `pyproject.toml` change to
+pick up new dependencies; otherwise the venv is reusable across
+sessions.
 
 ### Smoke test
 
