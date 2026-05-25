@@ -63,6 +63,5 @@ async def test_logout_logs_warning_on_delete_failure(caplog):
                 await client.logout()
         assert client._logged_in is False
         assert any(
-            "seat" in r.message.lower() or "logout" in r.message.lower()
-            for r in caplog.records
+            "seat" in r.message.lower() or "logout" in r.message.lower() for r in caplog.records
         )

@@ -27,9 +27,7 @@ def _patch_trigger(monkeypatch):
     calls = []
     import backend.app.routes.connection as conn_mod
 
-    monkeypatch.setattr(
-        conn_mod, "schedule_graceful_shutdown", lambda *a, **k: calls.append(True)
-    )
+    monkeypatch.setattr(conn_mod, "schedule_graceful_shutdown", lambda *a, **k: calls.append(True))
     return calls
 
 

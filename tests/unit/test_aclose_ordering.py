@@ -22,10 +22,10 @@ async def test_aclose_stops_monitor_before_logout():
         async def __aexit__(self, *exc_info) -> None:
             calls.append("db.close")
 
-    ctx = AppContext(settings=object(), db=object(), db_cm=FakeDbCm())
-    ctx.connection_monitor = RecStop("monitor")
-    ctx.sync_engine = RecStop("sync")
-    ctx.catdv = FakeCatdv()
+    ctx = AppContext(settings=object(), db=object(), db_cm=FakeDbCm())  # type: ignore[arg-type]
+    ctx.connection_monitor = RecStop("monitor")  # type: ignore[assignment]
+    ctx.sync_engine = RecStop("sync")  # type: ignore[assignment]
+    ctx.catdv = FakeCatdv()  # type: ignore[assignment]
 
     await ctx.aclose()
 
