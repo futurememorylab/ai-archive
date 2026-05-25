@@ -17,15 +17,10 @@ class _FakeArchive:
 class _FakeCatdv:
     def __init__(self):
         self.calls: list[int] = []
-        self.proxy_calls: list[int] = []
 
     async def download_thumbnail(self, thumb_id, dest, **kw):
         self.calls.append(thumb_id)
         Path(dest).write_bytes(b"\xff\xd8\xffJPEG")
-
-    async def download_proxy(self, clip_id, dest, **kw):
-        self.proxy_calls.append(clip_id)
-        Path(dest).write_bytes(b"\xff\xd8\xffPROXYJPEG")
 
 
 @pytest.mark.asyncio
@@ -63,36 +58,11 @@ async def test_falls_back_to_thumbnail_ids(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_no_poster_no_media_returns_none(tmp_path: Path):
+async def test_no_poster_returns_none(tmp_path: Path):
     catdv = _FakeCatdv()
     svc = ThumbnailService(cache_dir=tmp_path, archive=_FakeArchive({}), catdv=catdv)
     assert await svc.get_or_fetch(42) is None
     assert catdv.calls == []
-    assert catdv.proxy_calls == []
-
-
-@pytest.mark.asyncio
-async def test_image_media_fallback_when_no_poster(tmp_path: Path):
-    # Still-image clips carry no posterID/thumbnailIDs but their media file
-    # is itself a web image — serve that as the thumbnail.
-    catdv = _FakeCatdv()
-    pd = {"posterID": None, "thumbnailIDs": [], "media": {"filePath": "/vol/Anna 101.JPG"}}
-    svc = ThumbnailService(cache_dir=tmp_path, archive=_FakeArchive(pd), catdv=catdv)
-    out = await svc.get_or_fetch(42)
-    assert out == tmp_path / "42.jpg"
-    assert out.read_bytes() == b"\xff\xd8\xffPROXYJPEG"
-    assert catdv.calls == []  # no poster fetch attempted
-    assert catdv.proxy_calls == [42]  # fell back to the media file
-
-
-@pytest.mark.asyncio
-async def test_no_poster_non_image_media_returns_none(tmp_path: Path):
-    # A video with no poster must NOT trigger a full media download.
-    catdv = _FakeCatdv()
-    pd = {"media": {"filePath": "/vol/clip.mov"}}
-    svc = ThumbnailService(cache_dir=tmp_path, archive=_FakeArchive(pd), catdv=catdv)
-    assert await svc.get_or_fetch(42) is None
-    assert catdv.proxy_calls == []
 
 
 @pytest.mark.asyncio
