@@ -140,7 +140,10 @@ class FakeCatdv:
 
         @self.app.get("/catdv/api/9/thumbnail/{thumb_id}")
         async def get_thumbnail(thumb_id: int, request: Request):
-            if request.cookies.get("JSESSIONID") != "fake-session":
+            if (
+                time.time() < self.force_auth_until
+                or request.cookies.get("JSESSIONID") != "fake-session"
+            ):
                 # Mirror CatDV: HTTP 200 with a JSON AUTH envelope, not 401.
                 return self._envelope("AUTH")
             blob = self.thumbnails.get(thumb_id)
