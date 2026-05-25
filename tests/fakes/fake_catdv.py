@@ -24,6 +24,7 @@ class FakeCatdv:
         self.valid_creds = {"klientAI": "secret"}
         self.clips: dict[int, dict] = {}
         self.proxies: dict[int, bytes] = {}
+        self.thumbnails: dict[int, bytes] = {}
         self.force_auth_until: float = 0.0
         self.put_log: list[tuple[int, dict]] = []
         self.logout_count: int = 0
@@ -136,6 +137,16 @@ class FakeCatdv:
                 media_type="video/quicktime",
                 headers={"Accept-Ranges": "bytes", "Content-Length": str(len(blob))},
             )
+
+        @self.app.get("/catdv/api/9/thumbnail/{thumb_id}")
+        async def get_thumbnail(thumb_id: int, request: Request):
+            if request.cookies.get("JSESSIONID") != "fake-session":
+                # Mirror CatDV: HTTP 200 with a JSON AUTH envelope, not 401.
+                return self._envelope("AUTH")
+            blob = self.thumbnails.get(thumb_id)
+            if blob is None:
+                return Response(status_code=404)
+            return Response(content=blob, media_type="image/jpeg")
 
 
 @contextlib.contextmanager
