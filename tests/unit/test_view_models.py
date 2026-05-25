@@ -50,6 +50,14 @@ def test_clip_summary_minimal():
     assert s["marker_count"] == 0
 
 
+def test_clip_summary_includes_thumb_and_list_keys():
+    clip = _canonical(clip_id=42)
+    row = clip_summary(clip)
+    assert row["thumb_url"] == "/api/media/42/thumb"
+    assert row["select_value"] == "catdv/42"
+    assert row["row_href"] == "/clips/42"
+
+
 def test_clip_summary_with_year_decade_and_markers():
     fields = {
         "pragafilm.rok.natočení": FieldValue(

@@ -59,14 +59,18 @@ def clip_summary(
     cache_status: Any | None = None,
 ) -> dict[str, Any]:
     """One row in the clips-list table."""
+    clip_id = int(clip.key[1])
     return {
-        "id": int(clip.key[1]),
+        "id": clip_id,
         "name": _fix(clip.name),
         "duration_secs": clip.duration_secs,
         "year": _first_value(clip.fields.get(_YEAR_FIELD)),
         "decade": _first_value(clip.fields.get(_DECADE_FIELD)),
         "marker_count": len(clip.markers),
         "cache": cache_status_view(cache_status) if cache_status else None,
+        "thumb_url": f"/api/media/{clip_id}/thumb",
+        "select_value": f"{clip.key[0]}/{clip_id}",
+        "row_href": f"/clips/{clip_id}",
     }
 
 
