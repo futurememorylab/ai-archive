@@ -18,6 +18,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 from backend.app.deps import get_ctx
+from backend.app.shutdown import schedule_graceful_shutdown
 
 router = APIRouter(prefix="/api/connection", tags=["connection"])
 
@@ -75,6 +76,25 @@ async def retry_now(request: Request):
             {"mode": body["mode"]},
         )
     return body
+
+
+@router.post("/shutdown")
+async def shutdown(request: Request):
+    """Release the CatDV seat and stop the server.
+
+    Schedules a self-SIGTERM a beat after the response flushes; uvicorn's
+    graceful shutdown then runs the lifespan teardown (AppContext.aclose),
+    which stops the connection monitor before logging out so the seat can't
+    be re-grabbed. Refused under --reload (the reloader may respawn us).
+    """
+    ctx = get_ctx(request)
+    if getattr(ctx.settings, "dev_reload", False):
+        raise HTTPException(
+            status_code=409,
+            detail="shutdown disabled in reload mode; stop with Ctrl-C",
+        )
+    schedule_graceful_shutdown()
+    return _templates.TemplateResponse(request, "_shutdown_screen.html", {})
 
 
 @router.post("/offline")
