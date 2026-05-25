@@ -1,4 +1,4 @@
-<td class="mono col-year">{{ row.year or "—" }}</td>
+<td class="mono num col-year">{{ row.year or "—" }}</td>
 <td class="col-decade">{{ row.decade or "—" }}</td>
-<td class="mono col-dur">{{ "%d:%02d"|format((row.duration_secs|int)//60, (row.duration_secs|int)%60) }}</td>
-<td class="mono col-mk">{{ row.marker_count }}</td>
+<td class="mono num col-dur">{{ "%d:%02d"|format((row.duration_secs|int)//60, (row.duration_secs|int)%60) }}</td>
+<td class="mono num col-mk">{{ row.marker_count }}</td>
