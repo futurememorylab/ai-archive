@@ -118,7 +118,7 @@ sequenceDiagram
     A->>V: generateContent(gs://..., output_schema)
     V-->>A: structured JSON
     A->>D: insert annotation + N review_items
-    A-->>U: SSE: status → "Done"; reload Draft tab
+    A-->>U: SSE status "Done", reload Draft tab
 ```
 
 Accept/reject of `review_items` and pushing back to CatDV are the
