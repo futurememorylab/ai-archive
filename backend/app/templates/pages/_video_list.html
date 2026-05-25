@@ -35,7 +35,7 @@
       <td class="col-sel" onclick="event.stopPropagation()">
         <input type="checkbox" class="row-check" name="clip_keys"
                value="{{ row.select_value }}"
-               {% if row.row_bytes is not none %}data-bytes="{{ row.row_bytes }}"{% endif %}
+               {% if row.row_bytes is defined and row.row_bytes is not none %}data-bytes="{{ row.row_bytes }}"{% endif %}
                aria-label="Select {{ row.name }}">
       </td>
       <td class="cell-cache" onclick="event.stopPropagation()">
