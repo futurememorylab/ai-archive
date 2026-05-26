@@ -36,3 +36,4 @@ available number. See any existing ADR for the template.
 | 0024 | 2026-05-25 | [Browser-triggered graceful shutdown (shutdown button)](./adr/0024-shutdown-button.md) |
 | 0025 | 2026-05-25 | [Unified video-list component + CatDV poster thumbnails](./adr/0025-video-list-thumbnails-and-shared-component.md) |
 | 0026 | 2026-05-26 | [Prompt Studio: testbenches, runs, optional gold, CatDV-optional](./adr/0026-prompt-studio.md) |
+| 0027 | 2026-05-26 | [Prompt Studio implementation: deviations from the plan](./adr/0027-prompt-studio-implementation-deviations.md) |
