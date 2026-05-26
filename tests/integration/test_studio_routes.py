@@ -230,3 +230,66 @@ def test_studio_api_works_when_catdv_offline(monkeypatch, tmp_path):
             ctx.connection_monitor is not None
             and not ctx.connection_monitor.current_state().name.endswith("online")
         )
+
+
+# --- Task 16: page routes ---
+
+
+def test_landing_page_lists_testbenches(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        client.post("/api/studio/testbenches", json={"name": "demo"})
+        r = client.get("/studio")
+        assert r.status_code == 200
+        assert "demo" in r.text
+
+
+def test_testbench_page_renders(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        tb = client.post("/api/studio/testbenches", json={"name": "tb"}).json()
+        r = client.get(f"/studio/testbenches/{tb['id']}")
+        assert r.status_code == 200
+
+
+def test_run_detail_page_404_when_missing(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        r = client.get("/studio/runs/999")
+        assert r.status_code == 404
+
+
+def test_run_detail_page_renders_for_existing_run(monkeypatch, tmp_path):
+    import asyncio
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.ctx
+
+        async def _setup():
+            _, pv = await ctx.prompts_repo.create_with_initial_version(
+                ctx.db, name="p", description=None, body="b",
+                target_map={}, output_schema={}, model="m",
+                initial_state="production",
+            )
+            tb = await ctx.testbenches_repo.create(ctx.db, name="t", description=None)
+            rid = await ctx.studio_runs_repo.create(
+                ctx.db, testbench_id=tb, prompt_version_id=pv,
+            )
+            return rid
+
+        rid = asyncio.run(_setup())
+        r = client.get(f"/studio/runs/{rid}")
+        assert r.status_code == 200
+
+
+def test_compare_page_returns_two_sides(monkeypatch, tmp_path):
+    """Compare with gold on both sides should always render, even with no items."""
+    with _make_client(monkeypatch, tmp_path) as client:
+        tb = client.post("/api/studio/testbenches", json={"name": "cmp"}).json()
+        r = client.get(
+            f"/studio/testbenches/{tb['id']}/compare?left=gold&right=gold"
+        )
+        assert r.status_code == 200
+
+
+def test_landing_page_works_when_offline(monkeypatch, tmp_path):
+    """CATDV_OFFLINE=true is already set in _make_client; just verify /studio loads."""
+    with _make_client(monkeypatch, tmp_path) as client:
+        r = client.get("/studio")
+        assert r.status_code == 200

@@ -218,3 +218,115 @@ async def run_events(run_id: int, ctx: AppContext = Depends(get_ctx)):
             ctx.event_bus.unsubscribe(topic, q)
 
     return StreamingResponse(stream(), media_type="text/event-stream")
+
+
+# ---------------------------------------------------------------------------
+# HTML page routes
+# ---------------------------------------------------------------------------
+
+from pathlib import Path as _Path  # noqa: E402
+
+from fastapi.responses import HTMLResponse  # noqa: E402
+from fastapi.templating import Jinja2Templates  # noqa: E402
+from starlette.requests import Request  # noqa: E402
+
+_TEMPLATES_DIR = _Path(__file__).resolve().parents[1] / "templates"
+templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
+
+pages_router = APIRouter(prefix="/studio", tags=["studio-pages"])
+
+
+@pages_router.get("", response_class=HTMLResponse)
+async def studio_landing(request: Request, ctx: AppContext = Depends(get_ctx)):
+    testbenches = await ctx.testbenches_repo.list_active(ctx.db)
+    return templates.TemplateResponse(
+        request,
+        "pages/studio.html",
+        {
+            "testbenches": testbenches,
+            "selected": None,
+            "folders": [],
+            "items_by_folder": {},
+            "runs": [],
+        },
+    )
+
+
+@pages_router.get("/testbenches/{tb_id}", response_class=HTMLResponse)
+async def studio_testbench(
+    tb_id: int, request: Request, ctx: AppContext = Depends(get_ctx),
+):
+    testbenches = await ctx.testbenches_repo.list_active(ctx.db)
+    try:
+        selected = await ctx.testbenches_repo.get(ctx.db, tb_id)
+    except LookupError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="testbench not found")
+    folders = await ctx.testbenches_repo.list_folders(ctx.db, tb_id)
+    items_by_folder: dict[int, list] = {}
+    for f in folders:
+        items_by_folder[f.id] = await ctx.testbench_items_repo.list_for_folder(ctx.db, f.id)
+    runs = await ctx.studio_runs_repo.list_for_testbench(ctx.db, tb_id)
+    return templates.TemplateResponse(
+        request,
+        "pages/studio.html",
+        {
+            "testbenches": testbenches,
+            "selected": selected,
+            "folders": folders,
+            "items_by_folder": items_by_folder,
+            "runs": runs,
+        },
+    )
+
+
+@pages_router.get("/runs/{run_id}", response_class=HTMLResponse)
+async def studio_run_detail(
+    run_id: int, request: Request, ctx: AppContext = Depends(get_ctx),
+):
+    try:
+        run = await ctx.studio_runs_repo.get(ctx.db, run_id)
+    except LookupError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="run not found")
+    items = await ctx.studio_runs_repo.list_items(ctx.db, run_id)
+    return templates.TemplateResponse(
+        request,
+        "pages/studio_run.html",
+        {"run": run, "items": items},
+    )
+
+
+@pages_router.get("/testbenches/{tb_id}/compare", response_class=HTMLResponse)
+async def studio_compare(
+    tb_id: int, request: Request, left: str, right: str,
+    ctx: AppContext = Depends(get_ctx),
+):
+    """left/right are either a stringified run id or the literal 'gold'."""
+    items = await ctx.testbench_items_repo.list_for_testbench(ctx.db, tb_id)
+
+    async def _side(spec: str):
+        if spec == "gold":
+            return {
+                "kind": "gold",
+                "by_item": {
+                    it.id: (json.loads(it.gold_json) if it.gold_json else None)
+                    for it in items
+                },
+            }
+        run_id = int(spec)
+        run_items = await ctx.studio_runs_repo.list_items(ctx.db, run_id)
+        return {
+            "kind": "run",
+            "run_id": run_id,
+            "by_item": {ri.testbench_item_id: ri for ri in run_items},
+        }
+
+    left_side = await _side(left)
+    right_side = await _side(right)
+    return templates.TemplateResponse(
+        request,
+        "pages/studio_compare.html",
+        {
+            "items": items,
+            "left": left_side, "right": right_side,
+        },
+    )

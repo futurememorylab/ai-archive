@@ -1,0 +1,20 @@
+{% extends "pages/layout.html" %}
+{% block rail_active %}studio{% endblock %}
+{% block body %}
+<div class="page page-studio-run">
+  <h1>Run #{{ run.id }} <span class="status">{{ run.status }}</span></h1>
+  <p>Testbench {{ run.testbench_id }} · Prompt v{{ run.prompt_version_id }}</p>
+  <table class="run-items">
+    <thead><tr><th>Item</th><th>Status</th><th>Latency</th></tr></thead>
+    <tbody>
+      {% for it in items %}
+        <tr data-item-id="{{ it.id }}">
+          <td>#{{ it.testbench_item_id }}</td>
+          <td>{{ it.status }}</td>
+          <td>{{ it.latency_ms or "—" }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

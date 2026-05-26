@@ -1,0 +1,33 @@
+{% extends "pages/layout.html" %}
+{% block rail_active %}studio{% endblock %}
+{% block body %}
+<div class="page page-studio-compare">
+  <h1>Compare</h1>
+  <table class="compare">
+    <thead>
+      <tr>
+        <th>Item</th>
+        <th>{{ left.kind }}{% if left.kind == 'run' %} #{{ left.run_id }}{% endif %}</th>
+        <th>{{ right.kind }}{% if right.kind == 'run' %} #{{ right.run_id }}{% endif %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for it in items %}
+        <tr>
+          <td>{{ it.display_name }}</td>
+          <td>
+            {% set v = left.by_item.get(it.id) %}
+            {% if v is none %}<em class="muted">— no reference</em>
+            {% else %}<pre>{{ v }}</pre>{% endif %}
+          </td>
+          <td>
+            {% set v = right.by_item.get(it.id) %}
+            {% if v is none %}<em class="muted">— no reference</em>
+            {% else %}<pre>{{ v }}</pre>{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -96,6 +96,7 @@ def register_routers(app: FastAPI) -> None:
         app.include_router(r)
     app.include_router(live_router)
     app.include_router(studio_route_module.router)
+    app.include_router(studio_route_module.pages_router)
 
 
 app = FastAPI(title="CatDV Annotator", lifespan=lifespan)
