@@ -1,0 +1,47 @@
+{# Archive picker modal — search + multi-select add into a folder.
+
+   The modal is HTMX-swapped into #modal-root from the "+ Add from archive"
+   button inside an expanded folder (see _studio_folder.html). The modal
+   manages its own state via the `archivePicker(folderId)` Alpine
+   component; the close action wipes #modal-root.
+
+   Search re-fetches the partial with a new ?q= parameter (htmx swap of
+   .modal-results only).
+#}
+<div class="modal" x-data="archivePicker({{ folder_id }})" @keydown.escape.window="close()">
+  <div class="modal-backdrop" @click="close()"></div>
+  <div class="modal-card">
+    <div class="modal-hdr">
+      <h2>Add clips to folder</h2>
+      <span class="grow"></span>
+      <button class="btn ghost" @click="close()">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="search" placeholder="search clips…" value="{{ q }}"
+             hx-get="/studio/_archive_picker?folder_id={{ folder_id }}"
+             hx-target=".modal-results"
+             hx-trigger="search, keyup changed delay:300ms"
+             hx-include="this"
+             name="q">
+      <div class="modal-results">
+        {% if not results %}
+          <div class="muted">No clips returned. Try a different query.</div>
+        {% endif %}
+        {% for c in results %}
+          <label class="picker-row">
+            <input type="checkbox" :checked="picked.has({{ c.id }})"
+                   @change="toggle({{ c.id }})">
+            <span class="name">{{ c.name }}</span>
+            <span class="mono-cell muted">id:{{ c.id }}</span>
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="modal-foot">
+      <span class="muted" x-text="picked.size + ' selected'"></span>
+      <span class="grow"></span>
+      <button class="btn ghost" @click="close()">Cancel</button>
+      <button class="btn primary" @click="addSelected()" :disabled="picked.size === 0">Add</button>
+    </div>
+  </div>
+</div>

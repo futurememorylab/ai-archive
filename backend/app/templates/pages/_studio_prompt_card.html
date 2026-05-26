@@ -1,0 +1,69 @@
+{# PR1: single prompt card (cur only). PR2 will add the compare card.
+   The editor is shown only when the active version is a draft. The Output
+   tab loads via HTMX-style fetch on focus and on run completion (the
+   $root.pendingRunSwap counter is the watch trigger).
+#}
+<div class="studio-prompt-card" x-data="studioPromptCard()">
+  <div class="pc-hdr">
+    {% if active_version %}
+      <span class="pc-vlbl">v{{ active_version.version_num }}</span>
+      <span class="pc-status {{ active_version.state }}">{{ active_version.state }}</span>
+      <span class="grow"></span>
+      {# Model picker — uses the `modelPicker` Alpine component which
+         proxies its `model` accessor to studioPage.activeModel. Cannot
+         use `$root` directly: nested x-data on this picker makes it its
+         own root, hiding the page scope. #}
+      <div class="model-picker" x-data="modelPicker" @click.outside="open = false">
+        <button class="tag info model-picker-btn" :class="open && 'open'"
+                @click="open = !open" title="switch model">
+          <span class="dot"></span>
+          <span x-text="model"></span>
+          <span class="caret">▾</span>
+        </button>
+        <div class="model-menu" x-show="open" x-cloak>
+          {% set models = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-pro'] %}
+          {% for m in models %}
+            <button class="model-menu-item" :class="model === '{{ m }}' && 'is-current'"
+                    @click="model = '{{ m }}'; open = false">
+              <span class="model-menu-dot"></span>
+              <span class="model-menu-lbl">{{ m }}</span>
+            </button>
+          {% endfor %}
+        </div>
+      </div>
+    {% else %}
+      <span class="muted">no version</span>
+    {% endif %}
+  </div>
+
+  <div class="pc-tabs">
+    <button class="pc-tab" :class="mode === 'prompt' && 'active'" @click="mode = 'prompt'">Prompt</button>
+    <button class="pc-tab" :class="mode === 'output' && 'active'" @click="mode = 'output'">Output</button>
+  </div>
+
+  <div class="pc-body">
+    {% if active_version %}
+      <div x-show="mode === 'prompt'">
+        {% if active_version.state == 'draft' %}
+          <textarea class="pc-editor" x-ref="editor"
+                    @input.debounce.700ms="save()"
+                    spellcheck="false">{{ active_version.body }}</textarea>
+        {% else %}
+          <pre class="pc-readonly mono">{{ active_version.body }}</pre>
+        {% endif %}
+      </div>
+      <div x-show="mode === 'output'"
+           x-init="$nextTick(() => loadOutput())"
+           x-effect="$root.pendingRunSwap && loadOutput()">
+        <div class="run-slot" x-ref="runSlot">
+          <div class="muted">loading…</div>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="pc-foot">
+    <span x-show="dirty" class="mono-cell muted">draft · saving…</span>
+    <span x-show="!dirty" class="mono-cell muted">saved</span>
+  </div>
+</div>

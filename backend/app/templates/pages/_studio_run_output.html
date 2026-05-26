@@ -1,0 +1,52 @@
+{# Renders the latest studio_run.output_json for (version, clip).
+   Known fields (scenes, summary_cz) rendered as widgets; everything else
+   as generic rows. The route resolves the latest run for the pair and
+   passes both `run` (or None) and `version` (or None).
+#}
+{% if not version %}
+  <div class="run-empty muted">Unknown version.</div>
+{% elif not run %}
+  <div class="run-empty muted">
+    No run yet. Hit <b>Run</b> to execute v{{ version.version_num }} on the focused clip.
+  </div>
+{% elif run.status == 'error' %}
+  <div class="run-error">
+    <div class="run-error-h"><b>Error</b> — v{{ version.version_num }}</div>
+    <div class="run-error-msg">{{ run.error or 'unknown error' }}</div>
+  </div>
+{% elif run.status in ('pending', 'running') %}
+  <div class="run-empty muted">⟳ Running…</div>
+{% else %}
+  {% set o = run.output_json or {} %}
+  <div class="run-output">
+    {% if o.get('scenes') %}
+      <div class="ro-section">
+        <div class="ro-hdr">
+          <span>scenes</span>
+          <span class="ro-count">{{ o.scenes|length }}</span>
+          <span class="grow"></span>
+          <span class="mono-cell ro-target">→ CatDV markers</span>
+        </div>
+        <div class="ro-scenes">
+          {% for s in o.scenes %}
+            <div class="ro-scene">
+              <span class="ro-tc mono-cell">{{ "%.2f" | format(s.in_secs) }} – {{ "%.2f" | format(s.out_secs) }}</span>
+              <span class="ro-name">{{ s.name }}</span>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+    {% for k, v in o.items() %}
+      {% if k != 'scenes' %}
+        <div class="ro-field">
+          <div class="ro-fhdr"><span class="ro-fkey">{{ k }}</span></div>
+          <div class="ro-fval">{{ v }}</div>
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+  <div class="run-stats mono-cell muted" style="padding:6px 0;">
+    {{ "%.1f"|format(run.duration_s or 0) }}s · {{ run.tokens_out or 0 }} tok · ${{ "%.4f"|format(run.cost_usd or 0) }} · {{ run.model }}
+  </div>
+{% endif %}

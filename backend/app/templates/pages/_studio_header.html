@@ -1,0 +1,59 @@
+{# Studio top bar — prompt picker (left), model picker (middle), run button (right).
+
+   State lives in the page-level Alpine component `studioPage` (see studio.js).
+   The picker dropdowns are simple buttons that toggle `open` flags and
+   re-mount themselves on prompt switch. Run button reads `focusedClipId` and
+   `activeVersionId` from the Alpine root scope.
+
+   `prompts`, `selected_prompt`, `versions`, `active_version` come from the
+   page route, all as dicts (model_dump'd).
+#}
+<header class="studio-hdr" x-data="studioHeader()">
+  <span class="exp-icn">{% include "icons/_flask.svg" %}</span>
+
+  <div class="hdr-titles">
+    {% if selected_prompt %}
+      <div class="hdr-tpicker" x-data="{ open: false }" @click.outside="open = false">
+        <button class="hdr-title hdr-title-btn" :class="open && 'open'"
+                @click="open = !open" title="switch prompt">
+          <span class="hdr-title-text">{{ selected_prompt.name }}</span>
+          <span class="caret">▾</span>
+        </button>
+        <div class="hdr-tmenu" x-show="open" x-cloak>
+          <div class="hdr-tmenu-h mono-cell">prompts</div>
+          {% for p in prompts %}
+            <a class="hdr-tmenu-item {% if selected_prompt and p.id == selected_prompt.id %}is-current{% endif %}"
+               href="/studio?prompt_id={{ p.id }}">
+              <span class="hdr-tmenu-lbl">
+                <span class="hdr-tmenu-name">{{ p.name }}</span>
+                {% if p.description %}<span class="hdr-tmenu-desc">{{ p.description }}</span>{% endif %}
+              </span>
+              <span class="grow"></span>
+              <span class="hdr-tmenu-v mono-cell">id:{{ p.id }}</span>
+            </a>
+          {% endfor %}
+        </div>
+      </div>
+    {% else %}
+      <div class="hdr-title muted">Pick a prompt</div>
+    {% endif %}
+  </div>
+
+  <span class="grow"></span>
+
+  {% if active_version %}
+    <button class="btn primary studio-run-btn"
+            :disabled="!$root.focusedClipId || $root.running"
+            @click="$root.runOnFocusedClip()"
+            :title="$root.focusedClipId ? '' : 'Click a clip in a folder to focus it'">
+      <template x-if="!$root.running">
+        <span>▶ Run on this clip · v{{ active_version.version_num }}</span>
+      </template>
+      <template x-if="$root.running">
+        <span>⟳ Running… <span x-text="$root.runningElapsedLabel"></span></span>
+      </template>
+    </button>
+  {% else %}
+    <button class="btn primary" disabled title="No version available for this prompt">▶ Run</button>
+  {% endif %}
+</header>

@@ -5,6 +5,10 @@
   <form method="post" action="/prompts/{{ selected.id }}/_new_version">
     <button type="submit" class="tmpl-menu-item">+ Create new version</button>
   </form>
+  <a class="tmpl-menu-item" href="/studio?prompt_id={{ selected.id }}">
+    {% include "icons/_flask.svg" %}
+    Open in Studio
+  </a>
   {% if selected_version.state == "draft" %}
   <form method="post"
         action="/prompts/{{ selected.id }}/versions/{{ selected_version.id }}/_promote">

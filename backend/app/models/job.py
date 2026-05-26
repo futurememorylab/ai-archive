@@ -25,6 +25,7 @@ class Job(BaseModel):
     status: JobStatus = "pending"
     total_clips: int
     notes: str | None = None
+    kind: str | None = None
 
 
 class JobItem(BaseModel):

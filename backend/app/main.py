@@ -22,6 +22,7 @@ from backend.app.routes.media import router as media_router
 from backend.app.routes.pages import page_routers
 from backend.app.routes.prompts import router as prompts_router
 from backend.app.routes.review import router as review_router
+from backend.app.routes.studio import router as studio_router
 from backend.app.routes.sync import router as sync_router
 from backend.app.routes.ui import router as ui_router
 from backend.app.routes.workspaces import router as workspaces_router
@@ -89,6 +90,7 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(events_router)
     app.include_router(connection_router)
     app.include_router(workspaces_router)
+    app.include_router(studio_router)
     app.include_router(sync_router)
     app.include_router(ui_router)
     app.include_router(cache_api_router)
