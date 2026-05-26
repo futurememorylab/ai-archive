@@ -99,6 +99,39 @@ async def _studio_folder(request: Request, folder_id: int, active_version_id: in
     )
 
 
+@router.get("/studio/_archive_picker", response_class=HTMLResponse)
+async def _studio_archive_picker(
+    request: Request,
+    folder_id: int,
+    q: str = "",
+):
+    """Renders the archive picker modal body. Uses ArchiveProvider.list_clips
+    when wired; in offline/test mode, returns an empty list and the modal
+    still opens (user can search again later)."""
+    from backend.app.archive.model import ClipQuery
+
+    ctx = get_ctx(request)
+    results = []
+    if ctx.archive:
+        try:
+            page = await ctx.archive.list_clips(
+                ctx.settings.catdv_catalog_id,
+                ClipQuery(text=q or None, offset=0, limit=50),
+            )
+            # page.items is a tuple of CanonicalClip; key[1] is the string clip id
+            results = [
+                {"id": int(clip.key[1]), "name": clip.name}
+                for clip in (page.items or ())
+            ]
+        except Exception:  # noqa: BLE001
+            results = []
+    return templates.TemplateResponse(
+        request,
+        "pages/_studio_archive_picker.html",
+        {"folder_id": folder_id, "q": q, "results": results},
+    )
+
+
 @router.get("/studio/_run", response_class=HTMLResponse)
 async def _studio_run(
     request: Request,

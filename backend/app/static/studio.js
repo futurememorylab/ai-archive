@@ -83,6 +83,34 @@ document.addEventListener('alpine:init', () => {
 
   Alpine.data('studioHeader', () => ({}));
 
+  Alpine.data('archivePicker', (folderId) => ({
+    folderId,
+    picked: new Set(),
+
+    toggle(id) {
+      if (this.picked.has(id)) this.picked.delete(id);
+      else this.picked.add(id);
+    },
+
+    async addSelected() {
+      const ids = Array.from(this.picked);
+      if (!ids.length) return;
+      const res = await fetch(`/api/studio/folders/${this.folderId}/clips`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({clip_ids: ids}),
+      });
+      if (res.ok) {
+        location.reload();
+      }
+    },
+
+    close() {
+      const root = document.getElementById('modal-root');
+      if (root) root.innerHTML = '';
+    },
+  }));
+
   Alpine.data('studioFolders', () => ({
     expandedId: null,
     newFolderOpen: false,
