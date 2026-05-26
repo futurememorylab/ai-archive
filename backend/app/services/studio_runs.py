@@ -185,6 +185,9 @@ class StudioRunsService:
 
     async def run(self, conn: aiosqlite.Connection, run_id: int) -> None:
         run = await self.runs_repo.get(conn, run_id)
+        if run.status == "cancelled":
+            log.info("studio run %s already cancelled before start; skipping", run_id)
+            return
         version = await self.prompts_repo.get_version(conn, run.prompt_version_id)
         await self.runs_repo.update_status(conn, run_id, "running", started=True)
         topic = f"studio_run:{run_id}"
