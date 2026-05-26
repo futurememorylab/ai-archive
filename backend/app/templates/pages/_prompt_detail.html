@@ -9,7 +9,8 @@
                 output_schema_text: {{ selected_version.output_schema_text|tojson }},
                 model: {{ selected_version.model|tojson }},
                 prompt_name: {{ selected.name|tojson }},
-                prompt_description: {{ (selected.description or "")|tojson }}
+                prompt_description: {{ (selected.description or "")|tojson }},
+                media_kind: {{ selected.media_kind|tojson }}
             })'>
 
   {# Title row + tags + model picker + Save + kebab.
@@ -26,6 +27,13 @@
         {% else %}
           <span class="tag"><span class="dot"></span>archived</span>
         {% endif %}
+        <select class="txt" style="height: 24px; padding: 0 6px;"
+                x-model="mediaKind" @change="setMediaKind()"
+                title="Which clip kind this prompt applies to">
+          <template x-for="k in ['any','video','image']" :key="k">
+            <option :value="k" x-text="k"></option>
+          </template>
+        </select>
       </div>
       <div class="muted" style="font-size: 12px;">{{ selected.description or "" }}</div>
     </div>

@@ -23,6 +23,7 @@ document.addEventListener("alpine:init", () => {
     saving: false,
 
     prompt_name: initial.prompt_name || "",
+    mediaKind: initial.media_kind || "any",
     prompt_description: initial.prompt_description || "",
     dupOpen: false,
     dupName: "",
@@ -90,6 +91,19 @@ document.addEventListener("alpine:init", () => {
         this.dupError = e.message || "duplicate failed";
       } finally {
         this.dupSaving = false;
+      }
+    },
+
+    async setMediaKind() {
+      try {
+        const resp = await fetch(`/api/prompts/${this.prompt_id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ media_kind: this.mediaKind }),
+        });
+        if (!resp.ok) this.error = `kind update failed (${resp.status})`;
+      } catch (e) {
+        this.error = String(e);
       }
     },
 
