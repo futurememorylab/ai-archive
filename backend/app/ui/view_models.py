@@ -10,6 +10,7 @@ from typing import Any
 import ftfy
 
 from backend.app.archive.model import CanonicalClip, FieldValue, Marker
+from backend.app.media_kind import is_image_path
 
 _YEAR_FIELD = "pragafilm.rok.natočení"
 _DECADE_FIELD = "pragafilm.dekáda.natočení"
@@ -115,6 +116,11 @@ def _format_summary(provider_data: dict[str, Any]) -> str:
     return " · ".join(bits)
 
 
+def _media_kind(provider_data: dict[str, Any]) -> str:
+    media = provider_data.get("media") or {}
+    return "image" if is_image_path(media.get("filePath")) else "video"
+
+
 def clip_detail(
     clip: CanonicalClip,
     cache_status: Any | None = None,
@@ -133,6 +139,7 @@ def clip_detail(
             "duration_secs": clip.duration_secs,
             "fps": clip.fps or 25.0,
             "format": _format_summary(clip.provider_data),
+            "kind": _media_kind(clip.provider_data),
             "media_url": f"/api/media/{clip_id}",
             "markers": [_marker_view(m) for m in sorted(clip.markers, key=lambda m: m.in_.secs)],
             "fields": fields_view,
