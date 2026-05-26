@@ -36,3 +36,4 @@ available number. See any existing ADR for the template.
 | 0024 | 2026-05-25 | [Browser-triggered graceful shutdown (shutdown button)](./adr/0024-shutdown-button.md) |
 | 0025 | 2026-05-25 | [Unified video-list component + CatDV poster thumbnails](./adr/0025-video-list-thumbnails-and-shared-component.md) |
 | 0026 | 2026-05-26 | [Image (still) clip support via original-media fetch](./adr/0026-image-clip-support-via-original-media.md) |
+| 0027 | 2026-05-26 | [Image annotation prompt + prompt media_kind](./adr/0027-image-annotation-prompt-and-media-kind.md) |
