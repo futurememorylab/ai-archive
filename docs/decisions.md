@@ -41,3 +41,4 @@ available number. See any existing ADR for the template.
 | 0029 | 2026-05-26 | [Image annotation prompt + prompt media_kind](./adr/0029-image-annotation-prompt-and-media-kind.md) |
 | 0030 | 2026-05-26 | [UI responsiveness: local assets, click feedback, cache scroll](./adr/0030-ui-responsiveness-local-assets-feedback-scroll.md) |
 | 0031 | 2026-05-26 | [Cache page pagination shared with Clips](./adr/0031-cache-pagination-shared-with-clips.md) |
+| 0032 | 2026-05-26 | [Bound uvicorn graceful shutdown so open streams can't leak the seat](./adr/0032-shutdown-graceful-timeout.md) |
