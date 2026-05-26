@@ -351,6 +351,39 @@ async def _build_archive_subsystem(ctx: AppContext) -> _OnlineFlags:
             catdv=ctx.catdv,
         )
 
+    # Wire StudioRunsService eagerly. The route file also lazy-builds one
+    # if absent (defensive), but this path is what production sees first.
+    from backend.app.services.proxy_resolver import LocalCacheOnlyResolver
+    from backend.app.services.studio_runs import StudioRunsService
+
+    cache_only_resolver = LocalCacheOnlyResolver(
+        repo=ctx.proxy_cache_repo,
+        db_provider=lambda c=ctx: c.db,
+        cache_dir=settings.data_dir / "cache" / "proxies",
+    )
+
+    def _studio_mode_getter(c=ctx) -> str:
+        cm = c.connection_monitor
+        if cm is None:
+            return "offline"
+        from backend.app.services.connection_monitor import ConnectionState
+        return "online" if cm.current_state() == ConnectionState.online else "offline"
+
+    ctx.studio_runs_service = StudioRunsService(
+        runs_repo=ctx.studio_runs_repo,
+        items_repo=ctx.testbench_items_repo,
+        prompts_repo=ctx.prompts_repo,
+        archive=ctx.archive,
+        proxy_resolver=ctx.proxy_resolver,
+        cache_only_resolver=cache_only_resolver,
+        clip_cache_repo=ctx.clip_cache_repo,
+        ai_store=ctx.ai_store,
+        gemini=ctx.gemini,
+        event_bus=ctx.event_bus,
+        uploads_root=settings.studio_uploads_dir,
+        mode_getter=_studio_mode_getter,
+    )
+
     return _OnlineFlags(forced_offline=forced_offline, login_failed=login_failed)
 
 

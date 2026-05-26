@@ -2,16 +2,28 @@
 liveness checks. Called from the FastAPI lifespan before serving."""
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import aiosqlite
 
 from backend.app.repositories.live_sessions import LiveSessionsRepo
+from backend.app.repositories.studio_runs import StudioRunsRepo
 
 
 async def run_startup_cleanup(conn: aiosqlite.Connection) -> int:
     """Drop stale-pending live_sessions older than 1h. Returns rows deleted."""
     repo = LiveSessionsRepo()
     return await repo.cleanup_stale_pending(conn, older_than_hours=1)
+
+
+async def run_studio_startup(conn: aiosqlite.Connection, *, uploads_dir: Path) -> int:
+    """Ensure the Studio uploads directory exists and sweep crashed runs.
+
+    Mirrors `JobsRepo.reset_transient`. Any `studio_runs` left `running` —
+    along with their transient-state items — were interrupted by the
+    previous process shutdown. Returns the number of runs swept."""
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    return await StudioRunsRepo().reset_transient(conn)
 
 
 @dataclass
