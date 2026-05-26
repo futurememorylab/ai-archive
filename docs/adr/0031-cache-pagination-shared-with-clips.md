@@ -1,4 +1,4 @@
-# 0029. Cache page pagination shared with Clips
+# 0031. Cache page pagination shared with Clips
 
 **Date:** 2026-05-26
 **Status:** Accepted
@@ -40,7 +40,7 @@ Spec: `docs/specs/2026-05-26-cache-pagination-design.md`.
 - One pager component + one offset helper serve both pages; the Clips render
   output is unchanged (verified).
 - Cache pages are a constant length (≤ 50 rows), so the page no longer grows
-  unbounded — complementing the scroll fix in [0028](./0028-ui-responsiveness-local-assets-feedback-scroll.md).
+  unbounded — complementing the scroll fix in [0030](./0030-ui-responsiveness-local-assets-feedback-scroll.md).
 - **Tradeoff:** turning the page swaps `#cache-table-region`, which resets the
   client-side Alpine bulk-selection (`cacheSel`) state. Accepted as expected
   behaviour rather than a silent regression.

@@ -1,4 +1,4 @@
-# 0028. UI responsiveness: local assets, click feedback, cache scroll
+# 0030. UI responsiveness: local assets, click feedback, cache scroll
 
 **Date:** 2026-05-26
 **Status:** Accepted

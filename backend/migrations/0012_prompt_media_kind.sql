@@ -1,4 +1,4 @@
--- 0011: tag each prompt with the media kind it targets so the Annotate
+-- 0012: tag each prompt with the media kind it targets so the Annotate
 -- dropdown can offer only kind-appropriate prompts. New prompts default to
 -- 'any'; existing prompts are video-oriented (the only seed is the
 -- scene-marker prompt), so backfill them to 'video'.

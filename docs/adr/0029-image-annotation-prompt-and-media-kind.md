@@ -1,11 +1,11 @@
-# 0027. Image annotation prompt + prompt media_kind
+# 0029. Image annotation prompt + prompt media_kind
 
 **Date:** 2026-05-26
 **Status:** Accepted
 
 ## Context
 
-After image clips became viewable/annotatable (ADR 0026), running the
+After image clips became viewable/annotatable (ADR 0028), running the
 default scene-marker prompt on a still produced nonsensical timestamped
 "scenes". Stills need a prompt with no scenes/timecodes, while keeping the
 Czech summary + era metadata — and the output had to be stored and indexed

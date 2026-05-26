@@ -35,7 +35,9 @@ available number. See any existing ADR for the template.
 | 0023 | 2026-05-25 | [Boot-time login failures keep the CatDV client alive for retry](./adr/0023-boot-login-failures-keep-client-for-retry.md) |
 | 0024 | 2026-05-25 | [Browser-triggered graceful shutdown (shutdown button)](./adr/0024-shutdown-button.md) |
 | 0025 | 2026-05-25 | [Unified video-list component + CatDV poster thumbnails](./adr/0025-video-list-thumbnails-and-shared-component.md) |
-| 0026 | 2026-05-26 | [Image (still) clip support via original-media fetch](./adr/0026-image-clip-support-via-original-media.md) |
-| 0027 | 2026-05-26 | [Image annotation prompt + prompt media_kind](./adr/0027-image-annotation-prompt-and-media-kind.md) |
-| 0028 | 2026-05-26 | [UI responsiveness: local assets, click feedback, cache scroll](./adr/0028-ui-responsiveness-local-assets-feedback-scroll.md) |
-| 0029 | 2026-05-26 | [Cache page pagination shared with Clips](./adr/0029-cache-pagination-shared-with-clips.md) |
+| 0026 | 2026-05-26 | [Prompt Studio: testbenches, runs, optional gold, CatDV-optional](./adr/0026-prompt-studio.md) |
+| 0027 | 2026-05-26 | [Prompt Studio implementation: deviations from the plan](./adr/0027-prompt-studio-implementation-deviations.md) |
+| 0028 | 2026-05-26 | [Image (still) clip support via original-media fetch](./adr/0028-image-clip-support-via-original-media.md) |
+| 0029 | 2026-05-26 | [Image annotation prompt + prompt media_kind](./adr/0029-image-annotation-prompt-and-media-kind.md) |
+| 0030 | 2026-05-26 | [UI responsiveness: local assets, click feedback, cache scroll](./adr/0030-ui-responsiveness-local-assets-feedback-scroll.md) |
+| 0031 | 2026-05-26 | [Cache page pagination shared with Clips](./adr/0031-cache-pagination-shared-with-clips.md) |

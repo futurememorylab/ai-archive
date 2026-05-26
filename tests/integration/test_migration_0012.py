@@ -46,23 +46,23 @@ async def test_backfill_sets_existing_prompts_to_video(tmp_path: Path):
 
     db = tmp_path / "t.db"
     async with open_db(db) as conn:
-        # Pre-mark 0011 as applied so the first pass runs only 0001..0010.
+        # Pre-mark 0012 as applied so the first pass runs only 0001..0011.
         await conn.executescript(META_TABLE_SQL)
         await conn.execute(
-            "INSERT INTO schema_migrations(name) VALUES ('0011_prompt_media_kind.sql')"
+            "INSERT INTO schema_migrations(name) VALUES ('0012_prompt_media_kind.sql')"
         )
         await conn.commit()
-        await apply_migrations(conn, MIGRATIONS)  # applies 0001..0010 only
+        await apply_migrations(conn, MIGRATIONS)  # applies 0001..0011 only
 
-        # A prompt that existed before 0011 (schema has no media_kind column yet).
+        # A prompt that existed before 0012 (schema has no media_kind column yet).
         await conn.execute(
             "INSERT INTO prompts(name, description, archived, created_at, updated_at) "
             "VALUES ('legacy', NULL, 0, '2026-01-01', '2026-01-01')"
         )
         await conn.commit()
 
-        # Now run 0011's SQL (it was pre-marked, so apply it directly).
-        sql = (MIGRATIONS / "0011_prompt_media_kind.sql").read_text()
+        # Now run 0012's SQL (it was pre-marked, so apply it directly).
+        sql = (MIGRATIONS / "0012_prompt_media_kind.sql").read_text()
         await conn.executescript(sql)
         await conn.commit()
 

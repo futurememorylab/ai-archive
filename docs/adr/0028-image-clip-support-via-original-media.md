@@ -1,4 +1,4 @@
-# 0026. Image (still) clip support via original-media fetch
+# 0028. Image (still) clip support via original-media fetch
 
 **Date:** 2026-05-26
 **Status:** Accepted
