@@ -1,20 +1,22 @@
 {% extends "pages/layout.html" %}
 {% block rail_active %}studio{% endblock %}
 {% block body %}
-<div class="page page-studio-run">
-  <h1>Run #{{ run.id }} <span class="status">{{ run.status }}</span></h1>
-  <p>Testbench {{ run.testbench_id }} · Prompt v{{ run.prompt_version_id }}</p>
+<div class="page page-studio-run" x-data="studioRunView({{ run.id }})">
+  <header>
+    <h1>Run #{{ run.id }} <span class="status status--{{ run.status }}">{{ run.status }}</span></h1>
+    <p>Testbench {{ run.testbench_id }} · Prompt v{{ run.prompt_version_id }}</p>
+    {% if run.status in ("pending", "running") %}
+      <button @click="cancelRun()">Cancel</button>
+    {% endif %}
+  </header>
   <table class="run-items">
-    <thead><tr><th>Item</th><th>Status</th><th>Latency</th></tr></thead>
-    <tbody>
+    <thead><tr><th>Item</th><th>Status</th><th>Latency</th><th>Output</th></tr></thead>
+    <tbody id="run-items-tbody">
       {% for it in items %}
-        <tr data-item-id="{{ it.id }}">
-          <td>#{{ it.testbench_item_id }}</td>
-          <td>{{ it.status }}</td>
-          <td>{{ it.latency_ms or "—" }}</td>
-        </tr>
+        {% include "pages/_studio_run_item_row.html" %}
       {% endfor %}
     </tbody>
   </table>
 </div>
+<script src="/static/studio.js"></script>
 {% endblock %}
