@@ -1,0 +1,24 @@
+{% extends "pages/layout.html" %}
+{% block title %}Studio · CatDV Annotator{% endblock %}
+{% block rail_active %}studio{% endblock %}
+
+{% block body %}
+<div class="studio-page" data-studio
+     data-prompt-id="{{ selected_prompt.id if selected_prompt else '' }}"
+     data-active-version-id="{{ active_version.id if active_version else '' }}">
+
+  {% include "pages/_studio_header.html" %}
+
+  <div class="studio-body no-player">
+    <aside class="studio-videos">
+      {% include "pages/_studio_folder_list.html" %}
+    </aside>
+    <section class="studio-right">
+      <div class="studio-player-slot" data-studio-player-slot></div>
+      <div class="studio-compare">
+        {% include "pages/_studio_prompt_card.html" %}
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}
