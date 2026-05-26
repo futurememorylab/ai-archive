@@ -1,7 +1,8 @@
-function clipAnnotate(clipId) {
+function clipAnnotate(clipId, clipKind) {
   return {
     open: false,
     prompts: null,
+    clipKind: clipKind || "video",
     loading: false,
     error: null,
     running: false,
@@ -34,7 +35,9 @@ function clipAnnotate(clipId) {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const data = await r.json();
         this.prompts = (data || []).filter(
-          (p) => p.current_production_version_id != null,
+          (p) =>
+            p.current_production_version_id != null &&
+            (p.media_kind === this.clipKind || p.media_kind === "any"),
         );
       } catch (e) {
         this.error = String(e);

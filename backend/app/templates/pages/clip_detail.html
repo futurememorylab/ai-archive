@@ -11,7 +11,7 @@
      :class="{ 'is-draft': scope === 'draft', 'live-active': liveSession.state !== 'idle' }"
      x-data='Object.assign(
        player({{ clip.fps }}, {{ clip.duration_secs }}, {{ clip.markers|tojson }}, {{ draft.markers|tojson }}),
-       clipAnnotate({{ clip.id }}),
+       clipAnnotate({{ clip.id }}, "{{ clip.kind }}"),
        { scope: "published", tab: "markers",
          liveSession: liveSession({{ clip.id }}, { inactivityS: {{ gemini_live_inactivity_s|default(60) }} })
        }
