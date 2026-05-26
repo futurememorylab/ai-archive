@@ -35,6 +35,8 @@ from backend.app.repositories.prefetch_queue import PrefetchQueueRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.proxy_cache import ProxyCacheRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
+from backend.app.repositories.studio_folders import StudioFoldersRepo
+from backend.app.repositories.studio_runs import StudioRunsRepo
 from backend.app.repositories.workspaces import WorkspacesRepo
 from backend.app.repositories.write_log import WriteLogRepo
 from backend.app.services.cache_actions import CacheActions
@@ -72,6 +74,8 @@ class AppContext:
     workspaces_repo: WorkspacesRepo = field(default_factory=WorkspacesRepo)
     cache_actions_log_repo: CacheActionsLogRepo = field(default_factory=CacheActionsLogRepo)
     prefetch_queue_repo: PrefetchQueueRepo = field(default_factory=PrefetchQueueRepo)
+    studio_folders_repo: StudioFoldersRepo = field(default_factory=StudioFoldersRepo)
+    studio_runs_repo: StudioRunsRepo = field(default_factory=StudioRunsRepo)
     event_bus: EventBus = field(default_factory=EventBus)
 
     _running_jobs: dict[int, object] = field(default_factory=dict)
