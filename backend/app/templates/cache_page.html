@@ -89,7 +89,7 @@
   </div>
 
   <details class="cache-extra-filters">
-    <summary>Filters <span class="mono muted cache-entry-count">{{ rows | length }} entries</span></summary>
+    <summary>Filters <span class="mono muted cache-entry-count">{{ total }} entries</span></summary>
     <form action="/cache" method="get" class="filters-form">
       <input type="hidden" name="tab" value="{{ tab }}">
       <label>Store: <input name="store" value="{{ filters.store or '' }}"></label>

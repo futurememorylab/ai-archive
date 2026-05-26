@@ -318,3 +318,41 @@ def test_bulk_evict_route(monkeypatch, tmp_path: Path):
     body = r.json()
     assert body["ok"] == 1
     assert body["bytes_freed"] == 20
+
+
+def test_cache_pagination_first_page(monkeypatch, tmp_path: Path):
+    """limit=2 over 3 clips shows 2 rows + a next link to offset=2."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        _seed_clip(client, key=("catdv", "5001"))
+        _seed_clip(client, key=("catdv", "5002"))
+        _seed_clip(client, key=("catdv", "5003"))
+        r = client.get("/cache?tab=all&limit=2", headers={"HX-Request": "true"})
+    assert r.status_code == 200
+    assert r.text.count('class="row-check"') == 2
+    assert "offset=2" in r.text  # next link
+    assert "of 3" in r.text  # "1–2 of 3" range label
+
+
+def test_cache_pagination_second_page(monkeypatch, tmp_path: Path):
+    """offset=2&limit=2 over 3 clips shows the remaining 1 row + a prev link."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        _seed_clip(client, key=("catdv", "5001"))
+        _seed_clip(client, key=("catdv", "5002"))
+        _seed_clip(client, key=("catdv", "5003"))
+        r = client.get(
+            "/cache?tab=all&limit=2&offset=2", headers={"HX-Request": "true"}
+        )
+    assert r.status_code == 200
+    assert r.text.count('class="row-check"') == 1
+    assert "offset=0" in r.text  # prev link
+
+
+def test_cache_queue_tab_has_no_pager(monkeypatch, tmp_path: Path):
+    """Queue tab is a live list, not paginated."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        r = client.get("/cache?tab=queue", headers={"HX-Request": "true"})
+    assert r.status_code == 200
+    assert 'class="pager"' not in r.text
