@@ -17,14 +17,19 @@ TRANSIENT_STATUSES = ("resolving", "uploading", "prompting")
 
 class JobsRepo:
     async def create_job(
-        self, conn: aiosqlite.Connection, *, prompt_version_id: int, clip_ids: list[int]
+        self,
+        conn: aiosqlite.Connection,
+        *,
+        prompt_version_id: int,
+        clip_ids: list[int],
+        kind: str | None = None,
     ) -> int:
         cur = await conn.execute(
             """
-            INSERT INTO jobs (prompt_version_id, status, created_at, total_clips)
-            VALUES (?, 'pending', ?, ?)
+            INSERT INTO jobs (prompt_version_id, status, created_at, total_clips, kind)
+            VALUES (?, 'pending', ?, ?, ?)
             """,
-            (prompt_version_id, _now_iso(), len(clip_ids)),
+            (prompt_version_id, _now_iso(), len(clip_ids), kind),
         )
         job_id = cur.lastrowid
         assert job_id is not None
@@ -47,6 +52,13 @@ class JobsRepo:
         return Job(
             id=row[0], prompt_version_id=row[1], status=row[2], total_clips=row[3], notes=row[4]
         )
+
+    async def get_job_kind(self, conn: aiosqlite.Connection, job_id: int) -> str | None:
+        cur = await conn.execute("SELECT kind FROM jobs WHERE id = ?", (job_id,))
+        row = await cur.fetchone()
+        if row is None:
+            raise LookupError(f"job {job_id} not found")
+        return row[0]
 
     async def list_jobs(self, conn: aiosqlite.Connection, *, limit: int = 50) -> list[Job]:
         cur = await conn.execute(
