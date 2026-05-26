@@ -102,7 +102,7 @@ class RestProxyResolver:
             media = clip.provider_data.get("media") or {}
             file_path = media.get("filePath")
             media_id = media.get("ID")
-            if is_image_path(file_path) and media_id is not None:
+            if isinstance(file_path, str) and is_image_path(file_path) and media_id is not None:
                 ext = Path(file_path).suffix.lower()
                 dest = self._cache_dir / f"{clip_id}{ext}"
                 mid = int(media_id)
