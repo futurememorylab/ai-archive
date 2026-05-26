@@ -353,7 +353,9 @@ def _cache_row(status) -> dict:
         "thumb_url": f"/api/media/{cid}/thumb",
         "name": status.name,
         "name_sub": f"{pid}/{cid}",
-        "row_href": None,
+        # Orphans have no cached metadata, so the detail page would 404 — leave
+        # them non-clickable. Everything else opens like the cuts list.
+        "row_href": None if is_orphan else f"/clips/{cid}",
         "row_class": "orphan" if is_orphan else None,
         "row_bytes": local_bytes + ai_bytes,
         "clip_pid": pid,
