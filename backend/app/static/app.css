@@ -378,7 +378,7 @@ a { color: inherit; text-decoration: none; }
 .vlist .col-sel { width: 40px; }
 .vlist .col-cache, .vlist .cell-cache { width: 64px; }
 .vlist .col-year, .vlist .col-decade, .vlist .col-dur, .vlist .col-mk,
-.vlist .col-ws, .vlist .col-local, .vlist .col-ai { width: 100px; }
+.vlist .col-local, .vlist .col-ai { width: 100px; }
 .vlist .namecell { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .vlist .name-wrap { display: flex; flex-direction: column; min-width: 0; }
 .vlist .name { overflow: hidden; text-overflow: ellipsis; }
@@ -408,15 +408,10 @@ a { color: inherit; text-decoration: none; }
 
 /* cache-list specifics carried onto the shared scaffold */
 .vlist tr.vrow.orphan { background: color-mix(in oklab, var(--bad) 5%, transparent); }
-.vlist .col-actions { width: 100px; text-align: right; }
-/* stack the two hover buttons so the actions column fits the same 100px
-   as every other data column (keeps both lists' columns identical width) */
-.vlist .row-actions { opacity: 0; transition: opacity 80ms;
-  display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
-.vlist .row-actions .ra-btn { margin-left: 0; }
+.vlist .col-actions { width: 148px; text-align: right; white-space: nowrap; }
+.vlist .row-actions { opacity: 0; transition: opacity 80ms; }
 .vlist tr.vrow:hover .row-actions,
 .vlist tr.vrow:focus-within .row-actions { opacity: 1; }
-.vlist .col-ws { overflow: hidden; text-overflow: ellipsis; }
 
 .pager {
   display: flex; align-items: center; gap: 12px;
