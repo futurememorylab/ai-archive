@@ -31,8 +31,10 @@ async def studio_page(request: Request, prompt_id: int | None = None):
             versions = []
     elif prompts:
         # Default to the first active prompt if none specified
+        first_id = prompts[0].id
+        assert first_id is not None  # DB-fetched prompts always have an id
         selected_prompt, versions = await ctx.prompts_repo.get_with_versions(
-            ctx.db, prompts[0].id
+            ctx.db, first_id
         )
 
     # Pick the active version: the only draft if exists, else the latest
@@ -115,7 +117,7 @@ async def _studio_archive_picker(
     if ctx.archive:
         try:
             page = await ctx.archive.list_clips(
-                ctx.settings.catdv_catalog_id,
+                str(ctx.settings.catdv_catalog_id),
                 ClipQuery(text=q or None, offset=0, limit=50),
             )
             # page.items is a tuple of CanonicalClip; key[1] is the string clip id
@@ -161,5 +163,8 @@ async def _studio_run(
     return templates.TemplateResponse(
         request,
         "pages/_studio_run_output.html",
-        {"run": run.model_dump() if run else None, "version": version.model_dump() if version else None},
+        {
+            "run": run.model_dump() if run else None,
+            "version": version.model_dump() if version else None,
+        },
     )

@@ -1,6 +1,5 @@
 """StudioRunsRepo — run creation, completion, latest lookup, version indicator."""
 
-import json
 from pathlib import Path
 
 import aiosqlite
@@ -95,9 +94,13 @@ async def test_complete_error_records_message(db):
 async def test_latest_for_pair_returns_most_recent(db):
     repo = StudioRunsRepo()
     r1 = await repo.create_pending(db, prompt_version_id=10, clip_id=12041, model="m")
-    await repo.complete_ok(db, r1, output_json={"k": 1}, duration_s=1.0, tokens_in=0, tokens_out=0, cost_usd=0)
+    await repo.complete_ok(
+        db, r1, output_json={"k": 1}, duration_s=1.0, tokens_in=0, tokens_out=0, cost_usd=0
+    )
     r2 = await repo.create_pending(db, prompt_version_id=10, clip_id=12041, model="m")
-    await repo.complete_ok(db, r2, output_json={"k": 2}, duration_s=1.0, tokens_in=0, tokens_out=0, cost_usd=0)
+    await repo.complete_ok(
+        db, r2, output_json={"k": 2}, duration_s=1.0, tokens_in=0, tokens_out=0, cost_usd=0
+    )
     latest = await repo.latest_for_pair(db, prompt_version_id=10, clip_id=12041)
     assert latest is not None
     assert latest.output_json == {"k": 2}
@@ -115,9 +118,13 @@ async def test_versions_run_on_clip(db):
     repo = StudioRunsRepo()
     # v10 succeeded on clip; v11 succeeded on clip
     a = await repo.create_pending(db, prompt_version_id=10, clip_id=12041, model="m")
-    await repo.complete_ok(db, a, output_json={}, duration_s=1.0, tokens_in=0, tokens_out=0, cost_usd=0)
+    await repo.complete_ok(
+        db, a, output_json={}, duration_s=1.0, tokens_in=0, tokens_out=0, cost_usd=0
+    )
     b = await repo.create_pending(db, prompt_version_id=11, clip_id=12041, model="m")
-    await repo.complete_ok(db, b, output_json={}, duration_s=1.0, tokens_in=0, tokens_out=0, cost_usd=0)
+    await repo.complete_ok(
+        db, b, output_json={}, duration_s=1.0, tokens_in=0, tokens_out=0, cost_usd=0
+    )
     # v10 also has an errored run on a different clip — should not appear here
     c = await repo.create_pending(db, prompt_version_id=10, clip_id=99, model="m")
     await repo.complete_error(db, c, error="x")

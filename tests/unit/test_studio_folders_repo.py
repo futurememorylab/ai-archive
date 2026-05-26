@@ -1,8 +1,9 @@
 """StudioFoldersRepo — create/list/rename/delete folders + clip membership."""
 
+from pathlib import Path
+
 import aiosqlite
 import pytest
-from pathlib import Path
 
 from backend.app.db import open_db
 from backend.app.migrations_runner import apply_migrations
