@@ -6,16 +6,13 @@ ProxyResolver, and the prompts/jobs/annotations/review-items repos."""
 import json
 import logging
 import mimetypes
-import time
-from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import aiosqlite
 
 from backend.app.archive.ai_store import AIInputStore
 from backend.app.models.annotation import Annotation
-from backend.app.models.studio import AnnotationOutput
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.prompts import PromptsRepo
@@ -24,9 +21,6 @@ from backend.app.services.events import EventBus
 from backend.app.services.target_map import expand
 
 log = logging.getLogger(__name__)
-
-
-PipelineStatus = Literal["resolving", "uploading", "prompting"]
 
 
 def _render_prompt(body: str, *, duration_secs: float) -> str:
@@ -51,63 +45,6 @@ def _render_prompt(body: str, *, duration_secs: float) -> str:
         f"  invent content beyond {duration_secs:.2f} s.\n\n"
     )
     return anchor + body
-
-
-async def process_item(
-    *,
-    clip_resolver_arg: Any,       # int for CatDV, anything the resolver protocol accepts
-    archive_lookup_arg: str | None,
-    clip_key: tuple[str, str],
-    version: Any,                  # PromptVersion-like; needs body, output_schema, model
-    proxy_resolver: Any,
-    archive: Any | None,           # may be None for uploads
-    ai_store: Any,
-    gemini: Any,
-    on_status: Callable[[PipelineStatus], Awaitable[None]],
-) -> AnnotationOutput:
-    """Shared per-item Gemini pipeline. Used by both production
-    `annotator.run_job` and `services/studio_runs.py`. Returns the output
-    dataclass; the caller owns persistence."""
-
-    await on_status("resolving")
-    local_path: Path = await proxy_resolver.path_for_clip_id(clip_resolver_arg)
-
-    await on_status("uploading")
-    mime = mimetypes.guess_type(str(local_path))[0] or "video/quicktime"
-    upload = await ai_store.ensure_uploaded(clip_key, local_path, mime)
-    file_ref = await ai_store.reference_for_gemini(upload)
-
-    duration_secs = 0.0
-    if archive is not None and archive_lookup_arg is not None:
-        canonical = await archive.get_clip(archive_lookup_arg)
-        duration_secs = float(canonical.duration_secs or 0.0)
-
-    await on_status("prompting")
-    rendered_body = _render_prompt(version.body, duration_secs=duration_secs)
-    t0 = time.monotonic()
-    result = gemini.annotate(
-        file_ref=file_ref,
-        prompt=rendered_body,
-        schema=version.output_schema,
-        model=version.model,
-    )
-    latency_ms = int((time.monotonic() - t0) * 1000)
-
-    raw_text = result.get("text", "") or ""
-    structured: dict[str, Any] | None
-    try:
-        structured = json.loads(raw_text) if raw_text else None
-    except json.JSONDecodeError:
-        structured = None
-
-    return AnnotationOutput(
-        structured=structured,
-        raw_text=raw_text,
-        raw=result.get("raw", {}),
-        prompt_used=rendered_body,
-        model=version.model,
-        latency_ms=latency_ms,
-    )
 
 
 async def run_job(
@@ -192,28 +129,37 @@ async def _process_item(
     event_bus,
     topic,
 ) -> None:
-    async def on_status(s: str) -> None:
-        await jobs_repo.update_item_status(db, item.id, s)
-        await event_bus.publish(topic, {"item_id": item.id, "status": s})
+    await jobs_repo.update_item_status(db, item.id, "resolving")
+    await event_bus.publish(topic, {"item_id": item.id, "status": "resolving"})
+    local_path: Path = await proxy_resolver.path_for_clip_id(item.catdv_clip_id)
 
-    out = await process_item(
-        clip_resolver_arg=item.catdv_clip_id,
-        archive_lookup_arg=str(item.catdv_clip_id),
-        clip_key=("catdv", str(item.catdv_clip_id)),
-        version=version,
-        proxy_resolver=proxy_resolver,
-        archive=archive,
-        ai_store=ai_store,
-        gemini=gemini,
-        on_status=on_status,
-    )
+    await jobs_repo.update_item_status(db, item.id, "uploading")
+    await event_bus.publish(topic, {"item_id": item.id, "status": "uploading"})
 
-    # Re-fetch canonical for the clip_snapshot persisted on the annotation row.
-    # Duplicate call vs process_item is intentional — preserves byte-for-byte
-    # behavior of the prior implementation. (See ADR/spec notes.)
+    mime = mimetypes.guess_type(str(local_path))[0] or "video/quicktime"
+    clip_key = ("catdv", str(item.catdv_clip_id))
+    upload = await ai_store.ensure_uploaded(clip_key, local_path, mime)
+    file_ref = await ai_store.reference_for_gemini(upload)
+
     canonical = await archive.get_clip(str(item.catdv_clip_id))
     clip_snapshot: dict[str, Any] = dict(canonical.provider_data)
     duration_secs = float(canonical.duration_secs or 0.0)
+
+    await jobs_repo.update_item_status(db, item.id, "prompting")
+    await event_bus.publish(topic, {"item_id": item.id, "status": "prompting"})
+    rendered_body = _render_prompt(version.body, duration_secs=duration_secs)
+    result = gemini.annotate(
+        file_ref=file_ref,
+        prompt=rendered_body,
+        schema=version.output_schema,
+        model=version.model,
+    )
+
+    structured: dict[str, Any] | None
+    try:
+        structured = json.loads(result["text"]) if result.get("text") else None
+    except json.JSONDecodeError:
+        structured = None
 
     annotation_id = await annotations_repo.insert(
         db,
@@ -222,18 +168,18 @@ async def _process_item(
             catdv_clip_name=clip_snapshot.get("name", ""),
             prompt_version_id=version.id,
             job_id=item.job_id,
-            model=out.model,
-            prompt_used=out.prompt_used,
-            raw_response=out.raw,
-            structured_output=out.structured,
+            model=version.model,
+            prompt_used=rendered_body,
+            raw_response=result.get("raw", {}),
+            structured_output=structured,
             clip_snapshot=clip_snapshot,
         ),
     )
     await jobs_repo.attach_annotation(db, item.id, annotation_id)
 
-    if out.structured:
+    if structured:
         review = expand(
-            out.structured,
+            structured,
             version.target_map,
             annotation_id=annotation_id,
             catdv_clip_id=item.catdv_clip_id,

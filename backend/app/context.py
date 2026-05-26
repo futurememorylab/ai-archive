@@ -34,9 +34,6 @@ from backend.app.repositories.pending_operations import PendingOperationsRepo
 from backend.app.repositories.prefetch_queue import PrefetchQueueRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.proxy_cache import ProxyCacheRepo
-from backend.app.repositories.studio_runs import StudioRunsRepo
-from backend.app.repositories.testbench_items import TestbenchItemsRepo
-from backend.app.repositories.testbenches import TestbenchesRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.workspaces import WorkspacesRepo
 from backend.app.repositories.write_log import WriteLogRepo
@@ -75,9 +72,6 @@ class AppContext:
     workspaces_repo: WorkspacesRepo = field(default_factory=WorkspacesRepo)
     cache_actions_log_repo: CacheActionsLogRepo = field(default_factory=CacheActionsLogRepo)
     prefetch_queue_repo: PrefetchQueueRepo = field(default_factory=PrefetchQueueRepo)
-    testbenches_repo: TestbenchesRepo = field(default_factory=TestbenchesRepo)
-    testbench_items_repo: TestbenchItemsRepo = field(default_factory=TestbenchItemsRepo)
-    studio_runs_repo: StudioRunsRepo = field(default_factory=StudioRunsRepo)
     event_bus: EventBus = field(default_factory=EventBus)
 
     _running_jobs: dict[int, object] = field(default_factory=dict)
@@ -98,7 +92,6 @@ class AppContext:
     cache_actions: CacheActions | None = None
     lru_eviction: LruEviction | None = None
     media_prefetcher: MediaPrefetcher | None = None
-    studio_runs_service: object | None = None
 
     @classmethod
     async def build(cls, settings: Settings, *, init_external: bool = True) -> AppContext:
@@ -350,39 +343,6 @@ async def _build_archive_subsystem(ctx: AppContext) -> _OnlineFlags:
             archive=ctx.archive,
             catdv=ctx.catdv,
         )
-
-    # Wire StudioRunsService eagerly. The route file also lazy-builds one
-    # if absent (defensive), but this path is what production sees first.
-    from backend.app.services.proxy_resolver import LocalCacheOnlyResolver
-    from backend.app.services.studio_runs import StudioRunsService
-
-    cache_only_resolver = LocalCacheOnlyResolver(
-        repo=ctx.proxy_cache_repo,
-        db_provider=lambda c=ctx: c.db,
-        cache_dir=settings.data_dir / "cache" / "proxies",
-    )
-
-    def _studio_mode_getter(c=ctx) -> str:
-        cm = c.connection_monitor
-        if cm is None:
-            return "offline"
-        from backend.app.services.connection_monitor import ConnectionState
-        return "online" if cm.current_state() == ConnectionState.online else "offline"
-
-    ctx.studio_runs_service = StudioRunsService(
-        runs_repo=ctx.studio_runs_repo,
-        items_repo=ctx.testbench_items_repo,
-        prompts_repo=ctx.prompts_repo,
-        archive=ctx.archive,
-        proxy_resolver=ctx.proxy_resolver,
-        cache_only_resolver=cache_only_resolver,
-        clip_cache_repo=ctx.clip_cache_repo,
-        ai_store=ctx.ai_store,
-        gemini=ctx.gemini,
-        event_bus=ctx.event_bus,
-        uploads_root=settings.studio_uploads_dir,
-        mode_getter=_studio_mode_getter,
-    )
 
     return _OnlineFlags(forced_offline=forced_offline, login_failed=login_failed)
 

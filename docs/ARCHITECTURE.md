@@ -68,8 +68,6 @@ routes. Run `.venv/bin/lint-imports` to check locally.
 | LRU evicted a pinned clip | It shouldn't. See `services/lru_eviction.py` + `repositories/workspaces.py::pinned_clip_keys` |
 | Gemini upload keeps repeating | `archive/ai_stores/gcs/adapter.py`, `repositories/ai_store_files.py` |
 | Prompt edit rejected as "immutable" | `repositories/prompts.py::VersionImmutableError` |
-| Studio run stuck or output missing | `services/studio_runs.py`, `repositories/studio_runs.py`; check `studio_run_items.status` and `unacceptable_reason` |
-| Studio CatDV clip resolves to 'unacceptable' | `services/studio_runs.py::resolve_clip_input` chain; `repositories/proxy_cache.py` + `repositories/ai_store_files.py` |
 
 ## Where else to look
 
