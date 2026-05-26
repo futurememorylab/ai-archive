@@ -1,0 +1,24 @@
+{
+  "name": "Image description + era (Czech)",
+  "description": "Describes a still photograph in Czech and classifies the era. Default seeded prompt for image clips.",
+  "media_kind": "image",
+  "prompt": "You are annotating an archival still photograph from a Czech private archive — a digitised monochrome photo, typically 1920s–1950s. Describe the photograph in 2–4 Czech sentences (who/what/where is visible), and classify the era from visual cues (clothing, vehicles, technology). There is no video and no timeline — do not return scenes or timestamps. Return JSON matching the schema.",
+  "output_schema": {
+    "type": "object",
+    "required": ["summary_cz", "decade", "years"],
+    "properties": {
+      "summary_cz": { "type": "object", "required": ["value"],
+        "properties": { "value": { "type": "string" } } },
+      "decade": { "type": "object", "required": ["value"],
+        "properties": { "value": { "type": "string",
+          "enum": ["20.léta", "30.léta", "40.léta", "50.léta", "60.léta"] } } },
+      "years": { "type": "array", "items": { "type": "string" } }
+    }
+  },
+  "target_map": {
+    "summary_cz": { "kind": "note",  "target": "pragafilm.popis.materialu", "mode": "append" },
+    "decade":     { "kind": "field", "identifier": "pragafilm.dekáda.natočení" },
+    "years":      { "kind": "field", "identifier": "pragafilm.rok.natočení" }
+  },
+  "model": "gemini-2.5-pro"
+}

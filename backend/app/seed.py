@@ -26,6 +26,7 @@ async def seed_default_prompt(conn: aiosqlite.Connection, *, seed_path: Path) ->
         output_schema=data["output_schema"],
         model=data["model"],
         initial_state="production",
+        media_kind=data.get("media_kind", "any"),
     )
 
 
