@@ -3,9 +3,13 @@
 {% block rail_active %}studio{% endblock %}
 
 {% block body %}
-<div class="studio-page" data-studio
-     data-prompt-id="{{ selected_prompt.id if selected_prompt else '' }}"
-     data-active-version-id="{{ active_version.id if active_version else '' }}">
+<div class="studio-page"
+     x-data="studioPage({
+       promptId: {{ selected_prompt.id if selected_prompt else 'null' }},
+       activeVersionId: {{ active_version.id if active_version else 'null' }},
+       activeVersionNum: {{ active_version.version_num if active_version else 'null' }},
+       activeModel: '{{ active_version.model if active_version else '' }}',
+     })">
 
   {% include "pages/_studio_header.html" %}
 
