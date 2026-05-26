@@ -91,11 +91,18 @@
 
   <section class="player-wrap">
     <div class="viewer">
+      {% if clip.kind == "image" %}
+      <img class="video"
+           src="{{ clip.media_url }}"
+           alt="{{ clip.name }}"
+           @dblclick="$el.requestFullscreen && $el.requestFullscreen()">
+      {% else %}
       <video x-ref="video"
              class="video"
              src="{{ clip.media_url }}"
              preload="metadata"
              @dblclick="$refs.video.requestFullscreen && $refs.video.requestFullscreen()"></video>
+      {% endif %}
       <div class="hud hud-tl">
         <div class="hud-lbl">timecode · <span x-text="Math.round(fps) + 'p'">25p</span></div>
         <div class="hud-tc" x-text="tc(current)">00:00:00:00</div>
