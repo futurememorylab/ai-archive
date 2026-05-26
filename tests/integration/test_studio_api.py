@@ -74,3 +74,47 @@ def test_add_list_remove_clips(client):
 
     r = client.get(f"/api/studio/folders/{fid}/clips")
     assert [c["clip_id"] for c in r.json()] == [12042]
+
+
+def test_create_run_persists_pending_studio_run_and_job(client):
+    # 1. Create a prompt
+    r = client.post(
+        "/api/prompts",
+        json={
+            "name": "studio-e2e",
+            "body": "do x",
+            "target_map": {},
+            "output_schema": {},
+            "model": "gemini-2.5-pro",
+        },
+    )
+    assert r.status_code == 201
+    pid = r.json()["id"]
+    r = client.get(f"/api/prompts/{pid}")
+    assert r.status_code == 200
+    vid = r.json()["latest_version_id"]
+
+    # 2. Create a studio run with explicit model override
+    r = client.post(
+        "/api/studio/runs",
+        json={"prompt_version_id": vid, "clip_id": 42, "model": "gemini-2.5-flash"},
+    )
+    assert r.status_code == 201
+    body = r.json()
+    assert "run_id" in body and "job_id" in body
+    run_id = body["run_id"]
+
+    # 3. Run exists, status=pending, model recorded
+    r = client.get(f"/api/studio/runs/{run_id}")
+    assert r.status_code == 200
+    run = r.json()
+    assert run["status"] == "pending"
+    assert run["model"] == "gemini-2.5-flash"
+
+    # 4. Latest lookup returns the same run
+    r = client.get(
+        "/api/studio/runs",
+        params={"prompt_version_id": vid, "clip_id": 42, "latest": 1},
+    )
+    assert r.status_code == 200
+    assert r.json()["id"] == run_id
