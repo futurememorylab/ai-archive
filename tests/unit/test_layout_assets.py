@@ -26,3 +26,29 @@ def test_vendored_js_exists_and_nonempty():
         p = _STATIC / rel
         assert p.exists(), f"missing vendored asset: {rel}"
         assert p.stat().st_size > 1024, f"vendored asset too small: {rel}"
+
+
+_CSS = _STATIC / "app.css"
+
+
+def test_layout_does_not_reference_google_fonts():
+    html = _LAYOUT.read_text(encoding="utf-8")
+    assert "fonts.googleapis.com" not in html
+    assert "fonts.gstatic.com" not in html
+
+
+def test_css_self_hosts_fonts():
+    css = _CSS.read_text(encoding="utf-8")
+    assert "@font-face" in css
+    assert "/static/vendor/fonts/inter-latin-wght-normal.woff2" in css
+    assert "/static/vendor/fonts/jetbrains-mono-latin-wght-normal.woff2" in css
+
+
+def test_vendored_fonts_exist_and_nonempty():
+    for rel in (
+        "vendor/fonts/inter-latin-wght-normal.woff2",
+        "vendor/fonts/jetbrains-mono-latin-wght-normal.woff2",
+    ):
+        p = _STATIC / rel
+        assert p.exists(), f"missing vendored font: {rel}"
+        assert p.stat().st_size > 1024, f"vendored font too small: {rel}"
