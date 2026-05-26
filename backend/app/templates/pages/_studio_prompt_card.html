@@ -1,1 +1,48 @@
-<div class="studio-prompt-card muted">Prompt card (filled in Task 15)</div>
+{# PR1: single prompt card (cur only). PR2 will add the compare card.
+   The editor is shown only when the active version is a draft. The Output
+   tab loads via HTMX-style fetch on focus and on run completion (the
+   $root.pendingRunSwap counter is the watch trigger).
+#}
+<div class="studio-prompt-card" x-data="studioPromptCard()">
+  <div class="pc-hdr">
+    {% if active_version %}
+      <span class="pc-vlbl">v{{ active_version.version_num }}</span>
+      <span class="pc-status {{ active_version.state }}">{{ active_version.state }}</span>
+      <span class="grow"></span>
+      <span class="pc-meta mono-cell">{{ active_version.model }}</span>
+    {% else %}
+      <span class="muted">no version</span>
+    {% endif %}
+  </div>
+
+  <div class="pc-tabs">
+    <button class="pc-tab" :class="mode === 'prompt' && 'active'" @click="mode = 'prompt'">Prompt</button>
+    <button class="pc-tab" :class="mode === 'output' && 'active'" @click="mode = 'output'">Output</button>
+  </div>
+
+  <div class="pc-body">
+    {% if active_version %}
+      <div x-show="mode === 'prompt'">
+        {% if active_version.state == 'draft' %}
+          <textarea class="pc-editor" x-ref="editor"
+                    @input.debounce.700ms="save()"
+                    spellcheck="false">{{ active_version.body }}</textarea>
+        {% else %}
+          <pre class="pc-readonly mono">{{ active_version.body }}</pre>
+        {% endif %}
+      </div>
+      <div x-show="mode === 'output'"
+           x-init="$nextTick(() => loadOutput())"
+           x-effect="$root.pendingRunSwap && loadOutput()">
+        <div class="run-slot" x-ref="runSlot">
+          <div class="muted">loading…</div>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="pc-foot">
+    <span x-show="dirty" class="mono-cell muted">draft · saving…</span>
+    <span x-show="!dirty" class="mono-cell muted">saved</span>
+  </div>
+</div>

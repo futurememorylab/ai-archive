@@ -97,3 +97,24 @@ async def _studio_folder(request: Request, folder_id: int, active_version_id: in
         "pages/_studio_folder.html",
         {"folder_id": folder_id, "clips": enriched},
     )
+
+
+@router.get("/studio/_run", response_class=HTMLResponse)
+async def _studio_run(
+    request: Request,
+    prompt_version_id: int,
+    clip_id: int,
+):
+    ctx = get_ctx(request)
+    run = await ctx.studio_runs_repo.latest_for_pair(
+        ctx.db, prompt_version_id=prompt_version_id, clip_id=clip_id
+    )
+    try:
+        version = await ctx.prompts_repo.get_version(ctx.db, prompt_version_id)
+    except LookupError:
+        version = None
+    return templates.TemplateResponse(
+        request,
+        "pages/_studio_run_output.html",
+        {"run": run.model_dump() if run else None, "version": version.model_dump() if version else None},
+    )

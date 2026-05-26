@@ -107,4 +107,63 @@ document.addEventListener('alpine:init', () => {
       }
     },
   }));
+
+  Alpine.data('studioPromptCard', () => ({
+    mode: 'prompt',
+    dirty: false,
+
+    async save() {
+      this.dirty = true;
+      const versionId = this.$root.activeVersionId;
+      const promptId = this.$root.promptId;
+      if (!versionId || !promptId) {
+        this.dirty = false;
+        return;
+      }
+      const body = this.$refs.editor ? this.$refs.editor.value : null;
+      if (body == null) {
+        this.dirty = false;
+        return;
+      }
+      // The prompts PUT endpoint requires the full version body. Fetch the
+      // existing version to round-trip target_map / output_schema / model.
+      try {
+        const v = await fetch(`/api/prompts/${promptId}/versions/${versionId}`).then(r => r.json());
+        const res = await fetch(`/api/prompts/${promptId}/versions/${versionId}`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            body,
+            target_map: v.target_map,
+            output_schema: v.output_schema,
+            model: v.model,
+          }),
+        });
+        this.dirty = !res.ok;
+      } catch (err) {
+        console.error('studio save failed', err);
+        this.dirty = false;
+      }
+    },
+
+    async loadOutput() {
+      const versionId = this.$root.activeVersionId;
+      const clipId = this.$root.focusedClipId;
+      if (!versionId) return;
+      const slot = this.$refs.runSlot;
+      if (!slot) return;
+      if (!clipId) {
+        slot.innerHTML = '<div class="muted">Click a clip in a folder to focus it.</div>';
+        return;
+      }
+      try {
+        const html = await fetch(
+          `/studio/_run?prompt_version_id=${versionId}&clip_id=${clipId}`,
+        ).then(r => r.text());
+        slot.innerHTML = html;
+      } catch (err) {
+        console.error('loadOutput failed', err);
+      }
+    },
+  }));
 });
