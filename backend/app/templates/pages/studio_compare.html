@@ -15,16 +15,8 @@
       {% for it in items %}
         <tr>
           <td>{{ it.display_name }}</td>
-          <td>
-            {% set v = left.by_item.get(it.id) %}
-            {% if v is none %}<em class="muted">— no reference</em>
-            {% else %}<pre>{{ v }}</pre>{% endif %}
-          </td>
-          <td>
-            {% set v = right.by_item.get(it.id) %}
-            {% if v is none %}<em class="muted">— no reference</em>
-            {% else %}<pre>{{ v }}</pre>{% endif %}
-          </td>
+          <td>{% with side=left, item_id=it.id %}{% include "pages/_studio_compare_cell.html" %}{% endwith %}</td>
+          <td>{% with side=right, item_id=it.id %}{% include "pages/_studio_compare_cell.html" %}{% endwith %}</td>
         </tr>
       {% endfor %}
     </tbody>
