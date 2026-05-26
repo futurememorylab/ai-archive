@@ -32,6 +32,14 @@
         </select>
       </label>
       <label>
+        <div class="panel-h" style="padding: 0; background: transparent; border: 0; height: 24px;">Applies to</div>
+        <select name="media_kind" class="txt" style="width: 240px;">
+          {% for k in ["any", "video", "image"] %}
+            <option value="{{ k }}"{% if form.media_kind == k %} selected{% endif %}>{{ k }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
         <div class="panel-h" style="padding: 0; background: transparent; border: 0; height: 24px;">Prompt</div>
         <textarea name="body" class="txt scroll"
                   style="width: 100%; min-height: 130px; resize: vertical; font-family: var(--f-mono);">{{ form.body }}</textarea>
