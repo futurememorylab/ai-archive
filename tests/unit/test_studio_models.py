@@ -50,8 +50,9 @@ def test_studio_run_item_unacceptable_state_allowed():
 
 def test_annotation_output_dataclass():
     out = AnnotationOutput(
-        structured={"k": "v"}, raw_text='{"k":"v"}',
+        structured={"k": "v"}, raw_text='{"k":"v"}', raw={"candidates": []},
         prompt_used="rendered prompt body", model="gemini-x", latency_ms=1234,
     )
     assert out.structured == {"k": "v"}
     assert out.latency_ms == 1234
+    assert out.raw == {"candidates": []}

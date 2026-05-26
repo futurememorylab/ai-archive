@@ -86,6 +86,7 @@ class AnnotationOutput:
     `services/annotator.py::run_job` and `services/studio_runs.py::run`."""
     structured: dict[str, Any] | None
     raw_text: str
+    raw: dict[str, Any]      # full gemini response dict — preserved for annotations.raw_response
     prompt_used: str
     model: str
     latency_ms: int
