@@ -341,9 +341,7 @@ def test_cache_pagination_second_page(monkeypatch, tmp_path: Path):
         _seed_clip(client, key=("catdv", "5001"))
         _seed_clip(client, key=("catdv", "5002"))
         _seed_clip(client, key=("catdv", "5003"))
-        r = client.get(
-            "/cache?tab=all&limit=2&offset=2", headers={"HX-Request": "true"}
-        )
+        r = client.get("/cache?tab=all&limit=2&offset=2", headers={"HX-Request": "true"})
     assert r.status_code == 200
     assert r.text.count('class="row-check"') == 1
     assert "offset=0" in r.text  # prev link
