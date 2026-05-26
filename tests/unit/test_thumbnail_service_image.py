@@ -45,10 +45,11 @@ IMAGE_PD = {
 @pytest.mark.asyncio
 async def test_builds_downscaled_poster_for_still(tmp_path: Path):
     catdv = _OriginalCatdv(_make_jpeg_bytes(1000, 800))
-    svc = ThumbnailService(cache_dir=tmp_path, archive=_FakeArchive(IMAGE_PD), catdv=catdv)
+    svc = ThumbnailService(cache_dir=tmp_path, archive=_FakeArchive(IMAGE_PD), catdv=catdv)  # type: ignore[arg-type]
     out = await svc.get_or_fetch(888745)
     assert out == tmp_path / "888745.jpg"
     assert catdv.original_calls == [881519]
+    assert out is not None
     with Image.open(out) as im:
         assert max(im.size) <= 480
     assert not (tmp_path / "888745.jpg.orig").exists()
@@ -57,7 +58,7 @@ async def test_builds_downscaled_poster_for_still(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_undecodable_original_returns_none(tmp_path: Path):
     catdv = _OriginalCatdv(b"this is not an image")
-    svc = ThumbnailService(cache_dir=tmp_path, archive=_FakeArchive(IMAGE_PD), catdv=catdv)
+    svc = ThumbnailService(cache_dir=tmp_path, archive=_FakeArchive(IMAGE_PD), catdv=catdv)  # type: ignore[arg-type]
     out = await svc.get_or_fetch(888745)
     assert out is None
     assert not (tmp_path / "888745.jpg").exists()
@@ -67,7 +68,7 @@ async def test_undecodable_original_returns_none(tmp_path: Path):
 async def test_non_image_with_no_poster_returns_none(tmp_path: Path):
     catdv = _OriginalCatdv(_make_jpeg_bytes(10, 10))
     pd = {"media": {"ID": 1, "filePath": "/Volumes/ARECA/x/clip.mov"}}
-    svc = ThumbnailService(cache_dir=tmp_path, archive=_FakeArchive(pd), catdv=catdv)
+    svc = ThumbnailService(cache_dir=tmp_path, archive=_FakeArchive(pd), catdv=catdv)  # type: ignore[arg-type]
     out = await svc.get_or_fetch(123)
     assert out is None
     assert catdv.original_calls == []

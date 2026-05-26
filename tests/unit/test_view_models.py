@@ -227,7 +227,9 @@ def test_clip_detail_kind_video():
         markers=(),
         fields={},
         notes={},
-        media=MediaRef(mime_type="video/quicktime", size_bytes=None, cached_path=None, upstream_handle=""),
+        media=MediaRef(
+            mime_type="video/quicktime", size_bytes=None, cached_path=None, upstream_handle=""
+        ),
         provider_data={"media": {"ID": 770000, "filePath": "/x/Bogdan 1.mov"}},
         fetched_at=datetime.now(UTC),
     )

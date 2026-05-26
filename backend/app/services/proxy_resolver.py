@@ -90,7 +90,9 @@ class RestProxyResolver:
             )
         return dest
 
-    async def _dest_and_downloader(self, clip_id: int) -> tuple[Path, Callable[[], Awaitable[None]]]:
+    async def _dest_and_downloader(
+        self, clip_id: int
+    ) -> tuple[Path, Callable[[], Awaitable[None]]]:
         """Return (dest_path, async download callable) for this clip.
 
         Images → original file at {id}{ext} via download_original; everything

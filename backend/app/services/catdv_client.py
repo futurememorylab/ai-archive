@@ -196,9 +196,7 @@ class CatdvClient:
                 await self.login()
                 async with self.http.stream("GET", url, params=params) as resp2:
                     resp2.raise_for_status()
-                    await self._stream_to_file(
-                        resp2, dest, append=False, chunk_size=chunk_size
-                    )
+                    await self._stream_to_file(resp2, dest, append=False, chunk_size=chunk_size)
                     return
             resp.raise_for_status()
             await self._stream_to_file(resp, dest, append=False, chunk_size=chunk_size)
