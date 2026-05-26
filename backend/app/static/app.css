@@ -804,6 +804,12 @@ a { color: inherit; text-decoration: none; }
 .muted-2 { color: var(--text-4); font-size: 11px; }
 
 .cache-page { padding: 14px 18px; overflow-y: auto; gap: 14px; flex: 1; min-height: 0; }
+/* .cache-page is both the scroll viewport and a flex column. Its children
+   (esp. .cache-listwrap, which has overflow:hidden so its flex min-height
+   collapses to 0) would otherwise be compressed to fit instead of overflowing
+   — leaving the page unscrollable. Pin them to their natural height so the
+   content overflows and overflow-y:auto engages. */
+.cache-page > * { flex-shrink: 0; }
 .cache-page .page-hdr {
   display: flex; align-items: baseline; gap: 12px;
   margin-bottom: 6px;
