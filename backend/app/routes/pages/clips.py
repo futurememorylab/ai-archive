@@ -21,6 +21,7 @@ from backend.app.services.clip_list_filters import (
     resolve as resolve_filters,
 )
 from backend.app.timecode import secs_to_smpte
+from backend.app.ui.pagination import page_offsets
 from backend.app.ui.view_models import clip_detail, clip_summary
 
 
@@ -124,6 +125,7 @@ async def clips_list(
         rows = await ctx.cache_inspector.status_for_clips(keys)
         statuses = {r.clip_key: r for r in rows}
 
+    prev_offset, next_offset = page_offsets(offset, limit, total)
     ctx_dict = {
         "q": q or "",
         "offset": offset,
@@ -138,8 +140,8 @@ async def clips_list(
             "name": "AI katalog",
         },
         "clips": [clip_summary(c, cache_status=statuses.get(c.key)) for c in clips],
-        "prev_offset": max(0, offset - limit) if offset > 0 else None,
-        "next_offset": offset + limit if offset + limit < total else None,
+        "prev_offset": prev_offset,
+        "next_offset": next_offset,
         "cache_fetched_at": cache_fetched_at,
         "cache_age": _humanize_age(cache_fetched_at),
     }
