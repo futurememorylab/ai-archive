@@ -118,3 +118,68 @@ def test_create_run_persists_pending_studio_run_and_job(client):
     )
     assert r.status_code == 200
     assert r.json()["id"] == run_id
+
+
+def test_studio_e2e_happy_path(client):
+    """End-to-end integration test: prompt, folder, clip, run, studio page."""
+    # 1. Create a prompt
+    r = client.post(
+        "/api/prompts",
+        json={
+            "name": "e2e-test-prompt",
+            "body": "do x",
+            "target_map": {},
+            "output_schema": {},
+            "model": "gemini-2.5-pro",
+        },
+    )
+    assert r.status_code == 201
+    pid = r.json()["id"]
+    r = client.get(f"/api/prompts/{pid}")
+    assert r.status_code == 200
+    vid = r.json()["latest_version_id"]
+
+    # 2. Create a folder
+    r = client.post("/api/studio/folders", json={"name": "e2e-folder"})
+    assert r.status_code == 201
+    fid = r.json()["id"]
+
+    # 3. Add a clip to the folder
+    r = client.post(f"/api/studio/folders/{fid}/clips", json={"clip_ids": [42]})
+    assert r.status_code == 200
+    assert r.json()["added"] == 1
+
+    # 4. List folders, find this folder, assert clip_count == 1
+    r = client.get("/api/studio/folders")
+    assert r.status_code == 200
+    f = next(x for x in r.json() if x["id"] == fid)
+    assert f["clip_count"] == 1
+    assert f["name"] == "e2e-folder"
+
+    # 5. POST a studio run with explicit model override
+    r = client.post(
+        "/api/studio/runs",
+        json={"prompt_version_id": vid, "clip_id": 42, "model": "gemini-2.5-flash"},
+    )
+    assert r.status_code == 201
+    run_id = r.json()["run_id"]
+
+    # 6. Get the run, assert status='pending', model='gemini-2.5-flash'
+    r = client.get(f"/api/studio/runs/{run_id}")
+    assert r.status_code == 200
+    run = r.json()
+    assert run["status"] == "pending"
+    assert run["model"] == "gemini-2.5-flash"
+
+    # 7. Latest lookup returns it
+    r = client.get(
+        "/api/studio/runs",
+        params={"prompt_version_id": vid, "clip_id": 42, "latest": 1},
+    )
+    assert r.status_code == 200
+    assert r.json()["id"] == run_id
+
+    # 8. GET /studio?prompt_id={pid} and assert studio page renders 200
+    r = client.get(f"/studio?prompt_id={pid}")
+    assert r.status_code == 200
+    assert "e2e-folder" in r.text
