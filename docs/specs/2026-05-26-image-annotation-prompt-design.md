@@ -29,6 +29,10 @@ of markers.
   prompts; on a video clip, only video-appropriate prompts. Generic
   (`any`) prompts show for both.
 - Ship a seeded default image prompt.
+- The prompt editor works for image prompts too: `media_kind` is set when
+  creating a prompt and editable afterwards.
+- The prompts UI visibly distinguishes prompts by kind (a badge), so the
+  user can tell at a glance which prompt is for images vs. video.
 
 ## Non-goals
 
@@ -94,7 +98,12 @@ per-version content): `TEXT NOT NULL DEFAULT 'any'` with
   - All read paths that build a `Prompt`/prompt-list dict
     (`list`, `get`, and whatever `/api/prompts` uses) select and return
     `media_kind`.
+  - New `set_media_kind(conn, prompt_id, media_kind)` updates the
+    prompt-level value (validated against the allowed set).
 - `/api/prompts` response includes `media_kind` per prompt.
+- New `PATCH /api/prompts/{id}` accepting `{ "media_kind": ... }` updates
+  the prompt-level kind (media_kind is stable across versions, so it is a
+  prompt-level edit, not part of the per-version PUT).
 
 ### 3. Seeded image prompt
 
@@ -149,12 +158,35 @@ Image prompt content (`backend/seeds/image_template.json`):
   video clip's lists only `video`/`any`. The single-clip job flow can no
   longer submit a scene prompt against a still.
 
-### 5. Prompt editor `media_kind` selector
+### 5. Prompt editor — create + edit `media_kind`
 
-- The prompt create/edit UI (prompts pages) gets a `media_kind` selector
-  (`video` / `image` / `any`, default `any`), so operators can author
-  kind-specific custom prompts. The create/version route + repo carry the
-  value through.
+The editor must work for image prompts as well as video, which means
+`media_kind` is both settable at creation and editable afterwards.
+
+- **Create** (`_prompt_new.html` + the create route/`create_with_initial_version`):
+  add an *"Applies to"* selector — `Video` / `Image` / `Any` (default
+  `Any`) — persisted on the new prompt.
+- **Edit** (prompt detail page, `_prompt_detail.html` + `promptEditor.js`):
+  a prompt-level *"Applies to"* control (e.g. a small select next to the
+  prompt title) that `PATCH`es `/api/prompts/{id}` with the chosen
+  `media_kind`. This is separate from the per-version Save (which posts
+  body/target_map/output_schema/model), because `media_kind` lives on the
+  prompt, not the version. The seeded image prompt is editable through the
+  same path like any other prompt.
+
+### 6. Visual distinction — kind badge
+
+So the user can tell at a glance which prompt is for images vs. video:
+
+- **Prompts list** (`_prompts_list.html`): render a small kind chip in
+  each row next to the name — e.g. `Image` / `Video`; `Any` may show a
+  neutral chip or none. Reuse existing badge/chip CSS conventions.
+- **Prompt detail header** (`_prompt_detail.html`): show the same chip
+  beside the prompt title (adjacent to the editable "Applies to" control).
+- **Annotate dropdown** (`_annotate_dropdown.html`): each listed prompt
+  already shows name + version; add the kind chip so the choice is
+  unambiguous (in practice the list is already filtered to the clip's
+  kind, so this is mainly reassurance for `any` prompts).
 
 ## Data flow (image annotation)
 
@@ -187,7 +219,8 @@ image clip detail → Annotate dropdown (filtered to image/any prompts)
   the image template creates a prompt with `media_kind="image"` and a
   target_map without a `markers` entry; idempotent on re-run.
 - **Repo/API**: `create_with_initial_version(media_kind=...)` round-trips;
-  `/api/prompts` returns `media_kind` for each prompt.
+  `/api/prompts` returns `media_kind` for each prompt; `set_media_kind` +
+  `PATCH /api/prompts/{id}` update the value and reject invalid kinds.
 - **Storage/indexing invariant** (the caveat): given a structured output
   `{summary_cz, decade, years}` and the image target_map,
   `target_map.expand` emits exactly one note + two field review items and
@@ -197,6 +230,9 @@ image clip detail → Annotate dropdown (filtered to image/any prompts)
   `image` clip keeps only `image`/`any` prompts and drops `video` ones,
   and vice-versa.
 - **Model**: `Prompt.media_kind` defaults to `any`; invalid value rejected.
+- **UI**: prompts-list/detail render the kind chip (route render test, in
+  the `tests/integration/test_routes_pages*.py` style); the create form
+  submits `media_kind` and the new prompt persists it.
 
 ## Out of scope / follow-up
 
