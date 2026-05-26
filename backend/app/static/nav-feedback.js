@@ -11,19 +11,21 @@
   var active = 0;
 
   function start() {
+    active++;
+    document.documentElement.classList.add("app-busy");
     var b = bar();
     if (!b) return;
-    active++;
     b.classList.remove("done");
     void b.offsetWidth; // reflow so re-adding .active restarts the transition
     b.classList.add("active");
   }
 
   function done() {
-    var b = bar();
-    if (!b) return;
     active = Math.max(0, active - 1);
     if (active > 0) return;
+    document.documentElement.classList.remove("app-busy");
+    var b = bar();
+    if (!b) return;
     b.classList.remove("active");
     b.classList.add("done");
   }
@@ -56,6 +58,11 @@
     if (!isPlainClick(ev)) return;
     var nav = ev.target.closest('a[href], [onclick*="location.href"]');
     if (!nav) return;
+    // htmx-handled elements (hx-get/post/…) don't do a full-page navigation, so
+    // the page never unloads — let the htmx:beforeRequest/afterRequest listeners
+    // drive feedback. Triggering here too would start() without a matching done()
+    // and leave the bar/cursor stuck on.
+    if (nav.closest("[hx-get],[hx-post],[hx-put],[hx-patch],[hx-delete],[hx-boost]")) return;
     if (nav.target === "_blank") return;
     var href = nav.getAttribute("href");
     if (href && (href.charAt(0) === "#")) return;
@@ -68,6 +75,7 @@
     var b = bar();
     if (b) { b.classList.remove("active"); b.classList.remove("done"); }
     active = 0;
+    document.documentElement.classList.remove("app-busy");
     var stuck = document.querySelectorAll(".is-navigating");
     for (var i = 0; i < stuck.length; i++) stuck[i].classList.remove("is-navigating");
   });

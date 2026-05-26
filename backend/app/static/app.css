@@ -803,7 +803,7 @@ a { color: inherit; text-decoration: none; }
 [x-cloak] { display: none !important; }
 .muted-2 { color: var(--text-4); font-size: 11px; }
 
-.cache-page { padding: 14px 18px; overflow-y: auto; gap: 14px; }
+.cache-page { padding: 14px 18px; overflow-y: auto; gap: 14px; flex: 1; min-height: 0; }
 .cache-page .page-hdr {
   display: flex; align-items: baseline; gap: 12px;
   margin-bottom: 6px;
@@ -1419,9 +1419,10 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 #app-progress {
   position: fixed;
   top: 0; left: 0;
-  height: 2px;
+  height: 3px;
   width: 0;
   background: var(--accent);
+  box-shadow: 0 0 10px 1px var(--accent);
   z-index: 9999;
   opacity: 0;
   pointer-events: none;
@@ -1449,4 +1450,8 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
   opacity: 0.6;
   cursor: progress;
 }
+
+/* while any navigation / htmx request is in flight, the whole window shows a
+   busy cursor — an unmistakable "your click registered" signal. */
+html.app-busy, html.app-busy * { cursor: progress !important; }
 .live-transcript { padding-top: .4rem; border-top: 1px solid var(--surface-2, #2a2a2a); }
