@@ -3,7 +3,7 @@ a clip_id to a local file path (downloading via CatDV REST if needed)
 and records the result in ProxyCacheRepo."""
 
 import os
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
@@ -90,7 +90,7 @@ class RestProxyResolver:
             )
         return dest
 
-    async def _dest_and_downloader(self, clip_id: int):
+    async def _dest_and_downloader(self, clip_id: int) -> tuple[Path, Callable[[], Awaitable[None]]]:
         """Return (dest_path, async download callable) for this clip.
 
         Images → original file at {id}{ext} via download_original; everything
