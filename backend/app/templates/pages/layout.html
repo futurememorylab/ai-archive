@@ -12,9 +12,11 @@
   <script defer src="/static/promptEditor.js"></script>
   <script defer src="/static/clipAnnotate.js"></script>
   <script defer src="/static/liveSession.js"></script>
+  <script defer src="/static/nav-feedback.js"></script>
   <script defer src="/static/vendor/alpine.min.js"></script>
 </head>
 <body>
+  <div id="app-progress" aria-hidden="true"></div>
   {%- set _ctx = request.app.state.ctx if request is defined else None -%}
   {%- set _monitor = _ctx.connection_monitor if _ctx else None -%}
   {%- if _monitor is none -%}

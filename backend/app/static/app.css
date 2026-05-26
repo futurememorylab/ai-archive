@@ -1413,4 +1413,39 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 .live-history-detail { padding: .4rem .2rem .8rem; font-size: 12px; }
 .live-summary { padding: .4rem 0; }
 .live-summary-missing { padding: .4rem 0; }
+
+/* ─── click / action feedback ────────────────────────────────────────── */
+#app-progress {
+  position: fixed;
+  top: 0; left: 0;
+  height: 2px;
+  width: 0;
+  background: var(--accent);
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+}
+#app-progress.active {
+  opacity: 1;
+  width: 90%;
+  transition: width 8s cubic-bezier(0.1, 0.7, 0.6, 1), opacity 0.15s ease;
+}
+#app-progress.done {
+  width: 100%;
+  opacity: 0;
+  transition: width 0.2s ease, opacity 0.3s ease 0.1s;
+}
+
+/* htmx adds .htmx-request to the in-flight element automatically */
+.htmx-request {
+  opacity: 0.6;
+  cursor: progress;
+  pointer-events: none;
+}
+
+/* full-page navigation: immediate press feedback on the clicked row/link */
+.is-navigating {
+  opacity: 0.6;
+  cursor: progress;
+}
 .live-transcript { padding-top: .4rem; border-top: 1px solid var(--surface-2, #2a2a2a); }
