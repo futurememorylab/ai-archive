@@ -358,3 +358,16 @@ async def test_update_metadata_sets_media_kind(db):
     await repo.update_metadata(db, pid, media_kind="video")
     prompt, _ = await repo.get_with_versions(db, pid)
     assert prompt.media_kind == "video"
+
+
+@pytest.mark.asyncio
+async def test_duplicate_preserves_media_kind(db):
+    repo = PromptsRepo()
+    pid, _ = await repo.create_with_initial_version(
+        db, name="orig-image", description=None, body="b",
+        target_map={"summary_cz": {"kind": "note", "target": "t"}},
+        output_schema={}, model="m", media_kind="image",
+    )
+    new_pid, _ = await repo.duplicate(db, pid)
+    new_prompt, _ = await repo.get_with_versions(db, new_pid)
+    assert new_prompt.media_kind == "image"

@@ -386,6 +386,7 @@ class PromptsRepo:
             output_schema=src_version.output_schema,
             model=src_version.model,
             initial_state="draft",
+            media_kind=src_prompt.media_kind,
         )
 
     async def _next_copy_name(self, conn: aiosqlite.Connection, src_name: str) -> str:
