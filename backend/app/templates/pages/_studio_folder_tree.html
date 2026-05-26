@@ -2,7 +2,7 @@
    `folders`, `items_by_folder`, and `depth` variables are passed in. #}
 {% set children = folders | selectattr("parent_id", "equalto", parent_id) | list %}
 {% for f in children %}
-  <li class="folder folder--depth-{{ depth }}">
+  <li class="folder folder--depth-{{ depth }}" data-folder-id="{{ f.id }}">
     <details open>
       <summary>📁 {{ f.name }}</summary>
       <ul class="folder__items">
