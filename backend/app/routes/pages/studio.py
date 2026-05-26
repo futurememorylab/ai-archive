@@ -51,3 +51,49 @@ async def studio_page(request: Request, prompt_id: int | None = None):
             "folders": folders,
         },
     )
+
+
+@router.get("/studio/_folders", response_class=HTMLResponse)
+async def _studio_folders(request: Request):
+    ctx = get_ctx(request)
+    folders = await ctx.studio_folders_repo.list_folders_with_counts(ctx.db)
+    return templates.TemplateResponse(
+        request,
+        "pages/_studio_folder_list.html",
+        {"folders": folders, "active_version": None},
+    )
+
+
+@router.get("/studio/_folder", response_class=HTMLResponse)
+async def _studio_folder(request: Request, folder_id: int, active_version_id: int | None = None):
+    """Expanded folder view — clip cards with run-dots."""
+    ctx = get_ctx(request)
+    clips_rows = await ctx.studio_folders_repo.list_clips(ctx.db, folder_id)
+
+    # Build per-clip "has any run with active version" / "any other version" flags.
+    enriched = []
+    for c in clips_rows:
+        versions = await ctx.studio_runs_repo.versions_run_on_clip(
+            ctx.db, clip_id=c["clip_id"]
+        )
+        has_cur = active_version_id is not None and active_version_id in versions
+        has_other = any(v != active_version_id for v in versions)
+        # Pull minimal clip metadata via the archive if available; fall back to id.
+        meta: dict = {"name": f"clip-{c['clip_id']}", "duration_secs": None, "year": None}
+        if ctx.archive:
+            try:
+                clip = await ctx.archive.get_clip(str(c["clip_id"]))
+                meta = {
+                    "name": clip.name,
+                    "duration_secs": clip.duration_secs,
+                    "year": (clip.provider_data or {}).get("pragafilm.rok.natoceni"),
+                }
+            except Exception:  # noqa: BLE001
+                pass
+        enriched.append({**c, **meta, "has_cur": has_cur, "has_other": has_other})
+
+    return templates.TemplateResponse(
+        request,
+        "pages/_studio_folder.html",
+        {"folder_id": folder_id, "clips": enriched},
+    )

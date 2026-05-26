@@ -1,0 +1,11 @@
+{% for c in clips %}
+  {% include "pages/_studio_clip_card.html" with context %}
+{% endfor %}
+{% if not clips %}
+  <div class="muted" style="padding:8px 4px">Empty folder.</div>
+{% endif %}
+<button class="btn ghost mini studio-add-from-archive"
+        hx-get="/studio/_archive_picker?folder_id={{ folder_id }}"
+        hx-target="#modal-root" hx-swap="innerHTML">
+  + Add from archive
+</button>

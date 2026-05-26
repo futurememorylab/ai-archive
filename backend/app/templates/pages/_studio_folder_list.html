@@ -1,1 +1,40 @@
-<div class="studio-folders muted">Folder list (filled in Task 13)</div>
+{# Folder tree with single-expand-at-a-time behavior.
+
+   Each folder header toggles an inline panel that HTMX-loads its clip cards
+   from /studio/_folder?folder_id=X. "+ Add from archive" inside the
+   expanded panel opens the archive picker modal (filled in Task 16).
+#}
+<div class="studio-folders" x-data="studioFolders()">
+  <div class="studio-folders-hdr">
+    <span>Folders</span>
+    <span class="grow"></span>
+    <button class="btn ghost mini" @click="newFolderOpen = !newFolderOpen">+ New folder</button>
+  </div>
+
+  <div x-show="newFolderOpen" x-cloak class="new-folder" style="display:flex;gap:6px;padding:8px 12px;border-bottom:1px solid var(--line);">
+    <input type="text" placeholder="folder name…" x-model="newFolderName"
+           @keyup.enter="createFolder()" style="flex:1;font-size:12px;" />
+    <button class="btn primary mini" @click="createFolder()">Create</button>
+  </div>
+
+  <div class="studio-folders-list">
+    {% for f in folders %}
+      <div class="studio-folder" :class="expandedId === {{ f.id }} && 'open'">
+        <div class="studio-folder-row" @click="toggle({{ f.id }})">
+          <span class="twist" x-text="expandedId === {{ f.id }} ? '▾' : '▸'"></span>
+          <span class="name">{{ f.name }}</span>
+          <span class="count">{{ f.clip_count }}</span>
+        </div>
+        <div class="studio-folder-kids" x-show="expandedId === {{ f.id }}" x-cloak
+             hx-get="/studio/_folder?folder_id={{ f.id }}{% if active_version %}&active_version_id={{ active_version.id }}{% endif %}"
+             hx-trigger="intersect once"
+             hx-swap="innerHTML">
+          <div class="muted">loading…</div>
+        </div>
+      </div>
+    {% endfor %}
+    {% if not folders %}
+      <div class="muted" style="padding:12px">No folders yet. Create one above.</div>
+    {% endif %}
+  </div>
+</div>

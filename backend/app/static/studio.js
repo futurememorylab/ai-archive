@@ -82,4 +82,29 @@ document.addEventListener('alpine:init', () => {
   }));
 
   Alpine.data('studioHeader', () => ({}));
+
+  Alpine.data('studioFolders', () => ({
+    expandedId: null,
+    newFolderOpen: false,
+    newFolderName: '',
+
+    toggle(id) {
+      this.expandedId = this.expandedId === id ? null : id;
+    },
+
+    async createFolder() {
+      const name = this.newFolderName.trim();
+      if (!name) return;
+      const res = await fetch('/api/studio/folders', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name}),
+      });
+      if (res.ok) {
+        location.reload();
+      } else if (res.status === 409) {
+        alert(`Folder "${name}" already exists.`);
+      }
+    },
+  }));
 });
