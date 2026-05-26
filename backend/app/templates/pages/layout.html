@@ -8,14 +8,14 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/app.css">
-  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <script src="/static/vendor/htmx.min.js"></script>
   {# player.js before Alpine: `alpine:init` fires synchronously when
      Alpine's bundle executes, so the listener must register first. #}
   <script defer src="/static/player.js"></script>
   <script defer src="/static/promptEditor.js"></script>
   <script defer src="/static/clipAnnotate.js"></script>
   <script defer src="/static/liveSession.js"></script>
-  <script defer src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js"></script>
+  <script defer src="/static/vendor/alpine.min.js"></script>
 </head>
 <body>
   {%- set _ctx = request.app.state.ctx if request is defined else None -%}
