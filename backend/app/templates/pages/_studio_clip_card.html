@@ -1,8 +1,30 @@
-{# Stub — Task 14 will replace this with the real clip card. #}
-<div class="studio-clip-card" data-clip-id="{{ c.clip_id }}">
-  <div class="thumb"></div>
-  <div class="meta">
-    <div class="name">{{ c.name }}</div>
-    <div class="tag mono-cell">id:{{ c.clip_id }}</div>
+{# Clip card — focus on click, remove on hover X, run-dots top-right.
+
+   Variables in scope (from _studio_folder endpoint):
+     c         — dict: clip_id, name, duration_secs, year, has_cur, has_other
+     folder_id — outer folder id (used for the remove DELETE call)
+#}
+<div class="studio-clip-card"
+     :class="$root.focusedClipId === {{ c.clip_id }} && 'selected'"
+     @click="$root.focusClip({{ c.clip_id }})"
+     data-clip-id="{{ c.clip_id }}">
+  <div class="thumb"
+       {% set thumb_url = '/api/media/' ~ c.clip_id ~ '/thumb' %}
+       style="background-image:url('{{ thumb_url }}')">
+    {% if c.duration_secs %}
+      {% set dur_min = (c.duration_secs|int) // 60 %}
+      {% set dur_sec = (c.duration_secs|int) % 60 %}
+      <span class="dur">{{ "%d:%02d" | format(dur_min, dur_sec) }}</span>
+    {% endif %}
   </div>
+  <div class="meta">
+    <div class="name" title="{{ c.name }}">{{ c.name }}</div>
+    <div class="tag">id:{{ c.clip_id }}{% if c.year %} · {{ c.year }}{% endif %}</div>
+  </div>
+  <div class="dots">
+    {% if c.has_cur %}<span class="rundot cur" title="ran with active version"></span>{% endif %}
+    {% if c.has_other %}<span class="rundot" title="ran with other version(s)"></span>{% endif %}
+  </div>
+  <button class="remove-x" title="remove from folder"
+          @click.stop="if (confirm('Remove from folder?')) { fetch('/api/studio/folders/{{ folder_id }}/clips/{{ c.clip_id }}', {method:'DELETE'}).then(() => $el.closest('.studio-clip-card').remove()); }">×</button>
 </div>
