@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import aiosqlite
 
+from backend.app.media_kind import is_image_path
 from backend.app.repositories.proxy_cache import ProxyCacheRepo
 
 if TYPE_CHECKING:
@@ -39,39 +40,84 @@ class RestProxyResolver:
         *,
         proxy_cache_repo: ProxyCacheRepo | None = None,
         db_provider: Callable[[], aiosqlite.Connection] | None = None,
+        archive=None,
     ) -> None:
         self._catdv = catdv
         self._cache_dir = cache_dir
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         self._repo = proxy_cache_repo
         self._db_provider = db_provider
+        self._archive = archive
 
     async def path_for_clip_id(self, clip_id: int) -> Path:
-        dest = self._cache_dir / f"{clip_id}.mov"
-        downloaded_now = False
-        if not dest.exists() or dest.stat().st_size == 0:
-            await self._catdv.download_proxy(clip_id, dest)
-            downloaded_now = True
+        # Cache hit by recorded row — avoids a get_clip round-trip and works
+        # for both image ({id}.jpg) and video ({id}.mov) files. Also repairs
+        # legacy rows with NULL provider_* columns.
         if self._repo is not None and self._db_provider is not None:
             conn = self._db_provider()
-            # Backfill missing rows (file pre-existed this code path) and
-            # legacy rows with NULL provider_* columns (written by the
-            # initial PR 8 record() that didn't populate them).
             existing = await self._repo.get(conn, clip_id)
-            needs_record = downloaded_now or existing is None or not existing.get("provider_id")
-            if needs_record:
-                await self._repo.record(
-                    conn,
-                    clip_id=clip_id,
-                    file_path=str(dest),
-                    size_bytes=dest.stat().st_size,
-                    etag=None,
-                    provider_id="catdv",
-                    provider_clip_id=str(clip_id),
-                )
-            else:
-                await self._repo.touch(conn, clip_id)
+            if existing is not None:
+                cached = Path(existing["file_path"])
+                if cached.exists() and cached.stat().st_size > 0:
+                    if existing.get("provider_id"):
+                        await self._repo.touch(conn, clip_id)
+                    else:
+                        await self._repo.record(
+                            conn,
+                            clip_id=clip_id,
+                            file_path=str(cached),
+                            size_bytes=cached.stat().st_size,
+                            etag=None,
+                            provider_id="catdv",
+                            provider_clip_id=str(clip_id),
+                        )
+                    return cached
+
+        dest, download = await self._dest_and_downloader(clip_id)
+        if not dest.exists() or dest.stat().st_size == 0:
+            await download()
+
+        if self._repo is not None and self._db_provider is not None:
+            conn = self._db_provider()
+            await self._repo.record(
+                conn,
+                clip_id=clip_id,
+                file_path=str(dest),
+                size_bytes=dest.stat().st_size,
+                etag=None,
+                provider_id="catdv",
+                provider_clip_id=str(clip_id),
+            )
         return dest
+
+    async def _dest_and_downloader(self, clip_id: int):
+        """Return (dest_path, async download callable) for this clip.
+
+        Images → original file at {id}{ext} via download_original; everything
+        else → web proxy at {id}.mov via download_proxy. Falls back to the
+        video path when no archive is wired (preserves legacy behaviour).
+        """
+        if self._archive is not None:
+            clip = await self._archive.get_clip(str(clip_id))
+            media = clip.provider_data.get("media") or {}
+            file_path = media.get("filePath")
+            media_id = media.get("ID")
+            if is_image_path(file_path) and media_id is not None:
+                ext = Path(file_path).suffix.lower()
+                dest = self._cache_dir / f"{clip_id}{ext}"
+                mid = int(media_id)
+
+                async def _dl_image() -> None:
+                    await self._catdv.download_original(mid, dest)
+
+                return dest, _dl_image
+
+        dest = self._cache_dir / f"{clip_id}.mov"
+
+        async def _dl_video() -> None:
+            await self._catdv.download_proxy(clip_id, dest)
+
+        return dest, _dl_video
 
     def is_managed(self, path: Path) -> bool:
         try:
@@ -184,6 +230,7 @@ def build_resolver(
             cache_dir=cache_dir,
             proxy_cache_repo=proxy_cache_repo,
             db_provider=db_provider,
+            archive=archive,
         )
     if source == "filesystem":
         if archive is None or media_store_map is None:
