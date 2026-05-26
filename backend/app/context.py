@@ -34,6 +34,9 @@ from backend.app.repositories.pending_operations import PendingOperationsRepo
 from backend.app.repositories.prefetch_queue import PrefetchQueueRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.proxy_cache import ProxyCacheRepo
+from backend.app.repositories.studio_runs import StudioRunsRepo
+from backend.app.repositories.testbench_items import TestbenchItemsRepo
+from backend.app.repositories.testbenches import TestbenchesRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.workspaces import WorkspacesRepo
 from backend.app.repositories.write_log import WriteLogRepo
@@ -72,6 +75,9 @@ class AppContext:
     workspaces_repo: WorkspacesRepo = field(default_factory=WorkspacesRepo)
     cache_actions_log_repo: CacheActionsLogRepo = field(default_factory=CacheActionsLogRepo)
     prefetch_queue_repo: PrefetchQueueRepo = field(default_factory=PrefetchQueueRepo)
+    testbenches_repo: TestbenchesRepo = field(default_factory=TestbenchesRepo)
+    testbench_items_repo: TestbenchItemsRepo = field(default_factory=TestbenchItemsRepo)
+    studio_runs_repo: StudioRunsRepo = field(default_factory=StudioRunsRepo)
     event_bus: EventBus = field(default_factory=EventBus)
 
     _running_jobs: dict[int, object] = field(default_factory=dict)
@@ -92,6 +98,7 @@ class AppContext:
     cache_actions: CacheActions | None = None
     lru_eviction: LruEviction | None = None
     media_prefetcher: MediaPrefetcher | None = None
+    studio_runs_service: object | None = None
 
     @classmethod
     async def build(cls, settings: Settings, *, init_external: bool = True) -> AppContext:

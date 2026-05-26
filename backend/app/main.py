@@ -21,6 +21,7 @@ from backend.app.routes.live import router as live_router
 from backend.app.routes.media import router as media_router
 from backend.app.routes.pages import page_routers
 from backend.app.routes.prompts import router as prompts_router
+from backend.app.routes import studio as studio_route_module
 from backend.app.routes.review import router as review_router
 from backend.app.routes.sync import router as sync_router
 from backend.app.routes.ui import router as ui_router
@@ -94,6 +95,7 @@ def register_routers(app: FastAPI) -> None:
     for r in page_routers:
         app.include_router(r)
     app.include_router(live_router)
+    app.include_router(studio_route_module.router)
 
 
 app = FastAPI(title="CatDV Annotator", lifespan=lifespan)
