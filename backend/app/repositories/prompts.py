@@ -50,6 +50,7 @@ def _row_to_prompt(row) -> Prompt:
         archived=bool(row[3]),
         created_at=row[4],
         updated_at=row[5],
+        media_kind=row[6],
     )
 
 
@@ -68,7 +69,7 @@ def _row_to_version(row) -> PromptVersion:
     )
 
 
-_PROMPT_COLS = "id, name, description, archived, created_at, updated_at"
+_PROMPT_COLS = "id, name, description, archived, created_at, updated_at, media_kind"
 _VERSION_COLS = (
     "id, prompt_id, version_num, state, body, target_map, "
     "output_schema, model, created_at, updated_at"
@@ -89,13 +90,14 @@ class PromptsRepo:
         output_schema: Any,
         model: str,
         initial_state: str = "draft",
+        media_kind: str = "any",
     ) -> tuple[int, int]:
         """Create prompt + v1. Returns (prompt_id, version_id)."""
         now = _now_iso()
         cur = await conn.execute(
-            "INSERT INTO prompts(name, description, archived, created_at, updated_at) "
-            "VALUES (?, ?, 0, ?, ?)",
-            (name, description, now, now),
+            "INSERT INTO prompts(name, description, archived, media_kind, created_at, updated_at) "
+            "VALUES (?, ?, 0, ?, ?, ?)",
+            (name, description, media_kind, now, now),
         )
         prompt_id = cur.lastrowid
         assert prompt_id is not None
@@ -177,6 +179,7 @@ class PromptsRepo:
         *,
         name: str | None = None,
         description: str | None = None,
+        media_kind: str | None = None,
     ) -> None:
         sets, args = [], []
         if name is not None:
@@ -185,6 +188,9 @@ class PromptsRepo:
         if description is not None:
             sets.append("description = ?")
             args.append(description)
+        if media_kind is not None:
+            sets.append("media_kind = ?")
+            args.append(media_kind)
         if not sets:
             return
         sets.append("updated_at = ?")
