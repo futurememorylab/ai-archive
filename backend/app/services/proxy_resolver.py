@@ -142,6 +142,9 @@ class FilesystemProxyResolver:
     """
 
     is_host_local = True
+    # NOTE: image (still) clips are only supported on the REST proxy path
+    # (RestProxyResolver). Host-local stills have no on-disk proxy, so they
+    # are out of scope here — see ADR 0026.
 
     def __init__(self, *, archive, media_store_map: "MediaStoreMap") -> None:
         self._archive = archive

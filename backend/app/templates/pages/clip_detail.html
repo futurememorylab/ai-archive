@@ -34,7 +34,7 @@
             {% elif mode == "online" %}
               <button type="button"
                       class="ca-btn"
-                      onclick="cacheClip({{ clip.id }})">⬇ Cache video</button>
+                      onclick="cacheClip({{ clip.id }})">⬇ Cache {{ "image" if clip.kind == "image" else "video" }}</button>
             {% endif %}
           {% endif %}
           {% if mode == "online" or (clip.cache and clip.cache.media_local.present) %}
