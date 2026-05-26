@@ -1,11 +1,16 @@
 """Annotator service — orchestrates a job's per-clip pipeline (resolve
 proxy, upload to AI store, prompt Gemini, persist annotation + review
 items). Depends on ArchiveProvider, AIInputStore, GeminiService,
-ProxyResolver, and the prompts/jobs/annotations/review-items repos."""
+ProxyResolver, and the prompts/jobs/annotations/review-items repos.
+
+For jobs with `kind='studio'`, output is persisted to studio_run instead
+and the CatDV-write step is skipped entirely.
+"""
 
 import json
 import logging
 import mimetypes
+import time
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +22,7 @@ from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
+from backend.app.repositories.studio_runs import StudioRunsRepo
 from backend.app.services.events import EventBus
 from backend.app.services.target_map import expand
 
@@ -60,9 +66,11 @@ async def run_job(
     review_items_repo: ReviewItemsRepo,
     jobs_repo: JobsRepo,
     prompts_repo: PromptsRepo,
+    studio_runs_repo: StudioRunsRepo,
 ) -> None:
     """Run a job to completion (or cancellation). Serial per job."""
     job = await jobs_repo.get_job(db, job_id)
+    kind = job.kind
     version = await prompts_repo.get_version(db, job.prompt_version_id)
     await jobs_repo.update_status(db, job_id, "running")
 
@@ -83,6 +91,7 @@ async def run_job(
                 db=db,
                 item=item,
                 version=version,
+                kind=kind,
                 archive=archive,
                 proxy_resolver=proxy_resolver,
                 ai_store=ai_store,
@@ -90,6 +99,7 @@ async def run_job(
                 annotations_repo=annotations_repo,
                 review_items_repo=review_items_repo,
                 jobs_repo=jobs_repo,
+                studio_runs_repo=studio_runs_repo,
                 event_bus=event_bus,
                 topic=topic,
             )
@@ -116,18 +126,11 @@ async def run_job(
 
 async def _process_item(
     *,
-    db,
-    item,
-    version,
-    archive,
-    proxy_resolver,
-    ai_store,
-    gemini,
-    annotations_repo,
-    review_items_repo,
-    jobs_repo,
-    event_bus,
-    topic,
+    db, item, version, kind,
+    archive, proxy_resolver, ai_store, gemini,
+    annotations_repo, review_items_repo,
+    jobs_repo, studio_runs_repo: StudioRunsRepo,
+    event_bus, topic,
 ) -> None:
     await jobs_repo.update_item_status(db, item.id, "resolving")
     await event_bus.publish(topic, {"item_id": item.id, "status": "resolving"})
@@ -135,7 +138,6 @@ async def _process_item(
 
     await jobs_repo.update_item_status(db, item.id, "uploading")
     await event_bus.publish(topic, {"item_id": item.id, "status": "uploading"})
-
     mime = mimetypes.guess_type(str(local_path))[0] or "video/quicktime"
     clip_key = ("catdv", str(item.catdv_clip_id))
     upload = await ai_store.ensure_uploaded(clip_key, local_path, mime)
@@ -148,12 +150,14 @@ async def _process_item(
     await jobs_repo.update_item_status(db, item.id, "prompting")
     await event_bus.publish(topic, {"item_id": item.id, "status": "prompting"})
     rendered_body = _render_prompt(version.body, duration_secs=duration_secs)
+    t0 = time.monotonic()
     result = gemini.annotate(
         file_ref=file_ref,
         prompt=rendered_body,
         schema=version.output_schema,
         model=version.model,
     )
+    elapsed_s = time.monotonic() - t0
 
     structured: dict[str, Any] | None
     try:
@@ -161,6 +165,69 @@ async def _process_item(
     except json.JSONDecodeError:
         structured = None
 
+    if kind == "studio":
+        await _finalize_studio(
+            db, item, structured, result, elapsed_s,
+            studio_runs_repo, jobs_repo, event_bus, topic,
+        )
+    else:
+        await _finalize_annotation(
+            db, item, version, structured, result, rendered_body,
+            clip_snapshot, duration_secs,
+            annotations_repo, review_items_repo, jobs_repo,
+            event_bus, topic,
+        )
+
+
+async def _finalize_studio(
+    db, item, structured, result, elapsed_s,
+    studio_runs_repo: StudioRunsRepo, jobs_repo, event_bus, topic,
+) -> None:
+    """Studio path: persist to studio_run, skip annotations + review_items."""
+    run_id = await studio_runs_repo.find_latest_id_for_job_clip(
+        db, job_id=item.job_id, clip_id=item.catdv_clip_id
+    )
+    if run_id is None:
+        await jobs_repo.update_item_status(db, item.id, "error", error="studio_run not found")
+        await event_bus.publish(
+            topic, {"item_id": item.id, "status": "error", "error": "studio_run not found"}
+        )
+        return
+
+    usage = (result.get("raw") or {}).get("usageMetadata") or {}
+    tokens_in = int(usage.get("promptTokenCount", 0) or 0)
+    tokens_out = int(usage.get("candidatesTokenCount", 0) or 0)
+    cost_usd = 0.0  # cost calc lives elsewhere; not implemented in v1
+
+    if structured is None:
+        await studio_runs_repo.complete_error(db, run_id, error="model returned non-JSON or empty")
+        await jobs_repo.update_item_status(db, item.id, "error", error="non-JSON output")
+        await event_bus.publish(
+            topic, {"item_id": item.id, "status": "error", "error": "non-JSON output"}
+        )
+        return
+
+    await studio_runs_repo.complete_ok(
+        db, run_id,
+        output_json=structured,
+        duration_s=elapsed_s,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        cost_usd=cost_usd,
+    )
+    await jobs_repo.update_item_status(db, item.id, "review_ready")
+    await event_bus.publish(
+        topic, {"item_id": item.id, "status": "review_ready", "studio_run_id": run_id}
+    )
+
+
+async def _finalize_annotation(
+    db, item, version, structured, result, rendered_body,
+    clip_snapshot, duration_secs,
+    annotations_repo, review_items_repo, jobs_repo,
+    event_bus, topic,
+) -> None:
+    """Original annotation path: write to annotations + review_items."""
     annotation_id = await annotations_repo.insert(
         db,
         Annotation(

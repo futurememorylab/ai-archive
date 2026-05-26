@@ -148,3 +148,19 @@ class StudioRunsRepo:
             (clip_id,),
         )
         return [r[0] for r in await cur.fetchall()]
+
+    async def find_latest_id_for_job_clip(
+        self, conn: aiosqlite.Connection, *, job_id: int, clip_id: int
+    ) -> int | None:
+        """Most recent studio_run row id for (job_id, clip_id), or None.
+
+        Used by the annotator's studio finalizer to find which studio_run
+        row this completed job_item corresponds to.
+        """
+        cur = await conn.execute(
+            "SELECT id FROM studio_run WHERE job_id = ? AND clip_id = ? "
+            "ORDER BY id DESC LIMIT 1",
+            (job_id, clip_id),
+        )
+        row = await cur.fetchone()
+        return row[0] if row else None

@@ -33,13 +33,13 @@ async def db(tmp_path: Path):
 async def test_create_job_default_kind_is_null(db):
     repo = JobsRepo()
     jid = await repo.create_job(db, prompt_version_id=10, clip_ids=[42])
-    kind = await repo.get_job_kind(db, jid)
-    assert kind is None
+    job = await repo.get_job(db, jid)
+    assert job.kind is None
 
 
 @pytest.mark.asyncio
 async def test_create_job_with_studio_kind(db):
     repo = JobsRepo()
     jid = await repo.create_job(db, prompt_version_id=10, clip_ids=[42], kind="studio")
-    kind = await repo.get_job_kind(db, jid)
-    assert kind == "studio"
+    job = await repo.get_job(db, jid)
+    assert job.kind == "studio"
