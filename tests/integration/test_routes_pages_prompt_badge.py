@@ -25,11 +25,18 @@ def _client(monkeypatch, tmp_path) -> TestClient:
 
 def test_prompts_list_shows_kind_chip(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as client:
-        client.post("/api/prompts", json={
-            "name": "Holiday snaps", "description": None, "body": "b",
-            "target_map": {}, "output_schema": {},
-            "model": "gemini-2.5-pro", "media_kind": "image",
-        })
+        client.post(
+            "/api/prompts",
+            json={
+                "name": "Holiday snaps",
+                "description": None,
+                "body": "b",
+                "target_map": {},
+                "output_schema": {},
+                "model": "gemini-2.5-pro",
+                "media_kind": "image",
+            },
+        )
         html = client.get("/prompts").text
         assert "Holiday snaps" in html
         assert ">image<" in html

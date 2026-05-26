@@ -35,7 +35,9 @@ async def test_existing_prompts_backfilled_to_video(tmp_path: Path):
         )
         await conn.commit()
         cur = await conn.execute("SELECT media_kind FROM prompts WHERE name='p'")
-        assert (await cur.fetchone())[0] == "any"
+        row = await cur.fetchone()
+        assert row is not None
+        assert row[0] == "any"
 
 
 @pytest.mark.asyncio

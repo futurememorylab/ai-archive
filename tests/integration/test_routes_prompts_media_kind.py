@@ -25,11 +25,18 @@ def _client(monkeypatch, tmp_path) -> TestClient:
 
 def test_create_with_media_kind_and_list_returns_it(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as client:
-        r = client.post("/api/prompts", json={
-            "name": "img-prompt", "description": None, "body": "b",
-            "target_map": {"summary_cz": {"kind": "note", "target": "t"}},
-            "output_schema": {}, "model": "gemini-2.5-pro", "media_kind": "image",
-        })
+        r = client.post(
+            "/api/prompts",
+            json={
+                "name": "img-prompt",
+                "description": None,
+                "body": "b",
+                "target_map": {"summary_cz": {"kind": "note", "target": "t"}},
+                "output_schema": {},
+                "model": "gemini-2.5-pro",
+                "media_kind": "image",
+            },
+        )
         assert r.status_code == 201
         pid = r.json()["id"]
         rows = {p["id"]: p for p in client.get("/api/prompts?archived=0").json()}
@@ -38,12 +45,17 @@ def test_create_with_media_kind_and_list_returns_it(monkeypatch, tmp_path):
 
 def test_patch_media_kind(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as client:
-        r = client.post("/api/prompts", json={
-            "name": "p2", "description": None, "body": "b",
-            "target_map": {}, "output_schema": {}, "model": "gemini-2.5-pro",
-        })
+        r = client.post(
+            "/api/prompts",
+            json={
+                "name": "p2",
+                "description": None,
+                "body": "b",
+                "target_map": {},
+                "output_schema": {},
+                "model": "gemini-2.5-pro",
+            },
+        )
         pid = r.json()["id"]
-        assert client.patch(
-            f"/api/prompts/{pid}", json={"media_kind": "video"}
-        ).status_code == 200
+        assert client.patch(f"/api/prompts/{pid}", json={"media_kind": "video"}).status_code == 200
         assert client.get(f"/api/prompts/{pid}").json()["media_kind"] == "video"

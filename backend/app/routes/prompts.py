@@ -141,7 +141,10 @@ async def patch_prompt(request: Request, prompt_id: int, body: PromptPatch):
     ctx = get_ctx(request)
     try:
         await ctx.prompts_repo.update_metadata(
-            ctx.db, prompt_id, name=body.name, description=body.description,
+            ctx.db,
+            prompt_id,
+            name=body.name,
+            description=body.description,
             media_kind=body.media_kind,
         )
     except aiosqlite.IntegrityError as exc:

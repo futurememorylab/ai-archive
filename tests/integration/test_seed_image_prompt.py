@@ -19,8 +19,10 @@ async def test_image_seed_creates_image_prompt_without_markers(tmp_path: Path):
         repo = PromptsRepo()
         prompt = await repo.get_by_name(conn, "Image description + era (Czech)")
         assert prompt is not None
+        assert prompt.id is not None
         assert prompt.media_kind == "image"
         version = await repo.get_production_version(conn, prompt.id)
+        assert version is not None
         tm = version.target_map.model_dump(exclude_unset=True)
         assert all(entry.get("kind") != "markers" for entry in tm.values())
         assert tm["summary_cz"]["target"] == "pragafilm.popis.materialu"
@@ -37,4 +39,6 @@ async def test_seed_is_idempotent(tmp_path: Path):
         cur = await conn.execute(
             "SELECT COUNT(*) FROM prompts WHERE name = 'Image description + era (Czech)'"
         )
-        assert (await cur.fetchone())[0] == 1
+        row = await cur.fetchone()
+        assert row is not None
+        assert row[0] == 1

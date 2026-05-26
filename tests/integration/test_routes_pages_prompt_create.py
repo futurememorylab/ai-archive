@@ -28,9 +28,13 @@ def test_create_form_persists_media_kind(monkeypatch, tmp_path):
         r = client.post(
             "/prompts/_create",
             data={
-                "name": "ui-image-prompt", "description": "", "body": "b",
-                "target_map": "{}", "output_schema": "{}",
-                "model": "gemini-2.5-pro", "media_kind": "image",
+                "name": "ui-image-prompt",
+                "description": "",
+                "body": "b",
+                "target_map": "{}",
+                "output_schema": "{}",
+                "model": "gemini-2.5-pro",
+                "media_kind": "image",
             },
             follow_redirects=False,
         )
