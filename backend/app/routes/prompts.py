@@ -5,7 +5,7 @@ state mutations visually distinct from RESTful CRUD; FastAPI maps them as
 literal path strings.
 """
 
-from typing import Any
+from typing import Any, Literal
 
 import aiosqlite
 from fastapi import APIRouter, HTTPException, Request, status
@@ -29,11 +29,13 @@ class PromptCreate(BaseModel):
     target_map: TargetMap
     output_schema: dict
     model: str
+    media_kind: Literal["video", "image", "any"] = "any"
 
 
 class PromptPatch(BaseModel):
     name: str | None = None
     description: str | None = None
+    media_kind: Literal["video", "image", "any"] | None = None
 
 
 class PromptDuplicate(BaseModel):
@@ -127,6 +129,7 @@ async def create_prompt(request: Request, body: PromptCreate):
             target_map=body.target_map,
             output_schema=body.output_schema,
             model=body.model,
+            media_kind=body.media_kind,
         )
     except aiosqlite.IntegrityError as exc:
         raise HTTPException(409, f"name collision: {exc}") from exc
@@ -138,7 +141,8 @@ async def patch_prompt(request: Request, prompt_id: int, body: PromptPatch):
     ctx = get_ctx(request)
     try:
         await ctx.prompts_repo.update_metadata(
-            ctx.db, prompt_id, name=body.name, description=body.description
+            ctx.db, prompt_id, name=body.name, description=body.description,
+            media_kind=body.media_kind,
         )
     except aiosqlite.IntegrityError as exc:
         raise HTTPException(409, f"name collision: {exc}") from exc
