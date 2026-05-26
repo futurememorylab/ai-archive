@@ -13,6 +13,33 @@
         output partial.
 */
 
+// window.studio — vanilla-JS shim for HTMX-injected content (clip cards,
+// archive picker results). Alpine v3's MutationObserver does NOT re-scan
+// directives on subtrees swapped in via HTMX `hx-swap="innerHTML"` when
+// the inserted nodes have no `x-data` of their own (they would rely on
+// inherited scope, which initTree doesn't wire up after the fact).
+// Rather than fight that, dynamic content uses vanilla `onclick` and
+// calls these shim methods, which proxy to the Alpine root.
+window.studio = {
+  _root() {
+    return document.querySelector('.studio-page')?._x_dataStack?.[0] ?? null;
+  },
+  focusClip(clipId) {
+    this._root()?.focusClip(clipId);
+    // Selected-state styling is handled here (Alpine `:class` won't bind
+    // on HTMX-injected nodes — see comment above).
+    document.querySelectorAll('.studio-clip-card.selected')
+      .forEach(el => el.classList.remove('selected'));
+    document.querySelectorAll(`.studio-clip-card[data-clip-id="${clipId}"]`)
+      .forEach(el => el.classList.add('selected'));
+  },
+  removeClip(folderId, clipId, btnEl) {
+    if (!confirm('Remove from folder?')) return;
+    fetch(`/api/studio/folders/${folderId}/clips/${clipId}`, {method: 'DELETE'})
+      .then(() => btnEl.closest('.studio-clip-card').remove());
+  },
+};
+
 document.addEventListener('alpine:init', () => {
   Alpine.data('studioPage', (initial) => ({
     promptId: initial.promptId,
@@ -91,6 +118,22 @@ document.addEventListener('alpine:init', () => {
   }));
 
   Alpine.data('studioHeader', () => ({}));
+
+  // Cross-component proxy to studioPage.activeModel — necessary because
+  // Alpine `$root` only walks to the nearest enclosing `x-data`, and nesting
+  // `x-data="{ open: false }"` on the picker hides the page scope.
+  Alpine.data('modelPicker', () => ({
+    open: false,
+    _page() {
+      return document.querySelector('.studio-page')._x_dataStack[0];
+    },
+    get model() {
+      return this._page().activeModel;
+    },
+    set model(v) {
+      this._page().activeModel = v;
+    },
+  }));
 
   Alpine.data('archivePicker', (folderId) => ({
     folderId,

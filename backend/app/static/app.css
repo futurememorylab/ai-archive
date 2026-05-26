@@ -1777,6 +1777,90 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   color: var(--text-3);
 }
 
+/* Studio header — prompt picker dropdown */
+.studio-hdr .hdr-tpicker {
+  position: relative;
+}
+.studio-hdr .hdr-title {
+  font-family: var(--f-display, inherit);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.studio-hdr .hdr-title-btn {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-flex; align-items: center; gap: 6px;
+  cursor: pointer;
+  color: inherit;
+}
+.studio-hdr .hdr-title-btn:hover { background: var(--surface-2); }
+.studio-hdr .hdr-title-btn.open { background: var(--surface-2); }
+.studio-hdr .hdr-title-btn .caret { font-size: 11px; color: var(--text-3); }
+.studio-hdr .hdr-tmenu {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  z-index: 30;
+  min-width: 360px;
+  max-width: 520px;
+  max-height: 60vh;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--line-2, var(--line));
+  border-radius: var(--r-2, 6px);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.45), 0 2px 6px rgba(0,0,0,0.25);
+  padding: 4px;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.studio-hdr .hdr-tmenu-h {
+  padding: 6px 8px 4px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+.studio-hdr .hdr-tmenu-item {
+  text-decoration: none;
+  color: var(--text-2);
+  padding: 6px 8px;
+  border-radius: 4px;
+  display: flex; align-items: flex-start; gap: 8px;
+}
+.studio-hdr .hdr-tmenu-item:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.studio-hdr .hdr-tmenu-item.is-current {
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  color: var(--text);
+}
+.studio-hdr .hdr-tmenu-lbl {
+  display: flex; flex-direction: column; gap: 1px;
+  min-width: 0;
+}
+.studio-hdr .hdr-tmenu-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.studio-hdr .hdr-tmenu-desc {
+  font-size: 11px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.studio-hdr .hdr-tmenu-v {
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
 /* ── Studio: archive picker modal ──────────────────────────────────────── */
 
 .modal {
