@@ -1,32 +1,46 @@
 {% extends "pages/layout.html" %}
 {% block rail_active %}studio{% endblock %}
 {% block body %}
-<div class="page page-studio">
-  <h1>Studio</h1>
-  <section class="studio-rail">
-    <h2>Testbenches</h2>
-    <ul>
-      {% for tb in testbenches %}
-        <li><a href="/studio/testbenches/{{ tb.id }}">{{ tb.name }}</a></li>
-      {% endfor %}
-    </ul>
-  </section>
-  {% if selected %}
-    <section class="studio-detail">
-      <h2>{{ selected.name }}</h2>
-      <h3>Folders</h3>
-      <ul>
-        {% for f in folders %}
-          <li>{{ f.name }} ({{ items_by_folder[f.id] | length }} items)</li>
-        {% endfor %}
-      </ul>
-      <h3>Runs</h3>
-      <ul>
-        {% for r in runs %}
-          <li><a href="/studio/runs/{{ r.id }}">Run #{{ r.id }} — {{ r.status }}</a></li>
-        {% endfor %}
-      </ul>
-    </section>
-  {% endif %}
+<div class="page page-studio" x-data="studioPage()">
+  {% include "pages/_studio_testbench_list.html" %}
+
+  <main class="studio-main">
+    {% if selected %}
+      <header class="studio-main__header">
+        <h1>{{ selected.name }}</h1>
+        <div class="studio-actions">
+          <button @click="openAddFolder({{ selected.id }})">+ Folder</button>
+          <button @click="openAddCatdv()" :disabled="!isOnline">+ CatDV clip</button>
+          <button @click="openUpload()">+ Upload video</button>
+          <button @click="openStartRun({{ selected.id }})">Run with prompt…</button>
+        </div>
+      </header>
+      <section class="folder-tree">
+        <ul>
+          {% with parent_id=None, depth=0 %}
+            {% include "pages/_studio_folder_tree.html" %}
+          {% endwith %}
+        </ul>
+      </section>
+      <section class="runs">
+        <h2>Runs</h2>
+        {% include "pages/_studio_runs_table.html" %}
+      </section>
+    {% else %}
+      <p class="studio-empty">Select a testbench from the left rail, or create a new one.</p>
+    {% endif %}
+  </main>
+
+  <div x-show="dialog.kind === 'gold'" class="dialog">
+    <div class="dialog__panel">
+      <h3>Edit gold</h3>
+      <textarea x-model="dialog.description" rows="8"></textarea>
+      <div class="dialog__actions">
+        <button @click="saveGold()">Save</button>
+        <button @click="dialog.kind = null">Cancel</button>
+      </div>
+    </div>
+  </div>
 </div>
+<script src="/static/studio.js"></script>
 {% endblock %}
