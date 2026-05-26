@@ -60,6 +60,11 @@ Otherwise the seat stays held for the JSESSIONID's idle-timeout window.
 
 The CatDV REST API binds the session to `JSESSIONID` and the seat is held *server-side*, not by our process. So even when our process dies, the seat can linger. The combination of (a) checking before starting and (b) graceful shutdown after running is what keeps the single available seat usable for the next dev session.
 
+## Shell Environment
+
+- This machine uses nvm; non-interactive shells don't have node/npm/npx on PATH. Source ~/.nvm/nvm.sh first, or use absolute paths.
+- Python 3.14 venvs are known-broken on this machine — use 3.12 or 3.13.
+
 ## Recording decisions at end of session
 
 When a session involves any non-trivial design call — a schema replacement,
