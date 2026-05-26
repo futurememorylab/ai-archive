@@ -12,19 +12,11 @@
   {% set _pq = 'q=' ~ (q|urlencode) ~ '&limit=' ~ limit %}
   {% if cache_filter and cache_filter != 'any' %}{% set _pq = _pq ~ '&cache=' ~ cache_filter %}{% endif %}
   {% if anno_filter and anno_filter != 'any' %}{% set _pq = _pq ~ '&anno=' ~ anno_filter %}{% endif %}
-  <nav class="pager">
-    {% if prev_offset is not none %}
-      <a class="pg-btn" href="/?{{ _pq }}&offset={{ prev_offset }}">‹ Prev</a>
-    {% else %}
-      <span class="pg-btn disabled">‹ Prev</span>
-    {% endif %}
-    <span class="pg-meta mono">
-      {% if clips %}{{ offset + 1 }}–{{ offset + clips|length }} of {{ total }}{% else %}0 of {{ total }}{% endif %}
-    </span>
-    {% if next_offset is not none %}
-      <a class="pg-btn" href="/?{{ _pq }}&offset={{ next_offset }}">Next ›</a>
-    {% else %}
-      <span class="pg-btn disabled">Next ›</span>
-    {% endif %}
-  </nav>
+  {% set _range = ((offset + 1) ~ '–' ~ (offset + clips|length) ~ ' of ' ~ total) if clips else ('0 of ' ~ total) %}
+  {% with prev_url = ('/?' ~ _pq ~ '&offset=' ~ prev_offset) if prev_offset is not none else none,
+          next_url = ('/?' ~ _pq ~ '&offset=' ~ next_offset) if next_offset is not none else none,
+          range_label = _range,
+          hx_target = none %}
+    {% include "pages/_pager.html" %}
+  {% endwith %}
 </div>
