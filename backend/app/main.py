@@ -59,6 +59,9 @@ async def lifespan(app: FastAPI):
     seed_path = SEEDS / "default_template.json"
     if seed_path.exists():
         await seed_default_prompt(ctx.db, seed_path=seed_path)
+    image_seed = SEEDS / "image_template.json"
+    if image_seed.exists():
+        await seed_default_prompt(ctx.db, seed_path=image_seed)
     live_seed = SEEDS / "live_system_instruction_cs.json"
     if live_seed.exists():
         await seed_live_system_instruction(ctx.db, seed_path=live_seed)

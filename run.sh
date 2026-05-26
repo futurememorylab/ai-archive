@@ -39,4 +39,5 @@ fi
 exec .venv/bin/uvicorn backend.app.main:app \
   --host "$(grep -E '^BIND_HOST=' .env | cut -d= -f2)" \
   --port "$(grep -E '^BIND_PORT=' .env | cut -d= -f2)" \
+  --timeout-graceful-shutdown 3 \
   $RELOAD_ARGS

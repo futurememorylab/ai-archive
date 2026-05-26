@@ -320,3 +320,74 @@ async def test_create_version_cross_prompt_from_version_id_raises(db):
     pid_b, _ = await repo.create_with_initial_version(db, name="B", description=None, **_vbody())
     with pytest.raises(LookupError):
         await repo.create_version(db, pid_b, from_version_id=vid_a)
+
+
+# ── media_kind ────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_create_persists_media_kind(db):
+    repo = PromptsRepo()
+    pid, _ = await repo.create_with_initial_version(
+        db,
+        name="img",
+        description=None,
+        body="b",
+        target_map={"summary_cz": {"kind": "note", "target": "t"}},
+        output_schema={},
+        model="m",
+        media_kind="image",
+    )
+    prompt, _ = await repo.get_with_versions(db, pid)
+    assert prompt.media_kind == "image"
+
+
+@pytest.mark.asyncio
+async def test_create_defaults_media_kind_any(db):
+    repo = PromptsRepo()
+    pid, _ = await repo.create_with_initial_version(
+        db,
+        name="def",
+        description=None,
+        body="b",
+        target_map={},
+        output_schema={},
+        model="m",
+    )
+    prompt, _ = await repo.get_with_versions(db, pid)
+    assert prompt.media_kind == "any"
+
+
+@pytest.mark.asyncio
+async def test_update_metadata_sets_media_kind(db):
+    repo = PromptsRepo()
+    pid, _ = await repo.create_with_initial_version(
+        db,
+        name="x",
+        description=None,
+        body="b",
+        target_map={},
+        output_schema={},
+        model="m",
+    )
+    await repo.update_metadata(db, pid, media_kind="video")
+    prompt, _ = await repo.get_with_versions(db, pid)
+    assert prompt.media_kind == "video"
+
+
+@pytest.mark.asyncio
+async def test_duplicate_preserves_media_kind(db):
+    repo = PromptsRepo()
+    pid, _ = await repo.create_with_initial_version(
+        db,
+        name="orig-image",
+        description=None,
+        body="b",
+        target_map={"summary_cz": {"kind": "note", "target": "t"}},
+        output_schema={},
+        model="m",
+        media_kind="image",
+    )
+    new_pid, _ = await repo.duplicate(db, pid)
+    new_prompt, _ = await repo.get_with_versions(db, new_pid)
+    assert new_prompt.media_kind == "image"

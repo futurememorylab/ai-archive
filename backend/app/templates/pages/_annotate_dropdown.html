@@ -30,6 +30,8 @@
             <button type="button" class="annotate-item" @click="pick(p)">
               <span class="annotate-name" x-text="p.name"></span>
               <span class="annotate-meta mono">
+                <span x-show="p.media_kind && p.media_kind !== 'any'"
+                      class="tag" x-text="p.media_kind"></span>
                 v<span x-text="p.current_production_version_num"></span>
               </span>
             </button>

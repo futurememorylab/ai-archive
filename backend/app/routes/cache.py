@@ -22,6 +22,7 @@ from pydantic import BaseModel
 
 from backend.app.archive.model import ClipKey
 from backend.app.deps import get_ctx
+from backend.app.ui.pagination import page_offsets
 from backend.app.ui.view_models import cache_status_view
 
 TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "templates"
@@ -183,6 +184,8 @@ async def cache_page(
     workspace: int | None = None,
     orphans: int | None = None,
     evictable: int | None = None,
+    offset: int = 0,
+    limit: int = 50,
 ) -> HTMLResponse:
     insp = _inspector(request)
     ctx = get_ctx(request)
@@ -225,6 +228,10 @@ async def cache_page(
             rows.append(status)
         rows_for_template = [_cache_row(s) for s in rows]
 
+    total = len(rows_for_template)
+    page_rows = rows_for_template[offset : offset + limit]
+    prev_offset, next_offset = page_offsets(offset, limit, total)
+
     summary = await insp.summary()
 
     # Orphan totals for the metric strip. Computed once per request from
@@ -251,7 +258,12 @@ async def cache_page(
     ctx_dict = {
         "summary": summary,
         "tab": tab_val,
-        "rows": rows_for_template,
+        "rows": page_rows,
+        "offset": offset,
+        "limit": limit,
+        "total": total,
+        "prev_offset": prev_offset,
+        "next_offset": next_offset,
         "filters": {
             "store": store,
             "workspace": workspace,
@@ -353,7 +365,9 @@ def _cache_row(status) -> dict:
         "thumb_url": f"/api/media/{cid}/thumb",
         "name": status.name,
         "name_sub": f"{pid}/{cid}",
-        "row_href": None,
+        # Orphans have no cached metadata, so the detail page would 404 — leave
+        # them non-clickable. Everything else opens like the cuts list.
+        "row_href": None if is_orphan else f"/clips/{cid}",
         "row_class": "orphan" if is_orphan else None,
         "row_bytes": local_bytes + ai_bytes,
         "clip_pid": pid,

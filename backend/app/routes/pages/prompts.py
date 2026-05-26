@@ -64,6 +64,7 @@ async def prompt_new_page(request: Request):
                 "target_map_text": "{}",
                 "output_schema_text": "{}",
                 "model": "gemini-2.5-flash-lite",
+                "media_kind": "any",
             },
         },
     )
@@ -79,6 +80,7 @@ async def action_create_prompt(request: Request):
     target_map_text = form.get("target_map") or "{}"
     output_schema_text = form.get("output_schema") or "{}"
     model = form.get("model") or "gemini-2.5-flash-lite"
+    media_kind = str(form.get("media_kind") or "any")
     error = None
     target_map = None
     output_schema = None
@@ -110,6 +112,7 @@ async def action_create_prompt(request: Request):
                     "target_map_text": target_map_text,
                     "output_schema_text": output_schema_text,
                     "model": model,
+                    "media_kind": media_kind,
                 },
             },
             status_code=400,
@@ -123,6 +126,7 @@ async def action_create_prompt(request: Request):
             target_map=target_map,
             output_schema=output_schema,
             model=model,
+            media_kind=media_kind,
         )
     except aiosqlite.IntegrityError as exc:
         prompts = await ctx.prompts_repo.list_active(ctx.db)
@@ -140,6 +144,7 @@ async def action_create_prompt(request: Request):
                     "target_map_text": target_map_text,
                     "output_schema_text": output_schema_text,
                     "model": model,
+                    "media_kind": media_kind,
                 },
             },
             status_code=400,

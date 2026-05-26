@@ -27,6 +27,22 @@
   --r-1: 4px; --r-2: 6px; --r-3: 10px;
 }
 
+/* ─── self-hosted fonts (variable: one file covers all weights) ───────── */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/static/vendor/fonts/inter-latin-wght-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("/static/vendor/fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2");
+}
+
 /* ─── base ───────────────────────────────────────────────────────────── */
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
@@ -44,7 +60,7 @@ a { color: inherit; text-decoration: none; }
 /* ─── app shell (grid) ───────────────────────────────────────────────── */
 .app {
   display: grid;
-  grid-template-rows:    40px 1fr;
+  grid-template-rows:    40px minmax(0, 1fr);
   grid-template-columns: 56px 1fr;
   grid-template-areas:
     "topbar topbar"
@@ -148,6 +164,7 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
 }
 
 /* ─── left rail ──────────────────────────────────────────────────────── */
@@ -378,7 +395,7 @@ a { color: inherit; text-decoration: none; }
 .vlist .col-sel { width: 40px; }
 .vlist .col-cache, .vlist .cell-cache { width: 64px; }
 .vlist .col-year, .vlist .col-decade, .vlist .col-dur, .vlist .col-mk,
-.vlist .col-ws, .vlist .col-local, .vlist .col-ai { width: 100px; }
+.vlist .col-local, .vlist .col-ai { width: 100px; }
 .vlist .namecell { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .vlist .name-wrap { display: flex; flex-direction: column; min-width: 0; }
 .vlist .name { overflow: hidden; text-overflow: ellipsis; }
@@ -408,15 +425,10 @@ a { color: inherit; text-decoration: none; }
 
 /* cache-list specifics carried onto the shared scaffold */
 .vlist tr.vrow.orphan { background: color-mix(in oklab, var(--bad) 5%, transparent); }
-.vlist .col-actions { width: 100px; text-align: right; }
-/* stack the two hover buttons so the actions column fits the same 100px
-   as every other data column (keeps both lists' columns identical width) */
-.vlist .row-actions { opacity: 0; transition: opacity 80ms;
-  display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
-.vlist .row-actions .ra-btn { margin-left: 0; }
+.vlist .col-actions { width: 148px; text-align: right; white-space: nowrap; }
+.vlist .row-actions { opacity: 0; transition: opacity 80ms; }
 .vlist tr.vrow:hover .row-actions,
 .vlist tr.vrow:focus-within .row-actions { opacity: 1; }
-.vlist .col-ws { overflow: hidden; text-overflow: ellipsis; }
 
 .pager {
   display: flex; align-items: center; gap: 12px;
@@ -791,7 +803,13 @@ a { color: inherit; text-decoration: none; }
 [x-cloak] { display: none !important; }
 .muted-2 { color: var(--text-4); font-size: 11px; }
 
-.cache-page { padding: 14px 18px; overflow-y: auto; gap: 14px; }
+.cache-page { padding: 14px 18px; overflow-y: auto; gap: 14px; flex: 1; min-height: 0; }
+/* .cache-page is both the scroll viewport and a flex column. Its children
+   (esp. .cache-listwrap, which has overflow:hidden so its flex min-height
+   collapses to 0) would otherwise be compressed to fit instead of overflowing
+   — leaving the page unscrollable. Pin them to their natural height so the
+   content overflows and overflow-y:auto engages. */
+.cache-page > * { flex-shrink: 0; }
 .cache-page .page-hdr {
   display: flex; align-items: baseline; gap: 12px;
   margin-bottom: 6px;
@@ -894,31 +912,8 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* filter bar + layer legend */
-.cache-filterbar {
-  display: flex; align-items: center; gap: 14px;
-  padding: 6px 0;
-  font-size: 12px;
-  color: var(--text-2);
-}
-.lyr-legend { display: inline-flex; gap: 14px; }
-.lyr-row {
-  display: inline-flex; align-items: center; gap: 4px;
-}
-.lyr-row .lyr-lbl { color: var(--text-3); font-size: 11px; }
-.lyr-meta, .lyr-local, .lyr-ai {
-  display: inline-block;
-  width: 8px; height: 8px; border-radius: 50%;
-  background: var(--line-2);
-}
-.lyr-meta.on  { background: var(--good); box-shadow: 0 0 4px var(--good); }
-.lyr-local.on { background: var(--accent); box-shadow: 0 0 4px var(--accent); }
-.lyr-ai.on    { background: var(--info); box-shadow: 0 0 4px var(--info); }
-.lyr-meta.off, .lyr-local.off, .lyr-ai.off {
-  background: var(--surface-2);
-  box-shadow: none;
-}
-
 .cache-extra-filters { margin-bottom: 6px; }
+.cache-entry-count { margin-left: 8px; font-size: 11px; }
 .cache-extra-filters summary {
   cursor: pointer; color: var(--text-3);
   font-size: 11.5px;
@@ -1425,4 +1420,44 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 .live-history-detail { padding: .4rem .2rem .8rem; font-size: 12px; }
 .live-summary { padding: .4rem 0; }
 .live-summary-missing { padding: .4rem 0; }
+
+/* ─── click / action feedback ────────────────────────────────────────── */
+#app-progress {
+  position: fixed;
+  top: 0; left: 0;
+  height: 3px;
+  width: 0;
+  background: var(--accent);
+  box-shadow: 0 0 10px 1px var(--accent);
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+}
+#app-progress.active {
+  opacity: 1;
+  width: 90%;
+  transition: width 8s cubic-bezier(0.1, 0.7, 0.6, 1), opacity 0.15s ease;
+}
+#app-progress.done {
+  width: 100%;
+  opacity: 0;
+  transition: width 0.2s ease, opacity 0.3s ease 0.1s;
+}
+
+/* htmx adds .htmx-request to the in-flight element automatically */
+.htmx-request {
+  opacity: 0.6;
+  cursor: progress;
+  pointer-events: none;
+}
+
+/* full-page navigation: immediate press feedback on the clicked row/link */
+.is-navigating {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* while any navigation / htmx request is in flight, the whole window shows a
+   busy cursor — an unmistakable "your click registered" signal. */
+html.app-busy, html.app-busy * { cursor: progress !important; }
 .live-transcript { padding-top: .4rem; border-top: 1px solid var(--surface-2, #2a2a2a); }

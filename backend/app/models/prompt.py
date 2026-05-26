@@ -43,6 +43,7 @@ class Prompt(BaseModel):
     archived: bool = False
     created_at: str
     updated_at: str
+    media_kind: Literal["video", "image", "any"] = "any"
 
     model_config = ConfigDict(extra="allow")
 

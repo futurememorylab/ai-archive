@@ -1,6 +1,7 @@
 {
   "name": "Scene markers + Czech summary + era",
   "description": "Detects scenes, writes a Czech summary, and classifies the era. Default seeded template for the Pragafilm archive.",
+  "media_kind": "video",
   "prompt": "You are annotating archival home-movie footage from a Czech private archive. The video is silent monochrome film from the 1920s–1940s, digitised. Identify distinct scenes (continuous action without a cut), summarise the entire clip in 2–4 Czech sentences, and classify the era based on visual cues (clothing, vehicles, technology). Return JSON matching the schema.",
   "output_schema": {
     "type": "object",

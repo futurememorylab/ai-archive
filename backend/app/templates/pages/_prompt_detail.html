@@ -9,7 +9,8 @@
                 output_schema_text: {{ selected_version.output_schema_text|tojson }},
                 model: {{ selected_version.model|tojson }},
                 prompt_name: {{ selected.name|tojson }},
-                prompt_description: {{ (selected.description or "")|tojson }}
+                prompt_description: {{ (selected.description or "")|tojson }},
+                media_kind: {{ selected.media_kind|tojson }}
             })'>
 
   {# Title row + tags + model picker + Save + kebab.
@@ -18,6 +19,9 @@
     <div style="min-width: 0;">
       <div class="row" style="gap: 8px; align-items: center; margin-bottom: 2px; flex-wrap: wrap;">
         <div style="font-family: var(--f-display); font-size: 18px; font-weight: 600;">{{ selected.name }}</div>
+        {% if selected.media_kind and selected.media_kind != "any" %}
+          <span class="tag">{{ selected.media_kind }}</span>
+        {% endif %}
         {% include "pages/_prompt_version_picker.html" %}
         {% if selected_version.state == "production" %}
           <span class="tag good"><span class="dot"></span>production</span>
@@ -26,6 +30,13 @@
         {% else %}
           <span class="tag"><span class="dot"></span>archived</span>
         {% endif %}
+        <select class="txt" style="height: 24px; padding: 0 6px;"
+                x-model="mediaKind" @change="setMediaKind()"
+                title="Which clip kind this prompt applies to">
+          <template x-for="k in ['any','video','image']" :key="k">
+            <option :value="k" x-text="k"></option>
+          </template>
+        </select>
       </div>
       <div class="muted" style="font-size: 12px;">{{ selected.description or "" }}</div>
     </div>

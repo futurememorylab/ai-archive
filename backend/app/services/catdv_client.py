@@ -176,6 +176,31 @@ class CatdvClient:
             resp.raise_for_status()
             await self._stream_to_file(resp, dest, append=existing_size > 0, chunk_size=chunk_size)
 
+    async def download_original(
+        self, media_id: int, dest: Path, chunk_size: int = 1024 * 1024
+    ) -> None:
+        """Stream a clip's ORIGINAL source file (not the proxy) to `dest`.
+
+        Used for stills, which have no generated proxy. Hits
+        `GET /api/9/media/{media_id}?type=orig` (the `media_id` comes from
+        the clip's `provider_data["media"]["ID"]`). `type` defaults to
+        `proxy` server-side, which 404s for stills — `orig` is required.
+        Same HTTP-200-AUTH-envelope guard as `download_proxy`.
+        """
+        if not self._logged_in:
+            await self.login()
+        url = f"{self._base}/catdv/api/9/media/{media_id}"
+        params = {"type": "orig"}
+        async with self.http.stream("GET", url, params=params) as resp:
+            if resp.status_code == 401 or _is_auth_envelope(resp):
+                await self.login()
+                async with self.http.stream("GET", url, params=params) as resp2:
+                    resp2.raise_for_status()
+                    await self._stream_to_file(resp2, dest, append=False, chunk_size=chunk_size)
+                    return
+            resp.raise_for_status()
+            await self._stream_to_file(resp, dest, append=False, chunk_size=chunk_size)
+
     async def download_thumbnail(
         self, thumb_id: int, dest: Path, *, width: int | None = None, fmt: str = "jpg"
     ) -> None:

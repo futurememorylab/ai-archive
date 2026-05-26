@@ -200,3 +200,37 @@ def test_clip_detail_leaves_clean_text_unchanged():
     assert d["clip"]["markers"][0]["description"] == (
         "Test marker added via REST API to verify write access."
     )
+
+
+def test_clip_detail_kind_image():
+    clip = CanonicalClip(
+        key=("catdv", "888745"),
+        name="Anna 101.JPG",
+        duration_secs=0.0,
+        fps=10.0,
+        markers=(),
+        fields={},
+        notes={},
+        media=MediaRef(mime_type="Unknown", size_bytes=None, cached_path=None, upstream_handle=""),
+        provider_data={"media": {"ID": 881519, "filePath": "/x/Anna 101.JPG"}},
+        fetched_at=datetime.now(UTC),
+    )
+    assert clip_detail(clip)["clip"]["kind"] == "image"
+
+
+def test_clip_detail_kind_video():
+    clip = CanonicalClip(
+        key=("catdv", "888894"),
+        name="Bogdan 1.mov",
+        duration_secs=31.0,
+        fps=25.0,
+        markers=(),
+        fields={},
+        notes={},
+        media=MediaRef(
+            mime_type="video/quicktime", size_bytes=None, cached_path=None, upstream_handle=""
+        ),
+        provider_data={"media": {"ID": 770000, "filePath": "/x/Bogdan 1.mov"}},
+        fetched_at=datetime.now(UTC),
+    )
+    assert clip_detail(clip)["clip"]["kind"] == "video"

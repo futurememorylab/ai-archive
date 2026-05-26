@@ -632,6 +632,16 @@
                 }
             }
         ],
+        "./backend/app/services/gemini.py": [
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 20,
+                    "endColumn": 28,
+                    "lineCount": 1
+                }
+            }
+        ],
         "./backend/app/services/media_prefetcher.py": [
             {
                 "code": "reportUnboundVariable",
@@ -1038,6 +1048,40 @@
                     "endColumn": 53,
                     "lineCount": 1
                 }
+            },
+            {
+                "code": "reportCallIssue",
+                "range": {
+                    "startColumn": 12,
+                    "endColumn": 22,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./tests/integration/test_context_boot_recovery.py": [
+            {
+                "code": "reportCallIssue",
+                "range": {
+                    "startColumn": 37,
+                    "endColumn": 47,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportCallIssue",
+                "range": {
+                    "startColumn": 37,
+                    "endColumn": 47,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportCallIssue",
+                "range": {
+                    "startColumn": 37,
+                    "endColumn": 47,
+                    "lineCount": 1
+                }
             }
         ],
         "./tests/integration/test_fs_e2e.py": [
@@ -1381,6 +1425,22 @@
             }
         ],
         "./tests/integration/test_routes_media.py": [
+            {
+                "code": "reportAttributeAccessIssue",
+                "range": {
+                    "startColumn": 25,
+                    "endColumn": 30,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportAttributeAccessIssue",
+                "range": {
+                    "startColumn": 25,
+                    "endColumn": 30,
+                    "lineCount": 1
+                }
+            },
             {
                 "code": "reportAttributeAccessIssue",
                 "range": {
@@ -2308,6 +2368,120 @@
                 "range": {
                     "startColumn": 11,
                     "endColumn": 49,
+                    "lineCount": 1
+                }
+            }
+        ],
+        "./tests/unit/test_thumbnail_service.py": [
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 36,
+                    "endColumn": 68,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 76,
+                    "endColumn": 81,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 36,
+                    "endColumn": 68,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 76,
+                    "endColumn": 81,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportOptionalMemberAccess",
+                "range": {
+                    "startColumn": 15,
+                    "endColumn": 25,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 36,
+                    "endColumn": 80,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 88,
+                    "endColumn": 93,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 55,
+                    "endColumn": 71,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 79,
+                    "endColumn": 84,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 55,
+                    "endColumn": 87,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 36,
+                    "endColumn": 68,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 76,
+                    "endColumn": 91,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 36,
+                    "endColumn": 68,
+                    "lineCount": 1
+                }
+            },
+            {
+                "code": "reportArgumentType",
+                "range": {
+                    "startColumn": 76,
+                    "endColumn": 93,
                     "lineCount": 1
                 }
             }

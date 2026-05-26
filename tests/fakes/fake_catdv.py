@@ -25,6 +25,7 @@ class FakeCatdv:
         self.clips: dict[int, dict] = {}
         self.proxies: dict[int, bytes] = {}
         self.thumbnails: dict[int, bytes] = {}
+        self.originals: dict[int, bytes] = {}
         self.force_auth_until: float = 0.0
         self.put_log: list[tuple[int, dict]] = []
         self.logout_count: int = 0
@@ -149,6 +150,21 @@ class FakeCatdv:
                 # Mirror CatDV: HTTP 200 with a JSON AUTH envelope, not 401.
                 return self._envelope("AUTH")
             blob = self.thumbnails.get(thumb_id)
+            if blob is None:
+                return Response(status_code=404)
+            return Response(content=blob, media_type="image/jpeg")
+
+        @self.app.get("/catdv/api/9/media/{media_id}")
+        async def get_original_media(media_id: int, request: Request):
+            # Mirror CatDV: missing session → HTTP 200 + AUTH envelope.
+            if (
+                time.time() < self.force_auth_until
+                or request.cookies.get("JSESSIONID") != "fake-session"
+            ):
+                return self._envelope("AUTH")
+            if request.query_params.get("type") != "orig":
+                return Response(status_code=404)  # no proxy for stills
+            blob = self.originals.get(media_id)
             if blob is None:
                 return Response(status_code=404)
             return Response(content=blob, media_type="image/jpeg")

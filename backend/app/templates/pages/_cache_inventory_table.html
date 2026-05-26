@@ -1,7 +1,6 @@
 {# Inventory table partial (All / Local / AI tabs). Renders the shared
-   _video_list scaffold; the page template sets innerHTML on
-   #cache-table-region, so this partial provides just the table. #}
-{% if rows %}
+   _video_list scaffold plus the shared pager; the page template sets
+   innerHTML on #cache-table-region, so this partial provides table + pager. #}
 {% with head_cells = "pages/_cache_head_cells.html",
         row_cells = "pages/_cache_row_cells.html",
         cache_label = "Cache",
@@ -9,6 +8,15 @@
         empty_msg = "No entries match the current filter." %}
   {% include "pages/_video_list.html" %}
 {% endwith %}
-{% else %}
-<p class="empty">No entries match the current filter.</p>
-{% endif %}
+{% set _cq = 'tab=' ~ tab ~ '&limit=' ~ limit %}
+{% if filters.store %}{% set _cq = _cq ~ '&store=' ~ (filters.store|urlencode) %}{% endif %}
+{% if filters.workspace is not none %}{% set _cq = _cq ~ '&workspace=' ~ filters.workspace %}{% endif %}
+{% if filters.orphans %}{% set _cq = _cq ~ '&orphans=1' %}{% endif %}
+{% if filters.evictable %}{% set _cq = _cq ~ '&evictable=1' %}{% endif %}
+{% set _range = ((offset + 1) ~ '–' ~ (offset + rows|length) ~ ' of ' ~ total) if rows else ('0 of ' ~ total) %}
+{% with prev_url = ('/cache?' ~ _cq ~ '&offset=' ~ prev_offset) if prev_offset is not none else none,
+        next_url = ('/cache?' ~ _cq ~ '&offset=' ~ next_offset) if next_offset is not none else none,
+        range_label = _range,
+        hx_target = "#cache-table-region" %}
+  {% include "pages/_pager.html" %}
+{% endwith %}

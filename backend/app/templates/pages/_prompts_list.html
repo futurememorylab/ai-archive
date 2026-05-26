@@ -3,7 +3,12 @@
     <a class="tmpl-row{% if selected and selected.id == p.id %} selected{% endif %}"
        href="/prompts/{{ p.id }}">
       <div>
-        <div class="name">{{ p.name }}</div>
+        <div class="name">
+          {{ p.name }}
+          {% if p.media_kind and p.media_kind != "any" %}
+            <span class="tag" style="margin-left: 6px;">{{ p.media_kind }}</span>
+          {% endif %}
+        </div>
         <div class="desc">{{ p.description or "" }}</div>
       </div>
     </a>
