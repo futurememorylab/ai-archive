@@ -19,7 +19,7 @@ The catdv-annotator backend talks to a CatDV Enterprise server that has only **2
 2. **If something is already listening on 8765**, do not launch a second instance. Verify health and report back:
 
    ```bash
-   /usr/bin/curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8765/healthz
+   /usr/bin/curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8765/api/health
    ```
 
    Tell the user the existing PID and health status, and stop. Ask before killing it.
@@ -27,7 +27,7 @@ The catdv-annotator backend talks to a CatDV Enterprise server that has only **2
 3. **If nothing is running**, activate the project venv and start the server. Use the local venv (`.venv/bin/python`), never system Python:
 
    ```bash
-   cd /Users/peterhora/Documents/futurememorylab/sikl/catdv-annotator
+   cd /Users/peterhora/github/catdv-annotator
    .venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8765 --reload
    ```
 
