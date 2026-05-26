@@ -132,6 +132,18 @@ async def _studio_archive_picker(
     )
 
 
+@router.get("/studio/_player", response_class=HTMLResponse)
+async def _studio_player(request: Request, clip_id: int):
+    """Player wrapper for the focused clip. The actual <video> mounts on the
+    media URL the rest of the app uses; no new player behavior is introduced
+    here."""
+    return templates.TemplateResponse(
+        request,
+        "pages/_studio_player.html",
+        {"clip_id": clip_id},
+    )
+
+
 @router.get("/studio/_run", response_class=HTMLResponse)
 async def _studio_run(
     request: Request,

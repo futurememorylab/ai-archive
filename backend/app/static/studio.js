@@ -41,6 +41,15 @@ document.addEventListener('alpine:init', () => {
     focusClip(clipId) {
       this.focusedClipId = clipId;
       this.pendingRunSwap++;
+      // Show the player region and load the player partial for this clip.
+      const body = document.querySelector('.studio-body');
+      if (body) body.classList.remove('no-player');
+      const slot = document.querySelector('[data-studio-player-slot]');
+      if (slot) {
+        fetch(`/studio/_player?clip_id=${clipId}`)
+          .then(r => r.text())
+          .then(html => { slot.innerHTML = html; });
+      }
     },
 
     async runOnFocusedClip() {
