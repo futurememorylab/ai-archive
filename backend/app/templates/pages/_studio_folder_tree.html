@@ -1,0 +1,28 @@
+{# Renders one level of the folder tree starting at `parent_id`. The
+   `folders`, `items_by_folder`, and `depth` variables are passed in. #}
+{% set children = folders | selectattr("parent_id", "equalto", parent_id) | list %}
+{% for f in children %}
+  <li class="folder folder--depth-{{ depth }}">
+    <details open>
+      <summary>📁 {{ f.name }}</summary>
+      <ul class="folder__items">
+        {% for it in items_by_folder.get(f.id, []) %}
+          <li class="item" data-item-id="{{ it.id }}">
+            <span class="item__name">{{ it.display_name }}</span>
+            <span class="item__source">{% if it.source_kind == 'upload' %}upload{% else %}CatDV #{{ it.catdv_provider_clip_id }}{% endif %}</span>
+            <span class="item__gold">{% if it.gold_json %}gold ✓{% else %}gold —{% endif %}</span>
+            <button class="btn-edit-gold"
+                    @click="$dispatch('open-gold', { id: {{ it.id }}, body: {{ (it.gold_json or '{}') | safe }} })">
+              edit gold
+            </button>
+          </li>
+        {% endfor %}
+      </ul>
+      <ul class="folder__subfolders">
+        {% with parent_id=f.id, depth=depth+1 %}
+          {% include "pages/_studio_folder_tree.html" %}
+        {% endwith %}
+      </ul>
+    </details>
+  </li>
+{% endfor %}

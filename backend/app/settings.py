@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     # media prefetch queue
     prefetch_tick_interval_s: int = 2
 
+    # studio uploads
+    studio_uploads_dir: Path = Path("var/studio_uploads")
+    studio_max_upload_mb: int = 500
+
     @model_validator(mode="after")
     def _validate_fs_archive(self) -> "Settings":
         if self.archive_provider == "fs":

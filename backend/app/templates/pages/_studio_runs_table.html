@@ -1,0 +1,13 @@
+<table class="studio-runs">
+  <thead><tr><th>Run</th><th>Status</th><th>Started</th><th>Finished</th></tr></thead>
+  <tbody>
+    {% for r in runs %}
+      <tr>
+        <td><a href="/studio/runs/{{ r.id }}">#{{ r.id }}</a></td>
+        <td><span class="status status--{{ r.status }}">{{ r.status }}</span></td>
+        <td>{{ r.started_at or "—" }}</td>
+        <td>{{ r.finished_at or "—" }}</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>

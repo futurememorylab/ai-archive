@@ -21,6 +21,7 @@ from backend.app.routes.live import router as live_router
 from backend.app.routes.media import router as media_router
 from backend.app.routes.pages import page_routers
 from backend.app.routes.prompts import router as prompts_router
+from backend.app.routes import studio as studio_route_module
 from backend.app.routes.review import router as review_router
 from backend.app.routes.sync import router as sync_router
 from backend.app.routes.ui import router as ui_router
@@ -28,7 +29,7 @@ from backend.app.routes.workspaces import router as workspaces_router
 from backend.app.seed import seed_default_prompt, seed_live_system_instruction
 from backend.app.services.connection_monitor import ConnectionState
 from backend.app.settings import Settings
-from backend.app.startup import run_startup_cleanup
+from backend.app.startup import run_startup_cleanup, run_studio_startup
 
 SEEDS = Path(__file__).resolve().parents[1] / "seeds"
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -62,6 +63,7 @@ async def lifespan(app: FastAPI):
     if live_seed.exists():
         await seed_live_system_instruction(ctx.db, seed_path=live_seed)
     await run_startup_cleanup(ctx.db)
+    await run_studio_startup(ctx.db, uploads_dir=ctx.settings.studio_uploads_dir)
     if init_external:
         if ctx.connection_monitor is not None:
             await ctx.connection_monitor.start()
@@ -94,6 +96,8 @@ def register_routers(app: FastAPI) -> None:
     for r in page_routers:
         app.include_router(r)
     app.include_router(live_router)
+    app.include_router(studio_route_module.router)
+    app.include_router(studio_route_module.pages_router)
 
 
 app = FastAPI(title="CatDV Annotator", lifespan=lifespan)

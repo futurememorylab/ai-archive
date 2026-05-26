@@ -1,0 +1,19 @@
+{# Renders one side of a compare row. `side` is the dict from the route
+   (kind + by_item); `item_id` is the row's testbench_item_id. #}
+{% set v = side.by_item.get(item_id) %}
+{% if v is none %}
+  <em class="muted">— no reference</em>
+{% elif side.kind == 'gold' %}
+  <pre class="gold">{{ v.description if v.description is defined else v }}</pre>
+{% else %}
+  {# A StudioRunItem #}
+  {% if v.status == 'done' and v.structured_json %}
+    <pre class="output">{{ v.structured_json }}</pre>
+  {% elif v.status == 'unacceptable' %}
+    <em class="muted">unacceptable: {{ v.unacceptable_reason }}</em>
+  {% elif v.status == 'error' %}
+    <em class="error">error: {{ v.error }}</em>
+  {% else %}
+    <em>{{ v.status }}</em>
+  {% endif %}
+{% endif %}
