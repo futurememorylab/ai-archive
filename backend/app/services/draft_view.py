@@ -45,7 +45,7 @@ def _field_from_review(item: ReviewItem) -> dict[str, Any]:
         "identifier": identifier,
         "name": identifier.split(".")[-1],
         "value": value_str,
-        "editable": not isinstance(value, list),
+        "multi": isinstance(value, list),
         "item_id": item.id,
         "kind": "field",
         "decision": item.decision,
@@ -71,6 +71,7 @@ def build_draft_view(
             "markers": [],
             "fields": [],
             "notes": None,
+            "note_items": [],
         }
     markers = [_marker_from_review(it) for it in review_items if it.kind == "marker"]
     markers.sort(key=lambda m: m["in_secs"])
@@ -82,6 +83,17 @@ def build_draft_view(
         if it.kind == "note" and it.proposed_value is not None
     ]
     notes = "\n\n".join(t for t in note_texts if t) or None
+    note_items = [
+        {
+            "item_id": it.id,
+            "kind": "note",
+            "decision": it.decision,
+            "identifier": it.target_identifier,
+            "text": _fix(str(it.proposed_value)) or "",
+        }
+        for it in review_items
+        if it.kind == "note" and it.proposed_value is not None
+    ]
     return {
         "has_draft": True,
         "annotation_id": annotation.id,
@@ -92,4 +104,5 @@ def build_draft_view(
         "markers": markers,
         "fields": fields,
         "notes": notes,
+        "note_items": note_items,
     }

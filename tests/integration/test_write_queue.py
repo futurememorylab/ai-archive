@@ -2,12 +2,13 @@ import json
 
 import pytest
 
+from backend.app.archive.model import AddMarkers, SetField
 from backend.app.models.annotation import Annotation, ReviewItem
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.pending_operations import PendingOperationsRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
-from backend.app.services.write_queue import WriteQueue
+from backend.app.services.write_queue import WriteQueue, _items_to_change_ops
 
 
 async def _seed(conn):
@@ -209,3 +210,63 @@ async def test_enqueue_apply_captures_expected_etag_per_row(db):
     rows = await PendingOperationsRepo().list_pending(db)
     assert rows
     assert all(r["expected_etag"] == "modify-date-v1" for r in rows)
+
+
+def test_edited_marker_dict_round_trips():
+    """edited_value dict on a marker item → AddMarkers op with the edited fields."""
+    from backend.app.models.prompt import TargetMap
+
+    item = ReviewItem(
+        id=1,
+        annotation_id=1,
+        catdv_clip_id=1,
+        kind="marker",
+        proposed_value={"name": "Original", "in": {"secs": 0.0}, "out": {"secs": 1.0}},
+        decision="accepted",
+        edited_value={
+            "name": "Edited",
+            "category": "X",
+            "description": "d",
+            "in": {"secs": 2.0},
+            "out": {"secs": 5.0},
+        },
+    )
+    target_map = TargetMap(root={"scenes": {"kind": "markers"}})
+    ops_with_origin = _items_to_change_ops([item], target_map, fps=25.0)
+
+    assert len(ops_with_origin) == 1
+    op, origin_ids = ops_with_origin[0]
+    assert isinstance(op, AddMarkers)
+    assert len(op.markers) == 1
+    m = op.markers[0]
+    assert m.name == "Edited"
+    assert m.in_.secs == 2.0
+    assert m.out is not None and m.out.secs == 5.0
+    assert m.description == "d"
+    assert m.category == "X"
+    assert origin_ids == [1]
+
+
+def test_edited_list_field_round_trips():
+    """edited_value list on a field item → SetField op with the list value."""
+    from backend.app.models.prompt import TargetMap
+
+    item = ReviewItem(
+        id=2,
+        annotation_id=1,
+        catdv_clip_id=1,
+        kind="field",
+        target_identifier="f.a",
+        proposed_value=["old"],
+        decision="accepted",
+        edited_value=["x", "y"],
+    )
+    target_map = TargetMap(root={"decade": {"kind": "field", "identifier": "f.a"}})
+    ops_with_origin = _items_to_change_ops([item], target_map, fps=25.0)
+
+    assert len(ops_with_origin) == 1
+    op, origin_ids = ops_with_origin[0]
+    assert isinstance(op, SetField)
+    assert op.identifier == "f.a"
+    assert op.value == ["x", "y"]
+    assert origin_ids == [2]
