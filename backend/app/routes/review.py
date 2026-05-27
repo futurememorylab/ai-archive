@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from backend.app.context import AppContext
 from backend.app.deps import get_ctx
 from backend.app.services.write_queue import etag_from_snapshot, fps_from_snapshot
 
@@ -39,7 +40,7 @@ async def set_decision(request: Request, item_id: int, body: Decision):
     return {"id": item_id, "decision": body.decision}
 
 
-async def _resolve_and_enqueue_clip(ctx, clip_id: int) -> int:
+async def _resolve_and_enqueue_clip(ctx: AppContext, clip_id: int) -> int:
     """Resolve a clip's accepted items + apply context and enqueue them.
     Returns the number of ops queued."""
     accepted = await ctx.review_items_repo.list_by_clip(ctx.db, clip_id, decision="accepted")
