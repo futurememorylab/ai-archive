@@ -1,19 +1,13 @@
 {% extends "pages/layout.html" %}
+{% import "components/_ui.html" as ui %}
 {% block rail_active %}cache{% endblock %}
 {% block title %}Cache · CatDV Annotator{% endblock %}
-{% block crumb %}
-  <span class="crumb">
-    <span>System</span>
-    <span class="sep"> / </span>
-    <span class="strong">Cache management</span>
-  </span>
-{% endblock %}
+{% block crumb %}{{ ui.breadcrumb([('System', None), ('Cache', None)]) }}{% endblock %}
 
 {% block body %}
 <div class="page cache-page" x-data="cacheSel()">
 
   <div class="page-hdr">
-    <h1>Cache</h1>
     <span class="meta">inspector · queue · purge</span>
     <span class="grow"></span>
     <button class="btn ghost" type="button" onclick="location.reload()">Refresh</button>

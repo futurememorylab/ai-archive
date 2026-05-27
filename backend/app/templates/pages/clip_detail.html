@@ -1,10 +1,8 @@
 {% extends "pages/layout.html" %}
+{% import "components/_ui.html" as ui %}
 {% block rail_active %}preview{% endblock %}
 {% block title %}{{ clip.name }} · CatDV Annotator{% endblock %}
-{% block crumb %}
-  <a class="crumb" href="/">‹ All clips</a>
-  <span class="crumb">{{ clip.name }}</span>
-{% endblock %}
+{% block crumb %}{{ ui.breadcrumb([('All clips', '/'), (clip.name, None)]) }}{% endblock %}
 {% block body %}
 <script>localStorage.setItem("catdv:lastClipId", "{{ clip.id }}");</script>
 <div class="detail"

@@ -60,3 +60,16 @@ def test_clip_badge_renders_zero(monkeypatch, tmp_path: Path):
     assert r.status_code == 200
     # zero pending → no badge spans rendered
     assert "clip-badge" in r.text
+
+
+def test_pages_have_breadcrumb_and_single_title(monkeypatch, tmp_path: Path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        for path in ("/prompts", "/cache"):
+            r = client.get(path)
+            assert r.status_code == 200
+            assert 'class="crumb"' in r.text  # top-bar context present
+        cache = client.get("/cache").text
+    # title not duplicated: "Cache" lives in the crumb leaf, not a body <h1>
+    assert "<h1>Cache</h1>" not in cache
+    assert '<span class="strong">Cache</span>' in cache

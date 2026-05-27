@@ -132,7 +132,8 @@ def test_cache_page_renders(monkeypatch, tmp_path: Path):
     with TestClient(app) as client:
         r = client.get("/cache")
     assert r.status_code == 200
-    assert "Cache management" in r.text
+    # crumb leaf is now "Cache" (rendered via the breadcrumb macro)
+    assert 'class="crumb"' in r.text
     assert "Local cache" in r.text
 
 
