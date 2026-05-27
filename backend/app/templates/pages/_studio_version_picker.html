@@ -1,10 +1,29 @@
-{# Version chip + dropdown stub — Task 8 turns this into an HTMX-swap
-   trigger.
+{# Version chip + dropdown for a single prompt-card. Picking a row triggers
+   an HTMX swap of the surrounding card to /studio/_prompt_card.
 
    Required scope from the enclosing card:
-     active_version, versions, side, clip_id
+     active_version, versions, side, clip_id (optional)
 #}
-<span class="pc-vchip" data-version-picker>
-  <span class="pc-vlbl">v{{ active_version.version_num }}</span>
-  <span class="pc-status {{ active_version.state }}">{{ active_version.state }}</span>
+<span class="pc-vchip" x-data="{ open: false }" @click.outside="open = false">
+  <button type="button" class="pc-vchip-btn" :class="open && 'open'"
+          @click="open = !open" title="Switch version">
+    <span class="pc-vlbl">v{{ active_version.version_num }}</span>
+    <span class="pc-status {{ active_version.state }}">{{ active_version.state }}</span>
+    <span class="caret">▾</span>
+  </button>
+  <div class="pc-vmenu" x-show="open" x-cloak>
+    <div class="pc-vmenu-h mono-cell">versions</div>
+    {% for v in versions %}
+      <button type="button"
+              class="pc-vmenu-item{% if v.id == active_version.id %} is-current{% endif %}"
+              data-version-pick="{{ v.id }}"
+              hx-get="/studio/_prompt_card?side={{ side }}&prompt_version_id={{ v.id }}{% if clip_id %}&clip_id={{ clip_id }}{% endif %}"
+              hx-target="closest .studio-prompt-card"
+              hx-swap="outerHTML"
+              @click="open = false">
+        <span class="pc-vmenu-lbl">v{{ v.version_num }}</span>
+        <span class="pc-status {{ v.state }}">{{ v.state }}</span>
+      </button>
+    {% endfor %}
+  </div>
 </span>

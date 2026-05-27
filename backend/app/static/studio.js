@@ -40,6 +40,29 @@ window.studio = {
   },
 };
 
+document.body.addEventListener('htmx:afterSwap', (evt) => {
+  const root = document.querySelector('.studio-page');
+  if (!root || !root._x_dataStack) return;
+  const page = root._x_dataStack[0];
+  const card = evt.target.closest('.studio-prompt-card');
+  if (!card) return;
+  const side = card.getAttribute('data-side');
+  const vId  = parseInt(card.getAttribute('data-version-id'), 10);
+  const vNum = parseInt(card.getAttribute('data-version-num'), 10);
+  if (Number.isNaN(vId)) return;
+  if (side === 'cur') {
+    page.activeVersionId = vId;
+    page.activeVersionNum = vNum;
+    page.pendingRunSwap++;
+  } else if (side === 'cmp') {
+    page.compareVersionId = vId;
+    page.compareVersionNum = vNum;
+    page.pendingRunSwap++;
+  }
+  page._writeUrl();
+  if (page.focusedClipId) page.refreshPlayer();
+});
+
 document.addEventListener('alpine:init', () => {
   Alpine.data('studioPage', (initial) => ({
     promptId: initial.promptId,
@@ -71,15 +94,21 @@ document.addEventListener('alpine:init', () => {
     focusClip(clipId) {
       this.focusedClipId = clipId;
       this.pendingRunSwap++;
-      // Show the player region and load the player partial for this clip.
       const body = document.querySelector('.studio-body');
       if (body) body.classList.remove('no-player');
+      this.refreshPlayer();
+    },
+
+    refreshPlayer() {
       const slot = document.querySelector('[data-studio-player-slot]');
-      if (slot) {
-        fetch(`/studio/_player?clip_id=${clipId}`)
-          .then(r => r.text())
-          .then(html => { slot.innerHTML = html; });
-      }
+      if (!slot || !this.focusedClipId) return;
+      const params = new URLSearchParams();
+      params.set('clip_id', this.focusedClipId);
+      if (this.activeVersionId)  params.set('version_id', this.activeVersionId);
+      if (this.compareVersionId) params.set('compare_id', this.compareVersionId);
+      fetch(`/studio/_player?${params.toString()}`)
+        .then(r => r.text())
+        .then(html => { slot.innerHTML = html; });
     },
 
     async runOnFocusedClip() {

@@ -108,3 +108,23 @@ def test_output_tab_includes_data_run_json_when_run_exists(client):
     r = client.get(f"/studio/_prompt_card?side=cur&prompt_version_id={v1}&clip_id=12041")
     assert r.status_code == 200
     assert "data-run-json" in r.text
+
+
+def test_prompt_card_lists_all_versions_in_picker(client):
+    _, v1, v2 = _make_prompt_two_versions(client)
+    r = client.get(f"/studio/_prompt_card?side=cur&prompt_version_id={v2}")
+    assert r.status_code == 200
+    # Both versions show up in the dropdown.
+    assert f'data-version-pick="{v1}"' in r.text
+    assert f'data-version-pick="{v2}"' in r.text
+    # Active version is marked.
+    assert 'is-current' in r.text
+
+
+def test_picker_uses_hx_get_to_swap_card(client):
+    _, v1, v2 = _make_prompt_two_versions(client)
+    r = client.get(f"/studio/_prompt_card?side=cur&prompt_version_id={v2}")
+    html = r.text
+    assert 'hx-get="/studio/_prompt_card' in html
+    assert 'hx-target="closest .studio-prompt-card"' in html
+    assert 'hx-swap="outerHTML"' in html

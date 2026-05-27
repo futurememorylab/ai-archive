@@ -1911,3 +1911,28 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .picker-row .name {
   flex: 1;
 }
+
+/* === Studio: version chip ============================================ */
+.pc-vchip { position: relative; display: inline-flex; align-items: center; }
+.pc-vchip-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--border, #2a2a2a);
+  background: var(--bg-2, #161616); color: inherit;
+  padding: 2px 8px; border-radius: 999px; cursor: pointer;
+}
+.pc-vchip-btn .caret { font-size: 10px; opacity: 0.7; }
+.pc-vchip-btn.open { background: var(--bg-3, #1f1f1f); }
+.pc-vmenu {
+  position: absolute; top: calc(100% + 4px); left: 0; min-width: 160px;
+  background: var(--bg-2, #161616); border: 1px solid var(--border, #2a2a2a);
+  border-radius: 6px; padding: 4px; z-index: 20;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+}
+.pc-vmenu-h { padding: 4px 8px; font-size: 10px; text-transform: uppercase; opacity: 0.5; }
+.pc-vmenu-item {
+  display: flex; width: 100%; align-items: center; gap: 8px;
+  background: none; border: 0; color: inherit;
+  padding: 6px 8px; border-radius: 4px; cursor: pointer;
+}
+.pc-vmenu-item:hover { background: var(--bg-3, #1f1f1f); }
+.pc-vmenu-item.is-current { background: var(--accent-fade, #2b3a4d); }
