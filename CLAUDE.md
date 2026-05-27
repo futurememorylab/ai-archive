@@ -99,6 +99,28 @@ flag would have made it incoherent?). Default answer is reuse.
 - This machine uses nvm; non-interactive shells don't have node/npm/npx on PATH. Source ~/.nvm/nvm.sh first, or use absolute paths.
 - Python 3.14 venvs are known-broken on this machine — use 3.12 or 3.13.
 
+## Specs must include a manual acceptance flow
+
+Every design spec under `docs/specs/` must end with (or contain near
+the bottom) a **Manual acceptance flows** section: a numbered list of
+end-user click-throughs that, taken together, prove the spec was
+actually implemented. One numbered flow per capability the spec
+introduces. Each flow names the setup (URL, prerequisite data), the
+actions, and the observable expected result.
+
+This serves three purposes:
+1. The reviewer/implementer at the end of the work has a concrete
+   acceptance checklist — not just "all tests pass".
+2. The spec's scope becomes tangible — if you can't write the
+   click-through, the spec is too abstract.
+3. Regressions on adjacent surfaces (the spec touches X to ship Y;
+   the flow includes "X still works") get a named guard.
+
+See `docs/specs/2026-05-26-prompt-studio-pr2-design.md` for the
+expected shape. The bar is: a colleague who didn't write the code can
+follow the flows on a running app and either tick them off or report
+exactly which step broke.
+
 ## Recording decisions at end of session
 
 When a session involves any non-trivial design call — a schema replacement,
