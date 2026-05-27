@@ -45,6 +45,8 @@ def _marker_from_review(item: ReviewItem) -> dict[str, Any]:
 def _field_from_review(item: ReviewItem) -> dict[str, Any]:
     identifier = item.target_identifier or ""
     value = _effective_value(item)
+    if isinstance(value, dict) and "value" in value:
+        value = value["value"]
     if isinstance(value, list):
         value_str = ", ".join(_fix(str(v)) or "" for v in value)
     elif value is None:
