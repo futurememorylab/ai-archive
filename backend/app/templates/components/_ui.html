@@ -1,0 +1,49 @@
+{# Reusable UI components. See docs/design-language.md. #}
+
+{% macro button(label, href=None, variant='', size='', type='button', attrs='') -%}
+  {%- set cls = ('btn ' ~ variant ~ ' ' ~ size).split() | join(' ') -%}
+  {%- if href -%}
+    <a class="{{ cls }}" href="{{ href }}" {{ attrs|safe }}>{{ label }}</a>
+  {%- else -%}
+    <button type="{{ type }}" class="{{ cls }}" {{ attrs|safe }}>{{ label }}</button>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro field(label, name, value='', type='text', help='', input_attrs='') -%}
+  <label class="field">
+    <span class="field-label">{{ label }}</span>
+    <input class="txt" type="{{ type }}" name="{{ name }}" value="{{ value }}" {{ input_attrs|safe }}>
+    {%- if help %}<span class="field-help">{{ help }}</span>{% endif -%}
+  </label>
+{%- endmacro %}
+
+{% macro textarea_field(label, name, value='', help='', min_height='120px', input_attrs='') -%}
+  <label class="field">
+    <span class="field-label">{{ label }}</span>
+    <textarea class="txt-area" name="{{ name }}" style="min-height: {{ min_height }};" {{ input_attrs|safe }}>{{ value }}</textarea>
+    {%- if help %}<span class="field-help">{{ help|safe }}</span>{% endif -%}
+  </label>
+{%- endmacro %}
+
+{% macro page_header(title, meta='') -%}
+  <div class="page-hdr">
+    <h1>{{ title }}</h1>
+    {%- if meta %}<span class="meta">{{ meta }}</span>{% endif -%}
+    <div class="grow"></div>
+    {%- if caller is defined %}{{ caller() }}{% endif -%}
+  </div>
+{%- endmacro %}
+
+{% macro breadcrumb(segments) -%}
+  <span class="crumb">
+    {%- for seg in segments -%}
+      {%- if not loop.first %}<span class="sep"> / </span>{% endif -%}
+      {%- if seg[1] %}<a href="{{ seg[1] }}">{{ seg[0] }}</a>
+      {%- else %}<span class="strong">{{ seg[0] }}</span>{% endif -%}
+    {%- endfor -%}
+  </span>
+{%- endmacro %}
+
+{% macro status_pill(label, state='') -%}
+  <span class="pill {{ state }}"><span class="led"></span>{{ label }}</span>
+{%- endmacro %}
