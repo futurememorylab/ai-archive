@@ -17,6 +17,8 @@
    href="/prompts" title="Prompts">{% include "icons/_prompts.svg" %}</a>
 <a class="rail-btn{% if _active == 'studio' %} active{% endif %}"
    href="/studio" title="Studio">{% include "icons/_flask.svg" %}</a>
+<a class="rail-btn{% if _active == 'review' %} active{% endif %}"
+   id="rail-review" href="/review" title="Review drafts">{% include "icons/_review.svg" %}<span class="rail-badge" id="review-badge" hidden></span></a>
 <a class="rail-btn{% if _active == 'cache' %} active{% endif %}"
    href="/cache" title="Cache">{% include "icons/_cache.svg" %}</a>
 <script>
@@ -34,5 +36,12 @@
       var clipsBtn = document.getElementById("rail-clips");
       if (q && clipsBtn) clipsBtn.href = "/" + q;
     } catch (e) { /* sessionStorage unavailable; leave default href */ }
+    fetch('/api/review/pending/count')
+      .then(function(r){ return r.ok ? r.json() : { count: 0 }; })
+      .then(function(d){
+        var b = document.getElementById('review-badge');
+        if (b && d.count > 0) { b.textContent = d.count; b.hidden = false; }
+      })
+      .catch(function(){ /* offline-safe: leave badge hidden */ });
   })();
 </script>
