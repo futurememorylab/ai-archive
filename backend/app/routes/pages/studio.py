@@ -135,14 +135,87 @@ async def _studio_archive_picker(
 
 
 @router.get("/studio/_player", response_class=HTMLResponse)
-async def _studio_player(request: Request, clip_id: int):
-    """Player wrapper for the focused clip. The actual <video> mounts on the
-    media URL the rest of the app uses; no new player behavior is introduced
-    here."""
+async def _studio_player(
+    request: Request,
+    clip_id: int,
+    version_id: int | None = None,
+    compare_id: int | None = None,
+):
+    """Player wrapper for the focused clip + scenes overlay.
+
+    Builds rows = [cur (if version_id), cmp (if compare_id)] each carrying
+    that version's latest run scenes. Empty rows are still passed so the
+    overlay can short-circuit on no-scenes consistently.
+    """
+    ctx = get_ctx(request)
+
+    # Resolve clip metadata via the archive when available.
+    fps: float = 25.0
+    duration_secs: float | None = None
+    duration_smpte: str = ""
+    if ctx.archive:
+        try:
+            clip = await ctx.archive.get_clip(str(clip_id))
+            fps = float(clip.fps or 25.0)
+            duration_secs = clip.duration_secs
+        except Exception:  # noqa: BLE001
+            pass
+
+    async def _scenes_for(vid: int) -> list[dict]:
+        run = await ctx.studio_runs_repo.latest_for_pair(
+            ctx.db, prompt_version_id=vid, clip_id=clip_id
+        )
+        if not run or not run.output_json:
+            return []
+        return list(run.output_json.get("scenes") or [])
+
+    rows: list[dict] = []
+    if version_id is not None:
+        scenes = await _scenes_for(version_id)
+        try:
+            v = await ctx.prompts_repo.get_version(ctx.db, version_id)
+            label = f"v{v.version_num}"
+        except LookupError:
+            label = f"v?{version_id}"
+        rows.append({
+            "key": label, "ranges": scenes, "cls": "range-cur",
+            "alpine_list": None, "x_show": None,
+        })
+    if compare_id is not None:
+        scenes = await _scenes_for(compare_id)
+        try:
+            v = await ctx.prompts_repo.get_version(ctx.db, compare_id)
+            label = f"v{v.version_num}"
+        except LookupError:
+            label = f"v?{compare_id}"
+        rows.append({
+            "key": label, "ranges": scenes, "cls": "range-cmp",
+            "alpine_list": None, "x_show": None,
+        })
+
+    # If the archive didn't supply a duration but we have scenes, derive a
+    # fallback from the max scene out_secs so the overlay still renders
+    # (offline mode + tests rely on this).
+    if not duration_secs:
+        max_out = 0.0
+        for row in rows:
+            for m in row["ranges"]:
+                out = m.get("out_secs") or m.get("in_secs", 0.0)
+                if out and out > max_out:
+                    max_out = float(out)
+        if max_out > 0:
+            duration_secs = max_out
+
     return templates.TemplateResponse(
         request,
         "pages/_studio_player.html",
-        {"clip_id": clip_id},
+        {
+            "clip_id": clip_id,
+            "fps": fps,
+            "duration_secs": duration_secs,
+            "duration_smpte": duration_smpte,
+            "rows": rows,
+        },
     )
 
 
