@@ -361,3 +361,113 @@ def test_review_page_htmx_returns_table_only(monkeypatch, tmp_path):
         assert r.status_code == 200
         assert "<table" in r.text
         assert "<aside" not in r.text
+
+
+async def _seed_clip2(ctx):
+    """Seed a second pending clip (clip_id=2, name='Clip_2') using the same
+    prompt version as _seed so they share the same job context."""
+    from backend.app.models.annotation import Annotation, ReviewItem
+
+    _, vid = await ctx.prompts_repo.create_with_initial_version(
+        ctx.db,
+        name="t2",
+        description=None,
+        body="p2",
+        target_map={
+            "scenes": {"kind": "markers"},
+        },
+        output_schema={},
+        model="m",
+    )
+    aid = await ctx.annotations_repo.insert(
+        ctx.db,
+        Annotation(
+            catdv_clip_id=2,
+            catdv_clip_name="Clip_2",
+            prompt_version_id=vid,
+            model="m",
+            prompt_used="p2",
+            raw_response={},
+            structured_output={},
+            clip_snapshot={"ID": 2, "name": "Clip_2", "markers": [], "fields": {}},
+        ),
+    )
+    await ctx.review_items_repo.bulk_insert(
+        ctx.db,
+        [
+            ReviewItem(
+                annotation_id=aid,
+                catdv_clip_id=2,
+                kind="marker",
+                proposed_value={
+                    "name": "scene-b",
+                    "in": {"frm": 0, "secs": 0.0},
+                    "out": {"frm": 50, "secs": 2.0},
+                },
+            ),
+        ],
+    )
+
+
+async def _upsert_clip_cache(ctx, clip_id: int, name: str, file_path: str):
+    """Insert a clip into clip_cache with the given media.filePath."""
+    from datetime import UTC, datetime
+
+    from backend.app.archive.model import CanonicalClip, MediaRef
+
+    clip = CanonicalClip(
+        key=("catdv", str(clip_id)),
+        name=name,
+        duration_secs=10.0,
+        fps=25.0,
+        markers=(),
+        fields={},
+        notes={},
+        media=MediaRef(
+            mime_type="video/quicktime",
+            size_bytes=None,
+            cached_path=None,
+            upstream_handle="",
+        ),
+        provider_data={"media": {"filePath": file_path}},
+        fetched_at=datetime.now(UTC),
+    )
+    await ctx.clip_cache_repo.upsert(ctx.db, clip=clip, catalog_id="881507")
+
+
+def test_review_media_filter_paginates_consistently(monkeypatch, tmp_path):
+    """Media filter must filter-then-paginate so totals, offsets, and rows are
+    all consistent (regression test for the bug where SQL pagination ran before
+    the Python kind-filter, producing wrong totals and missing clips)."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        # Seed clip 1 (IMAGE) and clip 2 (VIDEO).
+        # _seed_clip2 is inserted second so it has a later created_at and comes
+        # first in the SQL ORDER BY created_at DESC result set.  With the old
+        # buggy code, GET /review?media=image&limit=1 would return clip_2
+        # (video) at SQL offset 0, discard it in the Python filter, and yield
+        # 0 rows — even though clip_1 (image) exists and should be shown.
+        _run(_seed(ctx))
+        _run(_seed_clip2(ctx))
+        _run(_upsert_clip_cache(ctx, clip_id=1, name="Clip_1", file_path="/media/a.jpg"))
+        _run(_upsert_clip_cache(ctx, clip_id=2, name="Clip_2", file_path="/media/b.mov"))
+
+        # --- image filter: only Clip_1 is an image ---
+        r = client.get("/review?media=image")
+        assert r.status_code == 200
+        assert "Clip_1" in r.text
+        assert "Clip_2" not in r.text
+
+        # --- video filter: only Clip_2 is a video ---
+        r = client.get("/review?media=video")
+        assert r.status_code == 200
+        assert "Clip_2" in r.text
+        assert "Clip_1" not in r.text
+
+        # --- pager consistency: image with limit=1, offset=0 ---
+        # Clip_2 (video) is first in DB order; with the buggy code it would
+        # consume the page slot and the image clip would never appear.
+        r = client.get("/review?media=image&limit=1&offset=0")
+        assert r.status_code == 200
+        assert "Clip_1" in r.text
