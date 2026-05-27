@@ -58,7 +58,9 @@ def test_player_one_row_no_version(client):
     assert r.status_code == 200
     # No version_id → no overlay rows, but the player wrapper still renders.
     assert "data-clip-player" in r.text
-    assert 'class="transport"' not in r.text or 'class="ranges' not in r.text
+    # transport wrapper is unconditional; the meaningful check is that
+    # no ranges row rendered for the no-version case.
+    assert 'class="ranges' not in r.text
 
 
 def test_player_one_row_with_version(client):

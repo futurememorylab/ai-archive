@@ -10,6 +10,8 @@
      duration_secs    — float | None
      duration_smpte   — str  | ""
      rows             — list (built in the route)
+     duration_smpte   — str | "" (consumed by the included _player_overlay.html
+                        via Jinja scope inheritance for the rightmost tc-labels span)
 #}
 <div class="studio-player"
      data-clip-player
