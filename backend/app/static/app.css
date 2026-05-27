@@ -354,6 +354,16 @@ a { color: inherit; text-decoration: none; }
 }
 .actions-item:hover { background: var(--hover); }
 .actions-item-danger { color: var(--bad); }
+.actions-kinds {
+  display: flex; flex-direction: row; flex-wrap: wrap; gap: 4px 10px;
+  padding: 4px 10px 6px;
+  font-size: 11.5px; color: var(--text-2);
+}
+.actions-kinds label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.actions-sep {
+  height: 1px; background: var(--line-2);
+  margin: 4px 6px;
+}
 [x-cloak] { display: none !important; }
 
 .clips-region { display: flex; flex-direction: column; min-height: 0; flex: 1; }

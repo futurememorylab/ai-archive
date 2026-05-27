@@ -572,3 +572,21 @@ def test_clips_list_shows_draft_columns(monkeypatch, tmp_path):
         assert "1f" in r.text
         # Clip kind (video, since no filePath in provider_data) must appear.
         assert "video" in r.text
+
+
+def test_clips_list_has_review_bulk_actions(monkeypatch, tmp_path):
+    """GET / must render the bulk review actions and kind-filter toggles in
+    the Actions menu markup (always server-rendered; visible after selection)."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        ctx.archive = _FakeArchive([_make_canonical_clip(1)])
+        r = client.get("/")
+        assert r.status_code == 200
+        # Primary review actions must be present in the markup.
+        assert "Review selected" in r.text
+        assert "Apply drafts" in r.text
+        # Kind-filter toggle labels must be present.
+        assert "Markers" in r.text
+        assert "Fields" in r.text
+        assert "Notes" in r.text
