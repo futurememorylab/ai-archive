@@ -43,8 +43,14 @@ function reviewQueue(clipId) {
       if (i >= 0 && i + 1 < this.queue.length) {
         location.href = `/clips/${this.queue[i + 1]}?review=1`;
       } else {
-        location.href = '/review';
+        this._exitReview();
       }
+    },
+    _exitReview() {
+      // End of the review queue — return to the clips list we came from.
+      // (There is no standalone /review page on this build, so navigating
+      // there 404'd at the end of the queue / on a single-clip review.)
+      location.href = '/' + (sessionStorage.getItem('catdv:clipsListQuery') || '');
     },
     _decideMarker(container) {
       if (!container) return;
@@ -71,7 +77,7 @@ function reviewQueue(clipId) {
     prev() {
       const i = this._idx();
       if (i > 0) location.href = `/clips/${this.queue[i - 1]}?review=1`;
-      else location.href = '/review';
+      else this._exitReview();
     },
     skip() { this._next(); },
     async applyAndNext() {
