@@ -24,12 +24,14 @@
     Notes
   </button>
   {% endif %}
+  {% if show_history is not defined or show_history %}
   <button type="button" class="anno-tab" role="tab"
           :class="{ active: tab === 'history' }"
           :aria-selected="tab === 'history'"
           @click="tab = 'history'; if (!historyLoaded) loadHistory()">
     History
   </button>
+  {% endif %}
 </div>
 
 <div class="anno-section" role="tabpanel" x-show="tab === 'markers'" x-cloak>
@@ -69,6 +71,8 @@
 </div>
 {% endif %}
 
+{% if show_history is not defined or show_history %}
 <div class="anno-section" role="tabpanel" x-show="tab === 'history'" x-cloak>
   <div x-html="historyHtml || '<p class=&quot;muted&quot;>Načítám…</p>'"></div>
 </div>
+{% endif %}
