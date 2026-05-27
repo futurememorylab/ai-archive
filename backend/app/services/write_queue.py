@@ -43,6 +43,28 @@ class WriteQueue:
         self._review_items = review_items_repo
         self._clock = clock or (lambda: datetime.now(UTC))
 
+    async def enqueue_apply_for_clip(
+        self,
+        conn: aiosqlite.Connection,
+        *,
+        clip_id: int,
+        accepted: list[ReviewItem],
+        target_map: TargetMap,
+        expected_etag: str | None,
+        annotation_id: int | None,
+        fps: float,
+    ) -> list[int]:
+        """Thin wrapper over enqueue_apply keyed by a catdv clip id."""
+        return await self.enqueue_apply(
+            conn,
+            clip_key=("catdv", str(clip_id)),
+            items=accepted,
+            target_map=target_map,
+            expected_etag=expected_etag,
+            annotation_id=annotation_id,
+            fps=fps,
+        )
+
     async def enqueue_apply(
         self,
         conn: aiosqlite.Connection,

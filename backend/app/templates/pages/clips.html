@@ -38,7 +38,7 @@
         </span>
         {% if mode == "online" %}
         <a class="meta"
-           href="?{% if q %}q={{ q }}&{% endif %}{% if cache_filter and cache_filter != 'any' %}cache={{ cache_filter }}&{% endif %}{% if anno_filter and anno_filter != 'any' %}anno={{ anno_filter }}&{% endif %}offset={{ offset }}&limit={{ limit }}&refresh=1">
+           href="?{% if q %}q={{ q }}&{% endif %}{% if cache_filter and cache_filter != 'any' %}cache={{ cache_filter }}&{% endif %}{% if anno_filter and anno_filter != 'any' %}anno={{ anno_filter }}&{% endif %}{% if batch_filter %}batch={{ batch_filter }}&{% endif %}offset={{ offset }}&limit={{ limit }}&refresh=1">
           Refresh
         </a>
         {% endif %}
@@ -68,6 +68,17 @@
           <option value="has_any"    {% if anno_filter == 'has_any'    %}selected{% endif %}>Any annotations</option>
         </select>
       </label>
+      <label class="filter-field">
+        <span class="filter-lbl">Batch</span>
+        <select name="batch" onchange="this.form.requestSubmit()">
+          <option value="" {% if not batch_filter %}selected{% endif %}>Any</option>
+          {% for j in jobs %}
+            <option value="{{ j.id }}" {% if batch_filter == j.id %}selected{% endif %}>
+              #{{ j.id }}{% if j.notes %} · {{ j.notes }}{% elif j.kind %} · {{ j.kind }}{% endif %} ({{ j.total_clips }})
+            </option>
+          {% endfor %}
+        </select>
+      </label>
       <a class="btn btn-ghost filter-reset"
          :class="{ 'is-disabled': !active }"
          href="/">Reset filters</a>
@@ -85,6 +96,18 @@
           <span class="caret" aria-hidden="true">▾</span>
         </button>
         <div class="actions-menu" x-show="open" x-cloak>
+          <button type="button" class="actions-item" @click="open = false; reviewSelected()">
+            Review selected →
+          </button>
+          <div class="actions-kinds">
+            <label><input type="checkbox" x-model="kinds.marker"> Markers</label>
+            <label><input type="checkbox" x-model="kinds.field"> Fields</label>
+            <label><input type="checkbox" x-model="kinds.note"> Notes</label>
+          </div>
+          <button type="button" class="actions-item" @click="open = false; applyDrafts()">
+            Apply drafts (selected)
+          </button>
+          <div class="actions-sep" role="separator"></div>
           {% if not host_local_proxies and mode == "online" %}
           <button type="button"
                   class="actions-item"
@@ -139,6 +162,8 @@
         if (qInput) qInput.value = params.get("q") || "";
         if (cacheSel) cacheSel.value = params.get("cache") || "any";
         if (annoSel) annoSel.value = params.get("anno") || "any";
+        const batchSel = f.querySelector('select[name="batch"]');
+        if (batchSel) batchSel.value = params.get("batch") || "";
         this.recompute();
       },
       recompute() {
@@ -146,7 +171,8 @@
         const q = (f.querySelector('input[name="q"]')?.value || "").trim();
         const cache = f.querySelector('select[name="cache"]')?.value || "any";
         const anno = f.querySelector('select[name="anno"]')?.value || "any";
-        this.active = !!q || cache !== "any" || anno !== "any";
+        const batch = f.querySelector('select[name="batch"]')?.value || "";
+        this.active = !!q || cache !== "any" || anno !== "any" || !!batch;
       },
       init() {
         this.syncFromUrl();
@@ -158,32 +184,40 @@
   }
 
   function bulkSel() {
-    return {
-      count: 0,
-      _selectedKeys() {
-        return Array.from(
-          document.querySelectorAll('.row-check:checked')
-        ).map(el => el.value.split('/'));
+    return Object.assign(rowSelect(), {
+      kinds: { marker: true, field: true, note: true },
+      init() { this.initSelection(); },
+      _selectedClipIds() {
+        return this._selected()
+          .map(el => parseInt(el.value.split('/')[1], 10))
+          .filter(id => !isNaN(id));
       },
-      init() {
-        document.addEventListener('change', e => {
-          if (e.target.classList.contains('row-check')) {
-            this.count = this._selectedKeys().length;
-          }
-          if (e.target.id === 'row-select-all') {
-            document.querySelectorAll('.row-check').forEach(
-              cb => cb.checked = e.target.checked
-            );
-            this.count = this._selectedKeys().length;
-          }
+      _activeKinds() {
+        return Object.entries(this.kinds).filter(([, on]) => on).map(([k]) => k);
+      },
+      reviewSelected() {
+        const ids = this._selectedClipIds();
+        if (!ids.length) return;
+        sessionStorage.setItem('catdv:reviewQueue', JSON.stringify(ids));
+        location.href = `/clips/${ids[0]}?review=1`;
+      },
+      async applyDrafts() {
+        const clip_ids = this._selectedClipIds();
+        const kinds = this._activeKinds();
+        if (!clip_ids.length || !kinds.length) return;
+        if (!confirm(`Apply ${kinds.join(', ')} drafts for ${clip_ids.length} clip(s)?`)) return;
+        const r = await fetch('/api/review/apply-batch', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clip_ids, kinds }),
         });
+        if (r.ok) htmx.ajax('GET', window.location.href, '#clips-region');
+        else alert(`Apply failed (${r.status}).`);
       },
       async bulkPrefetch() {
         const keys = this._selectedKeys();
         if (keys.length === 0) return;
         const r = await fetch('/api/cache/prefetch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ clip_keys: keys }),
         });
         if (r.ok) htmx.ajax('GET', window.location.href, '#clips-region');
@@ -193,17 +227,12 @@
         if (keys.length === 0) return;
         if (!confirm(`Evict local media for ${keys.length} clip(s)?`)) return;
         const r = await fetch('/api/cache/bulk-evict', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            clip_keys: keys,
-            layers: ['media-local'],
-            force: false,
-          }),
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clip_keys: keys, layers: ['media-local'], force: false }),
         });
         if (r.ok) htmx.ajax('GET', window.location.href, '#clips-region');
       },
-    }
+    });
   }
 </script>
 {% endblock %}

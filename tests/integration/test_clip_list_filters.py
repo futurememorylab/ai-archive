@@ -300,3 +300,115 @@ async def test_intersection_of_cache_and_anno(db):
         anno="for_review",
     )
     assert out == {2}
+
+
+# ---------------------------------------------------------------------------
+# Batch (job) filter tests
+# ---------------------------------------------------------------------------
+
+async def _insert_job(db, *, job_id: int) -> None:
+    """Insert a minimal job row (prompt_version_id=1 must already exist)."""
+    await db.execute(
+        """
+        INSERT INTO jobs (id, prompt_version_id, status, created_at, total_clips)
+        VALUES (?, 1, 'completed', '2026-05-22', 1)
+        """,
+        (job_id,),
+    )
+    await db.commit()
+
+
+async def _insert_annotation_with_job(db, clip_id: int, job_id: int) -> int:
+    cur = await db.execute(
+        """
+        INSERT INTO annotations
+          (catdv_clip_id, catdv_clip_name, prompt_version_id, job_id,
+           model, prompt_used, raw_response, structured_output,
+           clip_snapshot, created_at, provider_id, provider_clip_id)
+        VALUES (?, ?, 1, ?, 'gemini', 'prompt',
+                '{}', '{}', '{}', '2026-05-22', 'catdv', ?)
+        """,
+        (clip_id, f"Clip {clip_id}", job_id, str(clip_id)),
+    )
+    await db.commit()
+    assert cur.lastrowid is not None
+    return cur.lastrowid
+
+
+def test_is_active_batch():
+    assert not is_active("any", "any", None)
+    assert is_active("any", "any", 5)
+    assert is_active("local", "any", None)
+
+
+@pytest.mark.asyncio
+async def test_resolve_batch_filter_isolates_job(db):
+    """resolve with batch= returns only clips with pending items for that job."""
+    await _seed_list_cache(db, [1, 2, 3])
+    await _seed_prompt_version(db)
+    await _insert_job(db, job_id=10)
+    await _insert_job(db, job_id=20)
+
+    # Clip 1 has a pending item in job 10
+    a1 = await _insert_annotation_with_job(db, clip_id=1, job_id=10)
+    await _insert_review_item(db, annotation_id=a1, clip_id=1, applied=False)
+
+    # Clip 2 has a pending item in job 20
+    a2 = await _insert_annotation_with_job(db, clip_id=2, job_id=20)
+    await _insert_review_item(db, annotation_id=a2, clip_id=2, applied=False)
+
+    # Clip 3 has an applied item in job 10 — should NOT appear in batch filter
+    a3 = await _insert_annotation_with_job(db, clip_id=3, job_id=10)
+    await _insert_review_item(db, annotation_id=a3, clip_id=3, applied=True)
+
+    out = await resolve(
+        db,
+        provider_id=PROVIDER,
+        catalog_id=CATALOG,
+        cache="any",
+        anno="any",
+        batch=10,
+    )
+    assert out == {1}
+
+
+@pytest.mark.asyncio
+async def test_resolve_batch_intersects_with_cache_filter(db):
+    """batch AND cache filters intersect — only clips matching both are returned."""
+    await _seed_list_cache(db, [1, 2, 3])
+    await _seed_prompt_version(db)
+    await _insert_job(db, job_id=10)
+
+    # Both clips 1 and 2 have pending items in job 10
+    a1 = await _insert_annotation_with_job(db, clip_id=1, job_id=10)
+    await _insert_review_item(db, annotation_id=a1, clip_id=1, applied=False)
+    a2 = await _insert_annotation_with_job(db, clip_id=2, job_id=10)
+    await _insert_review_item(db, annotation_id=a2, clip_id=2, applied=False)
+
+    # Only clip 2 has a local proxy — intersection should return only clip 2
+    await _insert_proxy(db, 2)
+
+    out = await resolve(
+        db,
+        provider_id=PROVIDER,
+        catalog_id=CATALOG,
+        cache="local",
+        anno="any",
+        batch=10,
+    )
+    assert out == {2}
+
+
+@pytest.mark.asyncio
+async def test_resolve_batch_returns_none_when_no_filter(db):
+    """With batch=None and no other filters, resolve still returns None."""
+    await _seed_list_cache(db, [1, 2])
+    out = await resolve(
+        db,
+        provider_id=PROVIDER,
+        catalog_id=CATALOG,
+        cache="any",
+        anno="any",
+        batch=None,
+    )
+    assert out is None

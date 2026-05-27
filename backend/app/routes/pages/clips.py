@@ -62,6 +62,7 @@ async def clips_list(
     refresh: int = 0,
     cache: str | None = None,
     anno: str | None = None,
+    batch: str | None = None,
 ):
     ctx = get_ctx(request)
     if ctx.archive is None:
@@ -70,6 +71,9 @@ async def clips_list(
     catalog_id = str(ctx.settings.catdv_catalog_id)
     cache_f = normalize_cache(cache)
     anno_f = normalize_anno(anno)
+    # `batch` arrives as a query string; the "Any" option submits an empty
+    # string, which must coerce to None (an `int | None` param 422s on "").
+    batch_id = int(batch) if batch and batch.isdigit() else None
     host_local_proxies = getattr(getattr(ctx, "proxy_resolver", None), "is_host_local", False)
 
     # `?refresh=1` lets the user bypass the list cache when they suspect
@@ -88,7 +92,7 @@ async def clips_list(
     effective_cache_f = "any" if (host_local_proxies and cache_f == "local") else cache_f
 
     try:
-        if filters_active(effective_cache_f, anno_f):
+        if filters_active(effective_cache_f, anno_f, batch_id):
             clips, total = await _filtered_page(
                 ctx,
                 catalog_id=catalog_id,
@@ -98,6 +102,7 @@ async def clips_list(
                 cache_filter=effective_cache_f,
                 anno_filter=anno_f,
                 host_local_proxies=host_local_proxies,
+                batch=batch_id,
             )
         else:
             page = await ctx.archive.list_clips(
@@ -125,6 +130,7 @@ async def clips_list(
         rows = await ctx.cache_inspector.status_for_clips(keys)
         statuses = {r.clip_key: r for r in rows}
 
+    jobs = await ctx.jobs_repo.list_jobs(ctx.db, limit=50)
     prev_offset, next_offset = page_offsets(offset, limit, total)
     ctx_dict = {
         "q": q or "",
@@ -133,7 +139,9 @@ async def clips_list(
         "total": total,
         "cache_filter": cache_f,
         "anno_filter": anno_f,
-        "filters_active": filters_active(effective_cache_f, anno_f),
+        "batch_filter": batch_id,
+        "jobs": jobs,
+        "filters_active": filters_active(effective_cache_f, anno_f, batch_id),
         "host_local_proxies": host_local_proxies,
         "catalog": {
             "id": ctx.settings.catdv_catalog_id,
@@ -145,6 +153,24 @@ async def clips_list(
         "cache_fetched_at": cache_fetched_at,
         "cache_age": _humanize_age(cache_fetched_at),
     }
+
+    # Annotate each row with its pending-draft counts and batch job id.
+    pending_rows = await ctx.review_items_repo.list_pending_clips(ctx.db, limit=2000, offset=0)
+    pmap = {r["catdv_clip_id"]: r for r in pending_rows}
+    for row in ctx_dict["clips"]:
+        p = pmap.get(row["id"])
+        mc = p["marker_count"] if p else 0
+        fc = p["field_count"] if p else 0
+        nc = p["note_count"] if p else 0
+        parts = []
+        if mc:
+            parts.append(f"{mc}m")
+        if fc:
+            parts.append(f"{fc}f")
+        if nc:
+            parts.append(f"{nc}n")
+        row["draft_label"] = " · ".join(parts) if parts else ""
+        row["batch"] = p["job_id"] if p else None
 
     template = (
         "pages/_clips_tbody.html"
@@ -164,6 +190,7 @@ async def _filtered_page(
     cache_filter,
     anno_filter,
     host_local_proxies: bool = False,
+    batch: int | None = None,
 ) -> tuple[list[CanonicalClip], int]:
     """Local-first paginated list when any filter is active.
 
@@ -179,6 +206,7 @@ async def _filtered_page(
         cache=cache_filter,
         anno=anno_filter,
         host_local_proxies=host_local_proxies,
+        batch=batch,
     )
     if not candidate_ids:
         return [], 0
@@ -337,7 +365,7 @@ async def _build_draft_view_model_for_live(ctx, clip_id: int) -> dict:
 
 
 @router.get("/clips/{clip_id}", response_class=HTMLResponse)
-async def clip_detail_page(request: Request, clip_id: int):
+async def clip_detail_page(request: Request, clip_id: int, review: int | None = None):
     ctx = get_ctx(request)
     if ctx.archive is None:
         raise HTTPException(503, "archive provider not initialized")
@@ -370,6 +398,7 @@ async def clip_detail_page(request: Request, clip_id: int):
         "gemini_live_inactivity_s",
         60,
     )
+    ctx_dict["review_mode"] = bool(review)
     return templates.TemplateResponse(request, "pages/clip_detail.html", ctx_dict)
 
 
