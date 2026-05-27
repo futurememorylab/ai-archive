@@ -36,9 +36,10 @@
              :class="{ editing: editingItemId === {{ m.item_id }} }"
              :style="(() => { const _m = _draftItem({{ m.item_id }}); if (!_m || !duration) return ''; const _l = (_m.in_secs / duration) * 100; const _w = (((_m.out_secs != null ? _m.out_secs : _m.in_secs + 1) - _m.in_secs) / duration) * 100; return `left:${_l}%; width:${_w}%`; })()"
              @pointerdown="startMarkerDrag($event, {{ m.item_id }}, 'move')"
+             @click.stop
              title="{{ m.name }}">
-          <span class="range-handle in"  x-show="editingItemId === {{ m.item_id }}" @pointerdown.stop="startMarkerDrag($event, {{ m.item_id }}, 'in')"></span>
-          <span class="range-handle out" x-show="editingItemId === {{ m.item_id }}" @pointerdown.stop="startMarkerDrag($event, {{ m.item_id }}, 'out')"></span>
+          <span class="range-handle in"  x-show="editingItemId === {{ m.item_id }}" @pointerdown.stop="startMarkerDrag($event, {{ m.item_id }}, 'in')" @click.stop></span>
+          <span class="range-handle out" x-show="editingItemId === {{ m.item_id }}" @pointerdown.stop="startMarkerDrag($event, {{ m.item_id }}, 'out')" @click.stop></span>
         </div>
         {% else %}
         <div class="range{% if 'range-draft' in row.cls %} draft-range{% endif %}"
