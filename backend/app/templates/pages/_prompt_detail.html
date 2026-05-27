@@ -78,17 +78,17 @@
 
   {# Prompt body editor. Sized to the viewport (no-autosize) so the editor
      scales to the window instead of growing the page. #}
-  {{ ui.textarea_field('Prompt', 'body', min_height='30vh', cls='no-autosize',
+  {{ ui.textarea_field('Prompt', 'body', min_height='28vh', cls='no-autosize',
        help='Plain text. No HTML, no Markdown &mdash; sent as-is to Gemini.',
        input_attrs='x-model="draft.body" :readonly="!canEdit"') }}
 
   {# target_map editor. #}
-  {{ ui.textarea_field('target_map', 'target_map', cls='json-editor no-autosize', min_height='20vh',
+  {{ ui.textarea_field('target_map', 'target_map', cls='json-editor no-autosize', min_height='18vh',
        help='Maps schema field &rarr; CatDV target. <span class="code-inline">markers</span>, <span class="code-inline">note</span>, <span class="code-inline">field</span>.',
        input_attrs='x-model="draft.target_map_text" :readonly="!canEdit"') }}
 
   {# output_schema editor. #}
-  {{ ui.textarea_field('output_schema', 'output_schema', cls='json-editor no-autosize', min_height='20vh',
+  {{ ui.textarea_field('output_schema', 'output_schema', cls='json-editor no-autosize', min_height='18vh',
        help='JSON Schema for the Gemini response. Versioned alongside the body.',
        input_attrs='x-model="draft.output_schema_text" :readonly="!canEdit"') }}
 

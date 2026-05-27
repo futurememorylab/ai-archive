@@ -95,10 +95,12 @@
            alt="{{ clip.name }}"
            @dblclick="$el.requestFullscreen && $el.requestFullscreen()">
       {% else %}
+      {# preload="none": don't fetch the proxy just for opening the clip — the
+         timeline duration is server-provided, so the video only loads on play. #}
       <video x-ref="video"
              class="video"
              src="{{ clip.media_url }}"
-             preload="metadata"
+             preload="none"
              @dblclick="$refs.video.requestFullscreen && $refs.video.requestFullscreen()"></video>
       {% endif %}
       <div class="hud hud-tl">
