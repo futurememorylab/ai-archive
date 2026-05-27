@@ -146,6 +146,24 @@ async def clips_list(
         "cache_age": _humanize_age(cache_fetched_at),
     }
 
+    # Annotate each row with its pending-draft counts and batch job id.
+    pending_rows = await ctx.review_items_repo.list_pending_clips(ctx.db, limit=2000, offset=0)
+    pmap = {r["catdv_clip_id"]: r for r in pending_rows}
+    for row in ctx_dict["clips"]:
+        p = pmap.get(row["id"])
+        mc = p["marker_count"] if p else 0
+        fc = p["field_count"] if p else 0
+        nc = p["note_count"] if p else 0
+        parts = []
+        if mc:
+            parts.append(f"{mc}m")
+        if fc:
+            parts.append(f"{fc}f")
+        if nc:
+            parts.append(f"{nc}n")
+        row["draft_label"] = " · ".join(parts) if parts else ""
+        row["batch"] = p["job_id"] if p else None
+
     template = (
         "pages/_clips_tbody.html"
         if request.headers.get("HX-Request") == "true"

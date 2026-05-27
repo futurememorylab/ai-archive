@@ -26,26 +26,6 @@ class ApplyBatch(BaseModel):
     kinds: list[str] | None = None
 
 
-@router.get("/pending")
-async def list_pending(
-    request: Request,
-    job_id: int | None = None,
-    offset: int = 0,
-    limit: int = 50,
-):
-    ctx = get_ctx(request)
-    rows = await ctx.review_items_repo.list_pending_clips(
-        ctx.db, job_id=job_id, limit=limit, offset=offset
-    )
-    total = await ctx.review_items_repo.count_pending_clips(ctx.db, job_id=job_id)
-    return {"clips": rows, "total": total, "offset": offset, "limit": limit}
-
-
-@router.get("/pending/count")
-async def pending_count(request: Request, job_id: int | None = None):
-    ctx = get_ctx(request)
-    return {"count": await ctx.review_items_repo.count_pending_clips(ctx.db, job_id=job_id)}
-
 
 @router.get("/clips/{clip_id}/items")
 async def list_items_for_clip(request: Request, clip_id: int):

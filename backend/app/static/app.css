@@ -196,15 +196,6 @@ a { color: inherit; text-decoration: none; }
   background: var(--accent);
   border-radius: 1px;
 }
-.rail-badge {
-  position: absolute; top: 2px; right: 2px;
-  min-width: 16px; height: 16px; padding: 0 4px;
-  border-radius: 8px; font-size: 10px; line-height: 16px;
-  text-align: center; background: var(--bad); color: #fff;
-  font-family: var(--f-mono);
-  font-variant-numeric: tabular-nums;
-  pointer-events: none;
-}
 
 /* ─── page-clips ─────────────────────────────────────────────────────── */
 .page { display: flex; flex-direction: column; height: 100%; }
