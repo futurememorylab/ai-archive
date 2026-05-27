@@ -1957,6 +1957,9 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .ri-readonly .ri-tc { color: var(--text-3); font-size: 11px; font-family: var(--f-mono); }
 .ri-editor { display: flex; flex-direction: column; gap: 8px; margin-top: 8px;
   padding: 10px; border: 1px solid var(--accent); border-radius: var(--r-2); }
+/* Editor textareas scale to the viewport so the editor is comfortable on any
+   screen (still capped by .txt-area max-height, so it never overflows). */
+.ri-editor .txt-area { min-height: 30vh; }
 .ri-row.editing { outline: 1px solid color-mix(in oklab, var(--accent) 40%, transparent); border-radius: var(--r-2); }
 
 /* In/out are edited on the timeline (drag); the editor shows a read-only

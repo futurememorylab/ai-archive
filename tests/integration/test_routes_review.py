@@ -575,8 +575,10 @@ def test_clips_list_shows_draft_columns(monkeypatch, tmp_path):
 
 
 def test_clips_list_has_review_bulk_actions(monkeypatch, tmp_path):
-    """GET / must render the bulk review actions and kind-filter toggles in
-    the Actions menu markup (always server-rendered; visible after selection)."""
+    """GET / must render the bulk review actions in the Actions menu markup
+    (always server-rendered; visible after selection). The per-kind
+    Markers/Fields/Notes toggles were removed — bulk apply now applies all
+    draft kinds (kinds default to all in bulkSel)."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         ctx = client.app.state.ctx
@@ -586,7 +588,3 @@ def test_clips_list_has_review_bulk_actions(monkeypatch, tmp_path):
         # Primary review actions must be present in the markup.
         assert "Review selected" in r.text
         assert "Apply drafts" in r.text
-        # Kind-filter toggle labels must be present.
-        assert "Markers" in r.text
-        assert "Fields" in r.text
-        assert "Notes" in r.text
