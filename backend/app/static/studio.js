@@ -207,8 +207,6 @@ document.addEventListener('alpine:init', () => {
     },
   }));
 
-  Alpine.data('studioHeader', () => ({}));
-
   // Cross-component proxy to studioPage.activeModel — necessary because
   // Alpine `$root` only walks to the nearest enclosing `x-data`, and nesting
   // `x-data="{ open: false }"` on the picker hides the page scope.
