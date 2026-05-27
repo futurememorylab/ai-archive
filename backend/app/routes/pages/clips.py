@@ -337,7 +337,7 @@ async def _build_draft_view_model_for_live(ctx, clip_id: int) -> dict:
 
 
 @router.get("/clips/{clip_id}", response_class=HTMLResponse)
-async def clip_detail_page(request: Request, clip_id: int):
+async def clip_detail_page(request: Request, clip_id: int, review: int | None = None):
     ctx = get_ctx(request)
     if ctx.archive is None:
         raise HTTPException(503, "archive provider not initialized")
@@ -370,6 +370,7 @@ async def clip_detail_page(request: Request, clip_id: int):
         "gemini_live_inactivity_s",
         60,
     )
+    ctx_dict["review_mode"] = bool(review)
     return templates.TemplateResponse(request, "pages/clip_detail.html", ctx_dict)
 
 

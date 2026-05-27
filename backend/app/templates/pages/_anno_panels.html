@@ -43,6 +43,13 @@
         <span class="tc mono">
           {{ smpte(m.in_secs, panels.fps or clip.fps) }}{% if m.out_secs is not none %} – {{ smpte(m.out_secs, panels.fps or clip.fps) }}{% endif %}
         </span>
+        {% if review_mode and m.item_id is defined and m.item_id is not none %}
+          <label class="review-item-toggle" onclick="event.stopPropagation()">
+            <input type="checkbox" class="ri-accept" data-item-id="{{ m.item_id }}"
+                   {% if m.decision != 'rejected' %}checked{% endif %}>
+            keep
+          </label>
+        {% endif %}
       </header>
       <h3 class="m-name">{{ m.name }}</h3>
       {% if m.description %}<p class="m-desc">{{ m.description }}</p>{% endif %}
@@ -58,6 +65,14 @@
       <span class="ident mono">{{ f.identifier }}</span>
       <span class="arrow">→</span>
       <span class="val">{{ f.value }}</span>
+      {% if review_mode and f.item_id is defined and f.item_id is not none %}
+        <label class="review-item-toggle">
+          <input type="checkbox" class="ri-accept" data-item-id="{{ f.item_id }}"
+                 {% if f.decision != 'rejected' %}checked{% endif %}>
+          keep
+        </label>
+        <input class="ri-edit" data-item-id="{{ f.item_id }}" value="{{ f.value }}">
+      {% endif %}
     </div>
   {% else %}
     <p class="muted">No custom fields.</p>

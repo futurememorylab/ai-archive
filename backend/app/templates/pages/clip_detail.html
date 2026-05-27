@@ -12,7 +12,7 @@
      x-data='Object.assign(
        player({{ clip.fps }}, {{ clip.duration_secs }}, {{ clip.markers|tojson }}, {{ draft.markers|tojson }}),
        clipAnnotate({{ clip.id }}, "{{ clip.kind }}"),
-       { scope: "published", tab: "markers",
+       { scope: "{{ 'draft' if review_mode else 'published' }}", tab: "markers",
          liveSession: liveSession({{ clip.id }}, { inactivityS: {{ gemini_live_inactivity_s|default(60) }} })
        }
      )'
@@ -215,6 +215,15 @@
         Draft
       </button>
     </div>
+
+    {% if review_mode %}
+    <div class="review-actionbar" x-data="reviewQueue({{ clip.id }})">
+      <span class="review-progress mono" x-text="progressLabel()"></span>
+      <span class="grow"></span>
+      <button type="button" class="ca-btn" @click="skip()">Skip</button>
+      <button type="button" class="ca-btn ca-btn-live" @click="applyAndNext()">Apply &amp; next →</button>
+    </div>
+    {% endif %}
 
     <div class="anno-scoped" x-show="scope === 'published'" x-cloak>
       {% with panels = {

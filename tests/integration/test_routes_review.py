@@ -435,6 +435,74 @@ async def _upsert_clip_cache(ctx, clip_id: int, name: str, file_path: str):
     await ctx.clip_cache_repo.upsert(ctx.db, clip=clip, catalog_id="881507")
 
 
+class _FakeArchive:
+    """Minimal archive stub — returns a single CanonicalClip by id."""
+
+    def __init__(self, clips):
+        self._clips = {str(c.key[1]): c for c in clips}
+
+    async def get_clip(self, clip_id_str):
+        from backend.app.archive.errors import ProviderError
+
+        try:
+            return self._clips[str(clip_id_str)]
+        except KeyError as exc:
+            raise ProviderError(f"not found: {clip_id_str}") from exc
+
+    async def list_clips(self, catalog_id, query):
+        from backend.app.archive.model import ClipPage
+
+        items = list(self._clips.values())
+        return ClipPage(items=items, total=len(items), offset=query.offset, limit=query.limit)
+
+
+def _make_canonical_clip(clip_id: int = 1):
+    from datetime import UTC, datetime
+
+    from backend.app.archive.model import CanonicalClip, MediaRef
+
+    return CanonicalClip(
+        key=("catdv", str(clip_id)),
+        name=f"Clip_{clip_id}",
+        duration_secs=10.0,
+        fps=25.0,
+        markers=(),
+        fields={},
+        notes={},
+        media=MediaRef(
+            mime_type="video/quicktime",
+            size_bytes=None,
+            cached_path=None,
+            upstream_handle=str(clip_id),
+        ),
+        provider_data={"ID": clip_id, "name": f"Clip_{clip_id}"},
+        fetched_at=datetime.now(UTC),
+    )
+
+
+def test_clip_detail_review_mode_renders_item_controls(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        _run(_seed(ctx))
+        ctx.archive = _FakeArchive([_make_canonical_clip(1)])
+        r = client.get("/clips/1?review=1")
+        assert r.status_code == 200
+        assert "review-item-toggle" in r.text
+        assert ("Apply &amp; next" in r.text) or ("Apply & next" in r.text)
+
+
+def test_clip_detail_normal_mode_no_item_controls(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        _run(_seed(ctx))
+        ctx.archive = _FakeArchive([_make_canonical_clip(1)])
+        r = client.get("/clips/1")  # no review flag
+        assert r.status_code == 200
+        assert "review-item-toggle" not in r.text
+
+
 def test_review_media_filter_paginates_consistently(monkeypatch, tmp_path):
     """Media filter must filter-then-paginate so totals, offsets, and rows are
     all consistent (regression test for the bug where SQL pagination ran before
