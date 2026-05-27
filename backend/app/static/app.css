@@ -1955,12 +1955,21 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .ri-readonly { display: flex; align-items: center; gap: 8px; }
 .ri-readonly .ri-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ri-readonly .ri-tc { color: var(--text-3); font-size: 11px; font-family: var(--f-mono); }
-.ri-editor { display: flex; flex-direction: column; gap: 8px; margin-top: 8px;
-  padding: 10px; border: 1px solid var(--accent); border-radius: var(--r-2); }
-/* Editor textareas scale to the viewport so the editor is comfortable on any
-   screen (still capped by .txt-area max-height, so it never overflows). */
-.ri-editor .txt-area { min-height: 30vh; }
-.ri-row.editing { outline: 1px solid color-mix(in oklab, var(--accent) 40%, transparent); border-radius: var(--r-2); }
+/* The editor breaks out of the narrow 400px review aside into a window-width
+   bottom panel, so editing has real room while the timeline stays visible
+   above for dragging. No accent outline (it reads as blue in the draft
+   colorway and looked busy). */
+.ri-editor {
+  position: fixed; left: 56px; right: 0; bottom: 0; z-index: 50;
+  display: flex; flex-direction: column; gap: 10px;
+  max-height: 60vh; overflow-y: auto;
+  padding: 16px 22px;
+  background: var(--panel);
+  border-top: 1px solid var(--line-2);
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.45);
+}
+.ri-editor .txt-area { min-height: 26vh; }
+.ri-row.editing { border-radius: var(--r-2); }
 
 /* In/out are edited on the timeline (drag); the editor shows a read-only
    live SMPTE readout + hint (Task 10 replaced the number spinners). */

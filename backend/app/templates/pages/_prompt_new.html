@@ -33,9 +33,9 @@
           {% endfor %}
         </select>
       </label>
-      {{ ui.textarea_field('Prompt', 'body', value=form.body, min_height='130px') }}
-      {{ ui.textarea_field('target_map (JSON)', 'target_map', value=form.target_map_text, min_height='100px', cls='json-editor') }}
-      {{ ui.textarea_field('output_schema (JSON)', 'output_schema', value=form.output_schema_text, min_height='140px', cls='json-editor') }}
+      {{ ui.textarea_field('Prompt', 'body', value=form.body, min_height='30vh', cls='no-autosize') }}
+      {{ ui.textarea_field('target_map (JSON)', 'target_map', value=form.target_map_text, min_height='20vh', cls='json-editor no-autosize') }}
+      {{ ui.textarea_field('output_schema (JSON)', 'output_schema', value=form.output_schema_text, min_height='20vh', cls='json-editor no-autosize') }}
       <div class="row" style="gap: 8px;">
         {{ ui.button('Create prompt', variant='primary', type='submit') }}
         {{ ui.button('Cancel', href='/prompts', variant='ghost') }}

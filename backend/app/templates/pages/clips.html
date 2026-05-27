@@ -190,8 +190,19 @@
         return Object.entries(this.kinds).filter(([, on]) => on).map(([k]) => k);
       },
       reviewSelected() {
-        const ids = this._selectedClipIds();
-        if (!ids.length) return;
+        // Only queue clips that actually have a draft to review — silently
+        // drop the rest so the walk never flashes through empty clips.
+        const ids = this._selected()
+          .filter(el => {
+            const cell = el.closest('tr')?.querySelector('.col-drafts');
+            return cell && cell.textContent.trim() !== '—';
+          })
+          .map(el => parseInt(el.value.split('/')[1], 10))
+          .filter(id => !isNaN(id));
+        if (!ids.length) {
+          alert('None of the selected clips have drafts to review.');
+          return;
+        }
         sessionStorage.setItem('catdv:reviewQueue', JSON.stringify(ids));
         location.href = `/clips/${ids[0]}?review=1`;
       },

@@ -25,10 +25,15 @@
   window.fmtTimecode = fmtTimecode;
   window.fmtBytes = fmtBytes;
   window.autosize = autosize;
+  // Autosize .txt-area to content, unless it opts out with .no-autosize
+  // (fields that are sized to the viewport instead, so they don't grow the page).
   document.addEventListener("input", (e) => {
-    if (e.target.classList && e.target.classList.contains("txt-area")) autosize(e.target);
+    const t = e.target;
+    if (t.classList && t.classList.contains("txt-area") && !t.classList.contains("no-autosize")) {
+      autosize(t);
+    }
   });
   document.addEventListener("DOMContentLoaded", () => {
-    document.querySelectorAll("textarea.txt-area").forEach(autosize);
+    document.querySelectorAll("textarea.txt-area:not(.no-autosize)").forEach(autosize);
   });
 })();
