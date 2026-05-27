@@ -13,7 +13,7 @@
   <label class="field">
     <span class="field-label">{{ label }}</span>
     <input class="txt" type="{{ type }}" name="{{ name }}" value="{{ value }}" {{ input_attrs|safe }}>
-    {%- if help %}<span class="field-help">{{ help }}</span>{% endif -%}
+    {%- if help %}<span class="field-help">{{ help|safe }}</span>{% endif -%}
   </label>
 {%- endmacro %}
 

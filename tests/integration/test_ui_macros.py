@@ -26,3 +26,24 @@ def test_textarea_field_passes_input_attrs():
     out = t.render()
     assert 'class="field-label"' in out and 'Body' in out
     assert 'class="txt-area' in out and 'x-model="d.body"' in out and '>hi</textarea>' in out
+
+def test_field_help_renders_markup():
+    env = _env()
+    t = env.from_string(
+        "{% import 'components/_ui.html' as ui %}"
+        "{{ ui.field('Map', 'm', help='see <span class=\"code-inline\">x</span>') }}"
+    )
+    out = t.render()
+    assert '<span class="code-inline">x</span>' in out
+
+def test_page_header_renders_with_and_without_caller():
+    env = _env()
+    plain = env.from_string(
+        "{% import 'components/_ui.html' as ui %}{{ ui.page_header('Cache', meta='3 items') }}"
+    ).render()
+    assert 'class="page-hdr"' in plain and '<h1>Cache</h1>' in plain and '3 items' in plain
+    with_actions = env.from_string(
+        "{% import 'components/_ui.html' as ui %}"
+        "{% call ui.page_header('Cache') %}<button>Refresh</button>{% endcall %}"
+    ).render()
+    assert '<h1>Cache</h1>' in with_actions and '<button>Refresh</button>' in with_actions
