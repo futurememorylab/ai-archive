@@ -62,7 +62,7 @@ async def clips_list(
     refresh: int = 0,
     cache: str | None = None,
     anno: str | None = None,
-    batch: int | None = None,
+    batch: str | None = None,
 ):
     ctx = get_ctx(request)
     if ctx.archive is None:
@@ -71,6 +71,9 @@ async def clips_list(
     catalog_id = str(ctx.settings.catdv_catalog_id)
     cache_f = normalize_cache(cache)
     anno_f = normalize_anno(anno)
+    # `batch` arrives as a query string; the "Any" option submits an empty
+    # string, which must coerce to None (an `int | None` param 422s on "").
+    batch_id = int(batch) if batch and batch.isdigit() else None
     host_local_proxies = getattr(getattr(ctx, "proxy_resolver", None), "is_host_local", False)
 
     # `?refresh=1` lets the user bypass the list cache when they suspect
@@ -89,7 +92,7 @@ async def clips_list(
     effective_cache_f = "any" if (host_local_proxies and cache_f == "local") else cache_f
 
     try:
-        if filters_active(effective_cache_f, anno_f, batch):
+        if filters_active(effective_cache_f, anno_f, batch_id):
             clips, total = await _filtered_page(
                 ctx,
                 catalog_id=catalog_id,
@@ -99,7 +102,7 @@ async def clips_list(
                 cache_filter=effective_cache_f,
                 anno_filter=anno_f,
                 host_local_proxies=host_local_proxies,
-                batch=batch,
+                batch=batch_id,
             )
         else:
             page = await ctx.archive.list_clips(
@@ -136,9 +139,9 @@ async def clips_list(
         "total": total,
         "cache_filter": cache_f,
         "anno_filter": anno_f,
-        "batch_filter": batch,
+        "batch_filter": batch_id,
         "jobs": jobs,
-        "filters_active": filters_active(effective_cache_f, anno_f, batch),
+        "filters_active": filters_active(effective_cache_f, anno_f, batch_id),
         "host_local_proxies": host_local_proxies,
         "catalog": {
             "id": ctx.settings.catdv_catalog_id,

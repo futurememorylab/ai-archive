@@ -259,3 +259,15 @@ def test_clips_list_batch_filter_dropdown(monkeypatch, tmp_path):
         assert 'select name="batch"' in r.text
         # Any-batch option is always present
         assert 'name="batch"' in r.text
+
+
+def test_clips_list_empty_batch_param_is_not_422(monkeypatch, tmp_path):
+    """The 'Any' batch option submits batch= (empty); it must coerce to None,
+    not 422. Regression for the filter form breaking on every change."""
+    with _make_client(monkeypatch, tmp_path) as client:
+        client.app.state.ctx.archive = FakeArchive((_canonical(),))
+        r = client.get("/?q=&cache=any&anno=for_review&batch=")
+        assert r.status_code == 200
+        # A real job id still works.
+        r2 = client.get("/?cache=any&anno=for_review&batch=7")
+        assert r2.status_code == 200
