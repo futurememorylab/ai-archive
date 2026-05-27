@@ -140,8 +140,11 @@ class ReviewItemsRepo:
     ) -> list[dict]:
         """One row per clip with un-applied review items, newest first.
 
-        Counts are over items with applied_at IS NULL. Clip metadata comes
-        from the most-recent annotation owning those items (MAX(annotation_id)).
+        When `job_id` is given, qualification, counts, and display metadata
+        are all scoped to items belonging to that job's annotations, so this
+        stays consistent with `count_pending_clips(job_id=...)`. Metadata is
+        taken from the newest matching annotation (MAX annotation_id; ids are
+        autoincrement so higher == later).
         """
         params: list = []
         job_clause = ""
@@ -149,27 +152,31 @@ class ReviewItemsRepo:
             job_clause = "AND a.job_id = ?"
             params.append(job_id)
         sql = f"""
+            WITH pending AS (
+              SELECT ri.catdv_clip_id AS catdv_clip_id,
+                     ri.kind          AS kind,
+                     ri.annotation_id AS annotation_id
+              FROM review_items ri
+              JOIN annotations a ON a.id = ri.annotation_id
+              WHERE ri.applied_at IS NULL {job_clause}
+            )
             SELECT
-              ri.catdv_clip_id                                   AS catdv_clip_id,
-              MAX(ri.annotation_id)                              AS annotation_id,
-              SUM(CASE WHEN ri.kind = 'marker' THEN 1 ELSE 0 END) AS marker_count,
-              SUM(CASE WHEN ri.kind = 'field'  THEN 1 ELSE 0 END) AS field_count,
-              SUM(CASE WHEN ri.kind = 'note'   THEN 1 ELSE 0 END) AS note_count,
+              p.catdv_clip_id                                    AS catdv_clip_id,
+              MAX(p.annotation_id)                               AS annotation_id,
+              SUM(CASE WHEN p.kind = 'marker' THEN 1 ELSE 0 END) AS marker_count,
+              SUM(CASE WHEN p.kind = 'field'  THEN 1 ELSE 0 END) AS field_count,
+              SUM(CASE WHEN p.kind = 'note'   THEN 1 ELSE 0 END) AS note_count,
               a.catdv_clip_name                                  AS catdv_clip_name,
               a.job_id                                           AS job_id,
               a.prompt_version_id                                AS prompt_version_id,
               a.created_at                                       AS created_at
-            FROM review_items ri
-            JOIN annotations a
-              ON a.id = (
-                SELECT MAX(ri2.annotation_id)
-                FROM review_items ri2
-                WHERE ri2.catdv_clip_id = ri.catdv_clip_id
-                  AND ri2.applied_at IS NULL
-              )
-            WHERE ri.applied_at IS NULL {job_clause}
-            GROUP BY ri.catdv_clip_id
-            ORDER BY a.created_at DESC, ri.catdv_clip_id DESC
+            FROM pending p
+            JOIN annotations a ON a.id = (
+              SELECT MAX(p2.annotation_id) FROM pending p2
+              WHERE p2.catdv_clip_id = p.catdv_clip_id
+            )
+            GROUP BY p.catdv_clip_id
+            ORDER BY a.created_at DESC, p.catdv_clip_id DESC
             LIMIT ? OFFSET ?
         """
         params.extend([limit, offset])
@@ -183,15 +190,13 @@ class ReviewItemsRepo:
         params: list = []
         job_clause = ""
         if job_id is not None:
-            job_clause = (
-                "AND ri.annotation_id IN "
-                "(SELECT id FROM annotations WHERE job_id = ?)"
-            )
+            job_clause = "AND a.job_id = ?"
             params.append(job_id)
         cur = await conn.execute(
             f"""
             SELECT COUNT(DISTINCT ri.catdv_clip_id)
             FROM review_items ri
+            JOIN annotations a ON a.id = ri.annotation_id
             WHERE ri.applied_at IS NULL {job_clause}
             """,
             tuple(params),

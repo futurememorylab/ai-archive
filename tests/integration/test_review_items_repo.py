@@ -246,3 +246,85 @@ async def test_count_pending_clips(db):
     )
     count = await repo.count_pending_clips(db)
     assert count == 1
+
+
+@pytest.mark.asyncio
+async def test_pending_clips_multi_job_scoping(db):
+    """One clip with pending items from two jobs; filters must scope independently."""
+    vid = await _get_or_create_prompt_version(db)
+    job7 = await _make_job(db, vid)
+    job8 = await _make_job(db, vid)
+
+    # A1 belongs to job7, A2 belongs to job8 (inserted second → higher annotation_id)
+    a1 = await _seed_annotation_for(
+        db, catdv_clip_id=99, catdv_clip_name="Clip_99_j7", job_id=job7, vid=vid
+    )
+    a2 = await _seed_annotation_for(
+        db, catdv_clip_id=99, catdv_clip_name="Clip_99_j8", job_id=job8, vid=vid
+    )
+    assert a2 > a1, "a2 must have a higher annotation_id than a1"
+
+    repo = ReviewItemsRepo()
+    # 2 markers from job7's annotation
+    await repo.bulk_insert(
+        db,
+        [
+            ReviewItem(
+                annotation_id=a1,
+                catdv_clip_id=99,
+                kind="marker",
+                proposed_value={"in": 0, "out": 5, "name": "m1"},
+            ),
+            ReviewItem(
+                annotation_id=a1,
+                catdv_clip_id=99,
+                kind="marker",
+                proposed_value={"in": 10, "out": 20, "name": "m2"},
+            ),
+        ],
+    )
+    # 1 field from job8's annotation
+    await repo.bulk_insert(
+        db,
+        [
+            ReviewItem(
+                annotation_id=a2,
+                catdv_clip_id=99,
+                kind="field",
+                target_identifier="genre",
+                proposed_value="drama",
+            ),
+        ],
+    )
+
+    # --- job7 filter: only the 2 markers, metadata from a1/job7 ---
+    rows7 = await repo.list_pending_clips(db, job_id=job7)
+    assert len(rows7) == 1
+    row7 = rows7[0]
+    assert row7["catdv_clip_id"] == 99
+    assert row7["marker_count"] == 2
+    assert row7["field_count"] == 0
+    assert row7["job_id"] == job7
+
+    # --- job8 filter: only the 1 field, metadata from a2/job8 ---
+    rows8 = await repo.list_pending_clips(db, job_id=job8)
+    assert len(rows8) == 1
+    row8 = rows8[0]
+    assert row8["catdv_clip_id"] == 99
+    assert row8["field_count"] == 1
+    assert row8["marker_count"] == 0
+    assert row8["job_id"] == job8
+
+    # --- no filter: all 3 items, metadata from the NEWER annotation (a2/job8) ---
+    rows_all = await repo.list_pending_clips(db)
+    assert len(rows_all) == 1
+    row_all = rows_all[0]
+    assert row_all["catdv_clip_id"] == 99
+    assert row_all["marker_count"] == 2
+    assert row_all["field_count"] == 1
+    assert row_all["job_id"] == job8  # a2 is newer (higher annotation_id)
+
+    # --- count checks ---
+    assert await repo.count_pending_clips(db, job_id=job7) == 1
+    assert await repo.count_pending_clips(db, job_id=job8) == 1
+    assert await repo.count_pending_clips(db) == 1
