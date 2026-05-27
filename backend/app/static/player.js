@@ -11,6 +11,11 @@ document.addEventListener("alpine:init", () => {
     markers: Array.isArray(markers) ? markers : [],
     draftMarkers: Array.isArray(draftMarkers) ? draftMarkers : [],
 
+    // Review-mode inline editor: at most one item expanded at a time.
+    // Lives on the player root so the panel (child reviewQueue scope) and a
+    // later timeline-drag task can both react to which item is being edited.
+    editingItemId: null,
+
     activeMarkers() {
       return this.scope === "draft" ? this.draftMarkers : this.markers;
     },
