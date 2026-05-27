@@ -5,8 +5,8 @@
   {% if row.ai_bytes %}{{ row.ai_bytes | bytes_human }}{% else %}<span class="muted-2">—</span>{% endif %}
 </td>
 <td class="row-actions col-actions" onclick="event.stopPropagation()">
-  <button type="button" class="ra-btn"
+  <button type="button" class="btn sm"
           @click="bulkPrefetch([['{{ row.clip_pid }}','{{ row.clip_cid }}']])">Re-fetch</button>
-  <button type="button" class="ra-btn ra-btn-danger"
+  <button type="button" class="btn sm danger"
           @click="bulkEvict([['{{ row.clip_pid }}','{{ row.clip_cid }}']])">Purge</button>
 </td>

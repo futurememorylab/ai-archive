@@ -5,14 +5,14 @@
                                       unset/None => plain href full-nav (Clips) #}
 <nav class="pager">
   {% if prev_url %}
-    <a class="pg-btn"{% if hx_target %} hx-get="{{ prev_url }}" hx-target="{{ hx_target }}" hx-swap="innerHTML" hx-push-url="true"{% else %} href="{{ prev_url }}"{% endif %}>‹ Prev</a>
+    <a class="btn sm"{% if hx_target %} hx-get="{{ prev_url }}" hx-target="{{ hx_target }}" hx-swap="innerHTML" hx-push-url="true"{% else %} href="{{ prev_url }}"{% endif %}>‹ Prev</a>
   {% else %}
-    <span class="pg-btn disabled">‹ Prev</span>
+    <span class="btn sm disabled">‹ Prev</span>
   {% endif %}
   <span class="pg-meta mono">{{ range_label }}</span>
   {% if next_url %}
-    <a class="pg-btn"{% if hx_target %} hx-get="{{ next_url }}" hx-target="{{ hx_target }}" hx-swap="innerHTML" hx-push-url="true"{% else %} href="{{ next_url }}"{% endif %}>Next ›</a>
+    <a class="btn sm"{% if hx_target %} hx-get="{{ next_url }}" hx-target="{{ hx_target }}" hx-swap="innerHTML" hx-push-url="true"{% else %} href="{{ next_url }}"{% endif %}>Next ›</a>
   {% else %}
-    <span class="pg-btn disabled">Next ›</span>
+    <span class="btn sm disabled">Next ›</span>
   {% endif %}
 </nav>

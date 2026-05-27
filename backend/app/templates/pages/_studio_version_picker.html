@@ -5,7 +5,7 @@
      active_version, versions, side, clip_id (optional)
 #}
 <span class="pc-vchip" x-data="{ open: false }" @click.outside="open = false">
-  <button type="button" class="pc-vchip-btn" :class="open && 'open'"
+  <button type="button" class="btn sm ghost" :class="open && 'open'"
           @click="open = !open" title="Switch version">
     <span class="pc-vlbl">v{{ active_version.version_num }}</span>
     <span class="pc-status {{ active_version.state }}">{{ active_version.state }}</span>

@@ -29,11 +29,11 @@
           {% if not host_local_proxies %}
             {% if clip.cache and clip.cache.media_local.present %}
               <button type="button"
-                      class="ca-btn ca-btn-danger"
+                      class="btn danger"
                       onclick="evictLocal({{ clip.id }})">Evict local</button>
             {% elif mode == "online" %}
               <button type="button"
-                      class="ca-btn"
+                      class="btn"
                       onclick="cacheClip({{ clip.id }})">⬇ Cache {{ "image" if clip.kind == "image" else "video" }}</button>
             {% endif %}
           {% endif %}
@@ -41,7 +41,7 @@
             {% include "pages/_annotate_dropdown.html" %}
           {% endif %}
           {% if (mode == "online" or (clip.cache and clip.cache.media_local.present)) and clip.duration_secs %}
-            <button type="button" class="ca-btn ca-btn-live"
+            <button type="button" class="btn ca-btn-live"
                     @click="liveSession.start()">🎤 Live</button>
           {% endif %}
         </span>
@@ -59,10 +59,10 @@
         <span class="rec-pill" :class="{ pulsing: liveSession.state === 'active' }">
           ● REC <span x-text="liveSession.elapsedFmt">0:00</span>
         </span>
-        <button type="button" class="ca-btn"
+        <button type="button" class="btn"
                 :disabled="liveSession.state !== 'active'"
                 @click="liveSession.sendFrame()">📸 Send frame</button>
-        <button type="button" class="ca-btn ca-btn-danger"
+        <button type="button" class="btn danger"
                 @click="liveSession.close('user_stop')">■ Stop</button>
         <span class="grow"></span>
         <span class="live-error" x-show="liveSession.error" x-text="liveSession.error"></span>
@@ -140,29 +140,29 @@
 
       <div class="transport-row">
         <div class="transport-btns">
-          <button type="button" class="tbtn"
+          <button type="button" class="btn icon ghost"
                   :disabled="!activeMarkers().length"
                   @click="prevMarker()"
                   title="prev marker (↑)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="12 6 6 12 12 18"/><polyline points="19 6 13 12 19 18"/></svg>
           </button>
-          <button type="button" class="tbtn"
+          <button type="button" class="btn icon ghost"
                   @click="stepFrame(-1)"
                   title="step back 1 frame (,)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>
           </button>
-          <button type="button" class="tbtn play"
+          <button type="button" class="btn icon play"
                   @click="togglePlay()"
                   title="play/pause (Space)">
             <svg x-show="!playing" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg>
             <svg x-show="playing"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
           </button>
-          <button type="button" class="tbtn"
+          <button type="button" class="btn icon ghost"
                   @click="stepFrame(1)"
                   title="step fwd 1 frame (.)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
           </button>
-          <button type="button" class="tbtn"
+          <button type="button" class="btn icon ghost"
                   :disabled="!activeMarkers().length"
                   @click="nextMarker()"
                   title="next marker (↓)">
@@ -202,13 +202,13 @@
 
   <aside class="anno-col">
     <div class="anno-scope" role="tablist" aria-label="Annotation source">
-      <button type="button" class="anno-scope-btn" data-scope="published"
+      <button type="button" class="btn sm" data-scope="published"
               :class="{ active: scope === 'published' }"
               :aria-selected="scope === 'published'"
               @click="scope = 'published'">
         Published
       </button>
-      <button type="button" class="anno-scope-btn" data-scope="draft"
+      <button type="button" class="btn sm" data-scope="draft"
               :class="{ active: scope === 'draft' }"
               :aria-selected="scope === 'draft'"
               @click="scope = 'draft'">
@@ -218,12 +218,12 @@
 
     {% if draft.has_draft %}
     <div class="review-actionbar" x-data="reviewQueue({{ clip.id }})">
-      <button type="button" class="ca-btn" x-show="queue.length > 0" @click="prev()">‹ Prev</button>
+      <button type="button" class="btn" x-show="queue.length > 0" @click="prev()">‹ Prev</button>
       <span class="review-progress mono" x-show="queue.length > 0" x-text="progressLabel()"></span>
       <span class="grow"></span>
-      <button type="button" class="ca-btn" x-show="queue.length > 0" @click="skip()">Skip</button>
-      <button type="button" class="ca-btn ca-btn-live" x-show="queue.length > 0" @click="applyAndNext()">Accept &amp; next →</button>
-      <button type="button" class="ca-btn ca-btn-live" x-show="queue.length === 0" @click="applyStay()">Accept &amp; apply</button>
+      <button type="button" class="btn" x-show="queue.length > 0" @click="skip()">Skip</button>
+      <button type="button" class="btn ca-btn-live" x-show="queue.length > 0" @click="applyAndNext()">Accept &amp; next →</button>
+      <button type="button" class="btn ca-btn-live" x-show="queue.length === 0" @click="applyStay()">Accept &amp; apply</button>
     </div>
     {% endif %}
 

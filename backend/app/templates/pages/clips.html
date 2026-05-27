@@ -30,7 +30,7 @@
                placeholder="Search clips by name…"
                autocomplete="off">
       </label>
-      <button type="submit" class="btn btn-primary">Search</button>
+      <button type="submit" class="btn primary">Search</button>
       <span class="grow"></span>
       {% if cache_age %}
         <span class="meta" title="List fetched from CatDV {{ cache_fetched_at }}">
@@ -79,7 +79,7 @@
           {% endfor %}
         </select>
       </label>
-      <a class="btn btn-ghost filter-reset"
+      <a class="btn sm ghost filter-reset"
          :class="{ 'is-disabled': !active }"
          href="/">Reset filters</a>
       <span class="grow"></span>
@@ -88,7 +88,7 @@
            @keydown.escape.window="open = false"
            @click.outside="open = false">
         <button type="button"
-                class="bulk-btn actions-btn"
+                class="btn sm actions-btn"
                 :class="{ 'actions-btn-active': count > 0 }"
                 :disabled="count === 0"
                 @click="open = !open">

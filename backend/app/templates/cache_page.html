@@ -98,7 +98,7 @@
                     {% if filters.orphans %}checked{% endif %}> orphans only</label>
       <label><input type="checkbox" name="evictable" value="1"
                     {% if filters.evictable %}checked{% endif %}> evictable only</label>
-      <button type="submit" class="bulk-btn">Apply</button>
+      <button type="submit" class="btn sm">Apply</button>
     </form>
   </details>
 
@@ -109,9 +109,9 @@
       <span class="mono muted" x-text="bytesHuman(totalBytes)"></span>
     </span>
     <span class="grow"></span>
-    <button type="button" class="bulk-btn" @click="clearSel()">Clear</button>
-    <button type="button" class="bulk-btn" @click="bulkPrefetch()">Re-fetch</button>
-    <button type="button" class="bulk-btn bulk-btn-danger" @click="bulkEvict()">Purge selected</button>
+    <button type="button" class="btn sm" @click="clearSel()">Clear</button>
+    <button type="button" class="btn sm" @click="bulkPrefetch()">Re-fetch</button>
+    <button type="button" class="btn sm danger" @click="bulkEvict()">Purge selected</button>
   </div>
 
   {# ─── Table region (HTMX target) ──────────────────────────────── #}
