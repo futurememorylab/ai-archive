@@ -39,6 +39,26 @@ async def set_decision(request: Request, item_id: int, body: Decision):
     return {"id": item_id, "decision": body.decision}
 
 
+async def _resolve_and_enqueue_clip(ctx, clip_id: int) -> int:
+    """Resolve a clip's accepted items + apply context and enqueue them.
+    Returns the number of ops queued."""
+    accepted = await ctx.review_items_repo.list_by_clip(ctx.db, clip_id, decision="accepted")
+    if not accepted:
+        return 0
+    annotation = await ctx.annotations_repo.get(ctx.db, accepted[0].annotation_id)
+    version = await ctx.prompts_repo.get_version(ctx.db, annotation.prompt_version_id)
+    op_ids = await ctx.write_queue.enqueue_apply_for_clip(
+        ctx.db,
+        clip_id=clip_id,
+        accepted=accepted,
+        target_map=version.target_map,
+        expected_etag=etag_from_snapshot(annotation.clip_snapshot),
+        annotation_id=annotation.id,
+        fps=fps_from_snapshot(annotation.clip_snapshot),
+    )
+    return len(op_ids)
+
+
 @router.post("/clips/{clip_id}/apply")
 async def apply_clip(request: Request, clip_id: int):
     """Enqueue accepted review items for upstream apply.
@@ -53,23 +73,7 @@ async def apply_clip(request: Request, clip_id: int):
     ctx = get_ctx(request)
     if ctx.write_queue is None:
         raise HTTPException(503, "write queue not initialized")
-
-    accepted = await ctx.review_items_repo.list_by_clip(ctx.db, clip_id, decision="accepted")
-    if not accepted:
-        return {"queued": 0, "applied": 0}
-
-    annotation = await ctx.annotations_repo.get(ctx.db, accepted[0].annotation_id)
-    version = await ctx.prompts_repo.get_version(ctx.db, annotation.prompt_version_id)
-
-    op_ids = await ctx.write_queue.enqueue_apply(
-        ctx.db,
-        clip_key=("catdv", str(clip_id)),
-        items=accepted,
-        target_map=version.target_map,
-        expected_etag=etag_from_snapshot(annotation.clip_snapshot),
-        annotation_id=annotation.id,
-        fps=fps_from_snapshot(annotation.clip_snapshot),
-    )
-    if ctx.sync_engine is not None:
+    queued = await _resolve_and_enqueue_clip(ctx, clip_id)
+    if queued and ctx.sync_engine is not None:
         ctx.sync_engine.notify()
-    return {"queued": len(op_ids), "applied": len(op_ids)}
+    return {"queued": queued, "applied": queued}
