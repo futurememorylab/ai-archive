@@ -33,6 +33,11 @@ scope and will land separately.
   for the cmp version's scenes.
 - Extract the existing clip-detail timeline overlay into a shared
   partial reused by both clip_detail and the studio player.
+- Studio Output tab reuses `_anno_panels.html` — the same partial that
+  renders markers / fields / notes on `clip_detail.html` and
+  `_anno_draft.html` — instead of its current bespoke `.ro-scene` /
+  `.ro-field` markup. Visual parity with clip view falls out for free
+  and the studio Markers list inherits clip-jump-on-click.
 
 ## Non-goals (PR2)
 
@@ -65,6 +70,7 @@ the rest is reimplemented in Jinja + Alpine + HTMX.
 | Version-switch mechanism | HTMX partial swap of the prompt-card body | Same shape as existing `/studio/_run` swap. Server owns the draft↔readonly DOM transition. |
 | Output-diff data source | Embed raw JSON in `_studio_run_output.html` as `<script type="application/json" data-run-json>` | Zero extra fetches; tiny payload bump on a partial that is already loaded. |
 | Player overlay | Extract clip_detail's `.transport`/`.timeline`/`.ranges`/`.playhead` into a shared partial; upgrade `_studio_player.html` to use the existing `Alpine.data("player", ...)` + the shared partial | Reuses proven player behavior, deduplicates an already-2-row timeline pattern (markers + draft-ranges → cur + cmp), satisfies "no new player behavior". |
+| Annotation cards (Output tab) | Reuse `_anno_panels.html` from clip_detail / anno-draft. `_studio_run_output.html` becomes a thin adapter that converts `(studio_run.output_json, prompt_version.target_map)` into the `panels` dict the existing partial expects, then `{% include %}`s it. | Same reasoning as the player overlay extraction: the rendering already exists and is battle-tested on clip view. Free visual parity, free marker-click-to-seek, no parallel-evolution risk. |
 | Diff toggle | Pure Alpine, reads from sibling card's DOM | Data is already loaded; no need to round-trip. |
 
 ## Architecture
@@ -82,8 +88,17 @@ CHANGED templates
 ├ pages/_studio_prompt_card.html        side-aware (cur|cmp); chip in header;
 │                                        diff-view slot in body; cmp gets
 │                                        "Diff vs v{cur}" toggle
-├ pages/_studio_run_output.html         + <script type="application/json"
-│                                          data-run-json> block
+├ pages/_studio_run_output.html         REWRITE: drops bespoke
+│                                        .ro-scene/.ro-field markup;
+│                                        builds `panels` dict from
+│                                        output_json + target_map and
+│                                        {% include %}s _anno_panels.html.
+│                                        Still emits the <script
+│                                        type="application/json"
+│                                        data-run-json> block.
+├ pages/_anno_panels.html               + `show_history` flag (default
+│                                        true; studio passes false to
+│                                        hide the clip-history tab).
 ├ pages/_studio_player.html             replaces native <video controls>
 │                                        with x-data="player(...)" +
 │                                        {% include "pages/_player_overlay.html" %}
@@ -203,6 +218,103 @@ if compare_id is not None:
     cmp_scenes = (cmp_run.output_json or {}).get("scenes") or []
     rows.append({"key": f"v{cmp.version_num}", "ranges": cmp_scenes, "cls": "range-cmp"})
 ```
+
+### Annotation cards (the shared `_anno_panels.html` partial)
+
+The Output tab today is a custom renderer in `_studio_run_output.html`:
+`.ro-scene` rows for `output_json.scenes` and `.ro-field` rows for
+everything else. The clip view has been rendering the same conceptual
+content — markers, fields, notes — through `_anno_panels.html` since
+PR3 of the original UI MVP, and that partial is already reused by
+`_anno_draft.html` for the draft scope. PR2 deletes the studio-bespoke
+renderer and routes the studio Output tab through the same partial.
+
+**Adapter.** A small Python helper converts a studio run + version into
+the `panels` dict shape `_anno_panels.html` expects:
+
+```python
+# backend/app/services/studio_panels.py  (new)
+def panels_from_studio_run(
+    run: StudioRun | None,
+    version: PromptVersion | None,
+    fps: float,
+) -> dict:
+    """Return the panels dict consumed by templates/pages/_anno_panels.html.
+
+    Maps:
+      output_json.scenes[]            → panels['markers']
+      output_json[k] for k != scenes  → panels['fields']  (identifier from
+                                                            version.target_map[k])
+      no separate notes mapping in v1 → panels['notes'] = None
+    """
+```
+
+Scenes carry `in_secs`, `out_secs`, `name`, and optionally `description`
+and `category` (when the prompt's output_schema emits them) — exactly
+what `_anno_panels.html` already renders on markers. Non-scenes keys are
+looked up in `version.target_map` to get a CatDV field identifier (e.g.
+`summary_cz → pragafilm.popis.materialu`); if a key has no mapping, the
+field row shows the raw key as the identifier.
+
+**Rewritten `_studio_run_output.html`:**
+
+```jinja
+{% if not version %}
+  <div class="run-empty muted">Unknown version.</div>
+{% elif not run %}
+  <div class="run-empty muted">
+    No run yet. Hit <b>Run</b> to execute v{{ version.version_num }} on the focused clip.
+  </div>
+{% elif run.status == 'error' %}
+  <div class="run-error">…</div>
+{% elif run.status in ('pending', 'running') %}
+  <div class="run-empty muted">⟳ Running…</div>
+{% else %}
+  {% include "pages/_anno_panels.html" %}   {# panels passed in by the route #}
+  <script type="application/json" data-run-json>{{ run.output_json|tojson }}</script>
+  <div class="run-stats mono-cell muted">…</div>
+{% endif %}
+```
+
+Both the route serving `/studio/_run` and the route serving
+`/studio/_prompt_card` (which includes this partial) call
+`panels_from_studio_run(...)` and pass `panels` in the template context.
+
+**`show_history` flag on `_anno_panels.html`.** The History tab in the
+clip view loads clip-history HTML and is not meaningful for studio
+output. The shared partial gains a `show_history` argument (default
+`true`); studio includes pass `show_history=False`. Clip detail's
+existing two includes don't pass the flag and so behave unchanged.
+
+**Alpine scope contract.** `_anno_panels.html` reads from its enclosing
+Alpine `x-data`:
+
+| Used by partial | clip_detail provides | studio provides |
+|---|---|---|
+| `tab` ('markers'\|'fields'\|'notes'\|'history') | yes, on the aside `x-data` | added to `studioPromptCard()` Alpine data (distinct from page-level `mode`) |
+| `seek(secs)` (marker-click jump) | yes (on the player wrap) | proxied via `$root.seekFocusedClip(secs)` → walks to the player Alpine instance and calls `seek(secs)` |
+| `historyLoaded`, `loadHistory()`, `historyHtml` | yes | not needed (`show_history=false` removes the tab) |
+
+The `seek` proxy is one method on `studioPage` that finds the player's
+Alpine root and forwards. Same pattern as `window.studio._root()`
+already used in `studio.js`. Defined once; tested once.
+
+**Why this matters.** Without this reuse, two separate templates
+evolve in parallel — every CSS tweak, every accessibility fix, every
+field type added to `_anno_panels.html` (e.g. a new "BIG_NOTES" widget,
+or marker categories getting badge colors) has to be re-applied to the
+studio renderer. Consolidating now while the studio renderer is one
+day old is much cheaper than the eventual divergence cleanup.
+
+**Test coverage.**
+- Unit: `panels_from_studio_run` — empty output, scenes-only,
+  fields-only, mixed, target_map hit vs miss.
+- Integration: `/studio/_run` response contains `class="anno-tabs"`
+  (proves the shared partial is rendering) and no `class="ro-scene"`
+  (proves the bespoke markup is gone).
+- Integration: clip detail unchanged — existing
+  `tests/integration/test_clip_detail*.py` still pass without
+  modification (the `show_history` default protects them).
 
 ### `lineDiff` algorithm
 
@@ -334,8 +446,22 @@ one of those; preference is the Python port for hermeticity.
 before and after the partial extraction and asserts the rendered
 `.transport` block is structurally equivalent — same range count, same
 left/width percentages, same `active` bindings, same playhead. This is
-the only piece of PR2 that touches non-Studio surfaces; the test guards
-the seam.
+one of two places where PR2 touches non-Studio surfaces; the test
+guards the seam.
+
+**Unit — `panels_from_studio_run` adapter:**
+Cases: empty output, scenes-only, fields-only, mixed, target_map hit,
+target_map miss (raw key falls through), missing `out_secs` on a scene,
+non-string field values (numbers, lists) survive `_anno_panels.html`'s
+expectations.
+
+**Integration — annotation-card reuse:**
+- `/studio/_run` response includes `class="anno-tabs"` and does NOT
+  include `class="ro-scene"` or `class="ro-field"` (proves the bespoke
+  markup is gone and the shared partial is in).
+- Existing `tests/integration/test_clip_detail*.py` pass without
+  modification (proves the `show_history` default-true doesn't break
+  the clip view).
 
 **Integration — Studio compare flow:**
 `tests/integration/test_studio_compare.py` (new) drives:
@@ -361,6 +487,16 @@ combination of side × draft/non-draft and inspects the response.
 - **Risk:** Extracting clip_detail's timeline breaks the existing UI.
   **Mitigation:** Snapshot-style integration test (above) gates the
   refactor. The extraction is mechanical; behavior delta should be zero.
+- **Risk:** Routing the studio Output tab through `_anno_panels.html`
+  reveals subtle scope coupling (the partial reads `tab`, `seek`,
+  `historyHtml` from its parent Alpine context).
+  **Mitigation:** The Alpine scope contract is documented above;
+  `studioPromptCard()` gains `tab` and `seekFocusedClip` proxies; the
+  `show_history` flag elides the history-tab requirements. Coverage
+  comes from the integration test asserting `anno-tabs` renders inside
+  `/studio/_run` and that marker click triggers the player seek (the
+  latter via a small DOM-event integration test, or a manual
+  verification entry in PR3's polish pass — pick at plan time).
 - **Risk:** `lineDiff` performance on very long prompts / outputs.
   **Mitigation:** v1 prompts cap at a few KB. Algorithm is O(n·m) which
   is fine at that scale; revisit if we hit prompts >10K lines.
@@ -390,15 +526,19 @@ PR2 lands as a single PR with the following commit boundaries
    test.
 2. **`_studio_player.html` upgrade.** Replace native controls with the
    custom transport + shared overlay; one row only at this stage.
-3. **`_studio_prompt_card` route + version picker.** Side-aware route
+3. **Annotation-card reuse.** Add `show_history` flag to
+   `_anno_panels.html`. Add `panels_from_studio_run` adapter. Rewrite
+   `_studio_run_output.html` to include the shared partial. Both clip
+   view and studio Output tab render via one path now.
+4. **`_studio_prompt_card` route + version picker.** Side-aware route
    serving the cur card via HTMX; chip in the header swaps the body.
-4. **Cmp card materialization.** `+ Compare` button, cmp slot, second
+5. **Cmp card materialization.** `+ Compare` button, cmp slot, second
    range row in overlay.
-5. **Tab sync.** Lift `mode` from card to page.
-6. **`lineDiff` + diff view.** Port the algorithm, add `cmpDiff`
+6. **Tab sync.** Lift `mode` from card to page.
+7. **`lineDiff` + diff view.** Port the algorithm, add `cmpDiff`
    component, render `_studio_diff.html` inside cmp body on toggle.
-7. **CSS for new affordances.** Diff colors, chip styling, legend.
-8. **Tests + ADR.**
+8. **CSS for new affordances.** Diff colors, chip styling, legend.
+9. **Tests + ADR.**
 
 If any of these split poorly under TDD, the implementation plan will
 re-slice them; this list is a hint, not a contract.
