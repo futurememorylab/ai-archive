@@ -113,30 +113,31 @@
       </div>
     </div>
 
-    {% with
-        duration_secs = clip.duration_secs,
-        duration_smpte = duration_smpte,
-        rows = [
-          {
-            "key": "markers",
-            "ranges": clip.markers,
-            "cls": "range-cur",
-            "alpine_list": "markers",
-            "x_show": None,
-          },
-          {
-            "key": "draft",
-            "ranges": draft.markers if draft and draft.has_draft else [],
-            "cls": "range-draft",
-            "alpine_list": None,
-            "x_show": "scope === 'draft'",
-          },
-        ]
-      %}
-      {% include "pages/_player_overlay.html" %}
-    {% endwith %}
-
     {% if clip.duration_secs %}
+    <div class="transport">
+      {% with
+          duration_secs = clip.duration_secs,
+          duration_smpte = duration_smpte,
+          rows = [
+            {
+              "key": "markers",
+              "ranges": clip.markers,
+              "cls": "range-cur",
+              "alpine_list": "markers",
+              "x_show": None,
+            },
+            {
+              "key": "draft",
+              "ranges": draft.markers if draft and draft.has_draft else [],
+              "cls": "range-draft",
+              "alpine_list": None,
+              "x_show": "scope === 'draft'",
+            },
+          ]
+        %}
+        {% include "pages/_player_overlay.html" %}
+      {% endwith %}
+
       <div class="transport-row">
         <div class="transport-btns">
           <button type="button" class="tbtn"
@@ -183,6 +184,7 @@
           <span class="tag">—</span>
         </div>
       </div>
+    </div>
     {% endif %}
 
     <div class="kbdbar mono">
