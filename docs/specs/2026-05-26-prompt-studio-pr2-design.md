@@ -482,6 +482,106 @@ and percentages.
 `tests/integration/test_studio_prompt_card_route.py` POSTs each
 combination of side × draft/non-draft and inspects the response.
 
+## Manual acceptance flows
+
+Each numbered flow corresponds to one PR2 capability. A reviewer (or
+the implementer at the end of the work) walks through them in order;
+all should pass before the PR is considered done. Test data assumption:
+a prompt with ≥ 2 versions (one draft, one production) and a folder
+with ≥ 1 clip that has at least one prior run on each version.
+
+1. **Cur-card version picker — switch**
+   - Open `/studio?prompt_id=N`. Focus a clip.
+   - Click the version chip on the cur card → dropdown lists all
+     versions with state badges (draft / production / archived).
+   - Pick a different version. Card body swaps. Run-button label
+     updates to the new `v{n}`. URL gains `?version_id=N`.
+   - Output tab refreshes to that (version, clip) pair's latest run
+     (or empty-state if no run).
+
+2. **Cur-card editable / read-only**
+   - With cur on a **draft** version, Prompt tab shows a `<textarea>`;
+     typing debounces and the footer toggles `draft · saving… → saved`.
+   - Switch cur to a **production** version. Prompt tab now shows a
+     `<pre>` block (no editor, no save indicator).
+   - Switch back to draft → textarea returns.
+
+3. **Compare materialization**
+   - Single-card mode initially. Click `+ Compare` on the cur card.
+   - A second card appears to the right with its own version chip and
+     tab strip. Default version = "next-most-recent non-cur, preferring
+     draft, else production".
+   - The player timeline now shows two stacked range rows. Legend
+     below the transport reads `v{cur} · X scenes` and
+     `v{cmp} · Y scenes`.
+   - Click `×` on the cmp card → cmp disappears, overlay drops to one
+     row, legend collapses.
+
+4. **Cmp-card version picker — local**
+   - With cmp showing, click its chip and pick a different version.
+   - Only the cmp card swaps. Run button label and `?version_id=`
+     remain on cur. URL gains/updates `?compare_version_id=M`.
+
+5. **Tab sync across cards**
+   - With both cards visible, click `Output` on the cur card → both
+     cards switch to Output. Click `Prompt` on cmp → both switch back.
+
+6. **Diff vs cur — Prompt mode**
+   - With both cards visible, on the Prompt tab, click `Diff vs v{cur}`
+     on the cmp card.
+   - Cmp card's body switches to a two-column line-diff. Identical
+     lines are neutral; lines present only in cur are highlighted as
+     `del`; lines present only in cmp are highlighted as `ins`.
+   - Toggle the diff button off → cmp body returns to the Prompt
+     `<pre>` view.
+
+7. **Diff vs cur — Output mode**
+   - Switch both cards to the Output tab (per flow 5). Click
+     `Diff vs v{cur}` on cmp.
+   - Cmp body shows a line-diff of `JSON.stringify(output, null, 2)`
+     for the two latest runs. Scenes with the same `in_secs/out_secs`
+     but different names show as paired del/ins lines.
+   - Edge case: if either side has no run yet, the diff view shows an
+     "empty on one side" placeholder rather than crashing.
+
+8. **Annotation-card visual parity**
+   - On the Output tab of either card, the markers/fields rendering
+     looks visually identical to what `/clips/{id}` shows on the
+     published-scope panel. Same tabs (Markers / Fields / Notes),
+     same marker article markup, same field-row layout. No
+     history tab in Studio (hidden via `show_history=false`).
+   - Click any marker in the Markers list → the player seeks to that
+     `in_secs`. (Cross-component reuse working end-to-end.)
+
+9. **Player overlay updates on version switch**
+   - With both cards visible, switch the cmp version to a different
+     version. The bottom range row redraws with the new version's
+     scenes. Cur (top) row is unchanged.
+
+10. **Run on this clip — label follows cur**
+    - Switch cur to v3 → Run button reads `▶ Run on this clip · v3`.
+    - Click Run. While running, button reads `⟳ Running… 00:0X`.
+      On completion, cur output refreshes and any open diff view
+      re-renders against the new run.
+
+11. **Deep linking**
+    - Copy the URL after configuring cur=v3 and cmp=v5 (e.g.
+      `/studio?prompt_id=N&version_id=3&compare_version_id=5`).
+    - Open the URL in a new tab. Both cards are present on first
+      paint, chips pre-selected to v3 / v5, Run button labels v3.
+
+12. **Single-card mode reload safety**
+    - Load `/studio?prompt_id=N` with no `compare_version_id`. One
+      card. Player overlay has one row. No regressions vs PR1
+      behavior.
+
+13. **Clip-detail regression (the only non-Studio surface touched)**
+    - Open any clip's detail page (`/clips/{id}`). Player works as
+      before — timeline, scrubbing, marker ranges, draft-ranges,
+      playhead, keyboard shortcuts. Anno panels on the right show
+      Markers / Fields / Notes / History. No visual or behavioral
+      diff vs `main` before PR2.
+
 ## Risks & mitigations
 
 - **Risk:** Extracting clip_detail's timeline breaks the existing UI.
