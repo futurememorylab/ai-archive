@@ -1,0 +1,28 @@
+{# Wraps the 1-or-2 prompt-cards row. studio.html includes this; the inner
+   `_studio_prompt_card.html` includes are passed side='cur' / 'cmp' via
+   {% with %}.
+
+   Required template inputs (passed through from studio.html):
+     active_version, compare_version, versions
+
+   Note: `_studio_prompt_card.html` (via `_studio_run_output.html`) also
+   references `version` as an alias of active_version. We set both
+   `active_version` and `version` in each {% with %} block so the included
+   partial chain resolves correctly.
+#}
+<div class="studio-compare-row">
+  {% with side='cur', active_version=active_version, version=active_version,
+         versions=versions, clip_id=None, run=None, panels=None, clip={'fps': 25.0} %}
+    {% include "pages/_studio_prompt_card.html" %}
+  {% endwith %}
+
+  <div class="cmp-slot" data-cmp-slot
+       {% if not compare_version %}style="display:none"{% endif %}>
+    {% if compare_version %}
+      {% with side='cmp', active_version=compare_version, version=compare_version,
+             versions=versions, clip_id=None, run=None, panels=None, clip={'fps': 25.0} %}
+        {% include "pages/_studio_prompt_card.html" %}
+      {% endwith %}
+    {% endif %}
+  </div>
+</div>

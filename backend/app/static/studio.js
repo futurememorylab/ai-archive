@@ -148,23 +148,37 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    openCompare() {
+    async openCompare() {
       const versions = window.__studioVersions || [];
       const cur = this.activeVersionId;
       const drafts = versions.filter(v => v.id !== cur && v.state === 'draft');
       const prods  = versions.filter(v => v.id !== cur && v.state === 'production');
       const others = versions.filter(v => v.id !== cur);
-      const pick = (drafts[0] || prods[0] || others[0]) || null;
+      const pick = (drafts[0] || prods[0] || others[0]);
       if (!pick) return;
       this.compareVersionId = pick.id;
       this.compareVersionNum = pick.version_num;
       this._writeUrl();
+      const slot = document.querySelector('[data-cmp-slot]');
+      if (!slot) return;
+      slot.style.display = '';
+      const params = new URLSearchParams();
+      params.set('side', 'cmp');
+      params.set('prompt_version_id', pick.id);
+      if (this.focusedClipId) params.set('clip_id', this.focusedClipId);
+      const html = await fetch(`/studio/_prompt_card?${params.toString()}`).then(r => r.text());
+      slot.innerHTML = html;
+      window.Alpine?.initTree(slot);
+      this.refreshPlayer();
     },
 
     closeCompare() {
       this.compareVersionId = null;
       this.compareVersionNum = null;
       this._writeUrl();
+      const slot = document.querySelector('[data-cmp-slot]');
+      if (slot) { slot.innerHTML = ''; slot.style.display = 'none'; }
+      this.refreshPlayer();
     },
 
     _writeUrl() {
