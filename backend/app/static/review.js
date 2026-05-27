@@ -5,11 +5,18 @@ function reviewQueue(clipId) {
       try { this.queue = JSON.parse(sessionStorage.getItem('catdv:reviewQueue') || '[]'); }
       catch (e) { this.queue = []; }
       document.addEventListener('change', e => {
-        if (e.target.classList.contains('ri-accept')) {
-          this._decide(e.target.dataset.itemId, e.target.checked ? 'accepted' : 'rejected');
-        }
-        if (e.target.classList.contains('ri-edit')) {
-          this._decide(e.target.dataset.itemId, 'accepted', e.target.value);
+        const t = e.target;
+        if (t.classList.contains('ri-accept')) {
+          this._decide(t.dataset.itemId, t.checked ? 'accepted' : 'rejected');
+        } else if (t.classList.contains('ri-mfield')) {
+          this._decideMarker(t.closest('.ri-marker'));
+        } else if (t.classList.contains('ri-edit')) {
+          const val = t.dataset.multi === '1'
+            ? t.value.split(',').map(s => s.trim()).filter(s => s.length)
+            : t.value;
+          this._decide(t.dataset.itemId, 'accepted', val);
+        } else if (t.classList.contains('ri-note')) {
+          this._decide(t.dataset.itemId, 'accepted', t.value);
         }
       });
     },
@@ -38,6 +45,33 @@ function reviewQueue(clipId) {
       } else {
         location.href = '/review';
       }
+    },
+    _decideMarker(container) {
+      if (!container) return;
+      const itemId = container.dataset.itemId;
+      const get = k => {
+        const el = container.querySelector(`.ri-mfield[data-k="${k}"]`);
+        return el ? el.value : '';
+      };
+      const edited = {
+        name: get('name'),
+        category: get('category') || null,
+        description: get('description') || null,
+        in: { secs: parseFloat(get('in')) || 0 },
+      };
+      const outRaw = get('out');
+      if (outRaw !== '' && !isNaN(parseFloat(outRaw))) {
+        edited.out = { secs: parseFloat(outRaw) };
+      }
+      // editing implies keep
+      const keep = container.querySelector('.ri-accept');
+      if (keep) keep.checked = true;
+      this._decide(itemId, 'accepted', edited);
+    },
+    prev() {
+      const i = this._idx();
+      if (i > 0) location.href = `/clips/${this.queue[i - 1]}?review=1`;
+      else location.href = '/review';
     },
     skip() { this._next(); },
     async applyAndNext() {

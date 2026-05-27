@@ -1,15 +1,20 @@
 {# Inputs:
-     panels — { markers: list, fields: list, notes: str|None, big_notes: str|None }
+     panels — { markers: list, fields: list, notes: str|None, big_notes: str|None,
+                note_items: list|None }
      scope  — "published" or "draft" (used only for distinct DOM ids if needed)
 #}
-{% set has_notes = panels.notes or panels.big_notes %}
+{% set has_notes = panels.notes or panels.big_notes or (review_mode and panels.note_items) %}
+{% set _is_image = clip is defined and clip is not none and clip.kind == 'image' %}
+{% set _show_note_items = review_mode and panels.note_items %}
 <div class="anno-tabs" role="tablist">
+  {% if not _is_image %}
   <button type="button" class="anno-tab" role="tab"
           :class="{ active: tab === 'markers' }"
           :aria-selected="tab === 'markers'"
           @click="tab = 'markers'">
     Markers <span class="count">{{ panels.markers|length }}</span>
   </button>
+  {% endif %}
   <button type="button" class="anno-tab" role="tab"
           :class="{ active: tab === 'fields' }"
           :aria-selected="tab === 'fields'"
@@ -34,6 +39,7 @@
   {% endif %}
 </div>
 
+{% if not _is_image %}
 <div class="anno-section" role="tabpanel" x-show="tab === 'markers'" x-cloak>
   {% for m in panels.markers %}
     <article class="marker" @click="seek({{ m.in_secs }})">
@@ -43,21 +49,37 @@
         <span class="tc mono">
           {{ smpte(m.in_secs, panels.fps or clip.fps) }}{% if m.out_secs is not none %} – {{ smpte(m.out_secs, panels.fps or clip.fps) }}{% endif %}
         </span>
-        {% if review_mode and m.item_id is defined and m.item_id is not none %}
-          <label class="review-item-toggle" onclick="event.stopPropagation()">
-            <input type="checkbox" class="ri-accept" data-item-id="{{ m.item_id }}"
-                   {% if m.decision != 'rejected' %}checked{% endif %}>
-            keep
-          </label>
-        {% endif %}
       </header>
-      <h3 class="m-name">{{ m.name }}</h3>
-      {% if m.description %}<p class="m-desc">{{ m.description }}</p>{% endif %}
+      {% if review_mode and m.item_id is defined and m.item_id is not none %}
+        <div class="ri-marker" data-item-id="{{ m.item_id }}" onclick="event.stopPropagation()">
+          <label class="review-item-toggle">
+            <input type="checkbox" class="ri-accept" data-item-id="{{ m.item_id }}"
+                   {% if m.decision != 'rejected' %}checked{% endif %}> keep
+          </label>
+          <input class="ri-mfield" data-item-id="{{ m.item_id }}" data-k="name"
+                 placeholder="name" value="{{ m.name }}">
+          <input class="ri-mfield" data-item-id="{{ m.item_id }}" data-k="category"
+                 placeholder="category" value="{{ m.category or '' }}">
+          <textarea class="ri-mfield" data-item-id="{{ m.item_id }}" data-k="description"
+                    placeholder="description">{{ m.description or '' }}</textarea>
+          <span class="ri-time">
+            <label>in <input class="ri-mfield" type="number" step="0.01" min="0"
+                             data-item-id="{{ m.item_id }}" data-k="in" value="{{ m.in_secs }}"></label>
+            <label>out <input class="ri-mfield" type="number" step="0.01" min="0"
+                              data-item-id="{{ m.item_id }}" data-k="out"
+                              value="{{ m.out_secs if m.out_secs is not none else '' }}"></label>
+          </span>
+        </div>
+      {% else %}
+        <h3 class="m-name">{{ m.name }}</h3>
+        {% if m.description %}<p class="m-desc">{{ m.description }}</p>{% endif %}
+      {% endif %}
     </article>
   {% else %}
     <p class="muted">No markers.</p>
   {% endfor %}
 </div>
+{% endif %}
 
 <div class="anno-section" role="tabpanel" x-show="tab === 'fields'" x-cloak>
   {% for f in panels.fields %}
@@ -71,9 +93,8 @@
                  {% if f.decision != 'rejected' %}checked{% endif %}>
           keep
         </label>
-        {% if f.editable %}
-        <input class="ri-edit" data-item-id="{{ f.item_id }}" value="{{ f.value }}">
-        {% endif %}
+        <input class="ri-edit" data-item-id="{{ f.item_id }}"
+               data-multi="{{ '1' if f.multi else '0' }}" value="{{ f.value }}">
       {% endif %}
     </div>
   {% else %}
@@ -83,8 +104,22 @@
 
 {% if has_notes %}
 <div class="anno-section" role="tabpanel" x-show="tab === 'notes'" x-cloak>
-  {% if panels.notes %}<p class="note">{{ panels.notes }}</p>{% endif %}
-  {% if panels.big_notes %}<p class="note big">{{ panels.big_notes }}</p>{% endif %}
+  {% if _show_note_items %}
+    {% for n in panels.note_items %}
+      <div class="ri-note-row" data-item-id="{{ n.item_id }}">
+        <label class="review-item-toggle">
+          <input type="checkbox" class="ri-accept" data-item-id="{{ n.item_id }}"
+                 {% if n.decision != 'rejected' %}checked{% endif %}> keep
+        </label>
+        <textarea class="ri-note" data-item-id="{{ n.item_id }}">{{ n.text }}</textarea>
+      </div>
+    {% else %}
+      <p class="muted">No notes.</p>
+    {% endfor %}
+  {% else %}
+    {% if panels.notes %}<p class="note">{{ panels.notes }}</p>{% endif %}
+    {% if panels.big_notes %}<p class="note big">{{ panels.big_notes }}</p>{% endif %}
+  {% endif %}
 </div>
 {% endif %}
 

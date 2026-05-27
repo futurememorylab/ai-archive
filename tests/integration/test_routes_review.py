@@ -489,7 +489,10 @@ def test_clip_detail_review_mode_renders_item_controls(monkeypatch, tmp_path):
         r = client.get("/clips/1?review=1")
         assert r.status_code == 200
         assert "review-item-toggle" in r.text
-        assert ("Apply &amp; next" in r.text) or ("Apply & next" in r.text)
+        # New primary label is "Accept & next"
+        assert ("Accept &amp; next" in r.text) or ("Accept & next" in r.text)
+        # Marker editable fields should be present (clip 1 has a marker review item)
+        assert 'class="ri-mfield"' in r.text
 
 
 def test_clip_detail_normal_mode_no_item_controls(monkeypatch, tmp_path):
@@ -585,3 +588,105 @@ def test_clip_detail_review_mode_published_items_have_no_controls(monkeypatch, t
         r = client.get("/clips/99?review=1")
         assert r.status_code == 200
         assert "ri-accept" not in r.text
+
+
+def _make_canonical_clip_image(clip_id: int = 50):
+    """A CanonicalClip whose media.filePath ends in .jpg — kind='image'."""
+    from datetime import UTC, datetime
+
+    from backend.app.archive.model import CanonicalClip, MediaRef
+
+    return CanonicalClip(
+        key=("catdv", str(clip_id)),
+        name=f"Image_{clip_id}",
+        duration_secs=0.0,
+        fps=25.0,
+        markers=(),
+        fields={},
+        notes={},
+        media=MediaRef(
+            mime_type="image/jpeg",
+            size_bytes=None,
+            cached_path=None,
+            upstream_handle=str(clip_id),
+        ),
+        provider_data={
+            "ID": clip_id,
+            "name": f"Image_{clip_id}",
+            "media": {"filePath": f"/media/img_{clip_id}.jpg"},
+        },
+        fetched_at=datetime.now(UTC),
+    )
+
+
+async def _seed_image_clip(ctx, clip_id: int = 50):
+    """Seed review items for an image clip (field + note only, no markers)."""
+    from backend.app.models.annotation import Annotation, ReviewItem
+
+    _, vid = await ctx.prompts_repo.create_with_initial_version(
+        ctx.db,
+        name=f"t-img-{clip_id}",
+        description=None,
+        body="p",
+        target_map={"decade": {"kind": "field", "identifier": "pragafilm.dekáda.natočení"}},
+        output_schema={},
+        model="m",
+    )
+    aid = await ctx.annotations_repo.insert(
+        ctx.db,
+        Annotation(
+            catdv_clip_id=clip_id,
+            catdv_clip_name=f"Image_{clip_id}",
+            prompt_version_id=vid,
+            model="m",
+            prompt_used="p",
+            raw_response={},
+            structured_output={},
+            clip_snapshot={"ID": clip_id, "name": f"Image_{clip_id}", "markers": [], "fields": {}},
+        ),
+    )
+    await ctx.review_items_repo.bulk_insert(
+        ctx.db,
+        [
+            ReviewItem(
+                annotation_id=aid,
+                catdv_clip_id=clip_id,
+                kind="field",
+                target_identifier="pragafilm.dekáda.natočení",
+                proposed_value="50.léta",
+            ),
+        ],
+    )
+
+
+def test_clip_detail_image_hides_markers_tab(monkeypatch, tmp_path):
+    """Image clips in review mode must not render the Markers tab button and
+    must default the tab to 'fields' in the Alpine x-data."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        _run(_seed_image_clip(ctx, clip_id=50))
+        ctx.archive = _FakeArchive([_make_canonical_clip_image(50)])
+        r = client.get("/clips/50?review=1")
+        assert r.status_code == 200
+        # Markers tab button must be absent
+        assert "@click=\"tab = 'markers'\"" not in r.text
+        assert "@click=\"tab='markers'\"" not in r.text
+        # Fields tab must still be present
+        assert "tab === 'fields'" in r.text
+        # Default tab should be 'fields' not 'markers'
+        assert "tab: \"fields\"" in r.text
+
+
+def test_clip_detail_review_action_bar_has_prev(monkeypatch, tmp_path):
+    """The review action bar must contain Prev, Skip, and Accept buttons."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        _run(_seed(ctx))
+        ctx.archive = _FakeArchive([_make_canonical_clip(1)])
+        r = client.get("/clips/1?review=1")
+        assert r.status_code == 200
+        assert "Prev" in r.text
+        assert "Skip" in r.text
+        assert "Accept" in r.text

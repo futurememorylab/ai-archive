@@ -2007,3 +2007,37 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   color: inherit; padding: 2px 4px; border-radius: 3px; font-size: 12px;
   width: 100%; margin-top: 2px;
 }
+
+/* Marker editable form */
+.ri-marker {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 6px 0; margin-top: 4px;
+}
+.ri-mfield {
+  background: var(--surface, #1d232a); border: 1px solid var(--line-2, rgba(255,255,255,0.12));
+  color: var(--text, #e6e9ee); padding: 3px 6px; border-radius: var(--r-1, 4px);
+  font-size: 12px; width: 100%;
+}
+.ri-mfield:focus { outline: none; border-color: var(--accent, #f5a623); }
+textarea.ri-mfield { resize: vertical; min-height: 44px; font-family: inherit; }
+.ri-time {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.ri-time label {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; color: var(--text-3, #7e8693);
+}
+.ri-time input.ri-mfield { width: 72px; }
+
+/* Note editable rows */
+.ri-note-row {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 6px 0; border-bottom: 1px solid var(--line, rgba(255,255,255,0.07));
+}
+.ri-note-row:last-child { border-bottom: none; }
+.ri-note {
+  background: var(--surface, #1d232a); border: 1px solid var(--line-2, rgba(255,255,255,0.12));
+  color: var(--text, #e6e9ee); padding: 4px 6px; border-radius: var(--r-1, 4px);
+  font-size: 12px; font-family: inherit; width: 100%; resize: vertical; min-height: 60px;
+}
+.ri-note:focus { outline: none; border-color: var(--accent, #f5a623); }
