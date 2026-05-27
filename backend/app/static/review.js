@@ -3,7 +3,9 @@ function reviewSel() {
     kinds: { marker: true, field: true, note: true },
     init() { this.initSelection(); },
     _selectedClipIds() {
-      return this._selected().map(el => parseInt(el.value.split('/')[1], 10));
+      return this._selected()
+        .map(el => parseInt(el.value.split('/')[1], 10))
+        .filter(id => !isNaN(id));
     },
     _activeKinds() {
       return Object.entries(this.kinds).filter(([, on]) => on).map(([k]) => k);
@@ -23,7 +25,11 @@ function reviewSel() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clip_ids, kinds }),
       });
-      if (r.ok) htmx.ajax('GET', window.location.href, '#review-table-region');
+      if (r.ok) {
+        htmx.ajax('GET', window.location.href, '#review-table-region');
+      } else {
+        alert(`Apply failed (${r.status}). Nothing was applied; try again.`);
+      }
     },
   });
 }
