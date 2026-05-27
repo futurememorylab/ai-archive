@@ -1009,7 +1009,7 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 .tag.muted { color: var(--text-3); }
 
 /* ─── tag extensions (prompts page) ─────────────────────────────────── */
-.tag .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
+.tag .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); margin-right: 4px; }
 .tag.good .dot { background: var(--good); }
 .tag.accent { color: var(--accent); border-color: color-mix(in oklab, var(--accent) 35%, transparent); }
 .tag.accent .dot { background: var(--accent); }
