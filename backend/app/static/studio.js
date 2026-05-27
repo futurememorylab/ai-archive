@@ -46,6 +46,12 @@ document.body.addEventListener('htmx:afterSwap', (evt) => {
   const page = root._x_dataStack[0];
   const card = evt.target.closest('.studio-prompt-card');
   if (!card) return;
+  // Alpine v3's MutationObserver doesn't reliably re-init x-data subtrees
+  // swapped by HTMX hx-swap="outerHTML" — after a few cycles the card
+  // comes back with no _x_dataStack, then every directive in it
+  // (picker, close, diff-toggle, tab clicks) becomes a dead click.
+  // Initialize the swapped subtree explicitly to keep it alive.
+  window.Alpine?.initTree(card);
   const side = card.getAttribute('data-side');
   const vId  = parseInt(card.getAttribute('data-version-id'), 10);
   const vNum = parseInt(card.getAttribute('data-version-num'), 10);
