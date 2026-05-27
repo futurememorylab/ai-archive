@@ -99,3 +99,56 @@ def test_player_one_row_with_version(client):
     assert r.text.count('class="range"') >= 2
     # Legend names the version.
     assert "legend-range-cur" in r.text
+
+
+def _two_versions(client):
+    """Create a prompt with v1 promoted and v2 branched."""
+    r = client.post("/api/prompts", json={
+        "name": "p2", "media_kind": "any", "model": "gemini-2.5-pro",
+        "target_map": {}, "output_schema": {}, "body": "v1",
+    })
+    assert r.status_code == 201, r.text
+    pid = r.json()["id"]
+    v1 = client.get(f"/api/prompts/{pid}").json()["latest_version_id"]
+    pr = client.post(f"/api/prompts/{pid}/versions/{v1}:promote")
+    assert pr.status_code == 200, pr.text
+    r = client.post(f"/api/prompts/{pid}/versions", json={"from_version_id": v1})
+    assert r.status_code == 201, r.text
+    v2 = r.json()["id"]
+    return pid, v1, v2
+
+
+def test_player_two_rows_with_compare_id(client):
+    pid, v1, v2 = _two_versions(client)
+    _seed_run(client, version_id=v1, clip_id=12041, scenes=[
+        {"in_secs": 1.0, "out_secs": 2.0, "name": "v1-scene"},
+    ])
+    _seed_run(client, version_id=v2, clip_id=12041, scenes=[
+        {"in_secs": 5.0, "out_secs": 6.0, "name": "v2-scene-a"},
+        {"in_secs": 7.0, "out_secs": 8.0, "name": "v2-scene-b"},
+    ])
+
+    r = client.get(f"/studio/_player?clip_id=12041&version_id={v2}&compare_id={v1}")
+    assert r.status_code == 200
+    # Two ranges rows.
+    assert 'class="ranges range-cur"' in r.text
+    assert 'class="ranges range-cmp"' in r.text
+    # Legend names both versions (both have non-empty scenes).
+    assert 'legend-range-cur' in r.text
+    assert 'legend-range-cmp' in r.text
+
+
+def test_player_two_rows_with_empty_cmp(client):
+    """compare_id given but no run exists for it → row renders but with 0 scenes."""
+    pid, v1, v2 = _two_versions(client)
+    _seed_run(client, version_id=v1, clip_id=12041, scenes=[
+        {"in_secs": 1.0, "out_secs": 2.0, "name": "x"},
+    ])
+    # No run on v2.
+    r = client.get(f"/studio/_player?clip_id=12041&version_id={v1}&compare_id={v2}")
+    assert r.status_code == 200
+    assert 'class="ranges range-cur"' in r.text
+    # range-cmp row container is still emitted (empty ranges list).
+    assert 'class="ranges range-cmp"' in r.text
+    # Legend should NOT include the empty row (selectattr filter in template).
+    assert 'legend-range-cmp' not in r.text
