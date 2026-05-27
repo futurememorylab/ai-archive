@@ -1936,3 +1936,36 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 }
 .pc-vmenu-item:hover { background: var(--bg-3, #1f1f1f); }
 .pc-vmenu-item.is-current { background: var(--accent-fade, #2b3a4d); }
+
+/* === Studio: prompt-card diff view ==================================== */
+.pc-diff { padding: 8px; }
+.pc-diff-hdr { display: flex; align-items: center; padding: 4px 6px 8px; }
+.pc-diff-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.pc-diff-table td {
+  vertical-align: top; padding: 2px 6px; white-space: pre-wrap;
+  word-break: break-word; border-top: 1px solid var(--border, #1f1f1f);
+}
+.diff-row.diff-eq td  { opacity: 0.55; }
+.diff-row.diff-del .diff-cell-a { background: rgba(220, 60, 60, 0.18); }
+.diff-row.diff-del .diff-cell-b { background: rgba(0,0,0,0); }
+.diff-row.diff-ins .diff-cell-a { background: rgba(0,0,0,0); }
+.diff-row.diff-ins .diff-cell-b { background: rgba(60, 180, 90, 0.18); }
+
+/* === Studio: compare row + cmp affordances =========================== */
+.studio-compare-row { display: flex; gap: 12px; align-items: stretch; }
+.studio-compare-row .studio-prompt-card { flex: 1 1 0; min-width: 0; }
+.cmp-card { border-left: 3px solid var(--accent, #4a90e2); }
+.btn-compare, .btn-diff-toggle, .btn-close-cmp {
+  background: none; border: 1px solid var(--border, #2a2a2a); color: inherit;
+  padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;
+}
+.btn-diff-toggle.active { background: var(--accent-fade, #2b3a4d); }
+.btn-close-cmp { font-size: 14px; line-height: 1; padding: 0 6px; }
+
+/* === Player overlay: cur / cmp range colors ========================== */
+.ranges.range-cur .range { background: rgba(74, 144, 226, 0.45); }
+.ranges.range-cmp { top: 60%; }  /* stack below the cur row */
+.ranges.range-cmp .range { background: rgba(220, 140, 60, 0.45); }
+.timeline-legend { display: flex; gap: 12px; padding: 4px 8px; font-size: 11px; }
+.legend-range-cur { color: rgba(74, 144, 226, 0.9); }
+.legend-range-cmp { color: rgba(220, 140, 60, 0.9); }

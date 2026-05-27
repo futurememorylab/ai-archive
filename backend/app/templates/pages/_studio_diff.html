@@ -1,4 +1,29 @@
-{# Cmp-only diff body stub — Task 13 fills this in. #}
-<div class="pc-diff" data-cmp-diff>
-  <div class="muted">diff coming soon</div>
+{# Cmp-card diff body. Reads cur + cmp text from sibling DOM and renders
+   a two-column line-diff. Refreshes when:
+     * the cmp `diff` toggle flips on (x-init runs)
+     * the page-level mode flips (prompt ↔ output)
+     * either side's content swaps (pendingRunSwap bumps)
+
+   Required scope: $root.mode, $root.pendingRunSwap, $root.activeVersionId,
+   $root.compareVersionId.
+#}
+<div class="pc-diff" data-cmp-diff x-data="cmpDiff"
+     x-init="refresh()"
+     x-effect="$root.mode; $root.pendingRunSwap; $root.activeVersionId; $root.compareVersionId; refresh()">
+  <div class="pc-diff-hdr mono-cell muted">
+    <span x-text="`diff · ${$root.mode}`"></span>
+    <span class="grow"></span>
+    <span x-show="rows.length" x-text="`${rows.filter(r => r.type !== 'eq').length} differences`"></span>
+  </div>
+  <table class="pc-diff-table">
+    <tbody>
+      <template x-for="(row, i) in rows" :key="i">
+        <tr :class="`diff-row diff-${row.type}`">
+          <td class="diff-cell-a mono"><span x-text="row.a ?? ''"></span></td>
+          <td class="diff-cell-b mono"><span x-text="row.b ?? ''"></span></td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+  <div class="muted" x-show="!rows.length">No content to diff yet.</div>
 </div>

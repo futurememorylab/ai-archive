@@ -33,7 +33,36 @@ document.addEventListener("alpine:init", () => {
   if (!window.Alpine) return;
   window.Alpine.data("cmpDiff", () => ({
     rows: [],
-    refresh() { /* filled in Task 13 */ },
+
+    refresh() {
+      const page = document.querySelector(".studio-page")?._x_dataStack?.[0];
+      if (!page) { this.rows = []; return; }
+      const mode = page.mode || "prompt";
+      const curCard = document.querySelector('.studio-prompt-card[data-side="cur"]');
+      const cmpCard = document.querySelector('.studio-prompt-card[data-side="cmp"]');
+      if (!curCard || !cmpCard) { this.rows = []; return; }
+
+      const readText = (card) => {
+        if (mode === "prompt") {
+          const ta = card.querySelector("textarea.pc-editor");
+          if (ta) return ta.value;
+          const pre = card.querySelector("pre.pc-readonly");
+          return pre ? pre.textContent : "";
+        }
+        // mode === 'output': read raw JSON from the embedded script and
+        // pretty-print it. The script lives inside the card's run-slot.
+        const blk = card.querySelector('script[type="application/json"][data-run-json]');
+        if (!blk) return "";
+        try {
+          const obj = JSON.parse(blk.textContent || "{}");
+          return JSON.stringify(obj, null, 2);
+        } catch {
+          return blk.textContent || "";
+        }
+      };
+
+      this.rows = lineDiff(readText(curCard), readText(cmpCard));
+    },
   }));
 });
 

@@ -66,3 +66,12 @@ def test_both_cards_bind_tabs_to_root_mode(client):
     assert out_count >= 2
     # Per-card `mode` ref should not appear in the partial.
     assert 'this.mode' not in html
+
+
+def test_cmp_card_emits_cmp_diff_alpine_root(client):
+    pid, v1, v2 = _two_versions(client)
+    r = client.get(f"/studio?prompt_id={pid}&version_id={v2}&compare_version_id={v1}")
+    html = r.text
+    # Cmp card has a diff slot wired to the cmpDiff Alpine component.
+    assert 'data-cmp-diff' in html
+    assert 'x-data="cmpDiff"' in html
