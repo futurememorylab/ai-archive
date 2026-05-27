@@ -208,8 +208,17 @@ a { color: inherit; text-decoration: none; }
   border-radius: 1px;
 }
 
-/* ─── page-clips ─────────────────────────────────────────────────────── */
+/* ─── shared page layout ─────────────────────────────────────────────── */
 .page { display: flex; flex-direction: column; height: 100%; }
+.page-hdr {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 20px; flex: none;
+  border-bottom: 1px solid var(--line);
+}
+.page-hdr h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0.01em; }
+.page-hdr .meta { color: var(--text-3); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+
+/* ─── page-clips ─────────────────────────────────────────────────────── */
 
 .filter-form {
   display: flex; flex-direction: column;
@@ -289,6 +298,8 @@ a { color: inherit; text-decoration: none; }
 .btn.icon { width: var(--btn-h); padding: 0; }
 .btn.icon.sm { width: var(--btn-h-sm); }
 .btn.is-disabled, .btn.disabled, .btn:disabled { opacity: 0.4; pointer-events: none; }
+.btn.good { background: color-mix(in oklab, var(--good) 20%, transparent); color: var(--good); border-color: color-mix(in oklab, var(--good) 40%, var(--line-2)); }
+.btn.good:hover { background: color-mix(in oklab, var(--good) 30%, transparent); }
 
 .filter-reset {
   align-self: center;
@@ -396,6 +407,8 @@ a { color: inherit; text-decoration: none; }
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 13px;
 }
 .vlist tbody td.num { text-align: right; }
@@ -805,17 +818,7 @@ a { color: inherit; text-decoration: none; }
    — leaving the page unscrollable. Pin them to their natural height so the
    content overflows and overflow-y:auto engages. */
 .cache-page > * { flex-shrink: 0; }
-.cache-page .page-hdr {
-  display: flex; align-items: baseline; gap: 12px;
-  margin-bottom: 6px;
-}
-.cache-page .page-hdr h1 {
-  margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0.01em;
-}
-.cache-page .page-hdr .meta {
-  color: var(--text-3); font-size: 11px; letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
+.cache-page .page-hdr { align-items: baseline; padding: 0; border-bottom: 0; margin-bottom: 6px; }
 
 .crumb .sep { color: var(--text-4); padding: 0 4px; }
 .crumb .strong { color: var(--text); font-weight: 500; }
@@ -1008,7 +1011,7 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 .tag.muted { color: var(--text-3); }
 
 /* ─── tag extensions (prompts page) ─────────────────────────────────── */
-.tag .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
+.tag .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); margin-right: 4px; }
 .tag.good .dot { background: var(--good); }
 .tag.accent { color: var(--accent); border-color: color-mix(in oklab, var(--accent) 35%, transparent); }
 .tag.accent .dot { background: var(--accent); }
@@ -1045,6 +1048,7 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 .tmpl-row .name { font-weight: 500; font-family: var(--f-display, var(--f-sans)); }
 .tmpl-row .desc { color: var(--text-3); font-size: 12px; }
 .tmpl-row .meta { font-family: var(--f-mono); font-size: 11px; color: var(--text-2); }
+.tmpl-row .tmpl-tag { margin-left: 4px; }
 
 /* ─── model picker ───────────────────────────────────────────────────── */
 .model-picker { position: relative; display: inline-flex; }
@@ -1157,6 +1161,15 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 }
 .prompts-page .prompts-list { border-right: 1px solid var(--line); overflow-y: auto; }
 .prompts-page .prompt-detail { padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow-y: auto; }
+.prompt-detail-hdr { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.prompt-detail-lhs { min-width: 0; }
+.prompt-detail-meta-row { display: flex; gap: 8px; align-items: center; margin-bottom: 2px; flex-wrap: wrap; }
+.prompt-detail-title { font-family: var(--f-display); font-size: 18px; font-weight: 600; }
+.prompt-detail-desc { font-size: 12px; color: var(--text-3); }
+.prompt-detail-actions { display: flex; gap: 8px; flex: none; }
+.prompt-kebab-wrap { position: relative; }
+.txt.sm { height: var(--btn-h-sm); padding: 0 6px; font-size: 12px; }
+.btn-caret { margin-left: 4px; }
 .prompts-page .empty-state { padding: 24px; color: var(--text-3); font-size: 13px; }
 .prompts-page .version-picker { position: relative; display: inline-flex; }
 .prompts-page .version-menu {
@@ -1223,6 +1236,12 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
   font-family: var(--f-mono);
 }
 .prompts-page .version-menu-item:hover { background: var(--panel-2); }
+
+/* ─── Prompt new page ────────────────────────────────────────────────── */
+.prompt-new-body { padding: 16px 20px; }
+.prompt-new-form { display: flex; flex-direction: column; gap: 14px; }
+.select-narrow { max-width: 240px; }
+.btn-row { gap: 8px; }
 
 /* ─── Annotate dropdown ──────────────────────────────────────────────── */
 .annotate-wrap { position: relative; display: inline-block; }
@@ -1367,8 +1386,6 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
   cursor: pointer; font-size: 11px; padding: 0 .4rem;
   position: absolute; right: .6rem; top: .4rem;
 }
-.ca-btn-live { background: #262; color: #bfb; }
-.ca-btn-live:hover { background: #383; }
 
 /* History tab */
 .live-history-list { list-style: none; padding: 0; margin: 0; }

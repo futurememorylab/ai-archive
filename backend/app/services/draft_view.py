@@ -22,8 +22,15 @@ def _effective_value(item: ReviewItem) -> Any:
     return item.edited_value if item.edited_value is not None else item.proposed_value
 
 
+def _unwrap(value: Any) -> Any:
+    """Unwrap {"value": X} dict wrappers that some prompt schemas produce."""
+    if isinstance(value, dict) and "value" in value:
+        return value["value"]
+    return value
+
+
 def _marker_from_review(item: ReviewItem) -> dict[str, Any]:
-    src = _effective_value(item)
+    src = _unwrap(_effective_value(item))
     pv: dict[str, Any] = src if isinstance(src, dict) else {}
     in_part = pv.get("in") or {}
     out_part = pv.get("out")
@@ -44,7 +51,7 @@ def _marker_from_review(item: ReviewItem) -> dict[str, Any]:
 
 def _field_from_review(item: ReviewItem) -> dict[str, Any]:
     identifier = item.target_identifier or ""
-    value = _effective_value(item)
+    value = _unwrap(_effective_value(item))
     if isinstance(value, list):
         value_str = ", ".join(_fix(str(v)) or "" for v in value)
     elif value is None:
@@ -88,7 +95,7 @@ def build_draft_view(
     fields = [_field_from_review(it) for it in review_items if it.kind == "field"]
     fields.sort(key=lambda f: f["identifier"])
     note_texts = [
-        _fix(str(_effective_value(it))) or ""
+        _fix(str(_unwrap(_effective_value(it)))) or ""
         for it in review_items
         if it.kind == "note" and _effective_value(it) is not None
     ]
@@ -99,7 +106,7 @@ def build_draft_view(
             "kind": "note",
             "decision": it.decision,
             "identifier": it.target_identifier,
-            "text": _fix(str(_effective_value(it))) or "",
+            "text": _fix(str(_unwrap(_effective_value(it)))) or "",
         }
         for it in review_items
         if it.kind == "note" and _effective_value(it) is not None

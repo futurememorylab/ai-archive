@@ -176,7 +176,7 @@ def _marker_from_review_value(value: dict[str, Any], fps: float) -> Marker | Non
 
 
 def _unwrap(value: Any) -> Any:
-    if isinstance(value, dict) and "value" in value and "evidence_secs" in value:
+    if isinstance(value, dict) and "value" in value:
         return value["value"]
     return value
 

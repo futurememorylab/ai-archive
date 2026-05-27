@@ -39,7 +39,7 @@
             {% include "pages/_annotate_dropdown.html" %}
           {% endif %}
           {% if (mode == "online" or (clip.cache and clip.cache.media_local.present)) and clip.duration_secs %}
-            <button type="button" class="btn ca-btn-live"
+            <button type="button" class="btn good"
                     @click="liveSession.start()">🎤 Live</button>
           {% endif %}
         </span>
@@ -222,8 +222,8 @@
       <span class="review-progress mono" x-show="queue.length > 0" x-text="progressLabel()"></span>
       <span class="grow"></span>
       <button type="button" class="btn" x-show="queue.length > 0" @click="skip()">Skip</button>
-      <button type="button" class="btn ca-btn-live" x-show="queue.length > 0" @click="applyAndNext()">Accept &amp; next →</button>
-      <button type="button" class="btn ca-btn-live" x-show="queue.length === 0" @click="applyStay()">Accept &amp; apply</button>
+      <button type="button" class="btn good" x-show="queue.length > 0" @click="applyAndNext()">Accept &amp; next →</button>
+      <button type="button" class="btn good" x-show="queue.length === 0" @click="applyStay()">Accept &amp; apply</button>
     </div>
     {% endif %}
 
