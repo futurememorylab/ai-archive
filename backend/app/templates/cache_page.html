@@ -21,7 +21,7 @@
     <div class="metric">
       <div class="m-label">Local cache</div>
       <div class="m-value">{{ summary.total_local_bytes | bytes_human }}</div>
-      <div class="m-sub">of {{ summary.media_cache_cap_bytes | bytes_human }}</div>
+      <div class="m-sub">of {{ summary.media_cache_cap_bytes | bytes_human }} cap</div>
       <div class="m-bar"><span style="width: {{ '%.1f' % local_pct }}%"></span></div>
       <div class="m-foot">
         <b>{{ summary.metadata_clip_count }}</b> metadata ·
@@ -40,8 +40,7 @@
         {%- else -%}—{%- endif -%}
       </div>
       <div class="m-foot">
-        <b>{{ ai_total_count }}</b> objects ·
-        <span class="muted-2">{{ summary.total_ai_bytes | comma }} B</span>
+        <b>{{ ai_total_count }}</b> objects
       </div>
     </div>
 

@@ -73,3 +73,17 @@ def test_pages_have_breadcrumb_and_single_title(monkeypatch, tmp_path: Path):
     # title not duplicated: "Cache" lives in the crumb leaf, not a body <h1>
     assert "<h1>Cache</h1>" not in cache
     assert '<span class="strong">Cache</span>' in cache
+
+
+def test_cache_metric_cap_labelled_and_no_raw_bytes(monkeypatch, tmp_path: Path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        r = client.get("/cache")
+    assert r.status_code == 200
+    # #4: the local-cache cap value is labelled as a cap (renders "of 50.0 GB cap").
+    assert "GB cap" in r.text
+    # #5: the AI-store m-foot no longer prints the redundant raw-byte line.
+    # That line rendered as "<b>N</b> objects ·\n  <span class="muted-2">N B</span>",
+    # so the "objects ·" separator and the raw-byte span are both gone.
+    assert "objects ·" not in r.text
+    assert 'class="muted-2">0 B' not in r.text
