@@ -248,3 +248,14 @@ def test_pager_url_encodes_search_query(monkeypatch, tmp_path):
         assert r.status_code == 200
         assert "q=hello%20world%26x" in r.text
         assert "q=hello world&x" not in r.text
+
+
+def test_clips_list_batch_filter_dropdown(monkeypatch, tmp_path):
+    """Batch <select> renders on GET / (even with no jobs = empty dropdown)."""
+    with _make_client(monkeypatch, tmp_path) as client:
+        client.app.state.ctx.archive = FakeArchive((_canonical(),))
+        r = client.get("/")
+        assert r.status_code == 200
+        assert 'select name="batch"' in r.text
+        # Any-batch option is always present
+        assert 'name="batch"' in r.text

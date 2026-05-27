@@ -62,6 +62,7 @@ async def clips_list(
     refresh: int = 0,
     cache: str | None = None,
     anno: str | None = None,
+    batch: int | None = None,
 ):
     ctx = get_ctx(request)
     if ctx.archive is None:
@@ -88,7 +89,7 @@ async def clips_list(
     effective_cache_f = "any" if (host_local_proxies and cache_f == "local") else cache_f
 
     try:
-        if filters_active(effective_cache_f, anno_f):
+        if filters_active(effective_cache_f, anno_f, batch):
             clips, total = await _filtered_page(
                 ctx,
                 catalog_id=catalog_id,
@@ -98,6 +99,7 @@ async def clips_list(
                 cache_filter=effective_cache_f,
                 anno_filter=anno_f,
                 host_local_proxies=host_local_proxies,
+                batch=batch,
             )
         else:
             page = await ctx.archive.list_clips(
@@ -125,6 +127,7 @@ async def clips_list(
         rows = await ctx.cache_inspector.status_for_clips(keys)
         statuses = {r.clip_key: r for r in rows}
 
+    jobs = await ctx.jobs_repo.list_jobs(ctx.db, limit=50)
     prev_offset, next_offset = page_offsets(offset, limit, total)
     ctx_dict = {
         "q": q or "",
@@ -133,7 +136,9 @@ async def clips_list(
         "total": total,
         "cache_filter": cache_f,
         "anno_filter": anno_f,
-        "filters_active": filters_active(effective_cache_f, anno_f),
+        "batch_filter": batch,
+        "jobs": jobs,
+        "filters_active": filters_active(effective_cache_f, anno_f, batch),
         "host_local_proxies": host_local_proxies,
         "catalog": {
             "id": ctx.settings.catdv_catalog_id,
@@ -182,6 +187,7 @@ async def _filtered_page(
     cache_filter,
     anno_filter,
     host_local_proxies: bool = False,
+    batch: int | None = None,
 ) -> tuple[list[CanonicalClip], int]:
     """Local-first paginated list when any filter is active.
 
@@ -197,6 +203,7 @@ async def _filtered_page(
         cache=cache_filter,
         anno=anno_filter,
         host_local_proxies=host_local_proxies,
+        batch=batch,
     )
     if not candidate_ids:
         return [], 0
