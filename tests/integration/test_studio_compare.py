@@ -53,3 +53,16 @@ def test_two_cards_when_compare_param_set(client):
     assert 'data-side="cmp"' in r.text
     assert f'data-version-id="{v2}"' in r.text  # cur card
     assert f'data-version-id="{v1}"' in r.text  # cmp card
+
+
+def test_both_cards_bind_tabs_to_root_mode(client):
+    pid, v1, v2 = _two_versions(client)
+    r = client.get(f"/studio?prompt_id={pid}&version_id={v2}&compare_version_id={v1}")
+    html = r.text
+    # Both cards' tab buttons read $root.mode.
+    cur_count = html.count('$root.mode === \'prompt\'')
+    out_count = html.count('$root.mode === \'output\'')
+    assert cur_count >= 2  # both cards have one each
+    assert out_count >= 2
+    # Per-card `mode` ref should not appear in the partial.
+    assert 'this.mode' not in html
