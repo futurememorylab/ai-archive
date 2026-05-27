@@ -82,7 +82,7 @@ document.addEventListener('alpine:init', () => {
     running: false,
     runId: null,
     runStartMs: 0,
-    runningElapsedLabel: '00:00',
+    runningElapsedLabel: '0:00',
     pendingRunSwap: 0,
 
     init() {
@@ -126,7 +126,7 @@ document.addEventListener('alpine:init', () => {
       if (!this.activeVersionId || !this.focusedClipId || this.running) return;
       this.running = true;
       this.runStartMs = performance.now();
-      this.runningElapsedLabel = '00:00';
+      this.runningElapsedLabel = '0:00';
       try {
         const res = await fetch('/api/studio/runs', {
           method: 'POST',
