@@ -106,6 +106,21 @@ _STATIC_DIR.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 
+@app.middleware("http")
+async def _revalidate_static(request: Request, call_next):
+    """Force browsers to revalidate static assets (JS/CSS) on every load.
+
+    Without this, browsers serve `/static/*` from memory cache without
+    revalidating, so edits to JS/CSS don't show up on a normal reload and
+    require a manual hard-refresh. `no-cache` keeps the ETag/304 flow (cheap)
+    while guaranteeing changed files are re-fetched.
+    """
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 @app.get("/api/health")
 async def health(request: Request) -> dict:
     ctx = getattr(request.app.state, "ctx", None)
