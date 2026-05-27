@@ -1536,6 +1536,15 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   min-height: 0;
 }
 
+/* Scope the shared _player.html chrome inside the studio slot. The
+   .viewer is flex:1 by default (intended for the full-height clip
+   page); here we cap it so the slot doesn't dominate the studio
+   layout. */
+.studio-player .viewer {
+  height: 320px;
+  flex: none;
+}
+
 .studio-compare {
   display: grid;
   grid-template-columns: 1fr;

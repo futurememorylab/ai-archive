@@ -90,114 +90,32 @@
   </div>
 
   <section class="player-wrap">
-    <div class="viewer">
-      {% if clip.kind == "image" %}
-      <img class="video"
-           src="{{ clip.media_url }}"
-           alt="{{ clip.name }}"
-           @dblclick="$el.requestFullscreen && $el.requestFullscreen()">
-      {% else %}
-      <video x-ref="video"
-             class="video"
-             src="{{ clip.media_url }}"
-             preload="metadata"
-             @dblclick="$refs.video.requestFullscreen && $refs.video.requestFullscreen()"></video>
-      {% endif %}
-      <div class="hud hud-tl">
-        <div class="hud-lbl">timecode · <span x-text="Math.round(fps) + 'p'">25p</span></div>
-        <div class="hud-tc" x-text="tc(current)">00:00:00:00</div>
-        <div class="hud-val">
-          frame <span x-text="frameStr(current)">0</span>
-          / <span x-text="frameStr(duration)">0</span>
-        </div>
-      </div>
-    </div>
-
-    {% if clip.duration_secs %}
-    <div class="transport">
-      {% with
-          duration_secs = clip.duration_secs,
-          duration_smpte = duration_smpte,
-          rows = [
-            {
-              "key": "markers",
-              "ranges": clip.markers,
-              "cls": "range-cur",
-              "alpine_list": "markers",
-              "x_show": None,
-            },
-            {
-              "key": "draft",
-              "ranges": draft.markers if draft and draft.has_draft else [],
-              "cls": "draft-ranges range-draft",
-              "alpine_list": None,
-              "x_show": "scope === 'draft'",
-            },
-          ]
-        %}
-        {% include "pages/_player_overlay.html" %}
-      {% endwith %}
-
-      <div class="transport-row">
-        <div class="transport-btns">
-          <button type="button" class="tbtn"
-                  :disabled="!activeMarkers().length"
-                  @click="prevMarker()"
-                  title="prev marker (↑)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="12 6 6 12 12 18"/><polyline points="19 6 13 12 19 18"/></svg>
-          </button>
-          <button type="button" class="tbtn"
-                  @click="stepFrame(-1)"
-                  title="step back 1 frame (,)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>
-          </button>
-          <button type="button" class="tbtn play"
-                  @click="togglePlay()"
-                  title="play/pause (Space)">
-            <svg x-show="!playing" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg>
-            <svg x-show="playing"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-          </button>
-          <button type="button" class="tbtn"
-                  @click="stepFrame(1)"
-                  title="step fwd 1 frame (.)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
-          </button>
-          <button type="button" class="tbtn"
-                  :disabled="!activeMarkers().length"
-                  @click="nextMarker()"
-                  title="next marker (↓)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 6 11 12 5 18"/><polyline points="12 6 18 12 12 18"/></svg>
-          </button>
-        </div>
-
-        <div class="tc-readout mono">
-          <span class="cur" x-text="tc(current)">00:00:00:00</span>
-          <span class="slash">/</span>
-          <span class="end" x-text="tc(duration)">{{ duration_smpte }}</span>
-        </div>
-
-        <div class="transport-meta mono">
-          <span>SHUTTLE</span>
-          <span class="tag">1×</span>
-          <span class="dot-sep">·</span>
-          <span>AUDIO</span>
-          <span class="tag">—</span>
-        </div>
-      </div>
-    </div>
-    {% endif %}
-
-    <div class="kbdbar mono">
-      <span class="group"><span class="kbd">Space</span><span>play/pause</span></span>
-      <span class="sep"></span>
-      <span class="group"><span class="kbd">,</span><span class="kbd">.</span><span>step 1f</span></span>
-      <span class="sep"></span>
-      <span class="group"><span class="kbd">↑</span><span class="kbd">↓</span><span>prev/next marker</span></span>
-      <span class="sep"></span>
-      <span class="group"><span class="kbd">J</span><span class="kbd">K</span><span class="kbd">L</span><span>shuttle</span></span>
-      <span class="sep"></span>
-      <span class="group"><span class="kbd">Home</span><span class="kbd">End</span><span>start/end</span></span>
-    </div>
+    {% with
+        clip_kind = clip.kind,
+        media_url = clip.media_url,
+        clip_name = clip.name,
+        duration_secs = clip.duration_secs,
+        duration_smpte = duration_smpte,
+        rows = [
+          {
+            "key": "markers",
+            "ranges": clip.markers,
+            "cls": "range-cur",
+            "alpine_list": "markers",
+            "x_show": None,
+          },
+          {
+            "key": "draft",
+            "ranges": draft.markers if draft and draft.has_draft else [],
+            "cls": "draft-ranges range-draft",
+            "alpine_list": None,
+            "x_show": "scope === 'draft'",
+          },
+        ],
+        show_kbdbar = True
+      %}
+      {% include "pages/_player.html" %}
+    {% endwith %}
   </section>
 
   <aside class="anno-col">

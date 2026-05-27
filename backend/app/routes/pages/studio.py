@@ -21,6 +21,7 @@ async def studio_page(
     prompt_id: int | None = None,
     version_id: int | None = None,
     compare_version_id: int | None = None,
+    clip_id: int | None = None,
 ):
     ctx = get_ctx(request)
     prompts = await ctx.prompts_repo.list_active(ctx.db)
@@ -63,6 +64,16 @@ async def studio_page(
     ):
         compare_version = next(v for v in versions if v.id == compare_version_id)
 
+    # Find the folder that holds the focused clip so the sidebar can
+    # auto-expand it on load — otherwise after a prompt switch the player
+    # restores but the clip's card is buried inside a collapsed folder,
+    # which looks like focus was lost.
+    focused_folder_id: int | None = None
+    if clip_id is not None:
+        focused_folder_id = await ctx.studio_folders_repo.folder_id_for_clip(
+            ctx.db, clip_id
+        )
+
     return templates.TemplateResponse(
         request,
         "pages/studio.html",
@@ -73,6 +84,8 @@ async def studio_page(
             "active_version": active_version.model_dump() if active_version else None,
             "compare_version": compare_version.model_dump() if compare_version else None,
             "folders": folders,
+            "focused_clip_id": clip_id,
+            "focused_folder_id": focused_folder_id,
         },
     )
 
@@ -89,8 +102,18 @@ async def _studio_folders(request: Request):
 
 
 @router.get("/studio/_folder", response_class=HTMLResponse)
-async def _studio_folder(request: Request, folder_id: int, active_version_id: int | None = None):
-    """Expanded folder view — clip cards with run-dots."""
+async def _studio_folder(
+    request: Request,
+    folder_id: int,
+    active_version_id: int | None = None,
+    clip_id: int | None = None,
+):
+    """Expanded folder view — clip cards with run-dots.
+
+    `clip_id` (when provided) is the currently-focused clip — used so the
+    matching card renders with the `.selected` class from the start,
+    instead of relying on a JS post-swap pass.
+    """
     ctx = get_ctx(request)
     clips_rows = await ctx.studio_folders_repo.list_clips(ctx.db, folder_id)
 
@@ -119,7 +142,7 @@ async def _studio_folder(request: Request, folder_id: int, active_version_id: in
     return templates.TemplateResponse(
         request,
         "pages/_studio_folder.html",
-        {"folder_id": folder_id, "clips": enriched},
+        {"folder_id": folder_id, "clips": enriched, "focused_clip_id": clip_id},
     )
 
 

@@ -91,3 +91,20 @@ class StudioFoldersRepo:
             (folder_id,),
         )
         return [{"clip_id": r[0], "added_at": r[1]} for r in await cur.fetchall()]
+
+    async def folder_id_for_clip(
+        self, conn: aiosqlite.Connection, clip_id: int
+    ) -> int | None:
+        """Lowest folder_id containing `clip_id`, or None if not in any folder.
+
+        A clip can live in multiple folders; callers that need "the" folder
+        (e.g. studio page auto-expand) accept the deterministic-but-arbitrary
+        pick.
+        """
+        cur = await conn.execute(
+            "SELECT folder_id FROM studio_folder_clip "
+            "WHERE clip_id = ? ORDER BY folder_id LIMIT 1",
+            (clip_id,),
+        )
+        row = await cur.fetchone()
+        return int(row[0]) if row is not None else None

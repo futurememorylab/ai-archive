@@ -42,3 +42,4 @@ available number. See any existing ADR for the template.
 | 0032 | 2026-05-26 | [Bound uvicorn graceful shutdown so open streams can't leak the seat](./adr/0032-shutdown-graceful-timeout.md) |
 | 0033 | 2026-05-26 | [Prompt Studio PR1 — shell and run loop](./adr/0033-prompt-studio-pr1-shell-and-run-loop.md) |
 | 0034 | 2026-05-27 | [Prompt Studio PR2 — version compare](./adr/0034-prompt-studio-pr2-version-compare.md) |
+| 0035 | 2026-05-27 | [Studio: shared player chrome + focused clip in URL](./adr/0035-studio-shared-player-chrome-and-focused-clip-url.md) |

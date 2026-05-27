@@ -1,8 +1,7 @@
-{# Studio player. Uses the same Alpine player() component as clip_detail
-   plus the shared _player_overlay.html partial. The overlay is gated by
-   the server-side rows list — when no version_id was passed (or the
-   focused clip has no scenes recorded yet), the overlay renders just
-   the playhead + ticks.
+{# Studio player. Uses the same Alpine player() component and shared
+   _player.html chrome as clip_detail — only the wrapper class differs.
+   The chrome's HUD + transport buttons stay; the kbdbar is hidden
+   because the studio page doesn't own keyboard focus.
 
    Template inputs:
      clip_id          — int
@@ -10,22 +9,22 @@
      duration_secs    — float | None
      duration_smpte   — str  | ""
      rows             — list (built in the route)
-     duration_smpte   — str | "" (consumed by the included _player_overlay.html
-                        via Jinja scope inheritance for the rightmost tc-labels span)
 #}
 <div class="studio-player"
      data-clip-player
      data-clip-id="{{ clip_id }}"
      x-data="player({{ fps or 25 }}, {{ duration_secs or 0 }}, [], [])">
-  <video x-ref="video"
-         class="video"
-         src="/api/media/{{ clip_id }}"
-         preload="metadata"
-         controls
-         style="width: 100%; max-height: 320px; background: #000;"></video>
-  <div class="transport">
-    {% with show_legend = True %}
-      {% include "pages/_player_overlay.html" %}
-    {% endwith %}
-  </div>
+  {% with
+      clip_kind = "video",
+      media_url = "/api/media/" ~ clip_id,
+      clip_name = "",
+      duration_secs = duration_secs,
+      duration_smpte = duration_smpte,
+      rows = rows,
+      show_legend = True,
+      show_meta = False,
+      show_kbdbar = False
+    %}
+    {% include "pages/_player.html" %}
+  {% endwith %}
 </div>

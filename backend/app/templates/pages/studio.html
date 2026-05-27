@@ -11,11 +11,12 @@
        activeModel: '{{ active_version.model if active_version else '' }}',
        compareVersionId: {{ compare_version.id if compare_version else 'null' }},
        compareVersionNum: {{ compare_version.version_num if compare_version else 'null' }},
+       focusedClipId: {{ focused_clip_id or 'null' }},
      })">
 
   {% include "pages/_studio_header.html" %}
 
-  <div class="studio-body no-player">
+  <div class="studio-body{% if not focused_clip_id %} no-player{% endif %}">
     <aside class="studio-videos">
       {% include "pages/_studio_folder_list.html" %}
     </aside>

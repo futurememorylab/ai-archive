@@ -40,10 +40,44 @@ window.studio = {
   },
 };
 
+// Prompt-picker links live inside a nested Alpine x-data, so $root there
+// shadows studioPage and clip_id can't be appended via :href binding.
+// Intercept the click and append clip_id from the live studioPage state
+// before navigation.
+document.body.addEventListener('click', (evt) => {
+  const a = evt.target.closest('a[data-prompt-switch]');
+  if (!a) return;
+  const root = document.querySelector('.studio-page');
+  const fid = root?._x_dataStack?.[0]?.focusedClipId;
+  if (!fid) return;
+  // Modifier-click (open in new tab/window) should also carry the clip;
+  // setting href before default action handles that case.
+  const u = new URL(a.href, location.origin);
+  u.searchParams.set('clip_id', String(fid));
+  a.href = u.toString();
+});
+
 document.body.addEventListener('htmx:afterSwap', (evt) => {
   const root = document.querySelector('.studio-page');
   if (!root || !root._x_dataStack) return;
   const page = root._x_dataStack[0];
+
+  // When a folder's clip cards swap in (hx-trigger="intersect once" on
+  // .studio-folder-kids), reconcile `.selected` against the live
+  // focusedClipId. The server bakes a `clip_id=…` into each folder's
+  // hx-get URL at page-load time, so cards arrive pre-selected based on
+  // the URL at that moment — but the user may have focused a different
+  // clip via JS since, and the hx-get URL doesn't update. Clear the
+  // server's guess, then apply the current focus.
+  if (evt.target.classList?.contains('studio-folder-kids')) {
+    evt.target.querySelectorAll('.studio-clip-card.selected')
+      .forEach(el => el.classList.remove('selected'));
+    if (page.focusedClipId) {
+      evt.target.querySelectorAll(`.studio-clip-card[data-clip-id="${page.focusedClipId}"]`)
+        .forEach(el => el.classList.add('selected'));
+    }
+  }
+
   const card = evt.target.closest('.studio-prompt-card');
   if (!card) return;
   // Alpine v3's MutationObserver doesn't reliably re-init x-data subtrees
@@ -78,7 +112,7 @@ document.addEventListener('alpine:init', () => {
     compareVersionId: initial.compareVersionId,
     compareVersionNum: initial.compareVersionNum,
     mode: 'prompt',  // page-level tab state; Task 11 confirms the lift from card-level.
-    focusedClipId: null,
+    focusedClipId: initial.focusedClipId ?? null,
     running: false,
     runId: null,
     runStartMs: 0,
@@ -86,6 +120,14 @@ document.addEventListener('alpine:init', () => {
     pendingRunSwap: 0,
 
     init() {
+      // Restore a server-seeded focused clip (e.g. from ?clip_id=…). The
+      // server already left `no-player` off the body in that case, so the
+      // slot is visible — we just need to load the player partial. The
+      // matching card's `.selected` class is rendered server-side by
+      // _studio_clip_card.html, so no DOM marking is needed here (cards
+      // aren't in the DOM at init time anyway — HTMX hasn't loaded the
+      // folder's kids yet).
+      if (this.focusedClipId) this.refreshPlayer();
       // Tick elapsed-time label while running.
       setInterval(() => {
         if (this.running) {
@@ -102,6 +144,7 @@ document.addEventListener('alpine:init', () => {
       this.pendingRunSwap++;
       const body = document.querySelector('.studio-body');
       if (body) body.classList.remove('no-player');
+      this._writeUrl();
       this.refreshPlayer();
     },
 
@@ -203,6 +246,7 @@ document.addEventListener('alpine:init', () => {
       if (this.promptId)         p.set('prompt_id', this.promptId);          else p.delete('prompt_id');
       if (this.activeVersionId)  p.set('version_id', this.activeVersionId);  else p.delete('version_id');
       if (this.compareVersionId) p.set('compare_version_id', this.compareVersionId); else p.delete('compare_version_id');
+      if (this.focusedClipId)    p.set('clip_id', this.focusedClipId);       else p.delete('clip_id');
       window.history.replaceState({}, '', `${window.location.pathname}?${p.toString()}`);
     },
   }));
@@ -251,8 +295,8 @@ document.addEventListener('alpine:init', () => {
     },
   }));
 
-  Alpine.data('studioFolders', () => ({
-    expandedId: null,
+  Alpine.data('studioFolders', (initialExpandedId = null) => ({
+    expandedId: initialExpandedId,
     newFolderOpen: false,
     newFolderName: '',
 

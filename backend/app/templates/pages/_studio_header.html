@@ -24,7 +24,14 @@
         <div class="hdr-tmenu" x-show="open" x-cloak>
           <div class="hdr-tmenu-h mono-cell">prompts</div>
           {% for p in prompts %}
+            {# data-prompt-switch is intercepted in studio.js to append the
+               currently-focused clip_id at click time. We can't use Alpine
+               :href here because this menu lives inside a nested
+               x-data="{ open: false }", which shadows the studioPage root —
+               $root would resolve to the inner div, where focusedClipId is
+               undefined. #}
             <a class="hdr-tmenu-item {% if selected_prompt and p.id == selected_prompt.id %}is-current{% endif %}"
+               data-prompt-switch
                href="/studio?prompt_id={{ p.id }}">
               <span class="hdr-tmenu-lbl">
                 <span class="hdr-tmenu-name">{{ p.name }}</span>
