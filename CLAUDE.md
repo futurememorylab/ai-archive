@@ -60,6 +60,40 @@ Otherwise the seat stays held for the JSESSIONID's idle-timeout window.
 
 The CatDV REST API binds the session to `JSESSIONID` and the seat is held *server-side*, not by our process. So even when our process dies, the seat can linger. The combination of (a) checking before starting and (b) graceful shutdown after running is what keeps the single available seat usable for the next dev session.
 
+## Frontend: explore before implementing
+
+Before designing or writing any frontend code (Jinja partial, Alpine
+component, CSS, JS), search the codebase for an existing component that
+already does the same thing or something close. **Reuse it. Extract it
+into a shared partial if it isn't one yet. Do not parallel-evolve a
+second renderer.**
+
+Where to look first:
+
+- `backend/app/templates/pages/` — all partials live here. Names
+  starting with `_` are includes (e.g. `_anno_panels.html`,
+  `_player_overlay.html`, `_video_list.html`, `_archive_picker.html`).
+- `backend/app/static/` — `player.js`, `studio.js`, `app.css`. The
+  `Alpine.data("player", ...)` block in `player.js` is the canonical
+  video transport.
+- `grep` patterns that pay off: `grep -rln "anno-\|range\|marker\|panels\|x-data" backend/app/templates/`.
+
+Red flags that mean you're about to duplicate something:
+
+- You're rendering scenes / markers / fields / notes from JSON — that
+  is `_anno_panels.html` territory. Build the `panels` dict and
+  `{% include %}`.
+- You're writing a `<video>` with markers, timeline, or playhead — use
+  `Alpine.data("player", ...)` + the shared overlay partial.
+- You're writing a thumbnail + name + duration card for a clip — look
+  at `_video_list.html` and the clip card patterns first.
+- You're writing a search-and-pick modal for archive clips — the
+  archive picker pattern already exists.
+
+If you genuinely need a new component, say so in the spec/ADR and
+explain why the existing one couldn't be extended (size? coupling? a
+flag would have made it incoherent?). Default answer is reuse.
+
 ## Shell Environment
 
 - This machine uses nvm; non-interactive shells don't have node/npm/npx on PATH. Source ~/.nvm/nvm.sh first, or use absolute paths.
