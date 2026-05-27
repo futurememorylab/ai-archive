@@ -1,0 +1,101 @@
+"""The Output tab now renders via the shared _anno_panels.html partial,
+and embeds the raw run JSON in a <script type="application/json"
+data-run-json> block for client-side diffing."""
+
+import asyncio
+import importlib
+import json
+
+import aiosqlite
+import pytest
+from fastapi.testclient import TestClient
+
+
+def _setenv(monkeypatch, tmp_path):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("APP_ENV", "dev")
+    monkeypatch.delenv("CATDV_PASSWORD", raising=False)
+
+
+@pytest.fixture
+def client(monkeypatch, tmp_path):
+    _setenv(monkeypatch, tmp_path)
+    from backend.app import main as main_mod
+    importlib.reload(main_mod)
+    with TestClient(main_mod.app) as c:
+        yield c
+
+
+def _seed_run(app, *, version_id, clip_id, output_json):
+    """Insert a studio_run row via a fresh aiosqlite connection.
+
+    Uses asyncio.new_event_loop() (Py 3.13 safe — get_event_loop() raises
+    on the main thread). Looks up the db path via ctx.settings.data_dir
+    because ctx.db_path is not exposed.
+    """
+    db_path = app.state.ctx.settings.data_dir / "app.db"
+    async def _go():
+        async with aiosqlite.connect(db_path) as db:
+            await db.execute(
+                "INSERT INTO studio_run(prompt_version_id, clip_id, status, "
+                "output_json, model, finished_at) "
+                "VALUES (?, ?, 'ok', ?, 'gemini-2.5-pro', '2026-05-27T00:00:00Z')",
+                (version_id, clip_id, json.dumps(output_json)),
+            )
+            await db.commit()
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(_go())
+    finally:
+        loop.close()
+
+
+def _make_prompt_with_version(client, *, target_map: dict):
+    """Create a prompt via POST then read its latest_version_id via GET."""
+    r = client.post("/api/prompts", json={
+        "name": "t", "media_kind": "any", "model": "gemini-2.5-pro",
+        "target_map": target_map, "output_schema": {}, "body": "x",
+    })
+    assert r.status_code == 201, r.text
+    pid = r.json()["id"]
+    env = client.get(f"/api/prompts/{pid}").json()
+    return pid, env["latest_version_id"]
+
+
+def test_run_output_uses_anno_panels_and_has_run_json(client):
+    pid, vid = _make_prompt_with_version(client, target_map={
+        "summary": {"kind": "field", "identifier": "pf.summary"},
+    })
+    from backend.app import main as main_mod
+    _seed_run(main_mod.app, version_id=vid, clip_id=12041, output_json={
+        "scenes": [{"in_secs": 1.0, "out_secs": 2.0, "name": "scene-a"}],
+        "summary": "krátký",
+    })
+
+    r = client.get(f"/studio/_run?prompt_version_id={vid}&clip_id=12041")
+    assert r.status_code == 200
+    html = r.text
+
+    # Shared partial is in.
+    assert 'class="anno-tabs"' in html
+    assert 'class="anno-section"' in html
+    # Bespoke markup is gone.
+    assert "ro-scene" not in html
+    assert "ro-field" not in html
+    # History tab is hidden in studio context.
+    assert "tab === 'history'" not in html
+    # Raw JSON is embedded for OutputDiff.
+    assert 'type="application/json"' in html
+    assert 'data-run-json' in html
+    # Marker article rendering works.
+    assert "scene-a" in html
+    # Field identifier was looked up via target_map.
+    assert "pf.summary" in html
+
+
+def test_run_output_empty_state_when_no_run(client):
+    pid, vid = _make_prompt_with_version(client, target_map={})
+    r = client.get(f"/studio/_run?prompt_version_id={vid}&clip_id=99999")
+    assert r.status_code == 200
+    assert "No run yet" in r.text
+    assert "anno-tabs" not in r.text

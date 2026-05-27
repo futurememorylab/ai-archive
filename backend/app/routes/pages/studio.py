@@ -231,6 +231,8 @@ async def _studio_run(
     prompt_version_id: int,
     clip_id: int,
 ):
+    from backend.app.services.studio_panels import panels_from_studio_run
+
     ctx = get_ctx(request)
     run = await ctx.studio_runs_repo.latest_for_pair(
         ctx.db, prompt_version_id=prompt_version_id, clip_id=clip_id
@@ -239,11 +241,25 @@ async def _studio_run(
         version = await ctx.prompts_repo.get_version(ctx.db, prompt_version_id)
     except LookupError:
         version = None
+
+    # fps lookup for SMPTE rendering inside _anno_panels.html (best-effort).
+    fps = 25.0
+    if ctx.archive:
+        try:
+            clip = await ctx.archive.get_clip(str(clip_id))
+            fps = float(clip.fps or 25.0)
+        except Exception:  # noqa: BLE001
+            pass
+
+    panels = panels_from_studio_run(run, version, fps=fps)
+
     return templates.TemplateResponse(
         request,
         "pages/_studio_run_output.html",
         {
             "run": run.model_dump() if run else None,
             "version": version.model_dump() if version else None,
+            "panels": panels,
+            "clip": {"fps": fps},  # _anno_panels.html references clip.fps in its tc()
         },
     )
