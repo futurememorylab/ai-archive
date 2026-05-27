@@ -26,15 +26,21 @@ def line_diff(a_text: str, b_text: str) -> list[dict[str, Any]]:
     i = j = 0
     while i < n and j < m:
         if A[i] == B[j]:
-            out.append({"type": "eq", "a": A[i], "b": B[j]}); i += 1; j += 1
+            out.append({"type": "eq", "a": A[i], "b": B[j]})
+            i += 1
+            j += 1
         elif lcs[i + 1][j] >= lcs[i][j + 1]:
-            out.append({"type": "del", "a": A[i]}); i += 1
+            out.append({"type": "del", "a": A[i]})
+            i += 1
         else:
-            out.append({"type": "ins", "b": B[j]}); j += 1
+            out.append({"type": "ins", "b": B[j]})
+            j += 1
     while i < n:
-        out.append({"type": "del", "a": A[i]}); i += 1
+        out.append({"type": "del", "a": A[i]})
+        i += 1
     while j < m:
-        out.append({"type": "ins", "b": B[j]}); j += 1
+        out.append({"type": "ins", "b": B[j]})
+        j += 1
     return out
 
 
