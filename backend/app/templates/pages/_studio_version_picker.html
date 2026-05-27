@@ -1,0 +1,10 @@
+{# Version chip + dropdown stub — Task 8 turns this into an HTMX-swap
+   trigger.
+
+   Required scope from the enclosing card:
+     active_version, versions, side, clip_id
+#}
+<span class="pc-vchip" data-version-picker>
+  <span class="pc-vlbl">v{{ active_version.version_num }}</span>
+  <span class="pc-status {{ active_version.state }}">{{ active_version.state }}</span>
+</span>

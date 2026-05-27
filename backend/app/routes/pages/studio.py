@@ -4,7 +4,9 @@ Subsequent tasks add HTMX partial endpoints (folders, clips, archive
 picker, run output, player).
 """
 
-from fastapi import APIRouter, Request
+from typing import Literal
+
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from backend.app.deps import get_ctx
@@ -241,6 +243,63 @@ async def _studio_player(
             "duration_secs": duration_secs,
             "duration_smpte": duration_smpte,
             "rows": rows,
+        },
+    )
+
+
+@router.get("/studio/_prompt_card", response_class=HTMLResponse)
+async def _studio_prompt_card(
+    request: Request,
+    side: Literal["cur", "cmp"],
+    prompt_version_id: int,
+    clip_id: int | None = None,
+):
+    """Renders one prompt-card. Used by HTMX swaps from the version chip
+    and by the initial cmp materialization.
+
+    404 on missing version. With clip_id, the Output tab pre-loads the
+    run partial; without, the Output tab shows the focus-a-clip
+    empty-state.
+    """
+    from backend.app.services.studio_panels import panels_from_studio_run
+
+    ctx = get_ctx(request)
+    try:
+        version = await ctx.prompts_repo.get_version(ctx.db, prompt_version_id)
+    except LookupError as exc:
+        raise HTTPException(404, f"version {prompt_version_id} not found") from exc
+
+    # Load the prompt's full version list for the picker dropdown (Task 8 uses it).
+    _, versions = await ctx.prompts_repo.get_with_versions(ctx.db, version.prompt_id)
+
+    run = None
+    panels: dict | None = None
+    fps = 25.0
+    if clip_id is not None:
+        run = await ctx.studio_runs_repo.latest_for_pair(
+            ctx.db, prompt_version_id=prompt_version_id, clip_id=clip_id
+        )
+        if ctx.archive:
+            try:
+                clip = await ctx.archive.get_clip(str(clip_id))
+                fps = float(clip.fps or 25.0)
+            except Exception:  # noqa: BLE001
+                pass
+        panels = panels_from_studio_run(run, version, fps=fps)
+
+    version_dict = version.model_dump()
+    return templates.TemplateResponse(
+        request,
+        "pages/_studio_prompt_card.html",
+        {
+            "side": side,
+            "active_version": version_dict,
+            "version": version_dict,  # consumed by the embedded _studio_run_output include
+            "versions": [v.model_dump() for v in versions],
+            "clip_id": clip_id,
+            "run": run.model_dump() if run else None,
+            "panels": panels,
+            "clip": {"fps": fps},
         },
     )
 

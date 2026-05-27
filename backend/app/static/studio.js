@@ -118,6 +118,33 @@ document.addEventListener('alpine:init', () => {
         if (run.status === 'ok' || run.status === 'error') return;
       }
     },
+
+    openCompare() {
+      const versions = window.__studioVersions || [];
+      const cur = this.activeVersionId;
+      const drafts = versions.filter(v => v.id !== cur && v.state === 'draft');
+      const prods  = versions.filter(v => v.id !== cur && v.state === 'production');
+      const others = versions.filter(v => v.id !== cur);
+      const pick = (drafts[0] || prods[0] || others[0]) || null;
+      if (!pick) return;
+      this.compareVersionId = pick.id;
+      this.compareVersionNum = pick.version_num;
+      this._writeUrl();
+    },
+
+    closeCompare() {
+      this.compareVersionId = null;
+      this.compareVersionNum = null;
+      this._writeUrl();
+    },
+
+    _writeUrl() {
+      const p = new URLSearchParams(window.location.search);
+      if (this.promptId)         p.set('prompt_id', this.promptId);          else p.delete('prompt_id');
+      if (this.activeVersionId)  p.set('version_id', this.activeVersionId);  else p.delete('version_id');
+      if (this.compareVersionId) p.set('compare_version_id', this.compareVersionId); else p.delete('compare_version_id');
+      window.history.replaceState({}, '', `${window.location.pathname}?${p.toString()}`);
+    },
   }));
 
   Alpine.data('studioHeader', () => ({}));
@@ -191,35 +218,29 @@ document.addEventListener('alpine:init', () => {
     },
   }));
 
-  Alpine.data('studioPromptCard', () => ({
-    mode: 'prompt',
+  Alpine.data('studioPromptCard', (side = 'cur') => ({
+    side,
+    diff: false,
     dirty: false,
+    // mode is on $root now (added in Task 6). The template references
+    // $root.mode directly, so this factory doesn't need a local `mode`.
 
     async save() {
+      if (this.side !== 'cur') return;  // never save from the cmp card.
       this.dirty = true;
       const versionId = this.$root.activeVersionId;
       const promptId = this.$root.promptId;
-      if (!versionId || !promptId) {
-        this.dirty = false;
-        return;
-      }
+      if (!versionId || !promptId) { this.dirty = false; return; }
       const body = this.$refs.editor ? this.$refs.editor.value : null;
-      if (body == null) {
-        this.dirty = false;
-        return;
-      }
-      // The prompts PUT endpoint requires the full version body. Fetch the
-      // existing version to round-trip target_map / output_schema / model.
+      if (body == null) { this.dirty = false; return; }
       try {
         const v = await fetch(`/api/prompts/${promptId}/versions/${versionId}`).then(r => r.json());
         const res = await fetch(`/api/prompts/${promptId}/versions/${versionId}`, {
           method: 'PUT',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
-            body,
-            target_map: v.target_map,
-            output_schema: v.output_schema,
-            model: v.model,
+            body, target_map: v.target_map,
+            output_schema: v.output_schema, model: v.model,
           }),
         });
         this.dirty = !res.ok;
@@ -230,7 +251,9 @@ document.addEventListener('alpine:init', () => {
     },
 
     async loadOutput() {
-      const versionId = this.$root.activeVersionId;
+      const versionId = this.side === 'cur'
+        ? this.$root.activeVersionId
+        : this.$root.compareVersionId;
       const clipId = this.$root.focusedClipId;
       if (!versionId) return;
       const slot = this.$refs.runSlot;
