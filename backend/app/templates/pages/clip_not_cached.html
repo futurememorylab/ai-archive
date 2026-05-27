@@ -1,9 +1,7 @@
 {% extends "pages/layout.html" %}
+{% import "components/_ui.html" as ui %}
 {% block title %}Clip {{ clip_id }} not cached · CatDV Annotator{% endblock %}
-{% block crumb %}
-  <a class="crumb" href="/">‹ All clips</a>
-  <span class="crumb">Clip {{ clip_id }}</span>
-{% endblock %}
+{% block crumb %}{{ ui.breadcrumb([('All clips', '/'), ('Clip ' ~ clip_id, None)]) }}{% endblock %}
 {% block body %}
 <div class="empty-state">
   <h2>Clip {{ clip_id }} is not available offline</h2>
