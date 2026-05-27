@@ -176,6 +176,10 @@ document.addEventListener('alpine:init', () => {
       const html = await fetch(`/studio/_prompt_card?${params.toString()}`).then(r => r.text());
       slot.innerHTML = html;
       window.Alpine?.initTree(slot);
+      // HTMX doesn't auto-scan DOM we injected ourselves — without this,
+      // the cmp card's version-picker hx-* attributes never get wired
+      // and picking a different cmp version is a dead click.
+      window.htmx?.process(slot);
       this.refreshPlayer();
     },
 
