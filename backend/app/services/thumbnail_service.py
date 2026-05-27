@@ -3,13 +3,15 @@
 Mirrors the proxy-cache pattern: poster JPEGs live as plain files at
 `cache_dir/{clip_id}.jpg`. The poster id comes from the clip's cached
 metadata (`posterID`, falling back to the first `thumbnailIDs` entry).
-When offline (`catdv is None`) only already-cached files are served.
+When offline (`catdv is None` OR `is_online_provider()` is False) only
+already-cached files are served — no network attempts.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -40,11 +42,16 @@ class ThumbnailService:
         cache_dir: Path,
         archive: ArchiveProvider,
         catdv: CatdvClient | None = None,
+        is_online_provider: Callable[[], bool] | None = None,
     ) -> None:
         self._cache_dir = cache_dir
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         self._archive = archive
         self._catdv = catdv
+        # When set, gates every network fetch — same pattern as the proxy
+        # resolver. None means "always online if catdv is set" (used by
+        # tests that don't wire a connection monitor).
+        self._is_online = is_online_provider
 
     def path_for(self, clip_id: int) -> Path:
         return self._cache_dir / f"{clip_id}.jpg"
@@ -54,6 +61,9 @@ class ThumbnailService:
         if dest.exists() and dest.stat().st_size > 0:
             return dest
         if self._catdv is None:
+            return None
+        if self._is_online is not None and not self._is_online():
+            # Offline: cache miss is terminal — no network attempts.
             return None
 
         try:
@@ -86,6 +96,8 @@ class ThumbnailService:
         it to a cached JPEG poster. Returns None (→ placeholder) for non-image
         clips or any decode failure."""
         if self._catdv is None:
+            return None
+        if self._is_online is not None and not self._is_online():
             return None
         media = clip.provider_data.get("media") or {}
         file_path = media.get("filePath")

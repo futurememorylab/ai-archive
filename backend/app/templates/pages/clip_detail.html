@@ -115,35 +115,28 @@
 
     {% if clip.duration_secs %}
     <div class="transport">
-      <div class="timeline" @click="seekFromEvent($event)">
-        <div class="ticks"></div>
-        <div class="ranges">
-          {% for m in clip.markers %}
-            {# No @click on .range: clicks bubble to .timeline so seekFromEvent
-               seeks to the exact clicked position, not the marker's start.
-               Index aligns with the Alpine `markers` array (same sorted source). #}
-            <div class="range"
-                 :class="{ active: isMarkerActive(markers[{{ loop.index0 }}]) }"
-                 style="left: {{ (m.in_secs / clip.duration_secs) * 100 }}%; width: {{ (((m.out_secs or m.in_secs + 1) - m.in_secs) / clip.duration_secs) * 100 }}%"
-                 title="{{ m.name }}"></div>
-          {% endfor %}
-        </div>
-        <div class="ranges draft-ranges" x-show="scope === 'draft'" x-cloak>
-          {% for m in draft.markers %}
-            <div class="range draft-range"
-                 style="left: {{ (m.in_secs / clip.duration_secs) * 100 }}%; width: {{ (((m.out_secs or m.in_secs + 1) - m.in_secs) / clip.duration_secs) * 100 }}%"
-                 title="{{ m.name }}"></div>
-          {% endfor %}
-        </div>
-        <div class="playhead" :style="`left: ${pct(current)}%`"></div>
-        <div class="tc-labels">
-          <span x-text="quintileTc(0)">00:00:00:00</span>
-          <span x-text="quintileTc(1)"></span>
-          <span x-text="quintileTc(2)"></span>
-          <span x-text="quintileTc(3)"></span>
-          <span x-text="quintileTc(4)">{{ duration_smpte }}</span>
-        </div>
-      </div>
+      {% with
+          duration_secs = clip.duration_secs,
+          duration_smpte = duration_smpte,
+          rows = [
+            {
+              "key": "markers",
+              "ranges": clip.markers,
+              "cls": "range-cur",
+              "alpine_list": "markers",
+              "x_show": None,
+            },
+            {
+              "key": "draft",
+              "ranges": draft.markers if draft and draft.has_draft else [],
+              "cls": "draft-ranges range-draft",
+              "alpine_list": None,
+              "x_show": "scope === 'draft'",
+            },
+          ]
+        %}
+        {% include "pages/_player_overlay.html" %}
+      {% endwith %}
 
       <div class="transport-row">
         <div class="transport-btns">

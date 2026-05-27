@@ -41,3 +41,4 @@ available number. See any existing ADR for the template.
 | 0031 | 2026-05-26 | [Cache page pagination shared with Clips](./adr/0031-cache-pagination-shared-with-clips.md) |
 | 0032 | 2026-05-26 | [Bound uvicorn graceful shutdown so open streams can't leak the seat](./adr/0032-shutdown-graceful-timeout.md) |
 | 0033 | 2026-05-26 | [Prompt Studio PR1 — shell and run loop](./adr/0033-prompt-studio-pr1-shell-and-run-loop.md) |
+| 0034 | 2026-05-27 | [Prompt Studio PR2 — version compare](./adr/0034-prompt-studio-pr2-version-compare.md) |

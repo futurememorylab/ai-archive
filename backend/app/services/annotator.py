@@ -24,6 +24,7 @@ from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.studio_runs import StudioRunsRepo
 from backend.app.services.events import EventBus
+from backend.app.services.proxy_resolver import ProxyNotFound
 from backend.app.services.target_map import expand
 
 log = logging.getLogger(__name__)
@@ -132,15 +133,42 @@ async def _process_item(
     jobs_repo, studio_runs_repo: StudioRunsRepo,
     event_bus, topic,
 ) -> None:
-    await jobs_repo.update_item_status(db, item.id, "resolving")
-    await event_bus.publish(topic, {"item_id": item.id, "status": "resolving"})
-    local_path: Path = await proxy_resolver.path_for_clip_id(item.catdv_clip_id)
-
-    await jobs_repo.update_item_status(db, item.id, "uploading")
-    await event_bus.publish(topic, {"item_id": item.id, "status": "uploading"})
-    mime = mimetypes.guess_type(str(local_path))[0] or "video/quicktime"
     clip_key = ("catdv", str(item.catdv_clip_id))
-    upload = await ai_store.ensure_uploaded(clip_key, local_path, mime)
+
+    # Fast path: if the AI store already has this clip, skip the local
+    # resolver + upload entirely. Gemini reads from GCS directly via the
+    # returned reference, so the local proxy isn't needed at all. GCS
+    # `UploadedRef`s have no expiry, so a non-None status() is durable.
+    upload = await ai_store.status(clip_key)
+
+    if upload is None:
+        # Cache miss in AI store → need the local file to upload it.
+        await jobs_repo.update_item_status(db, item.id, "resolving")
+        await event_bus.publish(topic, {"item_id": item.id, "status": "resolving"})
+        try:
+            local_path: Path = await proxy_resolver.path_for_clip_id(item.catdv_clip_id)
+        except ProxyNotFound:
+            msg = (
+                f"clip {item.catdv_clip_id} is not locally cached and not in "
+                f"AI store — cache the clip on /clips first, or reconnect to CatDV"
+            )
+            await jobs_repo.update_item_status(db, item.id, "error", error=msg)
+            await event_bus.publish(
+                topic, {"item_id": item.id, "status": "error", "error": msg}
+            )
+            if kind == "studio":
+                run_id = await studio_runs_repo.find_latest_id_for_job_clip(
+                    db, job_id=item.job_id, clip_id=item.catdv_clip_id
+                )
+                if run_id is not None:
+                    await studio_runs_repo.complete_error(db, run_id, error=msg)
+            return
+
+        await jobs_repo.update_item_status(db, item.id, "uploading")
+        await event_bus.publish(topic, {"item_id": item.id, "status": "uploading"})
+        mime = mimetypes.guess_type(str(local_path))[0] or "video/quicktime"
+        upload = await ai_store.ensure_uploaded(clip_key, local_path, mime)
+
     file_ref = await ai_store.reference_for_gemini(upload)
 
     canonical = await archive.get_clip(str(item.catdv_clip_id))

@@ -1,18 +1,30 @@
-{# PR1: single prompt card (cur only). PR2 will add the compare card.
-   The editor is shown only when the active version is a draft. The Output
-   tab loads via HTMX-style fetch on focus and on run completion (the
-   $root.pendingRunSwap counter is the watch trigger).
+{# Studio prompt-card. side ∈ {'cur', 'cmp'}. Used both as the page-rendered
+   initial card and as the HTMX-swapped partial. The version chip lives in
+   the header; cur side keeps the model picker (PR1 placement); cmp side
+   gets a Close button and a Diff-vs-cur toggle.
+
+   Required template inputs:
+     side             — "cur" | "cmp"
+     active_version   — dict (PromptVersion.model_dump())
+     versions         — list[dict]  (all versions of the prompt, for the picker)
+     clip_id          — int | None
+     run              — dict | None  (latest run for active_version + clip)
+     panels           — dict | None  (built via panels_from_studio_run)
+     clip             — { fps: float }  (consumed by _anno_panels.html)
 #}
-<div class="studio-prompt-card" x-data="studioPromptCard()">
+<div class="studio-prompt-card{% if side == 'cmp' %} cmp-card{% endif %}"
+     data-side="{{ side }}"
+     data-version-id="{{ active_version.id }}"
+     data-version-num="{{ active_version.version_num }}"
+     x-data="studioPromptCard('{{ side }}')">
+
   <div class="pc-hdr">
-    {% if active_version %}
-      <span class="pc-vlbl">v{{ active_version.version_num }}</span>
-      <span class="pc-status {{ active_version.state }}">{{ active_version.state }}</span>
-      <span class="grow"></span>
-      {# Model picker — uses the `modelPicker` Alpine component which
-         proxies its `model` accessor to studioPage.activeModel. Cannot
-         use `$root` directly: nested x-data on this picker makes it its
-         own root, hiding the page scope. #}
+    {% include "pages/_studio_version_picker.html" %}
+    {% if side == 'cur' %}
+      {# Model picker — preserved from PR1. Uses the `modelPicker` Alpine
+         component which proxies its `model` accessor to studioPage.activeModel.
+         Cannot use `$root` directly: nested x-data on this picker makes it
+         its own root, hiding the page scope. #}
       <div class="model-picker" x-data="modelPicker" @click.outside="open = false">
         <button class="tag info model-picker-btn" :class="open && 'open'"
                 @click="open = !open" title="switch model">
@@ -31,20 +43,38 @@
           {% endfor %}
         </div>
       </div>
+      <span class="grow"></span>
+      <button type="button" class="btn-compare"
+              x-show="compareVersionId === null"
+              @click="openCompare()">+ Compare</button>
     {% else %}
-      <span class="muted">no version</span>
+      <span class="grow"></span>
+      <button type="button" class="btn-diff-toggle"
+              @click="diff = !diff"
+              :class="diff && 'active'"
+              x-text="diff ? `Hide diff` : `Diff vs v${activeVersionNum}`"></button>
+      <button type="button" class="btn-close-cmp" title="Close compare"
+              @click="closeCompare()">×</button>
     {% endif %}
   </div>
 
   <div class="pc-tabs">
-    <button class="pc-tab" :class="mode === 'prompt' && 'active'" @click="mode = 'prompt'">Prompt</button>
-    <button class="pc-tab" :class="mode === 'output' && 'active'" @click="mode = 'output'">Output</button>
+    <button class="pc-tab" :class="mode === 'prompt' && 'active'"
+            @click="mode = 'prompt'">Prompt</button>
+    <button class="pc-tab" :class="mode === 'output' && 'active'"
+            @click="mode = 'output'">Output</button>
   </div>
 
   <div class="pc-body">
-    {% if active_version %}
+    {% if side == 'cmp' %}
+      <div x-show="diff" x-cloak>
+        {% include "pages/_studio_diff.html" %}
+      </div>
+    {% endif %}
+
+    <div {% if side == 'cmp' %}x-show="!diff"{% endif %}>
       <div x-show="mode === 'prompt'">
-        {% if active_version.state == 'draft' %}
+        {% if active_version.state == 'draft' and side == 'cur' %}
           <textarea class="pc-editor" x-ref="editor"
                     @input.debounce.700ms="save()"
                     spellcheck="false">{{ active_version.body }}</textarea>
@@ -54,16 +84,22 @@
       </div>
       <div x-show="mode === 'output'"
            x-init="$nextTick(() => loadOutput())"
-           x-effect="$root.pendingRunSwap && loadOutput()">
+           x-effect="pendingRunSwap && loadOutput()">
         <div class="run-slot" x-ref="runSlot">
-          <div class="muted">loading…</div>
+          {% if panels is not none %}
+            {% include "pages/_studio_run_output.html" %}
+          {% else %}
+            <div class="muted">Click a clip in a folder to focus it.</div>
+          {% endif %}
         </div>
       </div>
-    {% endif %}
+    </div>
   </div>
 
+  {% if side == 'cur' %}
   <div class="pc-foot">
     <span x-show="dirty" class="mono-cell muted">draft · saving…</span>
     <span x-show="!dirty" class="mono-cell muted">saved</span>
   </div>
+  {% endif %}
 </div>

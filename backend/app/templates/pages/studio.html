@@ -9,6 +9,8 @@
        activeVersionId: {{ active_version.id if active_version else 'null' }},
        activeVersionNum: {{ active_version.version_num if active_version else 'null' }},
        activeModel: '{{ active_version.model if active_version else '' }}',
+       compareVersionId: {{ compare_version.id if compare_version else 'null' }},
+       compareVersionNum: {{ compare_version.version_num if compare_version else 'null' }},
      })">
 
   {% include "pages/_studio_header.html" %}
@@ -20,9 +22,14 @@
     <section class="studio-right">
       <div class="studio-player-slot" data-studio-player-slot></div>
       <div class="studio-compare">
-        {% include "pages/_studio_prompt_card.html" %}
+        {% include "pages/_studio_compare.html" %}
       </div>
     </section>
   </div>
+
+  <script>
+    window.__studioVersions = {{ versions|tojson }};
+  </script>
+  <script src="/static/studio-diff.js"></script>
 </div>
 {% endblock %}

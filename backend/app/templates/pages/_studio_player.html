@@ -1,9 +1,31 @@
-{# Minimal wrapper around the existing media route. The <video> mounts on
-   the same URL the clip detail / cache views use; transport, scrubbing
-   and timeline behavior are unchanged. PR2 will layer marker overlays on
-   top of this. #}
-<div class="studio-player" data-clip-player data-clip-id="{{ clip_id }}">
-  <video controls preload="metadata"
+{# Studio player. Uses the same Alpine player() component as clip_detail
+   plus the shared _player_overlay.html partial. The overlay is gated by
+   the server-side rows list — when no version_id was passed (or the
+   focused clip has no scenes recorded yet), the overlay renders just
+   the playhead + ticks.
+
+   Template inputs:
+     clip_id          — int
+     fps              — float (defaults to 25 if unknown)
+     duration_secs    — float | None
+     duration_smpte   — str  | ""
+     rows             — list (built in the route)
+     duration_smpte   — str | "" (consumed by the included _player_overlay.html
+                        via Jinja scope inheritance for the rightmost tc-labels span)
+#}
+<div class="studio-player"
+     data-clip-player
+     data-clip-id="{{ clip_id }}"
+     x-data="player({{ fps or 25 }}, {{ duration_secs or 0 }}, [], [])">
+  <video x-ref="video"
+         class="video"
          src="/api/media/{{ clip_id }}"
+         preload="metadata"
+         controls
          style="width: 100%; max-height: 320px; background: #000;"></video>
+  <div class="transport">
+    {% with show_legend = True %}
+      {% include "pages/_player_overlay.html" %}
+    {% endwith %}
+  </div>
 </div>

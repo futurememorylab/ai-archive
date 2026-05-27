@@ -40,12 +40,44 @@ window.studio = {
   },
 };
 
+document.body.addEventListener('htmx:afterSwap', (evt) => {
+  const root = document.querySelector('.studio-page');
+  if (!root || !root._x_dataStack) return;
+  const page = root._x_dataStack[0];
+  const card = evt.target.closest('.studio-prompt-card');
+  if (!card) return;
+  // Alpine v3's MutationObserver doesn't reliably re-init x-data subtrees
+  // swapped by HTMX hx-swap="outerHTML" — after a few cycles the card
+  // comes back with no _x_dataStack, then every directive in it
+  // (picker, close, diff-toggle, tab clicks) becomes a dead click.
+  // Initialize the swapped subtree explicitly to keep it alive.
+  window.Alpine?.initTree(card);
+  const side = card.getAttribute('data-side');
+  const vId  = parseInt(card.getAttribute('data-version-id'), 10);
+  const vNum = parseInt(card.getAttribute('data-version-num'), 10);
+  if (Number.isNaN(vId)) return;
+  if (side === 'cur') {
+    page.activeVersionId = vId;
+    page.activeVersionNum = vNum;
+    page.pendingRunSwap++;
+  } else if (side === 'cmp') {
+    page.compareVersionId = vId;
+    page.compareVersionNum = vNum;
+    page.pendingRunSwap++;
+  }
+  page._writeUrl();
+  if (page.focusedClipId) page.refreshPlayer();
+});
+
 document.addEventListener('alpine:init', () => {
   Alpine.data('studioPage', (initial) => ({
     promptId: initial.promptId,
     activeVersionId: initial.activeVersionId,
     activeVersionNum: initial.activeVersionNum,
     activeModel: initial.activeModel,
+    compareVersionId: initial.compareVersionId,
+    compareVersionNum: initial.compareVersionNum,
+    mode: 'prompt',  // page-level tab state; Task 11 confirms the lift from card-level.
     focusedClipId: null,
     running: false,
     runId: null,
@@ -68,15 +100,28 @@ document.addEventListener('alpine:init', () => {
     focusClip(clipId) {
       this.focusedClipId = clipId;
       this.pendingRunSwap++;
-      // Show the player region and load the player partial for this clip.
       const body = document.querySelector('.studio-body');
       if (body) body.classList.remove('no-player');
+      this.refreshPlayer();
+    },
+
+    refreshPlayer() {
       const slot = document.querySelector('[data-studio-player-slot]');
-      if (slot) {
-        fetch(`/studio/_player?clip_id=${clipId}`)
-          .then(r => r.text())
-          .then(html => { slot.innerHTML = html; });
-      }
+      if (!slot || !this.focusedClipId) return;
+      const params = new URLSearchParams();
+      params.set('clip_id', this.focusedClipId);
+      if (this.activeVersionId)  params.set('version_id', this.activeVersionId);
+      if (this.compareVersionId) params.set('compare_id', this.compareVersionId);
+      fetch(`/studio/_player?${params.toString()}`)
+        .then(r => r.text())
+        .then(html => { slot.innerHTML = html; });
+    },
+
+    seekFocusedClip(secs) {
+      const playerEl = document.querySelector('.studio-player');
+      if (!playerEl || !playerEl._x_dataStack) return;
+      const player = playerEl._x_dataStack[0];
+      if (typeof player.seek === 'function') player.seek(secs);
     },
 
     async runOnFocusedClip() {
@@ -115,9 +160,52 @@ document.addEventListener('alpine:init', () => {
         if (run.status === 'ok' || run.status === 'error') return;
       }
     },
-  }));
 
-  Alpine.data('studioHeader', () => ({}));
+    async openCompare() {
+      const versions = window.__studioVersions || [];
+      const cur = this.activeVersionId;
+      const drafts = versions.filter(v => v.id !== cur && v.state === 'draft');
+      const prods  = versions.filter(v => v.id !== cur && v.state === 'production');
+      const others = versions.filter(v => v.id !== cur);
+      const pick = (drafts[0] || prods[0] || others[0]);
+      if (!pick) return;
+      this.compareVersionId = pick.id;
+      this.compareVersionNum = pick.version_num;
+      this._writeUrl();
+      const slot = document.querySelector('[data-cmp-slot]');
+      if (!slot) return;
+      slot.style.display = '';
+      const params = new URLSearchParams();
+      params.set('side', 'cmp');
+      params.set('prompt_version_id', pick.id);
+      if (this.focusedClipId) params.set('clip_id', this.focusedClipId);
+      const html = await fetch(`/studio/_prompt_card?${params.toString()}`).then(r => r.text());
+      slot.innerHTML = html;
+      window.Alpine?.initTree(slot);
+      // HTMX doesn't auto-scan DOM we injected ourselves — without this,
+      // the cmp card's version-picker hx-* attributes never get wired
+      // and picking a different cmp version is a dead click.
+      window.htmx?.process(slot);
+      this.refreshPlayer();
+    },
+
+    closeCompare() {
+      this.compareVersionId = null;
+      this.compareVersionNum = null;
+      this._writeUrl();
+      const slot = document.querySelector('[data-cmp-slot]');
+      if (slot) { slot.innerHTML = ''; slot.style.display = 'none'; }
+      this.refreshPlayer();
+    },
+
+    _writeUrl() {
+      const p = new URLSearchParams(window.location.search);
+      if (this.promptId)         p.set('prompt_id', this.promptId);          else p.delete('prompt_id');
+      if (this.activeVersionId)  p.set('version_id', this.activeVersionId);  else p.delete('version_id');
+      if (this.compareVersionId) p.set('compare_version_id', this.compareVersionId); else p.delete('compare_version_id');
+      window.history.replaceState({}, '', `${window.location.pathname}?${p.toString()}`);
+    },
+  }));
 
   // Cross-component proxy to studioPage.activeModel — necessary because
   // Alpine `$root` only walks to the nearest enclosing `x-data`, and nesting
@@ -188,35 +276,44 @@ document.addEventListener('alpine:init', () => {
     },
   }));
 
-  Alpine.data('studioPromptCard', () => ({
-    mode: 'prompt',
+  Alpine.data('studioPromptCard', (side = 'cur') => ({
+    side,
+    diff: false,
     dirty: false,
 
+    // Alpine's `$root` refers to the root of the CURRENT component, not
+    // the topmost ancestor. Since this card is its own x-data, `$root.X`
+    // resolves to the card itself (where X is undefined), not to
+    // studioPage. So we proxy page state via getters/methods. Same
+    // pattern as `modelPicker`.
+    _page() {
+      return document.querySelector('.studio-page')?._x_dataStack?.[0];
+    },
+    get mode()             { return this._page()?.mode || 'prompt'; },
+    set mode(v)            { const p = this._page(); if (p) p.mode = v; },
+    get compareVersionId() { return this._page()?.compareVersionId; },
+    get activeVersionNum() { return this._page()?.activeVersionNum; },
+    get pendingRunSwap()   { return this._page()?.pendingRunSwap; },
+    openCompare()          { return this._page()?.openCompare(); },
+    closeCompare()         { return this._page()?.closeCompare(); },
+
     async save() {
+      if (this.side !== 'cur') return;  // never save from the cmp card.
       this.dirty = true;
-      const versionId = this.$root.activeVersionId;
-      const promptId = this.$root.promptId;
-      if (!versionId || !promptId) {
-        this.dirty = false;
-        return;
-      }
+      const page = this._page();
+      const versionId = page?.activeVersionId;
+      const promptId = page?.promptId;
+      if (!versionId || !promptId) { this.dirty = false; return; }
       const body = this.$refs.editor ? this.$refs.editor.value : null;
-      if (body == null) {
-        this.dirty = false;
-        return;
-      }
-      // The prompts PUT endpoint requires the full version body. Fetch the
-      // existing version to round-trip target_map / output_schema / model.
+      if (body == null) { this.dirty = false; return; }
       try {
         const v = await fetch(`/api/prompts/${promptId}/versions/${versionId}`).then(r => r.json());
         const res = await fetch(`/api/prompts/${promptId}/versions/${versionId}`, {
           method: 'PUT',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
-            body,
-            target_map: v.target_map,
-            output_schema: v.output_schema,
-            model: v.model,
+            body, target_map: v.target_map,
+            output_schema: v.output_schema, model: v.model,
           }),
         });
         this.dirty = !res.ok;
@@ -226,9 +323,18 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
+    seek(secs) {
+      // _anno_panels.html marker articles call seek(secs). Proxy through
+      // the page root to the player's Alpine instance.
+      this._page()?.seekFocusedClip(secs);
+    },
+
     async loadOutput() {
-      const versionId = this.$root.activeVersionId;
-      const clipId = this.$root.focusedClipId;
+      const page = this._page();
+      const versionId = this.side === 'cur'
+        ? page?.activeVersionId
+        : page?.compareVersionId;
+      const clipId = page?.focusedClipId;
       if (!versionId) return;
       const slot = this.$refs.runSlot;
       if (!slot) return;

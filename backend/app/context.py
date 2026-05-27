@@ -341,11 +341,14 @@ async def _build_archive_subsystem(ctx: AppContext) -> _OnlineFlags:
     # Thumbnail cache: plain JPEG files alongside the proxy cache. Pass the
     # CatDV client only when we actually have one (online or seat-recoverable);
     # in cache-only / fs modes the service still serves already-cached files.
+    # is_online_provider gates network fetches: when the connection monitor
+    # reports offline, cache misses are terminal (no network attempts).
     if use_catdv:
         ctx.thumbnail_service = ThumbnailService(
             cache_dir=settings.data_dir / "cache" / "thumbs",
             archive=ctx.archive,
             catdv=ctx.catdv,
+            is_online_provider=_is_online,
         )
 
     return _OnlineFlags(forced_offline=forced_offline, login_failed=login_failed)

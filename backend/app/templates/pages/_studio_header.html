@@ -8,7 +8,9 @@
    `prompts`, `selected_prompt`, `versions`, `active_version` come from the
    page route, all as dicts (model_dump'd).
 #}
-<header class="studio-hdr" x-data="studioHeader()">
+{# No x-data on the header — bindings inside use $root.focusedClipId etc.,
+   which resolve to .studio-page only if no nested x-data hides it. #}
+<header class="studio-hdr">
   <span class="exp-icn">{% include "icons/_flask.svg" %}</span>
 
   <div class="hdr-titles">

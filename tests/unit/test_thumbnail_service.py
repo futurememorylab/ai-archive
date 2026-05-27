@@ -97,3 +97,35 @@ async def test_empty_body_returns_none(tmp_path: Path):
         cache_dir=tmp_path, archive=_FakeArchive({"posterID": 9000}), catdv=_EmptyBodyCatdv()
     )
     assert await svc.get_or_fetch(42) is None
+
+
+@pytest.mark.asyncio
+async def test_offline_provider_blocks_network_fetch(tmp_path: Path):
+    """When the connection monitor reports offline, cache miss returns
+    None without attempting any network fetch — the client stays alive
+    for retry but the service doesn't poke it."""
+    catdv = _FakeCatdv()
+    svc = ThumbnailService(
+        cache_dir=tmp_path,
+        archive=_FakeArchive({"posterID": 9000}),
+        catdv=catdv,
+        is_online_provider=lambda: False,
+    )
+    assert await svc.get_or_fetch(42) is None
+    assert catdv.calls == []  # no fetch attempted
+
+
+@pytest.mark.asyncio
+async def test_offline_provider_still_serves_cached_hit(tmp_path: Path):
+    """Cache hits are served regardless of online state — the gate
+    applies only to network fetches."""
+    (tmp_path / "42.jpg").write_bytes(b"cached")
+    catdv = _FakeCatdv()
+    svc = ThumbnailService(
+        cache_dir=tmp_path,
+        archive=_FakeArchive({"posterID": 9000}),
+        catdv=catdv,
+        is_online_provider=lambda: False,
+    )
+    assert await svc.get_or_fetch(42) == tmp_path / "42.jpg"
+    assert catdv.calls == []

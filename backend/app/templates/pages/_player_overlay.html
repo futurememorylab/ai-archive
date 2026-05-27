@@ -1,0 +1,56 @@
+{# Shared player timeline overlay — used by clip_detail and studio.
+
+   The caller MUST wrap this include in <div class="transport">…</div>
+   (some callers add a sibling .transport-row inside the wrapper for
+   playback controls; the partial stays scoped to the timeline + legend).
+
+   Required scope (from caller's x-data="player(...)"):
+     current, fps, duration (via player init), pct(secs), seek(secs),
+     seekFromEvent(e), tc(secs), quintileTc(i), isMarkerActive(m), markers.
+
+   Template inputs:
+     duration_secs    — server-known clip duration (truthy gates the entire block)
+     rows             — list of dicts, each {key, ranges, cls, alpine_list?}
+                        - key: display label for legend (e.g. "v5", "draft")
+                        - ranges: list of {in_secs, out_secs, name} dicts
+                        - cls: CSS class for the row (e.g. "range-cur", "draft-ranges")
+                        - alpine_list (optional): Alpine expression for active-highlighting
+                                                  (e.g. "markers"); when None, no highlight
+     duration_smpte   — pre-formatted SMPTE string for the far-right tc label
+     show_legend      — optional bool; when truthy, renders a legend strip
+                        below the timeline. Default False. clip_detail
+                        leaves it unset; studio passes True.
+#}
+{% if duration_secs %}
+<div class="timeline" @click="seekFromEvent($event)">
+  <div class="ticks"></div>
+  {% for row in rows %}
+    <div class="ranges {{ row.cls }}"
+         {% if row.x_show %}x-show="{{ row.x_show }}" x-cloak{% endif %}>
+      {% for m in row.ranges %}
+        <div class="range{% if 'range-draft' in row.cls %} draft-range{% endif %}"
+             {% if row.alpine_list %}:class="{ active: isMarkerActive({{ row.alpine_list }}[{{ loop.index0 }}]) }"{% endif %}
+             style="left: {{ (m.in_secs / duration_secs) * 100 }}%; width: {{ (((m.out_secs or m.in_secs + 1) - m.in_secs) / duration_secs) * 100 }}%"
+             title="{{ m.name }}"></div>
+      {% endfor %}
+    </div>
+  {% endfor %}
+  <div class="playhead" :style="`left: ${pct(current)}%`"></div>
+  <div class="tc-labels">
+    <span x-text="quintileTc(0)">00:00:00:00</span>
+    <span x-text="quintileTc(1)"></span>
+    <span x-text="quintileTc(2)"></span>
+    <span x-text="quintileTc(3)"></span>
+    <span x-text="quintileTc(4)">{{ duration_smpte or '' }}</span>
+  </div>
+</div>
+{% if show_legend is defined and show_legend and rows|selectattr('ranges')|list %}
+<div class="timeline-legend mono-cell muted">
+  {% for row in rows %}
+    {% if row.ranges %}
+      <span class="legend-{{ row.cls }}">● {{ row.key }} · {{ row.ranges|length }} scenes</span>
+    {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+{% endif %}
