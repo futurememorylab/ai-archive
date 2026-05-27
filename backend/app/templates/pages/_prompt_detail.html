@@ -1,3 +1,4 @@
+{% import "components/_ui.html" as ui %}
 {% if selected and selected_version %}
 <div class="prompt-detail-inner"
      x-data='promptEditor({
@@ -76,46 +77,19 @@
   <div class="error-banner" x-show="error" x-cloak x-text="error"></div>
 
   {# Prompt body editor. #}
-  <div>
-    <div class="panel-h" style="padding: 0; background: transparent; border: 0; height: 24px;">Prompt</div>
-    <textarea class="txt scroll"
-              style="width: 100%; min-height: 130px; resize: vertical;
-                     line-height: 1.5; font-family: var(--f-mono);"
-              :readonly="!canEdit"
-              x-model="draft.body"></textarea>
-    <div class="muted" style="font-size: 11px; margin-top: 4px;">
-      Plain text. No HTML, no Markdown — sent as-is to Gemini.
-    </div>
-  </div>
+  {{ ui.textarea_field('Prompt', 'body', min_height='130px',
+       help='Plain text. No HTML, no Markdown &mdash; sent as-is to Gemini.',
+       input_attrs='x-model="draft.body" :readonly="!canEdit"') }}
 
   {# target_map editor. #}
-  <div>
-    <div class="panel-h" style="padding: 0; background: transparent; border: 0; height: 24px;">target_map</div>
-    <textarea class="txt scroll json-editor"
-              style="width: 100%; min-height: 120px; resize: vertical;
-                     line-height: 1.5; font-family: var(--f-mono);"
-              :readonly="!canEdit"
-              x-model="draft.target_map_text"></textarea>
-    <div class="muted" style="font-size: 11px; margin-top: 4px;">
-      Maps schema field &rarr; CatDV target.
-      <span class="code-inline">markers</span>,
-      <span class="code-inline">note</span>,
-      <span class="code-inline">field</span>.
-    </div>
-  </div>
+  {{ ui.textarea_field('target_map', 'target_map', cls='json-editor',
+       help='Maps schema field &rarr; CatDV target. <span class="code-inline">markers</span>, <span class="code-inline">note</span>, <span class="code-inline">field</span>.',
+       input_attrs='x-model="draft.target_map_text" :readonly="!canEdit"') }}
 
   {# output_schema editor. #}
-  <div>
-    <div class="panel-h" style="padding: 0; background: transparent; border: 0; height: 24px;">output_schema</div>
-    <textarea class="txt scroll json-editor"
-              style="width: 100%; min-height: 160px; resize: vertical;
-                     line-height: 1.5; font-family: var(--f-mono);"
-              :readonly="!canEdit"
-              x-model="draft.output_schema_text"></textarea>
-    <div class="muted" style="font-size: 11px; margin-top: 4px;">
-      JSON Schema for the Gemini response. Versioned alongside the body.
-    </div>
-  </div>
+  {{ ui.textarea_field('output_schema', 'output_schema', cls='json-editor', min_height='160px',
+       help='JSON Schema for the Gemini response. Versioned alongside the body.',
+       input_attrs='x-model="draft.output_schema_text" :readonly="!canEdit"') }}
 
   {# Duplicate-prompt modal. #}
   <div class="modal-overlay" x-show="dupOpen" x-cloak

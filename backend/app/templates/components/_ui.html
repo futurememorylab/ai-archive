@@ -9,18 +9,18 @@
   {%- endif -%}
 {%- endmacro %}
 
-{% macro field(label, name, value='', type='text', help='', input_attrs='') -%}
+{% macro field(label, name, value='', type='text', help='', input_attrs='', cls='') -%}
   <label class="field">
     <span class="field-label">{{ label }}</span>
-    <input class="txt" type="{{ type }}" name="{{ name }}" value="{{ value }}" {{ input_attrs|safe }}>
+    <input class="{{ ('txt ' ~ cls).split() | join(' ') }}" type="{{ type }}" name="{{ name }}" value="{{ value }}" {{ input_attrs|safe }}>
     {%- if help %}<span class="field-help">{{ help|safe }}</span>{% endif -%}
   </label>
 {%- endmacro %}
 
-{% macro textarea_field(label, name, value='', help='', min_height='120px', input_attrs='') -%}
+{% macro textarea_field(label, name, value='', help='', min_height='120px', input_attrs='', cls='') -%}
   <label class="field">
     <span class="field-label">{{ label }}</span>
-    <textarea class="txt-area" name="{{ name }}" style="min-height: {{ min_height }};" {{ input_attrs|safe }}>{{ value }}</textarea>
+    <textarea class="{{ ('txt-area ' ~ cls).split() | join(' ') }}" name="{{ name }}" style="min-height: {{ min_height }};" {{ input_attrs|safe }}>{{ value }}</textarea>
     {%- if help %}<span class="field-help">{{ help|safe }}</span>{% endif -%}
   </label>
 {%- endmacro %}

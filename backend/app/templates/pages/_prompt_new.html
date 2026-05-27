@@ -1,4 +1,5 @@
 {% extends "pages/layout.html" %}
+{% import "components/_ui.html" as ui %}
 {% block title %}New Prompt · CatDV Annotator{% endblock %}
 {% block rail_active %}prompts{% endblock %}
 
@@ -12,51 +13,31 @@
   <div class="page-body" style="padding: 16px 20px;">
     {% if error %}<div class="error-banner">{{ error }}</div>{% endif %}
     <form method="post" action="/prompts/_create"
-          style="display: flex; flex-direction: column; gap: 14px; max-width: 800px;">
-      <label>
-        <div class="panel-h" style="padding: 0; background: transparent; border: 0; height: 24px;">Name</div>
-        <input type="text" name="name" value="{{ form.name }}" required class="txt"
-               style="width: 100%;" />
-      </label>
-      <label>
-        <div class="panel-h" style="padding: 0; background: transparent; border: 0; height: 24px;">Description</div>
-        <input type="text" name="description" value="{{ form.description }}" class="txt"
-               style="width: 100%;" />
-      </label>
-      <label>
-        <div class="panel-h" style="padding: 0; background: transparent; border: 0; height: 24px;">Model</div>
+          style="display: flex; flex-direction: column; gap: 14px;">
+      {{ ui.field('Name', 'name', value=form.name, input_attrs='required') }}
+      {{ ui.field('Description', 'description', value=form.description) }}
+      <label class="field">
+        <span class="field-label">Model</span>
         <select name="model" class="txt" style="width: 240px;">
           {% for m in ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3-flash-preview", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite", "gemini-3.1-flash-lite-preview", "gemini-3.5-flash"] %}
             <option value="{{ m }}"{% if form.model == m %} selected{% endif %}>{{ m }}</option>
           {% endfor %}
         </select>
       </label>
-      <label>
-        <div class="panel-h" style="padding: 0; background: transparent; border: 0; height: 24px;">Applies to</div>
+      <label class="field">
+        <span class="field-label">Applies to</span>
         <select name="media_kind" class="txt" style="width: 240px;">
           {% for k in ["any", "video", "image"] %}
             <option value="{{ k }}"{% if form.media_kind == k %} selected{% endif %}>{{ k }}</option>
           {% endfor %}
         </select>
       </label>
-      <label>
-        <div class="panel-h" style="padding: 0; background: transparent; border: 0; height: 24px;">Prompt</div>
-        <textarea name="body" class="txt scroll"
-                  style="width: 100%; min-height: 130px; resize: vertical; font-family: var(--f-mono);">{{ form.body }}</textarea>
-      </label>
-      <label>
-        <div class="panel-h" style="padding: 0; background: transparent; border: 0; height: 24px;">target_map (JSON)</div>
-        <textarea name="target_map" class="txt scroll json-editor"
-                  style="width: 100%; min-height: 100px; resize: vertical; font-family: var(--f-mono);">{{ form.target_map_text }}</textarea>
-      </label>
-      <label>
-        <div class="panel-h" style="padding: 0; background: transparent; border: 0; height: 24px;">output_schema (JSON)</div>
-        <textarea name="output_schema" class="txt scroll json-editor"
-                  style="width: 100%; min-height: 140px; resize: vertical; font-family: var(--f-mono);">{{ form.output_schema_text }}</textarea>
-      </label>
+      {{ ui.textarea_field('Prompt', 'body', value=form.body, min_height='130px') }}
+      {{ ui.textarea_field('target_map (JSON)', 'target_map', value=form.target_map_text, min_height='100px', cls='json-editor') }}
+      {{ ui.textarea_field('output_schema (JSON)', 'output_schema', value=form.output_schema_text, min_height='140px', cls='json-editor') }}
       <div class="row" style="gap: 8px;">
-        <button type="submit" class="btn primary">Create prompt</button>
-        <a class="btn ghost" href="/prompts">Cancel</a>
+        {{ ui.button('Create prompt', variant='primary', type='submit') }}
+        {{ ui.button('Cancel', href='/prompts', variant='ghost') }}
       </div>
     </form>
   </div>

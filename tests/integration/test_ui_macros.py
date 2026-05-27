@@ -27,6 +27,28 @@ def test_textarea_field_passes_input_attrs():
     assert 'class="field-label"' in out and 'Body' in out
     assert 'class="txt-area' in out and 'x-model="d.body"' in out and '>hi</textarea>' in out
 
+def test_textarea_field_cls_appends_single_class():
+    env = _env()
+    t = env.from_string(
+        "{% import 'components/_ui.html' as ui %}"
+        "{{ ui.textarea_field('Map', 'm', cls='json-editor', input_attrs='x-model=\"d.m\"') }}"
+    )
+    out = t.render()
+    assert 'class="txt-area json-editor"' in out
+    # textarea carries exactly one merged class attribute (no double class=)
+    textarea = out[out.index('<textarea'):out.index('</textarea>')]
+    assert textarea.count('class=') == 1
+    assert 'x-model="d.m"' in out
+
+def test_field_cls_appends_single_class():
+    env = _env()
+    t = env.from_string(
+        "{% import 'components/_ui.html' as ui %}"
+        "{{ ui.field('Name', 'n', cls='wide') }}"
+    )
+    out = t.render()
+    assert 'class="txt wide"' in out
+
 def test_field_help_renders_markup():
     env = _env()
     t = env.from_string(
