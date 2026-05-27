@@ -272,14 +272,29 @@ document.addEventListener('alpine:init', () => {
     side,
     diff: false,
     dirty: false,
-    // mode is on $root now (added in Task 6). The template references
-    // $root.mode directly, so this factory doesn't need a local `mode`.
+
+    // Alpine's `$root` refers to the root of the CURRENT component, not
+    // the topmost ancestor. Since this card is its own x-data, `$root.X`
+    // resolves to the card itself (where X is undefined), not to
+    // studioPage. So we proxy page state via getters/methods. Same
+    // pattern as `modelPicker`.
+    _page() {
+      return document.querySelector('.studio-page')?._x_dataStack?.[0];
+    },
+    get mode()             { return this._page()?.mode || 'prompt'; },
+    set mode(v)            { const p = this._page(); if (p) p.mode = v; },
+    get compareVersionId() { return this._page()?.compareVersionId; },
+    get activeVersionNum() { return this._page()?.activeVersionNum; },
+    get pendingRunSwap()   { return this._page()?.pendingRunSwap; },
+    openCompare()          { return this._page()?.openCompare(); },
+    closeCompare()         { return this._page()?.closeCompare(); },
 
     async save() {
       if (this.side !== 'cur') return;  // never save from the cmp card.
       this.dirty = true;
-      const versionId = this.$root.activeVersionId;
-      const promptId = this.$root.promptId;
+      const page = this._page();
+      const versionId = page?.activeVersionId;
+      const promptId = page?.promptId;
       if (!versionId || !promptId) { this.dirty = false; return; }
       const body = this.$refs.editor ? this.$refs.editor.value : null;
       if (body == null) { this.dirty = false; return; }
@@ -303,15 +318,15 @@ document.addEventListener('alpine:init', () => {
     seek(secs) {
       // _anno_panels.html marker articles call seek(secs). Proxy through
       // the page root to the player's Alpine instance.
-      const root = document.querySelector('.studio-page')?._x_dataStack?.[0];
-      root?.seekFocusedClip(secs);
+      this._page()?.seekFocusedClip(secs);
     },
 
     async loadOutput() {
+      const page = this._page();
       const versionId = this.side === 'cur'
-        ? this.$root.activeVersionId
-        : this.$root.compareVersionId;
-      const clipId = this.$root.focusedClipId;
+        ? page?.activeVersionId
+        : page?.compareVersionId;
+      const clipId = page?.focusedClipId;
       if (!versionId) return;
       const slot = this.$refs.runSlot;
       if (!slot) return;

@@ -1754,11 +1754,10 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   min-height: 0;
 }
 
-.studio-prompt-card .pc-editor {
+.studio-prompt-card .pc-editor,
+.studio-prompt-card .pc-readonly {
   width: 100%;
-  height: 100%;
   min-height: 220px;
-  resize: none;
   background: var(--surface);
   color: var(--text-1);
   border: 0;
@@ -1766,6 +1765,17 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   font-family: var(--f-mono, monospace);
   font-size: 12px;
   line-height: 1.5;
+  margin: 0;
+  padding: 8px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow: auto;
+  box-sizing: border-box;
+}
+
+.studio-prompt-card .pc-editor {
+  height: 100%;
+  resize: none;
 }
 
 .studio-prompt-card .pc-foot {

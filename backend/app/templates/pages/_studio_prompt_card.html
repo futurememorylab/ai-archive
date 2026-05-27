@@ -45,24 +45,24 @@
       </div>
       <span class="grow"></span>
       <button type="button" class="btn-compare"
-              x-show="$root.compareVersionId === null"
-              @click="$root.openCompare()">+ Compare</button>
+              x-show="compareVersionId === null"
+              @click="openCompare()">+ Compare</button>
     {% else %}
       <span class="grow"></span>
       <button type="button" class="btn-diff-toggle"
               @click="diff = !diff"
               :class="diff && 'active'"
-              x-text="diff ? `Hide diff` : `Diff vs v${$root.activeVersionNum}`"></button>
+              x-text="diff ? `Hide diff` : `Diff vs v${activeVersionNum}`"></button>
       <button type="button" class="btn-close-cmp" title="Close compare"
-              @click="$root.closeCompare()">×</button>
+              @click="closeCompare()">×</button>
     {% endif %}
   </div>
 
   <div class="pc-tabs">
-    <button class="pc-tab" :class="$root.mode === 'prompt' && 'active'"
-            @click="$root.mode = 'prompt'">Prompt</button>
-    <button class="pc-tab" :class="$root.mode === 'output' && 'active'"
-            @click="$root.mode = 'output'">Output</button>
+    <button class="pc-tab" :class="mode === 'prompt' && 'active'"
+            @click="mode = 'prompt'">Prompt</button>
+    <button class="pc-tab" :class="mode === 'output' && 'active'"
+            @click="mode = 'output'">Output</button>
   </div>
 
   <div class="pc-body">
@@ -73,7 +73,7 @@
     {% endif %}
 
     <div {% if side == 'cmp' %}x-show="!diff"{% endif %}>
-      <div x-show="$root.mode === 'prompt'">
+      <div x-show="mode === 'prompt'">
         {% if active_version.state == 'draft' and side == 'cur' %}
           <textarea class="pc-editor" x-ref="editor"
                     @input.debounce.700ms="save()"
@@ -82,9 +82,9 @@
           <pre class="pc-readonly mono">{{ active_version.body }}</pre>
         {% endif %}
       </div>
-      <div x-show="$root.mode === 'output'"
+      <div x-show="mode === 'output'"
            x-init="$nextTick(() => loadOutput())"
-           x-effect="$root.pendingRunSwap && loadOutput()">
+           x-effect="pendingRunSwap && loadOutput()">
         <div class="run-slot" x-ref="runSlot">
           {% if panels is not none %}
             {% include "pages/_studio_run_output.html" %}
