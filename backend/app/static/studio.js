@@ -111,6 +111,13 @@ document.addEventListener('alpine:init', () => {
         .then(html => { slot.innerHTML = html; });
     },
 
+    seekFocusedClip(secs) {
+      const playerEl = document.querySelector('.studio-player');
+      if (!playerEl || !playerEl._x_dataStack) return;
+      const player = playerEl._x_dataStack[0];
+      if (typeof player.seek === 'function') player.seek(secs);
+    },
+
     async runOnFocusedClip() {
       if (!this.activeVersionId || !this.focusedClipId || this.running) return;
       this.running = true;
@@ -291,6 +298,13 @@ document.addEventListener('alpine:init', () => {
         console.error('studio save failed', err);
         this.dirty = false;
       }
+    },
+
+    seek(secs) {
+      // _anno_panels.html marker articles call seek(secs). Proxy through
+      // the page root to the player's Alpine instance.
+      const root = document.querySelector('.studio-page')?._x_dataStack?.[0];
+      root?.seekFocusedClip(secs);
     },
 
     async loadOutput() {

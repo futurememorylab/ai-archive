@@ -99,3 +99,17 @@ def test_run_output_empty_state_when_no_run(client):
     assert r.status_code == 200
     assert "No run yet" in r.text
     assert "anno-tabs" not in r.text
+
+
+def test_marker_articles_have_seek_handler(client):
+    """Smoke: rendered marker @click attr is present (the seek wiring is
+    JS-only — exercised at runtime via studioPromptCard.seek())."""
+    pid, vid = _make_prompt_with_version(client, target_map={})
+    from backend.app import main as main_mod
+    _seed_run(main_mod.app, version_id=vid, clip_id=12041, output_json={
+        "scenes": [{"in_secs": 5.0, "out_secs": 6.0, "name": "s"}],
+    })
+    r = client.get(f"/studio/_run?prompt_version_id={vid}&clip_id=12041")
+    assert r.status_code == 200
+    # _anno_panels.html marker articles call seek(secs) — present in the rendered HTML.
+    assert '@click="seek(' in r.text
