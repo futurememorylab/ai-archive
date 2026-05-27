@@ -64,3 +64,9 @@ def test_nav_feedback_script_exists():
     p = _STATIC / "nav-feedback.js"
     assert p.exists()
     assert p.stat().st_size > 256
+
+
+def test_format_js_loaded_before_feature_scripts():
+    html = _LAYOUT.read_text(encoding="utf-8")
+    assert "/static/format.js" in html
+    assert html.index("/static/format.js") < html.index("/static/player.js")

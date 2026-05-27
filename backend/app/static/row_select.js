@@ -17,13 +17,7 @@ function rowSelect() {
       this.totalBytes = sel.reduce(
         (acc, el) => acc + parseInt(el.dataset.bytes || '0', 10), 0);
     },
-    bytesHuman(n) {
-      if (!n) return '0 B';
-      const u = ['B','KB','MB','GB','TB'];
-      let i = 0;
-      while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
-      return (i === 0 ? n.toFixed(0) : n.toFixed(1)) + ' ' + u[i];
-    },
+    bytesHuman(n) { return window.fmtBytes(n); },
     initSelection() {
       document.addEventListener('change', e => {
         if (e.target.classList.contains('row-check')) this._recount();

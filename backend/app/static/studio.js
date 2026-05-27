@@ -90,9 +90,7 @@ document.addEventListener('alpine:init', () => {
       setInterval(() => {
         if (this.running) {
           const s = Math.floor((performance.now() - this.runStartMs) / 1000);
-          const m = String(Math.floor(s / 60)).padStart(2, '0');
-          const r = String(s % 60).padStart(2, '0');
-          this.runningElapsedLabel = `${m}:${r}`;
+          this.runningElapsedLabel = window.fmtTimecode(s);
         }
       }, 500);
     },
