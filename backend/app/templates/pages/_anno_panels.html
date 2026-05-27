@@ -76,13 +76,22 @@
             {{ ui.textarea_field('Description', 'description', value=m.description or '',
                         min_height='60px', cls='ri-mfield',
                         input_attrs='data-item-id="' ~ m.item_id ~ '" data-k="description"') }}
-            {# Task 10 replaces these in/out number spinners with timeline drag. #}
+            {# In/out are edited on the timeline (drag the range or its edge
+               handles; ←/→ nudge while editing). The spinners are gone; this
+               is a live read-only SMPTE readout driven by the Alpine model.
+               Hidden inputs keep review.js's _decideMarker working: their
+               :value tracks the dragged in_secs/out_secs so a name/desc edit
+               persists the *current* time, never null/garbage. #}
             <span class="ri-time">
-              <label>in <input class="ri-mfield" type="number" step="0.01" min="0"
-                               data-item-id="{{ m.item_id }}" data-k="in" value="{{ m.in_secs }}"></label>
-              <label>out <input class="ri-mfield" type="number" step="0.01" min="0"
-                                data-item-id="{{ m.item_id }}" data-k="out"
-                                value="{{ m.out_secs if m.out_secs is not none else '' }}"></label>
+              <span class="ri-readout mono">
+                in <span x-text="riReadout({{ m.item_id }}, 'in')">{{ smpte(m.in_secs, panels.fps or clip.fps) }}</span>
+                out <span x-text="riReadout({{ m.item_id }}, 'out')">{% if m.out_secs is not none %}{{ smpte(m.out_secs, panels.fps or clip.fps) }}{% else %}—{% endif %}</span>
+              </span>
+              <span class="ri-hint muted">drag on timeline · ←/→ nudge (Shift = 1 frame)</span>
+              <input type="hidden" class="ri-mfield" data-item-id="{{ m.item_id }}" data-k="in"
+                     :value="(_draftItem({{ m.item_id }}) || {}).in_secs">
+              <input type="hidden" class="ri-mfield" data-item-id="{{ m.item_id }}" data-k="out"
+                     :value="(() => { const _m = _draftItem({{ m.item_id }}); return _m && _m.out_secs != null ? _m.out_secs : ''; })()">
             </span>
           </div>
         </div>

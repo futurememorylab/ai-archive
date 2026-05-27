@@ -74,3 +74,16 @@ def test_review_marker_preserves_persistence_hooks():
     # read-only row shows display text + SMPTE timecode
     assert 'class="ri-text"' in html
     assert 'class="ri-tc' in html
+
+
+def test_marker_in_out_spinners_replaced_with_readout():
+    """Task 10: the in/out number spinners are gone; in/out is edited on the
+    timeline. The editor now shows a live read-only SMPTE readout and keeps
+    HIDDEN data-k="in"/"out" inputs (Alpine-bound) for review.js persistence."""
+    html = _render_review_panels()
+    assert 'type="number"' not in html          # spinners removed
+    assert "riReadout(42, 'in')" in html         # live readout wired to player root
+    assert "riReadout(42, 'out')" in html
+    # persistence still works: hidden inputs bound to the dragged Alpine model
+    assert 'type="hidden"' in html
+    assert ":value" in html and "_draftItem(42)" in html

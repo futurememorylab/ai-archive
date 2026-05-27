@@ -569,6 +569,20 @@ a { color: inherit; text-decoration: none; }
     0 0 0 1px var(--accent),
     0 0 18px color-mix(in oklab, var(--accent) 40%, transparent);
 }
+/* Draft marker drag handles + editing highlight (Task 10). */
+.range-handle {
+  position: absolute; top: 0; bottom: 0; width: 6px;
+  background: var(--accent); border-radius: 2px;
+  cursor: ew-resize; z-index: 2;
+}
+.range-handle.in  { left: -3px; }
+.range-handle.out { right: -3px; }
+.ranges .range.draft-range.editing {
+  background: color-mix(in oklab, var(--accent) 45%, transparent);
+  border: 1px solid var(--accent);
+  box-shadow: 0 0 8px color-mix(in oklab, var(--accent) 50%, transparent);
+  cursor: grab;
+}
 .timeline .playhead {
   position: absolute; top: -2px; bottom: -2px; width: 2px;
   background: #fff;
@@ -1937,15 +1951,17 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   padding: 10px; border: 1px solid var(--accent); border-radius: var(--r-2); }
 .ri-row.editing { outline: 1px solid color-mix(in oklab, var(--accent) 40%, transparent); border-radius: var(--r-2); }
 
-/* in/out time inputs inside the marker editor (Task 10 replaces with drag) */
+/* In/out are edited on the timeline (drag); the editor shows a read-only
+   live SMPTE readout + hint (Task 10 replaced the number spinners). */
 .ri-time {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
 }
-.ri-time label {
-  display: inline-flex; align-items: center; gap: 4px;
+.ri-time .ri-readout {
+  display: inline-flex; align-items: center; gap: 6px;
   font-size: 11px; color: var(--text-3, #7e8693);
 }
-.ri-time input.ri-mfield { width: 88px; }
+.ri-time .ri-readout span { color: var(--accent); font-weight: 600; }
+.ri-time .ri-hint { font-size: 10.5px; }
 
 /* keep note rows visually separated when collapsed */
 .ri-note-row { border-bottom: 1px solid var(--line, rgba(255,255,255,0.07)); }
