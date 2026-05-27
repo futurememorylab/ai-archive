@@ -115,15 +115,21 @@ All additive; no existing endpoint changes behavior.
    (HTMX-swappable), plus summary counts for the metric strip. Honors
    `job_id` and `media_kind` filters.
 
-3. **`POST /api/review/apply-batch`** —
+3. **Extract a shared per-clip apply helper.** The annotation /
+   target_map / etag / fps resolution currently inlined in
+   `routes/review.py::apply_clip` is moved into one function (e.g.
+   `WriteQueue.enqueue_apply_for_clip(conn, clip_id, items)` or a thin
+   service helper). **`apply_clip` is refactored to call it** — no
+   behavior change — so the single-clip and batch paths share one
+   implementation rather than two copies of the resolution logic.
+
+4. **`POST /api/review/apply-batch`** —
    `{clip_ids: [int], kinds: ["marker","field","note"]}`. For each clip:
    set every un-applied `review_item` whose `kind ∈ kinds` to `accepted`,
-   then call the **existing** `WriteQueue.enqueue_apply` for that clip
-   (reusing the same annotation/target_map/etag/fps resolution as
-   `routes/review.py::apply_clip`). Returns `{clips: N, queued: M}`.
-   `kinds` defaults to all three when omitted.
+   then call the **shared helper** from (3). Returns `{clips: N,
+   queued: M}`. `kinds` defaults to all three when omitted.
 
-4. **Pending badge count** — a lightweight count (distinct clips with
+5. **Pending badge count** — a lightweight count (distinct clips with
    un-applied items) exposed for the rail badge. Reuse the existing
    topbar/pills context plumbing rather than a bespoke endpoint where
    possible; a `GET /api/review/pending/count` is acceptable if that
@@ -137,10 +143,19 @@ Per-kind counts on a row count those same un-applied items.
 ### UI surface A — `/review` page (mirror of the Cache page)
 
 Reuses the Cache page skeleton and partials: `_video_list.html` scaffold
-with `_review_head_cells.html` / `_review_row_cells.html`, the shared
-`_pager.html`, and an Alpine selection model `reviewSel()` cloned from
-`cacheSel()` (checkbox `.row-check`, `#row-select-all`, bulk bar shown
-when `count > 0`, HTMX `afterSwap` recount).
+with `_review_head_cells.html` / `_review_row_cells.html`, and the shared
+`_pager.html`.
+
+**Shared selection model (no clone).** The `cacheSel()` logic currently
+inlined in `cache_page.html` (checkbox `.row-check`, `#row-select-all`,
+bulk bar shown when `count > 0`, HTMX `afterSwap` recount) is **extracted
+into a reusable factory** in a shared static file — e.g.
+`rowSelect({ onBulk })` in `static/row_select.js` — parameterized by its
+per-row data attributes and the bulk-action callbacks. **The Cache page
+is refactored to use it** (dropping its inline copy), and `/review`
+consumes the same factory. One selection implementation, two pages. The
+Cache page's existing behavior must be unchanged after the refactor
+(regression-guarded in the acceptance flows).
 
 - **Metric strip:** Clips awaiting review · Markers pending · Fields
   pending · Notes pending · Last batch (job label + age).
@@ -237,8 +252,10 @@ job runs ─▶ annotations + review_items (decision=pending, applied_at=NULL)
 
 - `backend/app/repositories/review_items.py` — `list_pending_clips`,
   pending-count query.
-- `backend/app/routes/review.py` — `GET /pending`, `POST /apply-batch`,
-  pending-count.
+- `backend/app/services/write_queue.py` — extract
+  `enqueue_apply_for_clip` (shared by single-clip + batch apply).
+- `backend/app/routes/review.py` — refactor `apply_clip` onto the shared
+  helper; add `GET /pending`, `POST /apply-batch`, pending-count.
 - `backend/app/routes/pages/` — `/review` page handler + queue-entry
   wiring on the clip page (`?review=1`).
 - `backend/app/templates/pages/review.html` (new),
@@ -247,7 +264,10 @@ job runs ─▶ annotations + review_items (decision=pending, applied_at=NULL)
   `_anno_draft.html` — `review_mode` controls.
 - `backend/app/templates/pages/clip_detail.html` — review action bar.
 - `backend/app/templates/pages/_rail.html` + `icons/_review.svg`.
-- `backend/app/static/` — `reviewSel()` + queue navigation JS.
+- `backend/app/static/row_select.js` (new, extracted) — shared selection
+  factory; **`cache_page.html` refactored to consume it** (inline
+  `cacheSel()` removed).
+- `backend/app/static/` — review queue navigation JS.
 - DB: no schema change anticipated (reuses `review_items`); confirm a
   `decided_at` / `applied_at` column already exists (it does).
 
@@ -303,3 +323,10 @@ drafts.
 
 9. **Idempotency.** Re-open an already-applied clip with `?review=1` and
    click Apply & next again → no duplicate markers appear upstream.
+
+10. **Cache page regression (shared-selection extraction).** On
+    `/cache`, select rows → the bulk bar appears with the right count;
+    Select-all, Clear, Re-fetch, and Purge selected all behave exactly as
+    before the `row_select.js` extraction. (Guards that moving the
+    selection model out of `cache_page.html` didn't change Cache
+    behavior.)
