@@ -131,6 +131,7 @@ def test_build_draft_view_maps_string_field():
             "identifier": "pragafilm.dekáda.natočení",
             "name": "natočení",
             "value": "30.léta",
+            "editable": True,
             "item_id": None,
             "kind": "field",
             "decision": "pending",
@@ -155,6 +156,7 @@ def test_build_draft_view_maps_list_field_by_joining():
             "identifier": "pragafilm.rok.natočení",
             "name": "natočení",
             "value": "1932, 1933",
+            "editable": False,
             "item_id": None,
             "kind": "field",
             "decision": "pending",
@@ -268,7 +270,27 @@ def test_markers_and_fields_carry_item_id_kind_decision():
     assert f["item_id"] == 12
     assert f["kind"] == "field"
     assert f["decision"] == "accepted"
+    assert f["editable"] is True
     # existing display keys still present
     assert m["name"] == "a"
     assert f["identifier"] == "f.a"
     assert f["value"] == "v"
+
+
+def test_list_field_is_not_editable():
+    ann = _annotation(id=5, catdv_clip_id=1, catdv_clip_name="c")
+    items = [
+        ReviewItem(
+            id=20,
+            annotation_id=5,
+            catdv_clip_id=1,
+            kind="field",
+            target_identifier="pragafilm.rok.natočení",
+            proposed_value=["a", "b"],
+            decision="pending",
+        ),
+    ]
+    view = build_draft_view(ann, items)
+    f = view["fields"][0]
+    assert f["editable"] is False
+    assert f["value"] == "a, b"

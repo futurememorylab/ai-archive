@@ -21,10 +21,15 @@ function reviewQueue(clipId) {
     async _decide(itemId, decision, editedValue) {
       const body = { decision };
       if (editedValue !== undefined) body.edited_value = editedValue;
-      await fetch(`/api/review/items/${itemId}/decision`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      try {
+        const r = await fetch(`/api/review/items/${itemId}/decision`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) console.error(`decision persist failed for item ${itemId}: ${r.status}`);
+      } catch (e) {
+        console.error(`decision persist error for item ${itemId}`, e);
+      }
     },
     _next() {
       const i = this._idx();
@@ -40,8 +45,12 @@ function reviewQueue(clipId) {
       // then apply. Accept all currently-checked items first.
       const checked = Array.from(document.querySelectorAll('.ri-accept:checked'));
       await Promise.all(checked.map(cb => this._decide(cb.dataset.itemId, 'accepted')));
-      await fetch(`/api/review/clips/${clipId}/apply`, { method: 'POST' });
-      this._next();
+      const r = await fetch(`/api/review/clips/${clipId}/apply`, { method: 'POST' });
+      if (r.ok) {
+        this._next();
+      } else {
+        alert(`Apply failed (${r.status}). Nothing was applied; staying on this clip.`);
+      }
     },
   };
 }

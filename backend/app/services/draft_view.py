@@ -45,6 +45,7 @@ def _field_from_review(item: ReviewItem) -> dict[str, Any]:
         "identifier": identifier,
         "name": identifier.split(".")[-1],
         "value": value_str,
+        "editable": not isinstance(value, list),
         "item_id": item.id,
         "kind": "field",
         "decision": item.decision,

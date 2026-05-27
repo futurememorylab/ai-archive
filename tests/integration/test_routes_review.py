@@ -539,3 +539,49 @@ def test_review_media_filter_paginates_consistently(monkeypatch, tmp_path):
         r = client.get("/review?media=image&limit=1&offset=0")
         assert r.status_code == 200
         assert "Clip_1" in r.text
+
+
+def _make_canonical_clip_with_markers(clip_id: int = 99):
+    """Like _make_canonical_clip but includes a published marker."""
+    from datetime import UTC, datetime
+
+    from backend.app.archive.model import CanonicalClip, Marker, MediaRef, Timecode
+
+    return CanonicalClip(
+        key=("catdv", str(clip_id)),
+        name=f"Clip_{clip_id}",
+        duration_secs=10.0,
+        fps=25.0,
+        markers=(
+            Marker(
+                name="published-scene",
+                in_=Timecode(secs=0.0, fps=25.0, frm=0),
+                out=Timecode(secs=2.0, fps=25.0, frm=50),
+            ),
+        ),
+        fields={},
+        notes={},
+        media=MediaRef(
+            mime_type="video/quicktime",
+            size_bytes=None,
+            cached_path=None,
+            upstream_handle=str(clip_id),
+        ),
+        provider_data={"ID": clip_id, "name": f"Clip_{clip_id}"},
+        fetched_at=datetime.now(UTC),
+    )
+
+
+def test_clip_detail_review_mode_published_items_have_no_controls(monkeypatch, tmp_path):
+    """A clip in review=1 mode that has PUBLISHED markers but NO draft/review
+    items must not render any ri-accept controls — published items lack item_id
+    so even in review mode no controls should appear."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        # Use clip_id=99 — _seed only seeds clip_id=1, so there are no
+        # review_items for clip 99 in the DB.
+        ctx.archive = _FakeArchive([_make_canonical_clip_with_markers(99)])
+        r = client.get("/clips/99?review=1")
+        assert r.status_code == 200
+        assert "ri-accept" not in r.text

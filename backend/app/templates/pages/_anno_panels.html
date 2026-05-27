@@ -71,7 +71,9 @@
                  {% if f.decision != 'rejected' %}checked{% endif %}>
           keep
         </label>
+        {% if f.editable %}
         <input class="ri-edit" data-item-id="{{ f.item_id }}" value="{{ f.value }}">
+        {% endif %}
       {% endif %}
     </div>
   {% else %}
