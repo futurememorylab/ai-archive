@@ -17,6 +17,9 @@
                         - alpine_list (optional): Alpine expression for active-highlighting
                                                   (e.g. "markers"); when None, no highlight
      duration_smpte   — pre-formatted SMPTE string for the far-right tc label
+     show_legend      — optional bool; when truthy, renders a legend strip
+                        below the timeline. Default False. clip_detail
+                        leaves it unset; studio passes True.
 #}
 {% if duration_secs %}
 <div class="timeline" @click="seekFromEvent($event)">
@@ -25,7 +28,7 @@
     <div class="ranges {{ row.cls }}"
          {% if row.x_show %}x-show="{{ row.x_show }}" x-cloak{% endif %}>
       {% for m in row.ranges %}
-        <div class="range{% if row.cls == 'range-draft' %} draft-range{% endif %}"
+        <div class="range{% if 'range-draft' in row.cls %} draft-range{% endif %}"
              {% if row.alpine_list %}:class="{ active: isMarkerActive({{ row.alpine_list }}[{{ loop.index0 }}]) }"{% endif %}
              style="left: {{ (m.in_secs / duration_secs) * 100 }}%; width: {{ (((m.out_secs or m.in_secs + 1) - m.in_secs) / duration_secs) * 100 }}%"
              title="{{ m.name }}"></div>
@@ -41,7 +44,7 @@
     <span x-text="quintileTc(4)">{{ duration_smpte or '' }}</span>
   </div>
 </div>
-{% if rows|selectattr('ranges')|list %}
+{% if show_legend is defined and show_legend and rows|selectattr('ranges')|list %}
 <div class="timeline-legend mono-cell muted">
   {% for row in rows %}
     {% if row.ranges %}
