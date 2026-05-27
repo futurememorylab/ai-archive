@@ -16,10 +16,10 @@
 
   {# Title row + tags + model picker + Save + kebab.
      The header is inlined here so Alpine bindings on Save / model-picker / kebab resolve. #}
-  <div class="row" style="justify-content: space-between; align-items: flex-start; gap: 12px;">
-    <div style="min-width: 0;">
-      <div class="row" style="gap: 8px; align-items: center; margin-bottom: 2px; flex-wrap: wrap;">
-        <div style="font-family: var(--f-display); font-size: 18px; font-weight: 600;">{{ selected.name }}</div>
+  <div class="prompt-detail-hdr">
+    <div class="prompt-detail-lhs">
+      <div class="prompt-detail-meta-row">
+        <div class="prompt-detail-title">{{ selected.name }}</div>
         {% if selected.media_kind and selected.media_kind != "any" %}
           <span class="tag">{{ selected.media_kind }}</span>
         {% endif %}
@@ -31,7 +31,7 @@
         {% else %}
           <span class="tag"><span class="dot"></span>archived</span>
         {% endif %}
-        <select class="txt" style="height: 24px; padding: 0 6px;"
+        <select class="txt sm"
                 x-model="mediaKind" @change="setMediaKind()"
                 title="Which clip kind this prompt applies to">
           <template x-for="k in ['any','video','image']" :key="k">
@@ -39,16 +39,16 @@
           </template>
         </select>
       </div>
-      <div class="muted" style="font-size: 12px;">{{ selected.description or "" }}</div>
+      <div class="prompt-detail-desc">{{ selected.description or "" }}</div>
     </div>
-    <div class="row" style="gap: 8px; flex: none;">
+    <div class="prompt-detail-actions">
       <div class="model-picker">
         <button type="button" class="btn sm ghost"
                 :class="{ open: modelOpen }"
                 @click="modelOpen = !modelOpen"
                 :disabled="!canEdit">
           <span class="dot"></span><span x-text="draft.model"></span>
-          <span style="margin-left: 4px;">&#9662;</span>
+          <span class="btn-caret">&#9662;</span>
         </button>
         <div class="model-menu" x-show="modelOpen" x-cloak @click.outside="modelOpen=false">
           <template x-for="m in MODELS" :key="m">
@@ -62,10 +62,9 @@
         </div>
       </div>
       <button type="button" class="btn primary" x-show="dirty" @click="save()">&#10003; Save changes</button>
-      <div style="position: relative;">
-        <button type="button" class="btn ghost" aria-label="More actions"
-                @click="menuOpen = !menuOpen"
-                style="padding: 6px 8px;">&#8943;</button>
+      <div class="prompt-kebab-wrap">
+        <button type="button" class="btn icon ghost" aria-label="More actions"
+                @click="menuOpen = !menuOpen">&#8943;</button>
         <div x-show="menuOpen" x-cloak @click.outside="menuOpen=false">
           {% include "pages/_prompt_menu.html" %}
         </div>
@@ -107,11 +106,10 @@
           </label>
           <label class="modal-field">
             <span class="modal-label">Description</span>
-            <textarea class="txt scroll" x-model="dupDesc" rows="2"
-                      style="resize: vertical;"></textarea>
+            <textarea class="txt-area" x-model="dupDesc"></textarea>
           </label>
           <div class="error-banner" x-show="dupError" x-cloak x-text="dupError"></div>
-          <div class="muted" style="font-size: 11px;">
+          <div class="field-help">
             Creates a new prompt with v1 (draft) cloned from this prompt&rsquo;s current production version.
           </div>
         </div>
