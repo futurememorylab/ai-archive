@@ -13,6 +13,7 @@
 - Full backend gate before any "done" claim: `uv run pytest -q && uv run ruff check backend tests`.
 - Frontend has no unit tests; frontend tasks are verified by the **Manual acceptance flows** in the spec (`docs/specs/2026-05-27-draft-review-accept-design.md`) on a running server. Start/stop the server via the `server-start` / `server-stop` skills (CatDV seat discipline).
 - Commit after every task.
+- **Verification sequencing (user policy):** automated tests run anytime — they're fully isolated (per-test temp SQLite via the `db` fixture / `DATA_DIR`→`tmp_path`; `CATDV_OFFLINE=true` → no seat, no network; the real `./data/app.db` and CatDV are never touched). Mid-implementation, only **read-only** manual checks are allowed (page renders, navigation, badge shows). **Any manual step that writes upstream (applies drafts to CatDV / takes a seat) is DEFERRED to a single final verification pass** the user green-lights — do NOT run apply-to-CatDV per task. Where a task's manual step below includes an apply action, perform only the read-only portion inline and move the apply portion to the final pass.
 
 ---
 
