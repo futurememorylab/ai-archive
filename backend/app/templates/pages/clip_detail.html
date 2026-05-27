@@ -216,13 +216,14 @@
       </button>
     </div>
 
-    {% if review_mode %}
+    {% if draft.has_draft %}
     <div class="review-actionbar" x-data="reviewQueue({{ clip.id }})">
-      <button type="button" class="ca-btn" @click="prev()">‹ Prev</button>
-      <span class="review-progress mono" x-text="progressLabel()"></span>
+      <button type="button" class="ca-btn" x-show="queue.length > 0" @click="prev()">‹ Prev</button>
+      <span class="review-progress mono" x-show="queue.length > 0" x-text="progressLabel()"></span>
       <span class="grow"></span>
-      <button type="button" class="ca-btn" @click="skip()">Skip</button>
-      <button type="button" class="ca-btn ca-btn-live" @click="applyAndNext()">Accept &amp; next →</button>
+      <button type="button" class="ca-btn" x-show="queue.length > 0" @click="skip()">Skip</button>
+      <button type="button" class="ca-btn ca-btn-live" x-show="queue.length > 0" @click="applyAndNext()">Accept &amp; next →</button>
+      <button type="button" class="ca-btn ca-btn-live" x-show="queue.length === 0" @click="applyStay()">Accept &amp; apply</button>
     </div>
     {% endif %}
 

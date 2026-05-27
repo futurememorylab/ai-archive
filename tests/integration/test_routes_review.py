@@ -376,7 +376,9 @@ def test_clip_detail_review_mode_renders_item_controls(monkeypatch, tmp_path):
         assert 'class="ri-mfield"' in r.text
 
 
-def test_clip_detail_normal_mode_no_item_controls(monkeypatch, tmp_path):
+def test_clip_detail_draft_controls_show_without_review_flag(monkeypatch, tmp_path):
+    """Draft controls must appear even without ?review=1 — whenever a draft exists
+    the item controls (review-item-toggle) should render for draft items."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         ctx = client.app.state.ctx
@@ -384,7 +386,7 @@ def test_clip_detail_normal_mode_no_item_controls(monkeypatch, tmp_path):
         ctx.archive = _FakeArchive([_make_canonical_clip(1)])
         r = client.get("/clips/1")  # no review flag
         assert r.status_code == 200
-        assert "review-item-toggle" not in r.text
+        assert "review-item-toggle" in r.text
 
 
 def _make_canonical_clip_with_markers(clip_id: int = 99):
@@ -522,7 +524,8 @@ def test_clip_detail_image_hides_markers_tab(monkeypatch, tmp_path):
 
 
 def test_clip_detail_review_action_bar_has_prev(monkeypatch, tmp_path):
-    """The review action bar must contain Prev, Skip, and Accept buttons."""
+    """The review action bar must contain Prev, Skip, and Accept buttons.
+    The no-queue primary 'Accept & apply' must also be present in the markup."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         ctx = client.app.state.ctx
@@ -533,6 +536,19 @@ def test_clip_detail_review_action_bar_has_prev(monkeypatch, tmp_path):
         assert "Prev" in r.text
         assert "Skip" in r.text
         assert "Accept" in r.text
+        assert "Accept &amp; apply" in r.text
+
+
+def test_clip_detail_no_draft_no_action_bar(monkeypatch, tmp_path):
+    """A clip with NO review items must not render the review action bar at all."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        # clip 99 has no review items seeded — _seed only seeds clip_id=1
+        ctx.archive = _FakeArchive([_make_canonical_clip_with_markers(99)])
+        r = client.get("/clips/99")
+        assert r.status_code == 200
+        assert "review-actionbar" not in r.text
 
 
 def test_clips_list_shows_draft_columns(monkeypatch, tmp_path):

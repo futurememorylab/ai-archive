@@ -3,9 +3,9 @@
                 note_items: list|None }
      scope  — "published" or "draft" (used only for distinct DOM ids if needed)
 #}
-{% set has_notes = panels.notes or panels.big_notes or (review_mode and panels.note_items) %}
+{% set has_notes = panels.notes or panels.big_notes or panels.note_items %}
 {% set _is_image = clip is defined and clip is not none and clip.kind == 'image' %}
-{% set _show_note_items = review_mode and panels.note_items %}
+{% set _show_note_items = panels.note_items %}
 <div class="anno-tabs" role="tablist">
   {% if not _is_image %}
   <button type="button" class="anno-tab" role="tab"
@@ -50,7 +50,7 @@
           {{ smpte(m.in_secs, panels.fps or clip.fps) }}{% if m.out_secs is not none %} – {{ smpte(m.out_secs, panels.fps or clip.fps) }}{% endif %}
         </span>
       </header>
-      {% if review_mode and m.item_id is defined and m.item_id is not none %}
+      {% if m.item_id is defined and m.item_id is not none %}
         <div class="ri-marker" data-item-id="{{ m.item_id }}" onclick="event.stopPropagation()">
           <label class="review-item-toggle">
             <input type="checkbox" class="ri-accept" data-item-id="{{ m.item_id }}"
@@ -87,7 +87,7 @@
       <span class="ident mono">{{ f.identifier }}</span>
       <span class="arrow">→</span>
       <span class="val">{{ f.value }}</span>
-      {% if review_mode and f.item_id is defined and f.item_id is not none %}
+      {% if f.item_id is defined and f.item_id is not none %}
         <label class="review-item-toggle">
           <input type="checkbox" class="ri-accept" data-item-id="{{ f.item_id }}"
                  {% if f.decision != 'rejected' %}checked{% endif %}>

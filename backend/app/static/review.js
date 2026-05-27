@@ -86,41 +86,12 @@ function reviewQueue(clipId) {
         alert(`Apply failed (${r.status}). Nothing was applied; staying on this clip.`);
       }
     },
+    async applyStay() {
+      const checked = Array.from(document.querySelectorAll('.ri-accept:checked'));
+      await Promise.all(checked.map(cb => this._decide(cb.dataset.itemId, 'accepted')));
+      const r = await fetch(`/api/review/clips/${clipId}/apply`, { method: 'POST' });
+      if (r.ok) location.reload();
+      else alert(`Apply failed (${r.status}). Nothing was applied.`);
+    },
   };
-}
-
-function reviewSel() {
-  return Object.assign(rowSelect(), {
-    kinds: { marker: true, field: true, note: true },
-    init() { this.initSelection(); },
-    _selectedClipIds() {
-      return this._selected()
-        .map(el => parseInt(el.value.split('/')[1], 10))
-        .filter(id => !isNaN(id));
-    },
-    _activeKinds() {
-      return Object.entries(this.kinds).filter(([, on]) => on).map(([k]) => k);
-    },
-    reviewSelected() {
-      const ids = this._selectedClipIds();
-      if (!ids.length) return;
-      sessionStorage.setItem('catdv:reviewQueue', JSON.stringify(ids));
-      location.href = `/clips/${ids[0]}?review=1`;
-    },
-    async applySelected() {
-      const clip_ids = this._selectedClipIds();
-      const kinds = this._activeKinds();
-      if (!clip_ids.length || !kinds.length) return;
-      if (!confirm(`Apply ${kinds.join(', ')} drafts for ${clip_ids.length} clip(s)?`)) return;
-      const r = await fetch('/api/review/apply-batch', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clip_ids, kinds }),
-      });
-      if (r.ok) {
-        htmx.ajax('GET', window.location.href, '#review-table-region');
-      } else {
-        alert(`Apply failed (${r.status}). Nothing was applied; try again.`);
-      }
-    },
-  });
 }
