@@ -26,6 +26,9 @@ def _marker_from_review(item: ReviewItem) -> dict[str, Any]:
         if isinstance(out_part, dict) and "secs" in out_part
         else None,
         "color": pv.get("color"),
+        "item_id": item.id,
+        "kind": "marker",
+        "decision": item.decision,
     }
 
 
@@ -42,6 +45,9 @@ def _field_from_review(item: ReviewItem) -> dict[str, Any]:
         "identifier": identifier,
         "name": identifier.split(".")[-1],
         "value": value_str,
+        "item_id": item.id,
+        "kind": "field",
+        "decision": item.decision,
     }
 
 
