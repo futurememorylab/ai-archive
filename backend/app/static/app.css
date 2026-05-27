@@ -25,6 +25,11 @@
   --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   --r-1: 4px; --r-2: 6px; --r-3: 10px;
+
+  --btn-h: 32px;
+  --btn-h-sm: 26px;
+  --field-h: 32px;
+  --field-label-h: 24px;
 }
 
 /* ─── self-hosted fonts (variable: one file covers all weights) ───────── */
@@ -254,8 +259,8 @@ a { color: inherit; text-decoration: none; }
 }
 
 .btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  height: 36px; padding: 0 16px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: var(--btn-h); padding: 0 14px;
   border-radius: var(--r-2);
   border: 1px solid var(--line-2);
   background: var(--surface);
@@ -264,23 +269,20 @@ a { color: inherit; text-decoration: none; }
   cursor: pointer;
 }
 .btn:hover { background: var(--surface-2); }
-.btn-primary {
+.btn.primary {
   background: var(--accent); color: var(--accent-fg);
   border-color: color-mix(in oklab, var(--accent) 60%, var(--line-2));
   font-weight: 600;
 }
-.btn-primary:hover {
-  background: color-mix(in oklab, var(--accent) 90%, white 10%);
-}
-.btn-ghost {
-  background: transparent;
-  border-color: var(--line);
-  color: var(--text-2);
-}
-.btn-ghost:hover { background: var(--hover); color: var(--text); }
-.btn.is-disabled {
-  opacity: 0.4; pointer-events: none;
-}
+.btn.primary:hover { background: color-mix(in oklab, var(--accent) 90%, white 10%); }
+.btn.ghost { background: transparent; border-color: var(--line); color: var(--text-2); }
+.btn.ghost:hover { background: var(--hover); color: var(--text); }
+.btn.danger { color: var(--bad); border-color: color-mix(in oklab, var(--bad) 45%, var(--line-2)); background: transparent; }
+.btn.danger:hover { background: color-mix(in oklab, var(--bad) 12%, transparent); }
+.btn.sm { height: var(--btn-h-sm); padding: 0 10px; font-size: 12px; }
+.btn.icon { width: var(--btn-h); padding: 0; }
+.btn.icon.sm { width: var(--btn-h-sm); }
+.btn.is-disabled, .btn:disabled { opacity: 0.4; pointer-events: none; }
 
 .filter-reset {
   height: 28px; padding: 0 12px;
@@ -763,7 +765,10 @@ a { color: inherit; text-decoration: none; }
 /* ─── row select + bulk buttons ──────────────────────────────────────── */
 .col-sel, .row-select { width: 28px; text-align: center; }
 .col-cache, .cell-cache { width: 56px; }
-.row-check { cursor: pointer; }
+.row-check, .ri-accept, input[type="checkbox"].review-check {
+  accent-color: var(--accent);
+  width: 15px; height: 15px; cursor: pointer;
+}
 .bulk-btn {
   background: var(--surface); color: var(--text);
   border: 1px solid var(--line-2);
@@ -831,18 +836,6 @@ a { color: inherit; text-decoration: none; }
   color: var(--text-3); font-size: 11px; letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-
-.btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: var(--surface); color: var(--text);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-2);
-  padding: 5px 10px;
-  font: 500 12px/1 var(--f-sans);
-  cursor: pointer;
-}
-.btn:hover { background: var(--surface-2); }
-.btn.ghost { background: transparent; }
 
 .crumb .sep { color: var(--text-4); padding: 0 4px; }
 .crumb .strong { color: var(--text); font-weight: 500; }
@@ -1049,15 +1042,6 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 /* flex helper for non-table layouts; never targets table rows (see .vlist) */
 .row:not(tr) { display: flex; align-items: center; gap: 8px; }
 
-/* ─── btn.primary ────────────────────────────────────────────────────── */
-.btn.primary {
-  background: var(--accent);
-  color: var(--accent-fg);
-  border-color: transparent;
-  font-weight: 600;
-}
-.btn.primary:hover { filter: brightness(1.08); }
-
 /* ─── template list rows ─────────────────────────────────────────────── */
 .tmpl-row {
   display: grid;
@@ -1257,9 +1241,9 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 /* ─── Annotate dropdown ──────────────────────────────────────────────── */
 .annotate-wrap { position: relative; display: inline-block; }
 .ca-btn-primary {
-  background: var(--accent, #4a8fff);
+  background: var(--accent);
   color: white;
-  border: 1px solid var(--accent, #4a8fff);
+  border: 1px solid var(--accent);
 }
 .ca-btn-primary:disabled { opacity: 0.6; cursor: progress; }
 .annotate-menu {
@@ -1323,12 +1307,6 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
   --accent-2:  color-mix(in oklab, var(--info) 30%, transparent);
   --accent-fg: #0b1722;
 }
-.anno-draft-chip {
-  border-left: 3px solid var(--info);
-  padding-left: 8px;
-  color: color-mix(in oklab, var(--info) 70%, var(--text-2));
-}
-
 /* ─── Draft timeline track ───────────────────────────────────────────── */
 /* When draft is active, split the marker band: published on top half,
    draft on bottom half. Otherwise published uses full height. */
@@ -1348,14 +1326,14 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 .anno-status {
   padding: 8px 10px;
   margin: 8px 0;
-  background: var(--info-bg, #eef4ff);
-  border-left: 3px solid var(--accent, #4a8fff);
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  border-left: 3px solid var(--accent);
   font-size: 0.9em;
 }
 .anno-status.error {
-  background: var(--error-bg, #fdecec);
-  border-left-color: var(--error, #c0392b);
-  color: var(--error, #c0392b);
+  background: color-mix(in oklab, var(--bad) 12%, transparent);
+  border-left-color: var(--bad);
+  color: var(--bad);
 }
 
 /* ─── Draft chip ──────────────────────────────────────────────────── */
@@ -1904,9 +1882,6 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .modal-foot {
   border-top: 1px solid var(--line);
   border-bottom: 0;
-}
-.modal-body {
-  padding: 12px 14px; overflow: auto;
 }
 .modal-results {
   display: flex; flex-direction: column; gap: 4px; margin-top: 8px;
