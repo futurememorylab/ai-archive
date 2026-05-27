@@ -1,0 +1,17 @@
+{% with head_cells = "pages/_review_head_cells.html",
+        row_cells = "pages/_review_row_cells.html",
+        cache_label = "Cache",
+        colspan = 6,
+        empty_msg = "No drafts awaiting review." %}
+  {% include "pages/_video_list.html" %}
+{% endwith %}
+{% set _q = 'limit=' ~ limit %}
+{% if filters.job_id is not none %}{% set _q = _q ~ '&job_id=' ~ filters.job_id %}{% endif %}
+{% if filters.media %}{% set _q = _q ~ '&media=' ~ filters.media %}{% endif %}
+{% set _range = ((offset + 1) ~ '–' ~ (offset + rows|length) ~ ' of ' ~ total) if rows else ('0 of ' ~ total) %}
+{% with prev_url = ('/review?' ~ _q ~ '&offset=' ~ prev_offset) if prev_offset is not none else none,
+        next_url = ('/review?' ~ _q ~ '&offset=' ~ next_offset) if next_offset is not none else none,
+        range_label = _range,
+        hx_target = "#review-table-region" %}
+  {% include "pages/_pager.html" %}
+{% endwith %}

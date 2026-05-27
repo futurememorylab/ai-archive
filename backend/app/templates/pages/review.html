@@ -1,0 +1,66 @@
+{% extends "pages/layout.html" %}
+{% block rail_active %}review{% endblock %}
+{% block title %}Review · CatDV Annotator{% endblock %}
+{% block crumb %}
+  <span class="crumb"><span class="strong">Draft review</span></span>
+{% endblock %}
+{% block body %}
+<div class="page review-page" x-data="reviewSel()">
+  <div class="page-hdr">
+    <h1>Review</h1>
+    <span class="meta">accept · edit · apply</span>
+    <span class="grow"></span>
+    <button class="btn ghost" type="button" onclick="location.reload()">Refresh</button>
+  </div>
+
+  <div class="metric-strip">
+    <div class="metric"><div class="m-label">Clips awaiting review</div>
+      <div class="m-value">{{ metric.clips }}</div></div>
+    <div class="metric"><div class="m-label">Markers</div>
+      <div class="m-value">{{ metric.markers }}</div></div>
+    <div class="metric"><div class="m-label">Fields</div>
+      <div class="m-value">{{ metric.fields }}</div></div>
+    <div class="metric"><div class="m-label">Notes</div>
+      <div class="m-value">{{ metric.notes }}</div></div>
+  </div>
+
+  <details class="cache-extra-filters">
+    <summary>Filters <span class="mono muted">{{ total }} clips</span></summary>
+    <form action="/review" method="get" class="filters-form">
+      <label>Batch:
+        <select name="job_id">
+          <option value="">All</option>
+          {% for j in jobs %}
+            <option value="{{ j.id }}" {% if filters.job_id == j.id %}selected{% endif %}>
+              #{{ j.id }} · {{ j.notes or j.kind or "job" }} ({{ j.total_clips }})
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Media:
+        <select name="media">
+          <option value="" {% if not filters.media %}selected{% endif %}>All</option>
+          <option value="video" {% if filters.media == 'video' %}selected{% endif %}>Video</option>
+          <option value="image" {% if filters.media == 'image' %}selected{% endif %}>Image</option>
+        </select>
+      </label>
+      <button type="submit" class="bulk-btn">Apply</button>
+    </form>
+  </details>
+
+  <div class="bulkbar" x-show="count > 0" x-cloak>
+    <span class="bulk-count"><b x-text="count"></b> selected</span>
+    <span class="grow"></span>
+    <label class="kindtoggle"><input type="checkbox" x-model="kinds.marker"> Markers</label>
+    <label class="kindtoggle"><input type="checkbox" x-model="kinds.field"> Fields</label>
+    <label class="kindtoggle"><input type="checkbox" x-model="kinds.note"> Notes</label>
+    <button type="button" class="bulk-btn" @click="clearSel()">Clear</button>
+    <button type="button" class="bulk-btn" @click="reviewSelected()">Review selected →</button>
+    <button type="button" class="bulk-btn bulk-btn-danger" @click="applySelected()">Apply drafts (selected)</button>
+  </div>
+
+  <div id="review-table-region" class="cache-listwrap">
+    {% include "pages/_review_table.html" %}
+  </div>
+</div>
+{% endblock %}

@@ -339,3 +339,25 @@ def test_apply_batch_400_on_bad_kind(monkeypatch, tmp_path):
         _run(_seed(ctx))
         r = client.post("/api/review/apply-batch", json={"clip_ids": [1], "kinds": ["bogus"]})
         assert r.status_code == 400
+
+
+def test_review_page_renders(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        _run(_seed(ctx))
+        r = client.get("/review")
+        assert r.status_code == 200
+        assert "Clip_1" in r.text
+        assert "row-check" in r.text
+
+
+def test_review_page_htmx_returns_table_only(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        _run(_seed(ctx))
+        r = client.get("/review", headers={"HX-Request": "true"})
+        assert r.status_code == 200
+        assert "<table" in r.text
+        assert "<aside" not in r.text
