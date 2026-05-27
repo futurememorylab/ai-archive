@@ -43,3 +43,4 @@ available number. See any existing ADR for the template.
 | 0033 | 2026-05-26 | [Prompt Studio PR1 — shell and run loop](./adr/0033-prompt-studio-pr1-shell-and-run-loop.md) |
 | 0034 | 2026-05-27 | [Prompt Studio PR2 — version compare](./adr/0034-prompt-studio-pr2-version-compare.md) |
 | 0035 | 2026-05-27 | [Draft review & accept UI](./adr/0035-draft-review-accept-ui.md) |
+| 0036 | 2026-05-27 | [Fold draft review into the clips list (supersedes /review page)](./adr/0036-fold-review-into-clips-list.md) |

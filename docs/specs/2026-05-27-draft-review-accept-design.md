@@ -1,7 +1,18 @@
 # Draft Review & Accept — consolidated review queue + bulk apply
 
 **Date:** 2026-05-27
-**Status:** Approved (design)
+**Status:** Approved (design) — **partially superseded as-built.** The
+backend (pending query, `apply-batch`, edited-value apply) and the
+HITL clip-detail editor shipped as specced. The **standalone `/review`
+page described below was NOT shipped**: review was folded into the
+existing clips list (Type/Batch/Drafts columns + the existing
+`anno=for_review` filter + bulk Review/Apply actions), and the clip
+draft editor is always available when a draft exists (full editing of
+markers/fields/notes; Accept & apply, or Prev/Skip/Accept & next when
+in a review queue). See **[ADR 0036](../adr/0036-fold-review-into-clips-list.md)**
+for the merge rationale and **[ADR 0035](../adr/0035-draft-review-accept-ui.md)**
+for the original decisions. Read the sections below as the original
+intent; the clips-list integration is the as-built surface.
 **Depends on:** existing `review_items` table, `/api/review/*` endpoints,
 `WriteQueue` / `pending_operations` / `SyncEngine` apply path.
 
