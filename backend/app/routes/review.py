@@ -13,6 +13,8 @@ from backend.app.services.write_queue import etag_from_snapshot, fps_from_snapsh
 
 router = APIRouter(prefix="/api/review", tags=["review"])
 
+_VALID_KINDS = {"marker", "field", "note"}
+
 
 class Decision(BaseModel):
     decision: str
@@ -66,10 +68,17 @@ async def set_decision(request: Request, item_id: int, body: Decision):
     return {"id": item_id, "decision": body.decision}
 
 
-async def _resolve_and_enqueue_clip(ctx: AppContext, clip_id: int) -> int:
+async def _resolve_and_enqueue_clip(
+    ctx: AppContext, clip_id: int, *, kinds: set[str] | None = None
+) -> int:
     """Resolve a clip's accepted items + apply context and enqueue them.
-    Returns the number of ops queued."""
+
+    When `kinds` is given, only accepted items of those kinds are enqueued
+    (so a kind-filtered bulk apply does not flush previously-accepted items
+    of other kinds). Returns the number of ops queued."""
     accepted = await ctx.review_items_repo.list_by_clip(ctx.db, clip_id, decision="accepted")
+    if kinds is not None:
+        accepted = [it for it in accepted if it.kind in kinds]
     if not accepted:
         return 0
     annotation = await ctx.annotations_repo.get(ctx.db, accepted[0].annotation_id)
@@ -89,12 +98,17 @@ async def _resolve_and_enqueue_clip(ctx: AppContext, clip_id: int) -> int:
 @router.post("/apply-batch")
 async def apply_batch(request: Request, body: ApplyBatch):
     """Accept all un-applied items of the given kinds on the given clips,
-    then enqueue apply for each (the "yolo" bulk path)."""
+    then enqueue apply for each (the "yolo" bulk path).
+
+    Unknown clip_ids or clips with no matching un-applied items are skipped
+    silently (contribute 0); the loop is not atomic across clips (partial
+    progress is recoverable via the durable pending-ops queue).
+    """
     ctx = get_ctx(request)
     if ctx.write_queue is None:
         raise HTTPException(503, "write queue not initialized")
-    kinds = set(body.kinds) if body.kinds else {"marker", "field", "note"}
-    if not kinds <= {"marker", "field", "note"}:
+    kinds = set(body.kinds) if body.kinds else set(_VALID_KINDS)
+    if not kinds <= _VALID_KINDS:
         raise HTTPException(400, "kinds must be a subset of marker|field|note")
 
     total_queued = 0
@@ -106,7 +120,7 @@ async def apply_batch(request: Request, body: ApplyBatch):
             continue
         for it in to_accept:
             await ctx.review_items_repo.set_decision(ctx.db, it.id, "accepted")
-        queued = await _resolve_and_enqueue_clip(ctx, clip_id)
+        queued = await _resolve_and_enqueue_clip(ctx, clip_id, kinds=kinds)
         if queued:
             clips_touched += 1
             total_queued += queued

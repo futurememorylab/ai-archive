@@ -251,3 +251,91 @@ def test_apply_batch_defaults_all_kinds(monkeypatch, tmp_path):
         r = client.post("/api/review/apply-batch", json={"clip_ids": [1]})
         assert r.status_code == 200
         assert r.json()["queued"] >= 2
+
+
+def test_apply_batch_does_not_flush_preaccepted_other_kinds(monkeypatch, tmp_path):
+    """Regression: apply-batch with kinds=["marker"] must NOT flush a field item
+    that was already accepted (but not yet applied) before the batch call."""
+    from backend.app.archive.model import ChangeSet, WriteResult
+    from backend.app.repositories.pending_operations import PendingOperationsRepo
+    from backend.app.repositories.write_log import WriteLogRepo
+    from backend.app.services.connection_monitor import ConnectionState
+    from backend.app.services.sync_engine import SyncEngine
+
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        _run(_seed(ctx))
+
+        class FakeArchive:
+            id = "catdv"
+
+            async def apply_changes(self, change_set: ChangeSet) -> WriteResult:
+                return WriteResult(status="ok", upstream_response={"ID": 1, "modifyDate": "x"})
+
+        class AlwaysOnline:
+            def current_state(self):
+                return ConnectionState.online
+
+        ctx.archive = FakeArchive()
+        ctx.sync_engine = SyncEngine(
+            provider=ctx.archive,
+            pending_ops_repo=PendingOperationsRepo(),
+            write_log_repo=WriteLogRepo(),
+            connection_monitor=AlwaysOnline(),
+            db_provider=lambda: ctx.db,
+        )
+
+        # Find the field item id via GET /api/review/clips/1/items
+        items_resp = client.get("/api/review/clips/1/items")
+        assert items_resp.status_code == 200
+        all_items = items_resp.json()
+        field_items = [it for it in all_items if it["kind"] == "field"]
+        assert field_items, "seed must produce at least one field item"
+        field_id = field_items[0]["id"]
+
+        # Pre-accept the field item (simulating human-in-the-loop acceptance
+        # before any bulk apply has run)
+        r = client.post(f"/api/review/items/{field_id}/decision", json={"decision": "accepted"})
+        assert r.status_code == 200
+
+        # Now apply-batch with kinds=["marker"] only
+        r = client.post("/api/review/apply-batch", json={"clip_ids": [1], "kinds": ["marker"]})
+        assert r.status_code == 200
+        assert r.json()["clips"] == 1
+
+        # Drain the sync engine so any enqueued ops are applied upstream
+        _run(ctx.sync_engine.drain_once())
+
+        # Verify post-condition: marker applied, field NOT applied
+        items_after = client.get("/api/review/clips/1/items").json()
+        markers_after = [it for it in items_after if it["kind"] == "marker"]
+        fields_after = [it for it in items_after if it["kind"] == "field"]
+
+        assert all(it["applied_at"] is not None for it in markers_after), (
+            "marker items must be applied after apply-batch markers"
+        )
+        assert all(it["applied_at"] is None for it in fields_after), (
+            "field item was pre-accepted but must NOT be flushed by a marker-only apply-batch"
+        )
+
+
+def test_apply_batch_503_when_no_write_queue(monkeypatch, tmp_path):
+    """apply-batch must return 503 when write_queue is not initialised."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        _run(_seed(ctx))
+        ctx.write_queue = None
+        r = client.post("/api/review/apply-batch", json={"clip_ids": [1]})
+        assert r.status_code == 503
+
+
+def test_apply_batch_400_on_bad_kind(monkeypatch, tmp_path):
+    """apply-batch must return 400 when an unrecognised kind is supplied."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        _run(_seed(ctx))
+        r = client.post("/api/review/apply-batch", json={"clip_ids": [1], "kinds": ["bogus"]})
+        assert r.status_code == 400
