@@ -14,7 +14,12 @@ router = APIRouter(tags=["pages"])
 
 
 @router.get("/studio", response_class=HTMLResponse)
-async def studio_page(request: Request, prompt_id: int | None = None):
+async def studio_page(
+    request: Request,
+    prompt_id: int | None = None,
+    version_id: int | None = None,
+    compare_version_id: int | None = None,
+):
     ctx = get_ctx(request)
     prompts = await ctx.prompts_repo.list_active(ctx.db)
     folders = await ctx.studio_folders_repo.list_folders_with_counts(ctx.db)
@@ -30,17 +35,31 @@ async def studio_page(request: Request, prompt_id: int | None = None):
             selected_prompt = None
             versions = []
     elif prompts:
-        # Default to the first active prompt if none specified
         first_id = prompts[0].id
-        assert first_id is not None  # DB-fetched prompts always have an id
+        assert first_id is not None
         selected_prompt, versions = await ctx.prompts_repo.get_with_versions(
             ctx.db, first_id
         )
 
-    # Pick the active version: the only draft if exists, else the latest
+    version_ids = {v.id for v in versions}
+
+    # Pick the active version (cur).
     active_version = None
-    if versions:
+    if version_id is not None and version_id in version_ids:
+        active_version = next(v for v in versions if v.id == version_id)
+    elif versions:
         active_version = next((v for v in versions if v.state == "draft"), versions[0])
+
+    # Pick the compare version (cmp). Skip when it equals cur (no point comparing
+    # a version with itself).
+    compare_version = None
+    if (
+        compare_version_id is not None
+        and compare_version_id in version_ids
+        and active_version is not None
+        and compare_version_id != active_version.id
+    ):
+        compare_version = next(v for v in versions if v.id == compare_version_id)
 
     return templates.TemplateResponse(
         request,
@@ -50,6 +69,7 @@ async def studio_page(request: Request, prompt_id: int | None = None):
             "selected_prompt": selected_prompt.model_dump() if selected_prompt else None,
             "versions": [v.model_dump() for v in versions],
             "active_version": active_version.model_dump() if active_version else None,
+            "compare_version": compare_version.model_dump() if compare_version else None,
             "folders": folders,
         },
     )

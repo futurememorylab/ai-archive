@@ -46,6 +46,9 @@ document.addEventListener('alpine:init', () => {
     activeVersionId: initial.activeVersionId,
     activeVersionNum: initial.activeVersionNum,
     activeModel: initial.activeModel,
+    compareVersionId: initial.compareVersionId,
+    compareVersionNum: initial.compareVersionNum,
+    mode: 'prompt',  // page-level tab state; Task 11 confirms the lift from card-level.
     focusedClipId: null,
     running: false,
     runId: null,

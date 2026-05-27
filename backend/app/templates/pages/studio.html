@@ -9,6 +9,8 @@
        activeVersionId: {{ active_version.id if active_version else 'null' }},
        activeVersionNum: {{ active_version.version_num if active_version else 'null' }},
        activeModel: '{{ active_version.model if active_version else '' }}',
+       compareVersionId: {{ compare_version.id if compare_version else 'null' }},
+       compareVersionNum: {{ compare_version.version_num if compare_version else 'null' }},
      })">
 
   {% include "pages/_studio_header.html" %}
