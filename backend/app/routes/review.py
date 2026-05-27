@@ -19,6 +19,32 @@ class Decision(BaseModel):
     edited_value: Any = None
 
 
+class ApplyBatch(BaseModel):
+    clip_ids: list[int]
+    kinds: list[str] | None = None
+
+
+@router.get("/pending")
+async def list_pending(
+    request: Request,
+    job_id: int | None = None,
+    offset: int = 0,
+    limit: int = 50,
+):
+    ctx = get_ctx(request)
+    rows = await ctx.review_items_repo.list_pending_clips(
+        ctx.db, job_id=job_id, limit=limit, offset=offset
+    )
+    total = await ctx.review_items_repo.count_pending_clips(ctx.db, job_id=job_id)
+    return {"clips": rows, "total": total, "offset": offset, "limit": limit}
+
+
+@router.get("/pending/count")
+async def pending_count(request: Request, job_id: int | None = None):
+    ctx = get_ctx(request)
+    return {"count": await ctx.review_items_repo.count_pending_clips(ctx.db, job_id=job_id)}
+
+
 @router.get("/clips/{clip_id}/items")
 async def list_items_for_clip(request: Request, clip_id: int):
     ctx = get_ctx(request)
@@ -58,6 +84,35 @@ async def _resolve_and_enqueue_clip(ctx: AppContext, clip_id: int) -> int:
         fps=fps_from_snapshot(annotation.clip_snapshot),
     )
     return len(op_ids)
+
+
+@router.post("/apply-batch")
+async def apply_batch(request: Request, body: ApplyBatch):
+    """Accept all un-applied items of the given kinds on the given clips,
+    then enqueue apply for each (the "yolo" bulk path)."""
+    ctx = get_ctx(request)
+    if ctx.write_queue is None:
+        raise HTTPException(503, "write queue not initialized")
+    kinds = set(body.kinds) if body.kinds else {"marker", "field", "note"}
+    if not kinds <= {"marker", "field", "note"}:
+        raise HTTPException(400, "kinds must be a subset of marker|field|note")
+
+    total_queued = 0
+    clips_touched = 0
+    for clip_id in body.clip_ids:
+        pending = await ctx.review_items_repo.list_by_clip(ctx.db, clip_id, decision=None)
+        to_accept = [it for it in pending if it.applied_at is None and it.kind in kinds]
+        if not to_accept:
+            continue
+        for it in to_accept:
+            await ctx.review_items_repo.set_decision(ctx.db, it.id, "accepted")
+        queued = await _resolve_and_enqueue_clip(ctx, clip_id)
+        if queued:
+            clips_touched += 1
+            total_queued += queued
+    if total_queued and ctx.sync_engine is not None:
+        ctx.sync_engine.notify()
+    return {"clips": clips_touched, "queued": total_queued}
 
 
 @router.post("/clips/{clip_id}/apply")

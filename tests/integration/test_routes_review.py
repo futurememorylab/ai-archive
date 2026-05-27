@@ -174,3 +174,80 @@ def test_apply_clip_enqueues_and_drains_via_sync_engine(monkeypatch, tmp_path):
             and o.value == "30.léta"
             for o in cs.ops
         )
+
+
+def test_pending_lists_clip(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        _run(_seed(ctx))
+        r = client.get("/api/review/pending")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["total"] == 1
+        row = body["clips"][0]
+        assert row["catdv_clip_id"] == 1
+        assert row["marker_count"] == 1
+        assert row["field_count"] == 1
+
+
+def test_pending_count(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        _run(_seed(ctx))
+        r = client.get("/api/review/pending/count")
+        assert r.status_code == 200
+        assert r.json()["count"] == 1
+
+
+def test_apply_batch_marks_and_enqueues_filtered_by_kind(monkeypatch, tmp_path):
+    from backend.app.archive.model import ChangeSet, WriteResult
+    from backend.app.repositories.pending_operations import PendingOperationsRepo
+    from backend.app.repositories.write_log import WriteLogRepo
+    from backend.app.services.connection_monitor import ConnectionState
+    from backend.app.services.sync_engine import SyncEngine
+
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        _run(_seed(ctx))
+
+        class FakeArchive:
+            id = "catdv"
+            async def apply_changes(self, change_set: ChangeSet) -> WriteResult:
+                return WriteResult(status="ok", upstream_response={"ID": 1, "modifyDate": "x"})
+
+        class AlwaysOnline:
+            def current_state(self):
+                return ConnectionState.online
+
+        ctx.archive = FakeArchive()
+        ctx.sync_engine = SyncEngine(
+            provider=ctx.archive,
+            pending_ops_repo=PendingOperationsRepo(),
+            write_log_repo=WriteLogRepo(),
+            connection_monitor=AlwaysOnline(),
+            db_provider=lambda: ctx.db,
+        )
+
+        r = client.post("/api/review/apply-batch", json={"clip_ids": [1], "kinds": ["marker"]})
+        assert r.status_code == 200
+        assert r.json()["clips"] == 1
+        assert r.json()["queued"] >= 1
+
+        items = client.get("/api/review/clips/1/items").json()
+        markers = [it for it in items if it["kind"] == "marker"]
+        fields = [it for it in items if it["kind"] == "field"]
+        assert all(it["applied_at"] for it in markers)
+        assert all(it["applied_at"] is None for it in fields)
+
+
+def test_apply_batch_defaults_all_kinds(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        _run(_seed(ctx))
+        r = client.post("/api/review/apply-batch", json={"clip_ids": [1]})
+        assert r.status_code == 200
+        assert r.json()["queued"] >= 2
