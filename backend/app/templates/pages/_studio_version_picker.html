@@ -4,11 +4,12 @@
    Required scope from the enclosing card:
      active_version, versions, side, clip_id (optional)
 #}
+{% import "components/_ui.html" as ui %}
 <span class="pc-vchip" x-data="{ open: false }" @click.outside="open = false">
   <button type="button" class="btn sm ghost" :class="open && 'open'"
           @click="open = !open" title="Switch version">
     <span class="pc-vlbl">v{{ active_version.version_num }}</span>
-    <span class="pc-status {{ active_version.state }}">{{ active_version.state }}</span>
+    {{ ui.prompt_state_chip(active_version.state) }}
     <span class="caret">▾</span>
   </button>
   <div class="pc-vmenu" x-show="open" x-cloak>
@@ -22,7 +23,7 @@
               hx-swap="outerHTML"
               @click="open = false">
         <span class="pc-vmenu-lbl">v{{ v.version_num }}</span>
-        <span class="pc-status {{ v.state }}">{{ v.state }}</span>
+        {{ ui.prompt_state_chip(v.state) }}
       </button>
     {% endfor %}
   </div>

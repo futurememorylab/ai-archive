@@ -1021,6 +1021,14 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 .tag.info .dot { background: var(--info); }
 .tag.mono-cell { font-family: var(--f-mono); font-size: 10.5px; }
 
+/* Lock affordance on the shared prompt-state chip (production/archived =
+   read-only). Inherits the chip's state color via currentColor. */
+.prompt-state-lock {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+}
+
 /* ─── panel header ───────────────────────────────────────────────────── */
 .panel-h {
   display: flex; align-items: center; justify-content: space-between;

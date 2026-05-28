@@ -47,3 +47,14 @@
 {% macro status_pill(label, state='') -%}
   <span class="pill {{ state }}"><span class="led"></span>{{ label }}</span>
 {%- endmacro %}
+
+{# Prompt version state chip: draft / production / archived. The single
+   shared component used by the prompt editor and Studio. Production and
+   archived are read-only, so they carry a lock icon; draft (editable)
+   does not. #}
+{% macro prompt_state_chip(state) -%}
+  {%- set variant = {'production': 'good', 'draft': 'accent', 'archived': 'muted'}.get(state, 'muted') -%}
+  <span class="tag {{ variant }} prompt-state-chip"><span class="dot"></span>{{ state }}
+    {%- if state != 'draft' %}<span class="prompt-state-lock" title="read-only">{% include "icons/_lock.svg" %}</span>{% endif -%}
+  </span>
+{%- endmacro %}

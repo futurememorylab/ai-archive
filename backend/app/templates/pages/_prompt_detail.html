@@ -24,13 +24,7 @@
           <span class="tag">{{ selected.media_kind }}</span>
         {% endif %}
         {% include "pages/_prompt_version_picker.html" %}
-        {% if selected_version.state == "production" %}
-          <span class="tag good"><span class="dot"></span>production</span>
-        {% elif selected_version.state == "draft" %}
-          <span class="tag accent"><span class="dot"></span>draft</span>
-        {% else %}
-          <span class="tag"><span class="dot"></span>archived</span>
-        {% endif %}
+        {{ ui.prompt_state_chip(selected_version.state) }}
         <select class="txt sm"
                 x-model="mediaKind" @change="setMediaKind()"
                 title="Which clip kind this prompt applies to">

@@ -190,6 +190,22 @@ connection-chip in the topbar uses a sibling variant, `.env-pill`, for the
 same look on the live connection indicator — reuse that for connection
 state rather than re-styling a pill.)
 
+### Prompt state chip
+
+`prompt_state_chip(state)` is the single shared chip for a prompt
+version's `draft` / `production` / `archived` state, used by the prompt
+editor (`_prompt_detail.html`) and Studio (`_studio_version_picker.html`):
+
+```jinja
+{{ ui.prompt_state_chip(selected_version.state) }}
+```
+
+It renders the `.tag` look (`.tag.accent` draft, `.tag.good` production,
+`.tag.muted` archived) with a dot, and a **lock icon for production and
+archived** (the read-only states) via `icons/_lock.svg`. Draft is
+editable and shows no lock. Reuse this macro wherever a version state is
+shown — do not re-inline the `if/elif` chip.
+
 ## 7. JS helpers (`format.js`)
 
 Loaded first in `layout.html` (right after htmx, before player/feature
