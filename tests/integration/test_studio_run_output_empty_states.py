@@ -51,7 +51,7 @@ def _seed_run(app, *, version_id, clip_id, status, output_json=None, error=None)
                  error),
             )
             await db.commit()
-    asyncio.get_event_loop().run_until_complete(_go())
+    asyncio.run(_go())
 
 
 def test_no_version_renders_run_empty_shell(client):

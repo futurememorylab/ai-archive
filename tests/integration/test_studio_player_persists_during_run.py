@@ -53,7 +53,7 @@ def _seed_run(app, *, version_id, clip_id, status):
                  json.dumps({"scenes": []}) if status == "ok" else None),
             )
             await db.commit()
-    asyncio.get_event_loop().run_until_complete(_go())
+    asyncio.run(_go())
 
 
 def test_player_slot_in_page_not_in_run_partial(client):
