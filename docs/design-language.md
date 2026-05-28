@@ -53,6 +53,14 @@ never the raw value** — re-skinning (e.g. the draft pane re-scopes
 | `--good` | `#3ddc84` | success / ok |
 | `--bad` | `#ff5d5d` | error / danger / destructive |
 | `--info` | `#5ac8fa` | info; also the draft colorway |
+| `--range-cur` | `color-mix(--info 45%, transparent)` | studio player overlay: cur version's scene ranges |
+| `--range-cmp` | `color-mix(--accent 45%, transparent)` | studio player overlay: cmp version's scene ranges |
+
+> The two `--range-*` tokens are studio-specific affordances but live
+> in `:root` alongside the palette so they track future palette
+> shifts. Legend dots reuse `--info` / `--accent` directly (no alpha
+> mix). PR3 introduced these to replace hardcoded `rgba(74,144,226,…)`
+> / `rgba(220,140,60,…)` strings.
 
 ### Radii, fonts, component sizing
 
