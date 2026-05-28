@@ -1,7 +1,6 @@
 <div class="version-picker" x-data="{ open: false }">
-  <button type="button" class="tag mono-cell"
-          @click="open = !open"
-          style="cursor: pointer;">v{{ selected_version.version_num }} &#9662;</button>
+  <button type="button" class="btn sm ghost mono-cell"
+          @click="open = !open">v{{ selected_version.version_num }} &#9662;</button>
   <div class="version-menu" x-show="open" x-cloak @click.outside="open=false">
     {% for vv in versions %}
       <a class="version-menu-item{% if vv.id == selected_version.id %} is-current{% endif %}"

@@ -31,6 +31,7 @@ def test_build_draft_view_returns_empty_when_annotation_is_none():
         "markers": [],
         "fields": [],
         "notes": None,
+        "note_items": [],
         "big_notes": None,
         "fps": 25.0,
     }
@@ -74,6 +75,9 @@ def test_build_draft_view_maps_marker_review_items():
             "in_secs": 0.0,
             "out_secs": 1.0,
             "color": None,
+            "item_id": None,
+            "kind": "marker",
+            "decision": "pending",
         },
         {
             "name": "Scene 2",
@@ -82,6 +86,9 @@ def test_build_draft_view_maps_marker_review_items():
             "in_secs": 1.0,
             "out_secs": None,
             "color": None,
+            "item_id": None,
+            "kind": "marker",
+            "decision": "pending",
         },
     ]
 
@@ -127,6 +134,10 @@ def test_build_draft_view_maps_string_field():
             "identifier": "pragafilm.dekáda.natočení",
             "name": "natočení",
             "value": "30.léta",
+            "multi": False,
+            "item_id": None,
+            "kind": "field",
+            "decision": "pending",
         },
     ]
 
@@ -148,6 +159,10 @@ def test_build_draft_view_maps_list_field_by_joining():
             "identifier": "pragafilm.rok.natočení",
             "name": "natočení",
             "value": "1932, 1933",
+            "multi": True,
+            "item_id": None,
+            "kind": "field",
+            "decision": "pending",
         },
     ]
 
@@ -225,3 +240,87 @@ def test_build_draft_view_includes_header_chip_metadata_when_supplied():
     assert result["version_num"] == 3
     assert result["created_at"] == "2026-05-21T14:22:08+00:00"
     assert result["model"] == "gemini-2.5-pro"
+
+
+def test_markers_and_fields_carry_item_id_kind_decision():
+    ann = _annotation(id=5, catdv_clip_id=1, catdv_clip_name="c")
+    items = [
+        ReviewItem(
+            id=11,
+            annotation_id=5,
+            catdv_clip_id=1,
+            kind="marker",
+            proposed_value={"name": "a", "in": {"secs": 0.0}, "out": {"secs": 1.0}},
+            decision="pending",
+        ),
+        ReviewItem(
+            id=12,
+            annotation_id=5,
+            catdv_clip_id=1,
+            kind="field",
+            target_identifier="f.a",
+            proposed_value="v",
+            decision="accepted",
+        ),
+    ]
+    view = build_draft_view(ann, items)
+    assert view["has_draft"] is True
+    m = view["markers"][0]
+    assert m["item_id"] == 11
+    assert m["kind"] == "marker"
+    assert m["decision"] == "pending"
+    f = view["fields"][0]
+    assert f["item_id"] == 12
+    assert f["kind"] == "field"
+    assert f["decision"] == "accepted"
+    assert f["multi"] is False
+    # existing display keys still present
+    assert m["name"] == "a"
+    assert f["identifier"] == "f.a"
+    assert f["value"] == "v"
+
+
+def test_list_field_is_multi():
+    ann = _annotation(id=5, catdv_clip_id=1, catdv_clip_name="c")
+    items = [
+        ReviewItem(
+            id=20,
+            annotation_id=5,
+            catdv_clip_id=1,
+            kind="field",
+            target_identifier="pragafilm.rok.natočení",
+            proposed_value=["a", "b"],
+            decision="pending",
+        ),
+    ]
+    view = build_draft_view(ann, items)
+    f = view["fields"][0]
+    assert f["multi"] is True
+    assert f["value"] == "a, b"
+
+
+def test_build_draft_view_exposes_note_items():
+    ann = _annotation(id=5, catdv_clip_id=1, catdv_clip_name="c")
+    items = [
+        ReviewItem(
+            id=21,
+            annotation_id=5,
+            catdv_clip_id=1,
+            kind="note",
+            target_identifier="notes",
+            proposed_value="some note text",
+            decision="pending",
+        ),
+    ]
+    view = build_draft_view(ann, items)
+    assert "note_items" in view
+    assert len(view["note_items"]) == 1
+    ni = view["note_items"][0]
+    assert ni["item_id"] == 21
+    assert ni["kind"] == "note"
+    assert ni["decision"] == "pending"
+    assert ni["text"] == "some note text"
+
+    # annotation-None branch also returns note_items == []
+    none_view = build_draft_view(None, [])
+    assert none_view["note_items"] == []

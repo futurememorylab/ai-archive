@@ -25,6 +25,11 @@
   --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   --r-1: 4px; --r-2: 6px; --r-3: 10px;
+
+  --btn-h: 32px;
+  --btn-h-sm: 26px;
+  --field-h: 32px;
+  --field-label-h: 24px;
 }
 
 /* ─── self-hosted fonts (variable: one file covers all weights) ───────── */
@@ -118,6 +123,12 @@ a { color: inherit; text-decoration: none; }
   background: var(--good);
   box-shadow: 0 0 6px var(--good);
 }
+.pill { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px;
+  border-radius: 11px; border: 1px solid var(--line-2); font-family: var(--f-mono);
+  font-size: 10.5px; letter-spacing: 0.04em; color: var(--text-2); text-transform: uppercase; }
+.pill .led { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
+.pill.ok { color: var(--good); border-color: color-mix(in oklab, var(--good) 35%, transparent); }
+.pill.ok .led { background: var(--good); box-shadow: 0 0 6px var(--good); }
 .pillset {
   display: inline-flex; align-items: center; gap: 8px;
   padding-right: 4px;
@@ -197,8 +208,17 @@ a { color: inherit; text-decoration: none; }
   border-radius: 1px;
 }
 
-/* ─── page-clips ─────────────────────────────────────────────────────── */
+/* ─── shared page layout ─────────────────────────────────────────────── */
 .page { display: flex; flex-direction: column; height: 100%; }
+.page-hdr {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 20px; flex: none;
+  border-bottom: 1px solid var(--line);
+}
+.page-hdr h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0.01em; }
+.page-hdr .meta { color: var(--text-3); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+
+/* ─── page-clips ─────────────────────────────────────────────────────── */
 
 .filter-form {
   display: flex; flex-direction: column;
@@ -254,8 +274,8 @@ a { color: inherit; text-decoration: none; }
 }
 
 .btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  height: 36px; padding: 0 16px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: var(--btn-h); padding: 0 14px;
   border-radius: var(--r-2);
   border: 1px solid var(--line-2);
   background: var(--surface);
@@ -264,27 +284,24 @@ a { color: inherit; text-decoration: none; }
   cursor: pointer;
 }
 .btn:hover { background: var(--surface-2); }
-.btn-primary {
+.btn.primary {
   background: var(--accent); color: var(--accent-fg);
   border-color: color-mix(in oklab, var(--accent) 60%, var(--line-2));
   font-weight: 600;
 }
-.btn-primary:hover {
-  background: color-mix(in oklab, var(--accent) 90%, white 10%);
-}
-.btn-ghost {
-  background: transparent;
-  border-color: var(--line);
-  color: var(--text-2);
-}
-.btn-ghost:hover { background: var(--hover); color: var(--text); }
-.btn.is-disabled {
-  opacity: 0.4; pointer-events: none;
-}
+.btn.primary:hover { background: color-mix(in oklab, var(--accent) 90%, white 10%); }
+.btn.ghost { background: transparent; border-color: var(--line); color: var(--text-2); }
+.btn.ghost:hover { background: var(--hover); color: var(--text); }
+.btn.danger { color: var(--bad); border-color: color-mix(in oklab, var(--bad) 45%, var(--line-2)); background: transparent; }
+.btn.danger:hover { background: color-mix(in oklab, var(--bad) 12%, transparent); }
+.btn.sm { height: var(--btn-h-sm); padding: 0 10px; font-size: 12px; }
+.btn.icon { width: var(--btn-h); padding: 0; }
+.btn.icon.sm { width: var(--btn-h-sm); }
+.btn.is-disabled, .btn.disabled, .btn:disabled { opacity: 0.4; pointer-events: none; }
+.btn.good { background: color-mix(in oklab, var(--good) 20%, transparent); color: var(--good); border-color: color-mix(in oklab, var(--good) 40%, var(--line-2)); }
+.btn.good:hover { background: color-mix(in oklab, var(--good) 30%, transparent); }
 
 .filter-reset {
-  height: 28px; padding: 0 12px;
-  font-size: 12px;
   align-self: center;
 }
 
@@ -323,16 +340,16 @@ a { color: inherit; text-decoration: none; }
 .actions-dropdown { position: relative; }
 .actions-btn { display: inline-flex; align-items: center; gap: 6px; }
 .actions-btn .caret { font-size: 10px; color: var(--text-3); }
-.bulk-btn.actions-btn-active {
+.btn.actions-btn-active {
   background: var(--accent);
   color: var(--accent-fg);
   border-color: color-mix(in oklab, var(--accent) 60%, var(--line-2));
   font-weight: 600;
 }
-.bulk-btn.actions-btn-active:hover {
+.btn.actions-btn-active:hover {
   background: color-mix(in oklab, var(--accent) 90%, white 10%);
 }
-.bulk-btn.actions-btn-active .caret { color: var(--accent-fg); }
+.btn.actions-btn-active .caret { color: var(--accent-fg); }
 .actions-menu {
   position: absolute; right: 0; top: calc(100% + 4px);
   min-width: 200px;
@@ -354,6 +371,16 @@ a { color: inherit; text-decoration: none; }
 }
 .actions-item:hover { background: var(--hover); }
 .actions-item-danger { color: var(--bad); }
+.actions-kinds {
+  display: flex; flex-direction: row; flex-wrap: wrap; gap: 4px 10px;
+  padding: 4px 10px 6px;
+  font-size: 11.5px; color: var(--text-2);
+}
+.actions-kinds label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.actions-sep {
+  height: 1px; background: var(--line-2);
+  margin: 4px 6px;
+}
 [x-cloak] { display: none !important; }
 
 .clips-region { display: flex; flex-direction: column; min-height: 0; flex: 1; }
@@ -380,6 +407,8 @@ a { color: inherit; text-decoration: none; }
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 13px;
 }
 .vlist tbody td.num { text-align: right; }
@@ -438,16 +467,6 @@ a { color: inherit; text-decoration: none; }
   flex: none;
   font-size: 11.5px;
 }
-.pg-btn {
-  padding: 4px 10px; border-radius: var(--r-2);
-  border: 1px solid var(--line-2);
-  background: var(--surface);
-  color: var(--text-2);
-}
-.pg-btn:hover:not(.disabled) {
-  background: var(--surface-2); color: var(--text);
-}
-.pg-btn.disabled { opacity: 0.4; pointer-events: none; }
 .pg-meta { color: var(--text-3); }
 
 /* ─── page-detail ────────────────────────────────────────────────────── */
@@ -563,6 +582,24 @@ a { color: inherit; text-decoration: none; }
     0 0 0 1px var(--accent),
     0 0 18px color-mix(in oklab, var(--accent) 40%, transparent);
 }
+/* Draft marker drag handles + editing highlight (Task 10). */
+.range-handle {
+  position: absolute; top: 0; bottom: 0; width: 6px;
+  background: var(--accent); border-radius: 2px;
+  cursor: ew-resize; z-index: 2;
+  pointer-events: auto;
+}
+.range-handle.in  { left: -3px; }
+.range-handle.out { right: -3px; }
+/* Draft-range rows are pointer-events:none so the timeline seeks normally;
+   only the marker currently being edited becomes interactive (draggable). */
+.ranges .range.draft-range.editing {
+  background: color-mix(in oklab, var(--accent) 45%, transparent);
+  border: 1px solid var(--accent);
+  box-shadow: 0 0 8px color-mix(in oklab, var(--accent) 50%, transparent);
+  cursor: grab;
+  pointer-events: auto;
+}
 .timeline .playhead {
   position: absolute; top: -2px; bottom: -2px; width: 2px;
   background: #fff;
@@ -589,22 +626,12 @@ a { color: inherit; text-decoration: none; }
 }
 
 .transport-btns { display: flex; gap: 4px; }
-.tbtn {
-  width: 30px; height: 26px;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--surface);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-2);
-  color: var(--text-2);
-  cursor: pointer;
-}
-.tbtn:hover:not(:disabled) { color: var(--text); background: var(--surface-2); }
-.tbtn:disabled { opacity: 0.35; cursor: not-allowed; }
-.tbtn.play {
+.btn.play {
   background: var(--accent); color: var(--accent-fg);
-  border-color: transparent; width: 36px;
+  border-color: transparent;
 }
-.tbtn svg { width: 14px; height: 14px; }
+.btn.play:hover { background: color-mix(in oklab, var(--accent) 90%, white 10%); }
+.transport-btns .btn svg { width: 14px; height: 14px; }
 
 .transport .tc-readout {
   font-family: var(--f-mono); font-size: 14px; font-weight: 600;
@@ -753,31 +780,12 @@ a { color: inherit; text-decoration: none; }
 /* ─── row select + bulk buttons ──────────────────────────────────────── */
 .col-sel, .row-select { width: 28px; text-align: center; }
 .col-cache, .cell-cache { width: 56px; }
-.row-check { cursor: pointer; }
-.bulk-btn {
-  background: var(--surface); color: var(--text);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-1);
-  padding: 0.35rem 0.7rem;
-  font: 500 0.85rem/1 var(--f-sans);
-  cursor: pointer; text-decoration: none;
+.row-check, .ri-accept, input[type="checkbox"].review-check {
+  accent-color: var(--accent);
+  width: 15px; height: 15px; cursor: pointer;
 }
-.bulk-btn:hover { background: var(--surface-2); }
-.bulk-btn[disabled] { opacity: 0.4; cursor: not-allowed; }
-.bulk-btn-danger { color: var(--bad); border-color: color-mix(in oklab, var(--bad) 30%, transparent); }
-
 /* ─── cache actions on detail header ─────────────────────────────────── */
 .cache-actions { display: inline-flex; align-items: center; gap: 0.5rem; margin-left: 0.75rem; }
-.ca-btn {
-  background: var(--surface); color: var(--text);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-1);
-  padding: 0.3rem 0.6rem;
-  font: 500 0.8rem/1 var(--f-sans);
-  cursor: pointer;
-}
-.ca-btn:hover { background: var(--surface-2); }
-.ca-btn-danger { color: var(--bad); border-color: color-mix(in oklab, var(--bad) 30%, transparent); }
 
 
 /* ─── prefetch panel ────────────────────────────────────────────────── */
@@ -810,29 +818,7 @@ a { color: inherit; text-decoration: none; }
    — leaving the page unscrollable. Pin them to their natural height so the
    content overflows and overflow-y:auto engages. */
 .cache-page > * { flex-shrink: 0; }
-.cache-page .page-hdr {
-  display: flex; align-items: baseline; gap: 12px;
-  margin-bottom: 6px;
-}
-.cache-page .page-hdr h1 {
-  margin: 0; font-size: 18px; font-weight: 600; letter-spacing: 0.01em;
-}
-.cache-page .page-hdr .meta {
-  color: var(--text-3); font-size: 11px; letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: var(--surface); color: var(--text);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-2);
-  padding: 5px 10px;
-  font: 500 12px/1 var(--f-sans);
-  cursor: pointer;
-}
-.btn:hover { background: var(--surface-2); }
-.btn.ghost { background: transparent; }
+.cache-page .page-hdr { align-items: baseline; padding: 0; border-bottom: 0; margin-bottom: 6px; }
 
 .crumb .sep { color: var(--text-4); padding: 0 4px; }
 .crumb .strong { color: var(--text); font-weight: 500; }
@@ -942,6 +928,24 @@ a { color: inherit; text-decoration: none; }
 .txt:focus { outline: none; border-color: var(--accent); }
 .txt:read-only, .txt[readonly] { color: var(--text-2); background: var(--panel-2); }
 
+/* Reusable form-field component (label + textarea + help text). */
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field-label {
+  height: var(--field-label-h); display: flex; align-items: center;
+  color: var(--text-2); font-size: 12px; font-weight: 500;
+}
+.field-help { color: var(--text-3); font-size: 11px; margin-top: 2px; }
+.txt-area {
+  width: 100%; min-height: 120px; max-height: 50vh; resize: vertical;
+  overflow-y: auto;
+  padding: 8px 10px; line-height: 1.5;
+  background: var(--bg-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--r-2);
+  font-family: var(--f-mono); font-size: 13px; box-sizing: border-box;
+}
+.txt-area:focus { outline: none; border-color: var(--accent); }
+.txt-area.json-editor { font-family: var(--f-mono); }
+
 /* bulk action bar */
 .bulkbar {
   display: flex; align-items: center; gap: 8px;
@@ -981,17 +985,7 @@ a { color: inherit; text-decoration: none; }
 .row-actions { opacity: 0; transition: opacity 80ms; }
 .cache-row:hover .row-actions,
 .cache-row:focus-within .row-actions { opacity: 1; }
-.ra-btn {
-  background: var(--surface); color: var(--text-2);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-1);
-  padding: 3px 8px;
-  font: 500 11.5px/1 var(--f-sans);
-  cursor: pointer;
-  margin-left: 4px;
-}
-.ra-btn:hover { background: var(--surface-2); color: var(--text); }
-.ra-btn-danger { color: var(--bad); border-color: color-mix(in oklab, var(--bad) 30%, transparent); }
+.row-actions .btn + .btn { margin-left: 4px; }
 
 /* status tags */
 .tag {
@@ -1017,7 +1011,7 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 .tag.muted { color: var(--text-3); }
 
 /* ─── tag extensions (prompts page) ─────────────────────────────────── */
-.tag .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
+.tag .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); margin-right: 4px; }
 .tag.good .dot { background: var(--good); }
 .tag.accent { color: var(--accent); border-color: color-mix(in oklab, var(--accent) 35%, transparent); }
 .tag.accent .dot { background: var(--accent); }
@@ -1039,15 +1033,6 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 /* flex helper for non-table layouts; never targets table rows (see .vlist) */
 .row:not(tr) { display: flex; align-items: center; gap: 8px; }
 
-/* ─── btn.primary ────────────────────────────────────────────────────── */
-.btn.primary {
-  background: var(--accent);
-  color: var(--accent-fg);
-  border-color: transparent;
-  font-weight: 600;
-}
-.btn.primary:hover { filter: brightness(1.08); }
-
 /* ─── template list rows ─────────────────────────────────────────────── */
 .tmpl-row {
   display: grid;
@@ -1063,18 +1048,14 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 .tmpl-row .name { font-weight: 500; font-family: var(--f-display, var(--f-sans)); }
 .tmpl-row .desc { color: var(--text-3); font-size: 12px; }
 .tmpl-row .meta { font-family: var(--f-mono); font-size: 11px; color: var(--text-2); }
+.tmpl-row .tmpl-tag { margin-left: 4px; }
 
 /* ─── model picker ───────────────────────────────────────────────────── */
 .model-picker { position: relative; display: inline-flex; }
-.model-picker-btn {
-  appearance: none;
-  cursor: pointer;
-  font: inherit;
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 2px 7px;
+.model-picker .btn.open { background: color-mix(in oklab, var(--info) 12%, transparent); }
+.model-picker .btn .dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--info);
 }
-.model-picker-btn:hover { background: color-mix(in oklab, var(--info) 8%, transparent); }
-.model-picker-btn.open { background: color-mix(in oklab, var(--info) 12%, transparent); }
 .model-menu {
   position: absolute;
   top: calc(100% + 5px); right: 0;
@@ -1170,13 +1151,25 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 .code-inline { font-family: var(--f-mono); background: var(--bg-2); padding: 1px 5px; border-radius: 3px; color: var(--text); font-size: 11px; }
 
 /* ─── Prompts page shell ─────────────────────────────────────────────── */
+/* The page-body fills the space under the page header and owns the scroll,
+   so a tall form/editor scrolls within the page instead of overflowing it. */
+.prompts-page .page-body { flex: 1; min-height: 0; overflow-y: auto; }
 .prompts-page .prompts-body {
   display: grid;
   grid-template-columns: 320px 1fr;
-  height: 100%;
+  overflow-y: hidden;
 }
-.prompts-page .prompts-list { border-right: 1px solid var(--line); }
-.prompts-page .prompt-detail { padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+.prompts-page .prompts-list { border-right: 1px solid var(--line); overflow-y: auto; }
+.prompts-page .prompt-detail { padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow-y: auto; }
+.prompt-detail-hdr { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.prompt-detail-lhs { min-width: 0; }
+.prompt-detail-meta-row { display: flex; gap: 8px; align-items: center; margin-bottom: 2px; flex-wrap: wrap; }
+.prompt-detail-title { font-family: var(--f-display); font-size: 18px; font-weight: 600; }
+.prompt-detail-desc { font-size: 12px; color: var(--text-3); }
+.prompt-detail-actions { display: flex; gap: 8px; flex: none; }
+.prompt-kebab-wrap { position: relative; }
+.txt.sm { height: var(--btn-h-sm); padding: 0 6px; font-size: 12px; }
+.btn-caret { margin-left: 4px; }
 .prompts-page .empty-state { padding: 24px; color: var(--text-3); font-size: 13px; }
 .prompts-page .version-picker { position: relative; display: inline-flex; }
 .prompts-page .version-menu {
@@ -1244,14 +1237,15 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 }
 .prompts-page .version-menu-item:hover { background: var(--panel-2); }
 
+/* ─── Prompt new page ────────────────────────────────────────────────── */
+.prompt-new-body { padding: 16px 20px; }
+.prompt-new-form { display: flex; flex-direction: column; gap: 14px; }
+.select-narrow { max-width: 240px; }
+.btn-row { gap: 8px; }
+
 /* ─── Annotate dropdown ──────────────────────────────────────────────── */
 .annotate-wrap { position: relative; display: inline-block; }
-.ca-btn-primary {
-  background: var(--accent, #4a8fff);
-  color: white;
-  border: 1px solid var(--accent, #4a8fff);
-}
-.ca-btn-primary:disabled { opacity: 0.6; cursor: progress; }
+.annotate-wrap .btn:disabled { cursor: progress; }
 .annotate-menu {
   position: absolute; top: calc(100% + 4px); right: 0;
   min-width: 280px; max-height: 360px; overflow-y: auto;
@@ -1284,23 +1278,19 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
   overflow: hidden;
   margin: 8px 12px;
 }
-.anno-scope-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  height: 28px; padding: 0 12px;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
+/* Segmented control: neutralize the canonical .btn chrome so the two
+   buttons merge inside the .anno-scope pill container. */
+.anno-scope .btn {
+  border: 0; border-radius: 0; background: transparent;
   font-family: var(--f-display, inherit);
-  font-size: 11px; font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em; text-transform: uppercase;
   color: var(--text-3, #7a7a7a);
 }
-.anno-scope-btn.active {
+.anno-scope .btn.active {
   background: var(--accent);
   color: var(--accent-fg);
 }
-.anno-scope-btn[data-scope="draft"].active {
+.anno-scope .btn[data-scope="draft"].active {
   background: var(--info);
   color: #0b1722;
 }
@@ -1313,12 +1303,6 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
   --accent-2:  color-mix(in oklab, var(--info) 30%, transparent);
   --accent-fg: #0b1722;
 }
-.anno-draft-chip {
-  border-left: 3px solid var(--info);
-  padding-left: 8px;
-  color: color-mix(in oklab, var(--info) 70%, var(--text-2));
-}
-
 /* ─── Draft timeline track ───────────────────────────────────────────── */
 /* When draft is active, split the marker band: published on top half,
    draft on bottom half. Otherwise published uses full height. */
@@ -1338,21 +1322,22 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 .anno-status {
   padding: 8px 10px;
   margin: 8px 0;
-  background: var(--info-bg, #eef4ff);
-  border-left: 3px solid var(--accent, #4a8fff);
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  border-left: 3px solid var(--accent);
   font-size: 0.9em;
 }
 .anno-status.error {
-  background: var(--error-bg, #fdecec);
-  border-left-color: var(--error, #c0392b);
-  color: var(--error, #c0392b);
+  background: color-mix(in oklab, var(--bad) 12%, transparent);
+  border-left-color: var(--bad);
+  color: var(--bad);
 }
 
 /* ─── Draft chip ──────────────────────────────────────────────────── */
 .anno-draft-chip {
   font-size: 0.85em;
   color: var(--text-3, #7a7a7a);
-  padding: 4px 0 6px;
+  padding: 4px 0 6px 8px;
+  border-left: 3px solid var(--info);
   border-bottom: 1px dashed var(--line, #d0d0d0);
   margin-bottom: 6px;
 }
@@ -1401,8 +1386,6 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
   cursor: pointer; font-size: 11px; padding: 0 .4rem;
   position: absolute; right: .6rem; top: .4rem;
 }
-.ca-btn-live { background: #262; color: #bfb; }
-.ca-btn-live:hover { background: #383; }
 
 /* History tab */
 .live-history-list { list-style: none; padding: 0; margin: 0; }
@@ -1962,9 +1945,6 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   border-top: 1px solid var(--line);
   border-bottom: 0;
 }
-.modal-body {
-  padding: 12px 14px; overflow: auto;
-}
 .modal-results {
   display: flex; flex-direction: column; gap: 4px; margin-top: 8px;
 }
@@ -1991,14 +1971,9 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 
 /* === Studio: version chip ============================================ */
 .pc-vchip { position: relative; display: inline-flex; align-items: center; }
-.pc-vchip-btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  border: 1px solid var(--border, #2a2a2a);
-  background: var(--bg-2, #161616); color: inherit;
-  padding: 2px 8px; border-radius: 999px; cursor: pointer;
-}
-.pc-vchip-btn .caret { font-size: 10px; opacity: 0.7; }
-.pc-vchip-btn.open { background: var(--bg-3, #1f1f1f); }
+.pc-vchip .btn { border-radius: 999px; }
+.pc-vchip .btn .caret { font-size: 10px; opacity: 0.7; }
+.pc-vchip .btn.open { background: var(--hover); }
 .pc-vmenu {
   position: absolute; top: calc(100% + 4px); left: 0; min-width: 160px;
   background: var(--bg-2, #161616); border: 1px solid var(--border, #2a2a2a);
@@ -2032,12 +2007,8 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .studio-compare-row { display: flex; gap: 12px; align-items: stretch; }
 .studio-compare-row .studio-prompt-card { flex: 1 1 0; min-width: 0; }
 .cmp-card { border-left: 3px solid var(--accent, #4a90e2); }
-.btn-compare, .btn-diff-toggle, .btn-close-cmp {
-  background: none; border: 1px solid var(--border, #2a2a2a); color: inherit;
-  padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;
-}
-.btn-diff-toggle.active { background: var(--accent-fade, #2b3a4d); }
-.btn-close-cmp { font-size: 14px; line-height: 1; padding: 0 6px; }
+.pc-hdr .btn.active { background: var(--accent-fade, #2b3a4d); }
+.btn-close-cmp { font-size: 14px; line-height: 1; }
 
 /* === Player overlay: cur / cmp range colors ========================== */
 .ranges.range-cur .range { background: rgba(74, 144, 226, 0.45); }
@@ -2046,3 +2017,49 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .timeline-legend { display: flex; gap: 12px; padding: 4px 8px; font-size: 11px; }
 .legend-range-cur { color: rgba(74, 144, 226, 0.9); }
 .legend-range-cmp { color: rgba(220, 140, 60, 0.9); }
+
+/* === Review mode: per-item controls + action bar ==================== */
+.review-actionbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border-bottom: 1px solid var(--border, #1f1f1f);
+  background: var(--bg-2, #0f1216);
+}
+.review-progress { font-size: 12px; color: var(--fg-muted, #888); }
+.review-item-toggle {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; color: var(--fg-muted, #888); cursor: pointer;
+  margin-left: auto; white-space: nowrap;
+}
+.review-item-toggle input[type="checkbox"] { cursor: pointer; }
+/* ─── review-mode edit-gated inline editor ───────────────────────────── */
+/* .ri-mfield / .ri-edit / .ri-note are JS persistence hooks only; the
+   visual look comes from the .txt / .txt-area field components the macros
+   apply. The old cramped always-on visual rules were removed. */
+.ri-row { padding: 6px 0; }
+.ri-readonly { display: flex; align-items: center; gap: 8px; }
+.ri-readonly .ri-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ri-readonly .ri-tc { color: var(--text-3); font-size: 11px; font-family: var(--f-mono); }
+/* Inline editor with bigger, viewport-sized fields. No accent outline
+   (it reads as blue in the draft colorway and looked busy). */
+.ri-editor {
+  display: flex; flex-direction: column; gap: 10px; margin-top: 8px;
+  padding: 10px 0;
+}
+.ri-editor .txt-area { min-height: 48vh; }
+.ri-row.editing { border-radius: var(--r-2); }
+
+/* In/out are edited on the timeline (drag); the editor shows a read-only
+   live SMPTE readout + hint (Task 10 replaced the number spinners). */
+.ri-time {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.ri-time .ri-readout {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--text-3, #7e8693);
+}
+.ri-time .ri-readout span { color: var(--accent); font-weight: 600; }
+.ri-time .ri-hint { font-size: 10.5px; }
+
+/* keep note rows visually separated when collapsed */
+.ri-note-row { border-bottom: 1px solid var(--line, rgba(255,255,255,0.07)); }
+.ri-note-row:last-child { border-bottom: none; }

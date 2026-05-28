@@ -1,4 +1,4 @@
-# 0035. Studio: shared player chrome + focused clip in URL
+# 0037. Studio: shared player chrome + focused clip in URL
 
 - **Date:** 2026-05-27
 - **Status:** Accepted

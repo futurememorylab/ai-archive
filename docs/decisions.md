@@ -42,5 +42,7 @@ available number. See any existing ADR for the template.
 | 0032 | 2026-05-26 | [Bound uvicorn graceful shutdown so open streams can't leak the seat](./adr/0032-shutdown-graceful-timeout.md) |
 | 0033 | 2026-05-26 | [Prompt Studio PR1 — shell and run loop](./adr/0033-prompt-studio-pr1-shell-and-run-loop.md) |
 | 0034 | 2026-05-27 | [Prompt Studio PR2 — version compare](./adr/0034-prompt-studio-pr2-version-compare.md) |
-| 0035 | 2026-05-27 | [Studio: shared player chrome + focused clip in URL](./adr/0035-studio-shared-player-chrome-and-focused-clip-url.md) |
-| 0036 | 2026-05-28 | [Prompt Studio output renders via review_items, not raw output_json](./adr/0036-studio-output-via-review-items.md) |
+| 0035 | 2026-05-27 | [Draft review & accept UI](./adr/0035-draft-review-accept-ui.md) |
+| 0036 | 2026-05-27 | [Fold draft review into the clips list (supersedes /review page)](./adr/0036-fold-review-into-clips-list.md) |
+| 0037 | 2026-05-27 | [Studio: shared player chrome + focused clip in URL](./adr/0037-studio-shared-player-chrome-and-focused-clip-url.md) |
+| 0038 | 2026-05-28 | [Prompt Studio output renders via review_items, not raw output_json](./adr/0038-studio-output-via-review-items.md) |

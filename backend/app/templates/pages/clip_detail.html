@@ -1,10 +1,8 @@
 {% extends "pages/layout.html" %}
+{% import "components/_ui.html" as ui %}
 {% block rail_active %}preview{% endblock %}
 {% block title %}{{ clip.name }} · CatDV Annotator{% endblock %}
-{% block crumb %}
-  <a class="crumb" href="/">‹ All clips</a>
-  <span class="crumb">{{ clip.name }}</span>
-{% endblock %}
+{% block crumb %}{{ ui.breadcrumb([('All clips', '/'), (clip.name, None)]) }}{% endblock %}
 {% block body %}
 <script>localStorage.setItem("catdv:lastClipId", "{{ clip.id }}");</script>
 <div class="detail"
@@ -12,7 +10,7 @@
      x-data='Object.assign(
        player({{ clip.fps }}, {{ clip.duration_secs }}, {{ clip.markers|tojson }}, {{ draft.markers|tojson }}),
        clipAnnotate({{ clip.id }}, "{{ clip.kind }}"),
-       { scope: "published", tab: "markers",
+       { scope: "{{ 'draft' if review_mode else 'published' }}", tab: "{{ 'fields' if clip.kind == 'image' else 'markers' }}",
          liveSession: liveSession({{ clip.id }}, { inactivityS: {{ gemini_live_inactivity_s|default(60) }} })
        }
      )'
@@ -29,11 +27,11 @@
           {% if not host_local_proxies %}
             {% if clip.cache and clip.cache.media_local.present %}
               <button type="button"
-                      class="ca-btn ca-btn-danger"
+                      class="btn danger"
                       onclick="evictLocal({{ clip.id }})">Evict local</button>
             {% elif mode == "online" %}
               <button type="button"
-                      class="ca-btn"
+                      class="btn"
                       onclick="cacheClip({{ clip.id }})">⬇ Cache {{ "image" if clip.kind == "image" else "video" }}</button>
             {% endif %}
           {% endif %}
@@ -41,7 +39,7 @@
             {% include "pages/_annotate_dropdown.html" %}
           {% endif %}
           {% if (mode == "online" or (clip.cache and clip.cache.media_local.present)) and clip.duration_secs %}
-            <button type="button" class="ca-btn ca-btn-live"
+            <button type="button" class="btn good"
                     @click="liveSession.start()">🎤 Live</button>
           {% endif %}
         </span>
@@ -59,10 +57,10 @@
         <span class="rec-pill" :class="{ pulsing: liveSession.state === 'active' }">
           ● REC <span x-text="liveSession.elapsedFmt">0:00</span>
         </span>
-        <button type="button" class="ca-btn"
+        <button type="button" class="btn"
                 :disabled="liveSession.state !== 'active'"
                 @click="liveSession.sendFrame()">📸 Send frame</button>
-        <button type="button" class="ca-btn ca-btn-danger"
+        <button type="button" class="btn danger"
                 @click="liveSession.close('user_stop')">■ Stop</button>
         <span class="grow"></span>
         <span class="live-error" x-show="liveSession.error" x-text="liveSession.error"></span>
@@ -120,19 +118,48 @@
 
   <aside class="anno-col">
     <div class="anno-scope" role="tablist" aria-label="Annotation source">
-      <button type="button" class="anno-scope-btn" data-scope="published"
+      <button type="button" class="btn sm" data-scope="published"
               :class="{ active: scope === 'published' }"
               :aria-selected="scope === 'published'"
               @click="scope = 'published'">
         Published
       </button>
-      <button type="button" class="anno-scope-btn" data-scope="draft"
+      <button type="button" class="btn sm" data-scope="draft"
               :class="{ active: scope === 'draft' }"
               :aria-selected="scope === 'draft'"
               @click="scope = 'draft'">
         Draft
       </button>
     </div>
+
+    {% if draft.has_draft %}
+    <div class="review-actionbar" x-data="reviewQueue({{ clip.id }})">
+      <button type="button" class="btn" x-show="queue.length > 0" @click="prev()">‹ Prev</button>
+      <span class="review-progress mono" x-show="queue.length > 0" x-text="progressLabel()"></span>
+      <span class="grow"></span>
+      <button type="button" class="btn" x-show="queue.length > 0" @click="skip()">Skip</button>
+      <button type="button" class="btn good" x-show="queue.length > 0" @click="applyAndNext()">Accept &amp; next →</button>
+      <button type="button" class="btn good" x-show="queue.length === 0" @click="applyStay()">Accept &amp; apply</button>
+    </div>
+    {% endif %}
+
+    {# Review walk: a clip with no draft can't be reviewed, so skip past it to
+       the next queued clip (or back to the list at the end of the queue). #}
+    {% if review_mode and not draft.has_draft %}
+    <script>
+      (function autoSkipEmptyReview() {
+        try {
+          const q = JSON.parse(sessionStorage.getItem('catdv:reviewQueue') || '[]');
+          const i = q.indexOf({{ clip.id }});
+          if (i >= 0 && i + 1 < q.length) {
+            location.replace(`/clips/${q[i + 1]}?review=1`);
+          } else {
+            location.replace('/' + (sessionStorage.getItem('catdv:clipsListQuery') || ''));
+          }
+        } catch (e) { /* sessionStorage unavailable — leave the user here */ }
+      })();
+    </script>
+    {% endif %}
 
     <div class="anno-scoped" x-show="scope === 'published'" x-cloak>
       {% with panels = {

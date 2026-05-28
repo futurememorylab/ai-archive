@@ -23,6 +23,14 @@ def _client(monkeypatch, tmp_path) -> TestClient:
     return TestClient(main_mod.app)
 
 
+def test_new_prompt_form_uses_field_components(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path) as client:
+        r = client.get("/prompts/new")
+        assert r.status_code == 200
+        assert 'class="panel-h" style="padding: 0; background: transparent' not in r.text
+        assert 'class="txt-area' in r.text and 'class="field-label"' in r.text
+
+
 def test_create_form_persists_media_kind(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as client:
         r = client.post(

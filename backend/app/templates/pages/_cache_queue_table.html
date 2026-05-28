@@ -44,7 +44,7 @@
             <td class="num mono">{{ "%.1f" % (r.bytes_downloaded / 1048576) }} MB</td>
             <td class="row-actions">
               {% if r.status == "queued" %}
-                <button type="button" class="ra-btn"
+                <button type="button" class="btn sm"
                         hx-post="/api/cache/prefetch/{{ r.id }}/cancel"
                         hx-target="#prefetch-panel"
                         hx-swap="outerHTML"

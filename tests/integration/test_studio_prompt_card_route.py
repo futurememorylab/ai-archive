@@ -80,8 +80,10 @@ def test_cmp_side_renders_close_and_diff_toggle(client):
     r = client.get(f"/studio/_prompt_card?side=cmp&prompt_version_id={v1}")
     assert r.status_code == 200
     assert 'data-side="cmp"' in r.text
+    # close button keeps its layout-only class; diff toggle is identified by
+    # its behavior (button class migrated to canonical .btn during UI consolidation)
     assert 'btn-close-cmp' in r.text
-    assert 'btn-diff-toggle' in r.text
+    assert 'diff = !diff' in r.text
 
 
 def test_output_tab_includes_data_run_json_when_run_exists(client):

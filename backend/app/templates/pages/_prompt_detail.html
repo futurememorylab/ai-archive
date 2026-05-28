@@ -1,3 +1,4 @@
+{% import "components/_ui.html" as ui %}
 {% if selected and selected_version %}
 <div class="prompt-detail-inner"
      x-data='promptEditor({
@@ -15,10 +16,10 @@
 
   {# Title row + tags + model picker + Save + kebab.
      The header is inlined here so Alpine bindings on Save / model-picker / kebab resolve. #}
-  <div class="row" style="justify-content: space-between; align-items: flex-start; gap: 12px;">
-    <div style="min-width: 0;">
-      <div class="row" style="gap: 8px; align-items: center; margin-bottom: 2px; flex-wrap: wrap;">
-        <div style="font-family: var(--f-display); font-size: 18px; font-weight: 600;">{{ selected.name }}</div>
+  <div class="prompt-detail-hdr">
+    <div class="prompt-detail-lhs">
+      <div class="prompt-detail-meta-row">
+        <div class="prompt-detail-title">{{ selected.name }}</div>
         {% if selected.media_kind and selected.media_kind != "any" %}
           <span class="tag">{{ selected.media_kind }}</span>
         {% endif %}
@@ -30,7 +31,7 @@
         {% else %}
           <span class="tag"><span class="dot"></span>archived</span>
         {% endif %}
-        <select class="txt" style="height: 24px; padding: 0 6px;"
+        <select class="txt sm"
                 x-model="mediaKind" @change="setMediaKind()"
                 title="Which clip kind this prompt applies to">
           <template x-for="k in ['any','video','image']" :key="k">
@@ -38,16 +39,16 @@
           </template>
         </select>
       </div>
-      <div class="muted" style="font-size: 12px;">{{ selected.description or "" }}</div>
+      <div class="prompt-detail-desc">{{ selected.description or "" }}</div>
     </div>
-    <div class="row" style="gap: 8px; flex: none;">
+    <div class="prompt-detail-actions">
       <div class="model-picker">
-        <button type="button" class="tag info model-picker-btn"
+        <button type="button" class="btn sm ghost"
                 :class="{ open: modelOpen }"
                 @click="modelOpen = !modelOpen"
                 :disabled="!canEdit">
           <span class="dot"></span><span x-text="draft.model"></span>
-          <span style="margin-left: 4px;">&#9662;</span>
+          <span class="btn-caret">&#9662;</span>
         </button>
         <div class="model-menu" x-show="modelOpen" x-cloak @click.outside="modelOpen=false">
           <template x-for="m in MODELS" :key="m">
@@ -61,10 +62,9 @@
         </div>
       </div>
       <button type="button" class="btn primary" x-show="dirty" @click="save()">&#10003; Save changes</button>
-      <div style="position: relative;">
-        <button type="button" class="btn ghost" aria-label="More actions"
-                @click="menuOpen = !menuOpen"
-                style="padding: 6px 8px;">&#8943;</button>
+      <div class="prompt-kebab-wrap">
+        <button type="button" class="btn icon ghost" aria-label="More actions"
+                @click="menuOpen = !menuOpen">&#8943;</button>
         <div x-show="menuOpen" x-cloak @click.outside="menuOpen=false">
           {% include "pages/_prompt_menu.html" %}
         </div>
@@ -75,47 +75,21 @@
   {# Error banner (shown after a failed Save). #}
   <div class="error-banner" x-show="error" x-cloak x-text="error"></div>
 
-  {# Prompt body editor. #}
-  <div>
-    <div class="panel-h" style="padding: 0; background: transparent; border: 0; height: 24px;">Prompt</div>
-    <textarea class="txt scroll"
-              style="width: 100%; min-height: 130px; resize: vertical;
-                     line-height: 1.5; font-family: var(--f-mono);"
-              :readonly="!canEdit"
-              x-model="draft.body"></textarea>
-    <div class="muted" style="font-size: 11px; margin-top: 4px;">
-      Plain text. No HTML, no Markdown — sent as-is to Gemini.
-    </div>
-  </div>
+  {# Prompt body editor. Sized to the viewport (no-autosize) so the editor
+     scales to the window instead of growing the page. #}
+  {{ ui.textarea_field('Prompt', 'body', min_height='28vh', cls='no-autosize',
+       help='Plain text. No HTML, no Markdown &mdash; sent as-is to Gemini.',
+       input_attrs='x-model="draft.body" :readonly="!canEdit"') }}
 
   {# target_map editor. #}
-  <div>
-    <div class="panel-h" style="padding: 0; background: transparent; border: 0; height: 24px;">target_map</div>
-    <textarea class="txt scroll json-editor"
-              style="width: 100%; min-height: 120px; resize: vertical;
-                     line-height: 1.5; font-family: var(--f-mono);"
-              :readonly="!canEdit"
-              x-model="draft.target_map_text"></textarea>
-    <div class="muted" style="font-size: 11px; margin-top: 4px;">
-      Maps schema field &rarr; CatDV target.
-      <span class="code-inline">markers</span>,
-      <span class="code-inline">note</span>,
-      <span class="code-inline">field</span>.
-    </div>
-  </div>
+  {{ ui.textarea_field('target_map', 'target_map', cls='json-editor no-autosize', min_height='18vh',
+       help='Maps schema field &rarr; CatDV target. <span class="code-inline">markers</span>, <span class="code-inline">note</span>, <span class="code-inline">field</span>.',
+       input_attrs='x-model="draft.target_map_text" :readonly="!canEdit"') }}
 
   {# output_schema editor. #}
-  <div>
-    <div class="panel-h" style="padding: 0; background: transparent; border: 0; height: 24px;">output_schema</div>
-    <textarea class="txt scroll json-editor"
-              style="width: 100%; min-height: 160px; resize: vertical;
-                     line-height: 1.5; font-family: var(--f-mono);"
-              :readonly="!canEdit"
-              x-model="draft.output_schema_text"></textarea>
-    <div class="muted" style="font-size: 11px; margin-top: 4px;">
-      JSON Schema for the Gemini response. Versioned alongside the body.
-    </div>
-  </div>
+  {{ ui.textarea_field('output_schema', 'output_schema', cls='json-editor no-autosize', min_height='18vh',
+       help='JSON Schema for the Gemini response. Versioned alongside the body.',
+       input_attrs='x-model="draft.output_schema_text" :readonly="!canEdit"') }}
 
   {# Duplicate-prompt modal. #}
   <div class="modal-overlay" x-show="dupOpen" x-cloak
@@ -132,11 +106,10 @@
           </label>
           <label class="modal-field">
             <span class="modal-label">Description</span>
-            <textarea class="txt scroll" x-model="dupDesc" rows="2"
-                      style="resize: vertical;"></textarea>
+            <textarea class="txt-area" x-model="dupDesc"></textarea>
           </label>
           <div class="error-banner" x-show="dupError" x-cloak x-text="dupError"></div>
-          <div class="muted" style="font-size: 11px;">
+          <div class="field-help">
             Creates a new prompt with v1 (draft) cloned from this prompt&rsquo;s current production version.
           </div>
         </div>

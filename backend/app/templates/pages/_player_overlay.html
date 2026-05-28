@@ -28,10 +28,25 @@
     <div class="ranges {{ row.cls }}"
          {% if row.x_show %}x-show="{{ row.x_show }}" x-cloak{% endif %}>
       {% for m in row.ranges %}
+        {% if 'range-draft' in row.cls and m.item_id is defined and m.item_id is not none %}
+        {# Draft range: Alpine-bound position so timeline drag moves the bar
+           live, plus drag handles shown only while this item is being edited. #}
+        <div class="range draft-range"
+             data-item-id="{{ m.item_id }}"
+             :class="{ editing: editingItemId === {{ m.item_id }} }"
+             :style="(() => { const _m = _draftItem({{ m.item_id }}); if (!_m || !duration) return ''; const _l = (_m.in_secs / duration) * 100; const _w = (((_m.out_secs != null ? _m.out_secs : _m.in_secs + 1) - _m.in_secs) / duration) * 100; return `left:${_l}%; width:${_w}%`; })()"
+             @pointerdown="startMarkerDrag($event, {{ m.item_id }}, 'move')"
+             @click.stop
+             title="{{ m.name }}">
+          <span class="range-handle in"  x-show="editingItemId === {{ m.item_id }}" @pointerdown.stop="startMarkerDrag($event, {{ m.item_id }}, 'in')" @click.stop></span>
+          <span class="range-handle out" x-show="editingItemId === {{ m.item_id }}" @pointerdown.stop="startMarkerDrag($event, {{ m.item_id }}, 'out')" @click.stop></span>
+        </div>
+        {% else %}
         <div class="range{% if 'range-draft' in row.cls %} draft-range{% endif %}"
              {% if row.alpine_list %}:class="{ active: isMarkerActive({{ row.alpine_list }}[{{ loop.index0 }}]) }"{% endif %}
              style="left: {{ (m.in_secs / duration_secs) * 100 }}%; width: {{ (((m.out_secs or m.in_secs + 1) - m.in_secs) / duration_secs) * 100 }}%"
              title="{{ m.name }}"></div>
+        {% endif %}
       {% endfor %}
     </div>
   {% endfor %}

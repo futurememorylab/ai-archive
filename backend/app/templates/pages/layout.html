@@ -8,12 +8,15 @@
   <script src="/static/vendor/htmx.min.js"></script>
   {# player.js before Alpine: `alpine:init` fires synchronously when
      Alpine's bundle executes, so the listener must register first. #}
+  <script defer src="/static/format.js"></script>
   <script defer src="/static/player.js"></script>
   <script defer src="/static/promptEditor.js"></script>
   <script defer src="/static/clipAnnotate.js"></script>
   <script defer src="/static/studio.js"></script>
   <script defer src="/static/liveSession.js"></script>
   <script defer src="/static/nav-feedback.js"></script>
+  <script defer src="/static/row_select.js"></script>
+  <script defer src="/static/review.js"></script>
   <script defer src="/static/vendor/alpine.min.js"></script>
 </head>
 <body>

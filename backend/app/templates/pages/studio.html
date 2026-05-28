@@ -1,6 +1,8 @@
 {% extends "pages/layout.html" %}
+{% import "components/_ui.html" as ui %}
 {% block title %}Studio · CatDV Annotator{% endblock %}
 {% block rail_active %}studio{% endblock %}
+{% block crumb %}{{ ui.breadcrumb([('Studio', None)]) }}{% endblock %}
 
 {% block body %}
 <div class="studio-page"

@@ -70,6 +70,7 @@ def clip_summary(
         "marker_count": len(clip.markers),
         "cache": cache_status_view(cache_status) if cache_status else None,
         "thumb_url": f"/api/media/{clip_id}/thumb",
+        "kind": _media_kind(clip.provider_data),
         "select_value": f"{clip.key[0]}/{clip_id}",
         "row_href": f"/clips/{clip_id}",
     }

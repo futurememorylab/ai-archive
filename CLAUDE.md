@@ -78,6 +78,19 @@ Where to look first:
   video transport.
 - `grep` patterns that pay off: `grep -rln "anno-\|range\|marker\|panels\|x-data" backend/app/templates/`.
 
+There is also a small shared UI library for the primitives — buttons,
+form fields, page headers, breadcrumbs, status pills, and JS formatters.
+**Read `docs/design-language.md` and reuse it before hand-rolling any of
+these.** The canonical pieces: the `.btn` system + `{{ ui.button(...) }}`
+macro, `{{ ui.field(...) }}` / `{{ ui.textarea_field(...) }}`,
+`{{ ui.page_header(...) }}`, `{{ ui.breadcrumb(...) }}`,
+`{{ ui.status_pill(...) }}` (all in
+`backend/app/templates/components/_ui.html`), the `:root` design tokens in
+`backend/app/static/app.css`, and the `fmtTimecode` / `fmtBytes` /
+`autosize` helpers in `backend/app/static/format.js`. Use tokens not raw
+hex; use `.btn` not `*-btn`; call the formatters instead of re-deriving
+timecodes or byte sizes.
+
 Red flags that mean you're about to duplicate something:
 
 - You're rendering scenes / markers / fields / notes from JSON — that

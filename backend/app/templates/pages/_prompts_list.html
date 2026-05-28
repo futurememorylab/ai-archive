@@ -6,7 +6,7 @@
         <div class="name">
           {{ p.name }}
           {% if p.media_kind and p.media_kind != "any" %}
-            <span class="tag" style="margin-left: 6px;">{{ p.media_kind }}</span>
+            <span class="tag tmpl-tag">{{ p.media_kind }}</span>
           {% endif %}
         </div>
         <div class="desc">{{ p.description or "" }}</div>

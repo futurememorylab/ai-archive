@@ -56,6 +56,12 @@
   }
   document.addEventListener("click", function (ev) {
     if (!isPlainClick(ev)) return;
+    // Row sub-cells (checkbox, cache badge) call event.stopPropagation() to
+    // cancel the row's navigation. This listener runs in the capture phase —
+    // before that bubble-phase stopPropagation — so without this guard a
+    // checkbox click would start the progress bar for a navigation that never
+    // happens, leaving the bar stuck and the row dimmed. Skip those clicks.
+    if (ev.target.closest('[onclick*="stopPropagation"]')) return;
     var nav = ev.target.closest('a[href], [onclick*="location.href"]');
     if (!nav) return;
     // htmx-handled elements (hx-get/post/…) don't do a full-page navigation, so

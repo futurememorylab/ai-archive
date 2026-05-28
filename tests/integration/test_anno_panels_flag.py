@@ -28,3 +28,62 @@ def test_anno_panels_show_history_default_true_clip_detail_unchanged(client):
     if r.status_code != 200:
         pytest.skip("clip not available in offline test env")
     assert "tab === 'history'" in r.text
+
+
+def _render_review_panels(**panels_overrides):
+    """Render _anno_panels.html with a review marker item using the app's
+    configured Jinja env (so the `smpte` global resolves)."""
+    from backend.app.routes.pages.templates import templates
+
+    marker = {
+        "item_id": 42,
+        "name": "Wide establishing shot",
+        "category": "shot",
+        "description": "An establishing wide.",
+        "in_secs": 1.0,
+        "out_secs": 3.0,
+        "decision": "pending",
+    }
+    panels = {
+        "markers": [marker],
+        "fields": [],
+        "notes": None,
+        "big_notes": None,
+        "fps": 25.0,
+        "note_items": None,
+    }
+    panels.update(panels_overrides)
+    tmpl = templates.env.get_template("pages/_anno_panels.html")
+    return tmpl.render(panels=panels, scope="draft", clip=None, show_history=True)
+
+
+def test_review_items_render_readonly_with_edit_gate():
+    html = _render_review_panels()
+    assert "editingItemId" in html      # edit toggle wired to player-root state
+    assert "ri-editor" in html          # the gated editor container exists
+    assert 'class="ri-accept' in html   # keep-checkbox preserved (accent-styled)
+
+
+def test_review_marker_preserves_persistence_hooks():
+    html = _render_review_panels()
+    # JS persistence hooks review.js relies on must survive the restructure.
+    assert 'class="ri-row ri-marker"' in html   # _decideMarker closest('.ri-marker')
+    assert 'data-k="name"' in html
+    assert 'data-k="in"' in html and 'data-k="out"' in html
+    assert "ri-mfield" in html
+    # read-only row shows display text + SMPTE timecode
+    assert 'class="ri-text"' in html
+    assert 'class="ri-tc' in html
+
+
+def test_marker_in_out_spinners_replaced_with_readout():
+    """Task 10: the in/out number spinners are gone; in/out is edited on the
+    timeline. The editor now shows a live read-only SMPTE readout and keeps
+    HIDDEN data-k="in"/"out" inputs (Alpine-bound) for review.js persistence."""
+    html = _render_review_panels()
+    assert 'type="number"' not in html          # spinners removed
+    assert "riReadout(42, 'in')" in html         # live readout wired to player root
+    assert "riReadout(42, 'out')" in html
+    # persistence still works: hidden inputs bound to the dragged Alpine model
+    assert 'type="hidden"' in html
+    assert ":value" in html and "_draftItem(42)" in html

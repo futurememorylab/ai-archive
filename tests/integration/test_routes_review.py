@@ -174,3 +174,417 @@ def test_apply_clip_enqueues_and_drains_via_sync_engine(monkeypatch, tmp_path):
             and o.value == "30.léta"
             for o in cs.ops
         )
+
+
+def test_apply_batch_marks_and_enqueues_filtered_by_kind(monkeypatch, tmp_path):
+    from backend.app.archive.model import ChangeSet, WriteResult
+    from backend.app.repositories.pending_operations import PendingOperationsRepo
+    from backend.app.repositories.write_log import WriteLogRepo
+    from backend.app.services.connection_monitor import ConnectionState
+    from backend.app.services.sync_engine import SyncEngine
+
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        _run(_seed(ctx))
+
+        class FakeArchive:
+            id = "catdv"
+            async def apply_changes(self, change_set: ChangeSet) -> WriteResult:
+                return WriteResult(status="ok", upstream_response={"ID": 1, "modifyDate": "x"})
+
+        class AlwaysOnline:
+            def current_state(self):
+                return ConnectionState.online
+
+        ctx.archive = FakeArchive()
+        ctx.sync_engine = SyncEngine(
+            provider=ctx.archive,
+            pending_ops_repo=PendingOperationsRepo(),
+            write_log_repo=WriteLogRepo(),
+            connection_monitor=AlwaysOnline(),
+            db_provider=lambda: ctx.db,
+        )
+
+        r = client.post("/api/review/apply-batch", json={"clip_ids": [1], "kinds": ["marker"]})
+        assert r.status_code == 200
+        assert r.json()["clips"] == 1
+        assert r.json()["queued"] >= 1
+
+        items = client.get("/api/review/clips/1/items").json()
+        markers = [it for it in items if it["kind"] == "marker"]
+        fields = [it for it in items if it["kind"] == "field"]
+        assert all(it["applied_at"] for it in markers)
+        assert all(it["applied_at"] is None for it in fields)
+
+
+def test_apply_batch_defaults_all_kinds(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        _run(_seed(ctx))
+        r = client.post("/api/review/apply-batch", json={"clip_ids": [1]})
+        assert r.status_code == 200
+        assert r.json()["queued"] >= 2
+
+
+def test_apply_batch_does_not_flush_preaccepted_other_kinds(monkeypatch, tmp_path):
+    """Regression: apply-batch with kinds=["marker"] must NOT flush a field item
+    that was already accepted (but not yet applied) before the batch call."""
+    from backend.app.archive.model import ChangeSet, WriteResult
+    from backend.app.repositories.pending_operations import PendingOperationsRepo
+    from backend.app.repositories.write_log import WriteLogRepo
+    from backend.app.services.connection_monitor import ConnectionState
+    from backend.app.services.sync_engine import SyncEngine
+
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        _run(_seed(ctx))
+
+        class FakeArchive:
+            id = "catdv"
+
+            async def apply_changes(self, change_set: ChangeSet) -> WriteResult:
+                return WriteResult(status="ok", upstream_response={"ID": 1, "modifyDate": "x"})
+
+        class AlwaysOnline:
+            def current_state(self):
+                return ConnectionState.online
+
+        ctx.archive = FakeArchive()
+        ctx.sync_engine = SyncEngine(
+            provider=ctx.archive,
+            pending_ops_repo=PendingOperationsRepo(),
+            write_log_repo=WriteLogRepo(),
+            connection_monitor=AlwaysOnline(),
+            db_provider=lambda: ctx.db,
+        )
+
+        # Find the field item id via GET /api/review/clips/1/items
+        items_resp = client.get("/api/review/clips/1/items")
+        assert items_resp.status_code == 200
+        all_items = items_resp.json()
+        field_items = [it for it in all_items if it["kind"] == "field"]
+        assert field_items, "seed must produce at least one field item"
+        field_id = field_items[0]["id"]
+
+        # Pre-accept the field item (simulating human-in-the-loop acceptance
+        # before any bulk apply has run)
+        r = client.post(f"/api/review/items/{field_id}/decision", json={"decision": "accepted"})
+        assert r.status_code == 200
+
+        # Now apply-batch with kinds=["marker"] only
+        r = client.post("/api/review/apply-batch", json={"clip_ids": [1], "kinds": ["marker"]})
+        assert r.status_code == 200
+        assert r.json()["clips"] == 1
+
+        # Drain the sync engine so any enqueued ops are applied upstream
+        _run(ctx.sync_engine.drain_once())
+
+        # Verify post-condition: marker applied, field NOT applied
+        items_after = client.get("/api/review/clips/1/items").json()
+        markers_after = [it for it in items_after if it["kind"] == "marker"]
+        fields_after = [it for it in items_after if it["kind"] == "field"]
+
+        assert all(it["applied_at"] is not None for it in markers_after), (
+            "marker items must be applied after apply-batch markers"
+        )
+        assert all(it["applied_at"] is None for it in fields_after), (
+            "field item was pre-accepted but must NOT be flushed by a marker-only apply-batch"
+        )
+
+
+def test_apply_batch_503_when_no_write_queue(monkeypatch, tmp_path):
+    """apply-batch must return 503 when write_queue is not initialised."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        _run(_seed(ctx))
+        ctx.write_queue = None
+        r = client.post("/api/review/apply-batch", json={"clip_ids": [1]})
+        assert r.status_code == 503
+
+
+def test_apply_batch_400_on_bad_kind(monkeypatch, tmp_path):
+    """apply-batch must return 400 when an unrecognised kind is supplied."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        _run(_seed(ctx))
+        r = client.post("/api/review/apply-batch", json={"clip_ids": [1], "kinds": ["bogus"]})
+        assert r.status_code == 400
+
+
+class _FakeArchive:
+    """Minimal archive stub — returns a single CanonicalClip by id."""
+
+    def __init__(self, clips):
+        self._clips = {str(c.key[1]): c for c in clips}
+
+    async def get_clip(self, clip_id_str):
+        from backend.app.archive.errors import ProviderError
+
+        try:
+            return self._clips[str(clip_id_str)]
+        except KeyError as exc:
+            raise ProviderError(f"not found: {clip_id_str}") from exc
+
+    async def list_clips(self, catalog_id, query):
+        from backend.app.archive.model import ClipPage
+
+        items = list(self._clips.values())
+        return ClipPage(items=items, total=len(items), offset=query.offset, limit=query.limit)
+
+
+def _make_canonical_clip(clip_id: int = 1):
+    from datetime import UTC, datetime
+
+    from backend.app.archive.model import CanonicalClip, MediaRef
+
+    return CanonicalClip(
+        key=("catdv", str(clip_id)),
+        name=f"Clip_{clip_id}",
+        duration_secs=10.0,
+        fps=25.0,
+        markers=(),
+        fields={},
+        notes={},
+        media=MediaRef(
+            mime_type="video/quicktime",
+            size_bytes=None,
+            cached_path=None,
+            upstream_handle=str(clip_id),
+        ),
+        provider_data={"ID": clip_id, "name": f"Clip_{clip_id}"},
+        fetched_at=datetime.now(UTC),
+    )
+
+
+def test_clip_detail_review_mode_renders_item_controls(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        _run(_seed(ctx))
+        ctx.archive = _FakeArchive([_make_canonical_clip(1)])
+        r = client.get("/clips/1?review=1")
+        assert r.status_code == 200
+        assert "review-item-toggle" in r.text
+        # New primary label is "Accept & next"
+        assert ("Accept &amp; next" in r.text) or ("Accept & next" in r.text)
+        # Marker editable fields should be present (clip 1 has a marker review item)
+        assert 'class="ri-mfield"' in r.text
+
+
+def test_clip_detail_draft_controls_show_without_review_flag(monkeypatch, tmp_path):
+    """Draft controls must appear even without ?review=1 — whenever a draft exists
+    the item controls (review-item-toggle) should render for draft items."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        _run(_seed(ctx))
+        ctx.archive = _FakeArchive([_make_canonical_clip(1)])
+        r = client.get("/clips/1")  # no review flag
+        assert r.status_code == 200
+        assert "review-item-toggle" in r.text
+
+
+def _make_canonical_clip_with_markers(clip_id: int = 99):
+    """Like _make_canonical_clip but includes a published marker."""
+    from datetime import UTC, datetime
+
+    from backend.app.archive.model import CanonicalClip, Marker, MediaRef, Timecode
+
+    return CanonicalClip(
+        key=("catdv", str(clip_id)),
+        name=f"Clip_{clip_id}",
+        duration_secs=10.0,
+        fps=25.0,
+        markers=(
+            Marker(
+                name="published-scene",
+                in_=Timecode(secs=0.0, fps=25.0, frm=0),
+                out=Timecode(secs=2.0, fps=25.0, frm=50),
+            ),
+        ),
+        fields={},
+        notes={},
+        media=MediaRef(
+            mime_type="video/quicktime",
+            size_bytes=None,
+            cached_path=None,
+            upstream_handle=str(clip_id),
+        ),
+        provider_data={"ID": clip_id, "name": f"Clip_{clip_id}"},
+        fetched_at=datetime.now(UTC),
+    )
+
+
+def test_clip_detail_review_mode_published_items_have_no_controls(monkeypatch, tmp_path):
+    """A clip in review=1 mode that has PUBLISHED markers but NO draft/review
+    items must not render any ri-accept controls — published items lack item_id
+    so even in review mode no controls should appear."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        # Use clip_id=99 — _seed only seeds clip_id=1, so there are no
+        # review_items for clip 99 in the DB.
+        ctx.archive = _FakeArchive([_make_canonical_clip_with_markers(99)])
+        r = client.get("/clips/99?review=1")
+        assert r.status_code == 200
+        assert "ri-accept" not in r.text
+
+
+def _make_canonical_clip_image(clip_id: int = 50):
+    """A CanonicalClip whose media.filePath ends in .jpg — kind='image'."""
+    from datetime import UTC, datetime
+
+    from backend.app.archive.model import CanonicalClip, MediaRef
+
+    return CanonicalClip(
+        key=("catdv", str(clip_id)),
+        name=f"Image_{clip_id}",
+        duration_secs=0.0,
+        fps=25.0,
+        markers=(),
+        fields={},
+        notes={},
+        media=MediaRef(
+            mime_type="image/jpeg",
+            size_bytes=None,
+            cached_path=None,
+            upstream_handle=str(clip_id),
+        ),
+        provider_data={
+            "ID": clip_id,
+            "name": f"Image_{clip_id}",
+            "media": {"filePath": f"/media/img_{clip_id}.jpg"},
+        },
+        fetched_at=datetime.now(UTC),
+    )
+
+
+async def _seed_image_clip(ctx, clip_id: int = 50):
+    """Seed review items for an image clip (field + note only, no markers)."""
+    from backend.app.models.annotation import Annotation, ReviewItem
+
+    _, vid = await ctx.prompts_repo.create_with_initial_version(
+        ctx.db,
+        name=f"t-img-{clip_id}",
+        description=None,
+        body="p",
+        target_map={"decade": {"kind": "field", "identifier": "pragafilm.dekáda.natočení"}},
+        output_schema={},
+        model="m",
+    )
+    aid = await ctx.annotations_repo.insert(
+        ctx.db,
+        Annotation(
+            catdv_clip_id=clip_id,
+            catdv_clip_name=f"Image_{clip_id}",
+            prompt_version_id=vid,
+            model="m",
+            prompt_used="p",
+            raw_response={},
+            structured_output={},
+            clip_snapshot={"ID": clip_id, "name": f"Image_{clip_id}", "markers": [], "fields": {}},
+        ),
+    )
+    await ctx.review_items_repo.bulk_insert(
+        ctx.db,
+        [
+            ReviewItem(
+                annotation_id=aid,
+                catdv_clip_id=clip_id,
+                kind="field",
+                target_identifier="pragafilm.dekáda.natočení",
+                proposed_value="50.léta",
+            ),
+        ],
+    )
+
+
+def test_clip_detail_image_hides_markers_tab(monkeypatch, tmp_path):
+    """Image clips in review mode must not render the Markers tab button and
+    must default the tab to 'fields' in the Alpine x-data."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        _run(_seed_image_clip(ctx, clip_id=50))
+        ctx.archive = _FakeArchive([_make_canonical_clip_image(50)])
+        r = client.get("/clips/50?review=1")
+        assert r.status_code == 200
+        # Markers tab button must be absent
+        assert "@click=\"tab = 'markers'\"" not in r.text
+        assert "@click=\"tab='markers'\"" not in r.text
+        # Fields tab must still be present
+        assert "tab === 'fields'" in r.text
+        # Default tab should be 'fields' not 'markers'
+        assert "tab: \"fields\"" in r.text
+
+
+def test_clip_detail_review_action_bar_has_prev(monkeypatch, tmp_path):
+    """The review action bar must contain Prev, Skip, and Accept buttons.
+    The no-queue primary 'Accept & apply' must also be present in the markup."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        _run(_seed(ctx))
+        ctx.archive = _FakeArchive([_make_canonical_clip(1)])
+        r = client.get("/clips/1?review=1")
+        assert r.status_code == 200
+        assert "Prev" in r.text
+        assert "Skip" in r.text
+        assert "Accept" in r.text
+        assert "Accept &amp; apply" in r.text
+
+
+def test_clip_detail_no_draft_no_action_bar(monkeypatch, tmp_path):
+    """A clip with NO review items must not render the review action bar at all."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        # clip 99 has no review items seeded — _seed only seeds clip_id=1
+        ctx.archive = _FakeArchive([_make_canonical_clip_with_markers(99)])
+        r = client.get("/clips/99")
+        assert r.status_code == 200
+        assert "review-actionbar" not in r.text
+
+
+def test_clips_list_shows_draft_columns(monkeypatch, tmp_path):
+    """GET / must render Type, Batch, and Drafts column headers, and for a clip
+    with pending review items the Drafts cell must contain the counts label."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        # Seed draft items for clip 1 (1 marker, 1 field).
+        _run(_seed(ctx))
+        # Provide a FakeArchive so the clips list has clip 1 to display.
+        ctx.archive = _FakeArchive([_make_canonical_clip(1)])
+        r = client.get("/")
+        assert r.status_code == 200
+        # Column headers must be present.
+        assert "Type" in r.text
+        assert "Batch" in r.text
+        assert "Drafts" in r.text
+        # Clip 1 has 1 marker draft and 1 field draft → label "1m · 1f".
+        assert "1m" in r.text
+        assert "1f" in r.text
+        # Clip kind (video, since no filePath in provider_data) must appear.
+        assert "video" in r.text
+
+
+def test_clips_list_has_review_bulk_actions(monkeypatch, tmp_path):
+    """GET / must render the bulk review actions in the Actions menu markup
+    (always server-rendered; visible after selection). The per-kind
+    Markers/Fields/Notes toggles were removed — bulk apply now applies all
+    draft kinds (kinds default to all in bulkSel)."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+        ctx.archive = _FakeArchive([_make_canonical_clip(1)])
+        r = client.get("/")
+        assert r.status_code == 200
+        # Primary review actions must be present in the markup.
+        assert "Review selected" in r.text
+        assert "Apply drafts" in r.text

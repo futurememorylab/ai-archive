@@ -159,6 +159,80 @@ class ReviewItemsRepo:
         if commit:
             await conn.commit()
 
+    async def list_pending_clips(
+        self,
+        conn: aiosqlite.Connection,
+        *,
+        job_id: int | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict]:
+        """One row per clip with un-applied review items, newest first.
+
+        When `job_id` is given, qualification, counts, and display metadata
+        are all scoped to items belonging to that job's annotations, so this
+        stays consistent with `count_pending_clips(job_id=...)`. Metadata is
+        taken from the newest matching annotation (MAX annotation_id; ids are
+        autoincrement so higher == later).
+        """
+        params: list = []
+        job_clause = ""
+        if job_id is not None:
+            job_clause = "AND a.job_id = ?"
+            params.append(job_id)
+        sql = f"""
+            WITH pending AS (
+              SELECT ri.catdv_clip_id AS catdv_clip_id,
+                     ri.kind          AS kind,
+                     ri.annotation_id AS annotation_id
+              FROM review_items ri
+              JOIN annotations a ON a.id = ri.annotation_id
+              WHERE ri.applied_at IS NULL {job_clause}
+            )
+            SELECT
+              p.catdv_clip_id                                    AS catdv_clip_id,
+              MAX(p.annotation_id)                               AS annotation_id,
+              SUM(CASE WHEN p.kind = 'marker' THEN 1 ELSE 0 END) AS marker_count,
+              SUM(CASE WHEN p.kind = 'field'  THEN 1 ELSE 0 END) AS field_count,
+              SUM(CASE WHEN p.kind = 'note'   THEN 1 ELSE 0 END) AS note_count,
+              a.catdv_clip_name                                  AS catdv_clip_name,
+              a.job_id                                           AS job_id,
+              a.prompt_version_id                                AS prompt_version_id,
+              a.created_at                                       AS created_at
+            FROM pending p
+            JOIN annotations a ON a.id = (
+              SELECT MAX(p2.annotation_id) FROM pending p2
+              WHERE p2.catdv_clip_id = p.catdv_clip_id
+            )
+            GROUP BY p.catdv_clip_id
+            ORDER BY a.created_at DESC, p.catdv_clip_id DESC
+            LIMIT ? OFFSET ?
+        """
+        params.extend([limit, offset])
+        cur = await conn.execute(sql, tuple(params))
+        cols = [c[0] for c in cur.description]
+        return [dict(zip(cols, row, strict=True)) for row in await cur.fetchall()]
+
+    async def count_pending_clips(
+        self, conn: aiosqlite.Connection, *, job_id: int | None = None
+    ) -> int:
+        params: list = []
+        job_clause = ""
+        if job_id is not None:
+            job_clause = "AND a.job_id = ?"
+            params.append(job_id)
+        cur = await conn.execute(
+            f"""
+            SELECT COUNT(DISTINCT ri.catdv_clip_id)
+            FROM review_items ri
+            JOIN annotations a ON a.id = ri.annotation_id
+            WHERE ri.applied_at IS NULL {job_clause}
+            """,
+            tuple(params),
+        )
+        row = await cur.fetchone()
+        return int(row[0]) if row else 0
+
     @staticmethod
     def _row(row) -> ReviewItem:
         return ReviewItem(

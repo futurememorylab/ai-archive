@@ -1,20 +1,19 @@
 {% extends "pages/layout.html" %}
+{% import "components/_ui.html" as ui %}
 {% block title %}Prompts · CatDV Annotator{% endblock %}
 {% block rail_active %}prompts{% endblock %}
+{% block crumb %}{{ ui.breadcrumb([('Prompts', None)]) }}{% endblock %}
 
 {% block body %}
 <div class="page prompts-page">
-  <div class="page-hdr">
-    <h1>Prompts</h1>
-    <span class="meta">{{ prompts|length }} {% if archived_view %}archived{% else %}active{% endif %}</span>
-    <div class="grow"></div>
+  {% call ui.page_header('Prompts', meta=(prompts|length|string ~ (' archived' if archived_view else ' active'))) %}
     {% if archived_view %}
-      <a class="btn ghost" href="/prompts">Active prompts</a>
+      {{ ui.button('Active prompts', href='/prompts', variant='ghost') }}
     {% else %}
-      <a class="btn ghost" href="/prompts/archived">Archived</a>
-      <a class="btn primary" href="/prompts/new">+ New prompt</a>
+      {{ ui.button('Archived', href='/prompts/archived', variant='ghost') }}
+      {{ ui.button('+ New prompt', href='/prompts/new', variant='primary') }}
     {% endif %}
-  </div>
+  {% endcall %}
   <div class="page-body prompts-body">
     <aside class="prompts-list scroll">
       {% include "pages/_prompts_list.html" %}

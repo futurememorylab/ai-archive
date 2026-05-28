@@ -222,9 +222,7 @@ function liveSession(clipId, config) {
 
     _tickElapsed() {
       const s = Math.floor((Date.now() - this._startedAt) / 1000);
-      const mm = Math.floor(s / 60);
-      const ss = s % 60;
-      this.elapsedFmt = `${mm}:${ss.toString().padStart(2, "0")}`;
+      this.elapsedFmt = window.fmtTimecode(s);
     },
 
     _onWsMessage(evt) {

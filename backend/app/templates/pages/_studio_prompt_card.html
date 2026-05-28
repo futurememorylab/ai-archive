@@ -26,7 +26,7 @@
          Cannot use `$root` directly: nested x-data on this picker makes it
          its own root, hiding the page scope. #}
       <div class="model-picker" x-data="modelPicker" @click.outside="open = false">
-        <button class="tag info model-picker-btn" :class="open && 'open'"
+        <button class="btn sm ghost" :class="open && 'open'"
                 @click="open = !open" title="switch model">
           <span class="dot"></span>
           <span x-text="model"></span>
@@ -44,16 +44,16 @@
         </div>
       </div>
       <span class="grow"></span>
-      <button type="button" class="btn-compare"
+      <button type="button" class="btn sm"
               x-show="compareVersionId === null"
               @click="openCompare()">+ Compare</button>
     {% else %}
       <span class="grow"></span>
-      <button type="button" class="btn-diff-toggle"
+      <button type="button" class="btn sm"
               @click="diff = !diff"
               :class="diff && 'active'"
               x-text="diff ? `Hide diff` : `Diff vs v${activeVersionNum}`"></button>
-      <button type="button" class="btn-close-cmp" title="Close compare"
+      <button type="button" class="btn sm icon btn-close-cmp" title="Close compare"
               @click="closeCompare()">×</button>
     {% endif %}
   </div>

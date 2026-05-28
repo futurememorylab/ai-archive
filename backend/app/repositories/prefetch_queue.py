@@ -98,35 +98,36 @@ class PrefetchQueueRepo:
         Returns the claimed row (with status now `downloading`) or None
         if the queue is empty.
         """
-        await conn.execute("BEGIN IMMEDIATE")
-        try:
-            cur = await conn.execute(
-                """
-                SELECT id, provider_id, provider_clip_id, status,
-                       requested_by, requested_at, started_at, finished_at,
-                       error, bytes_downloaded
-                  FROM prefetch_queue
-                 WHERE status = 'queued'
-                 ORDER BY requested_at ASC
-                 LIMIT 1
-                """
-            )
-            row = await cur.fetchone()
-            if row is None:
-                await conn.commit()
-                return None
-            rid = int(row[0])
-            now = _now_iso()
-            await conn.execute(
-                "UPDATE prefetch_queue "
-                "   SET status='downloading', started_at=? "
-                " WHERE id=? AND status='queued'",
-                (now, rid),
-            )
-            await conn.commit()
-        except Exception:
-            await conn.rollback()
-            raise
+        # Compare-and-swap claim: pick the oldest queued row, then flip it to
+        # 'downloading' guarded by `status='queued'`. The UPDATE is atomic at
+        # the statement level, so we don't need an explicit `BEGIN IMMEDIATE`
+        # (which is incompatible with the connection's default transaction
+        # mode and raised "cannot start a transaction within a transaction").
+        # If the guarded UPDATE matched no row, another claimer won the race —
+        # report an empty claim and let the caller retry on the next tick.
+        cur = await conn.execute(
+            """
+            SELECT id
+              FROM prefetch_queue
+             WHERE status = 'queued'
+             ORDER BY requested_at ASC
+             LIMIT 1
+            """
+        )
+        row = await cur.fetchone()
+        if row is None:
+            return None
+        rid = int(row[0])
+        now = _now_iso()
+        upd = await conn.execute(
+            "UPDATE prefetch_queue "
+            "   SET status='downloading', started_at=? "
+            " WHERE id=? AND status='queued'",
+            (now, rid),
+        )
+        await conn.commit()
+        if upd.rowcount != 1:
+            return None
         # Re-read so callers see the updated status/started_at.
         return await self.get(conn, rid)
 

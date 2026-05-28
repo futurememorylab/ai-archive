@@ -44,8 +44,8 @@ def normalize_anno(value: str | None) -> AnnoFilter:
     return value if value in ANNO_VALUES else "any"  # type: ignore[return-value]
 
 
-def is_active(cache: CacheFilter, anno: AnnoFilter) -> bool:
-    return cache != "any" or anno != "any"
+def is_active(cache: CacheFilter, anno: AnnoFilter, batch: int | None = None) -> bool:
+    return cache != "any" or anno != "any" or batch is not None
 
 
 async def _ids_with_media_local(db: aiosqlite.Connection, provider_id: str) -> set[int]:
@@ -70,6 +70,20 @@ async def _ids_with_annotation_review_state(db: aiosqlite.Connection, *, applied
     """Clip IDs with at least one review_item matching the applied predicate."""
     where = "applied_at IS NOT NULL" if applied else "applied_at IS NULL"
     cur = await db.execute(f"SELECT DISTINCT catdv_clip_id FROM review_items WHERE {where}")
+    return {int(r[0]) for r in await cur.fetchall()}
+
+
+async def _ids_with_pending_in_job(db: aiosqlite.Connection, job_id: int) -> set[int]:
+    """Clip IDs with >=1 un-applied review_item belonging to the given job."""
+    cur = await db.execute(
+        """
+        SELECT DISTINCT ri.catdv_clip_id
+        FROM review_items ri
+        JOIN annotations a ON a.id = ri.annotation_id
+        WHERE ri.applied_at IS NULL AND a.job_id = ?
+        """,
+        (job_id,),
+    )
     return {int(r[0]) for r in await cur.fetchall()}
 
 
@@ -137,6 +151,7 @@ async def resolve(
     cache: CacheFilter,
     anno: AnnoFilter,
     host_local_proxies: bool = False,
+    batch: int | None = None,
 ) -> set[int] | None:
     """Resolve filters to a candidate clip_id set.
 
@@ -150,7 +165,7 @@ async def resolve(
         if cache == "none":
             return set()
         cache = "any"
-    if not is_active(cache, anno):
+    if not is_active(cache, anno, batch):
         return None
 
     universe: set[int] | None = None
@@ -187,6 +202,10 @@ async def resolve(
             ann = await _ids_with_any_annotation(db)
             anno_set = (await get_universe()) - ann
         candidate = anno_set if candidate is None else candidate & anno_set
+
+    if batch is not None:
+        batch_set = await _ids_with_pending_in_job(db, batch)
+        candidate = batch_set if candidate is None else candidate & batch_set
 
     assert candidate is not None  # at least one filter active by definition
     return candidate

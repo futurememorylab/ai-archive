@@ -1,4 +1,4 @@
-# 0036. Prompt Studio output renders via review_items, not raw output_json
+# 0038. Prompt Studio output renders via review_items, not raw output_json
 
 **Date:** 2026-05-28
 **Status:** Accepted

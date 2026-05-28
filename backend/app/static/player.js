@@ -11,6 +11,11 @@ document.addEventListener("alpine:init", () => {
     markers: Array.isArray(markers) ? markers : [],
     draftMarkers: Array.isArray(draftMarkers) ? draftMarkers : [],
 
+    // Review-mode inline editor: at most one item expanded at a time.
+    // Lives on the player root so the panel (child reviewQueue scope) and a
+    // later timeline-drag task can both react to which item is being edited.
+    editingItemId: null,
+
     activeMarkers() {
       return this.scope === "draft" ? this.draftMarkers : this.markers;
     },
@@ -30,6 +35,95 @@ document.addEventListener("alpine:init", () => {
       });
       v.addEventListener("play",  () => { this.playing = true; });
       v.addEventListener("pause", () => { this.playing = false; });
+    },
+
+    // ─── timeline marker drag (review draft markers, edit-activated) ─
+    // Draft markers carry item_id + in_secs/out_secs (see draft_view.py).
+    // Dragging mutates the Alpine model (the .range :style binds to it so
+    // the bar moves live), then persists via the review decision endpoint.
+    _drag: null,
+    _timelineEl() { return this.$root.querySelector(".timeline"); },
+    _xToSecs(clientX) {
+      const el = this._timelineEl();
+      if (!el) return 0;
+      const r = el.getBoundingClientRect();
+      if (!r.width || !this.duration) return 0;
+      const frac = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+      return frac * this.duration;
+    },
+    _draftItem(id) { return this.draftMarkers.find(m => m.item_id === id); },
+
+    startMarkerDrag(e, id, mode) {
+      e.preventDefault(); e.stopPropagation();
+      this.editingItemId = id;
+      const m = this._draftItem(id); if (!m) return;
+      this._drag = { id, mode, t0: this._xToSecs(e.clientX), in0: m.in_secs, out0: m.out_secs };
+      if (e.target.setPointerCapture) e.target.setPointerCapture(e.pointerId);
+      const move = (ev) => this._onMarkerDrag(ev);
+      const up = () => {
+        this._endMarkerDrag();
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    },
+
+    _onMarkerDrag(e) {
+      const d = this._drag; if (!d) return;
+      const m = this._draftItem(d.id); if (!m) return;
+      const dt = this._xToSecs(e.clientX) - d.t0;
+      const dur = this.duration;
+      if (d.mode === "move") {
+        const len = (d.out0 != null ? d.out0 : d.in0) - d.in0;
+        m.in_secs = Math.max(0, Math.min(d.in0 + dt, dur - len));
+        if (d.out0 != null) m.out_secs = m.in_secs + len;
+      } else if (d.mode === "in") {
+        m.in_secs = Math.max(0, Math.min(d.in0 + dt, (m.out_secs != null ? m.out_secs : dur)));
+      } else if (d.mode === "out") {
+        m.out_secs = Math.min(dur, Math.max(d.out0 + dt, m.in_secs));
+      }
+    },
+
+    _endMarkerDrag() {
+      const d = this._drag;
+      this._drag = null;
+      if (d) this._persistMarker(d.id);
+    },
+
+    nudgeMarker(dir, fine) {
+      if (this.editingItemId == null) return;
+      const m = this._draftItem(this.editingItemId); if (!m) return;
+      const step = fine ? (1 / (this.fps || 25)) : 1.0;   // Shift = 1 frame, else 1 second
+      m.in_secs = Math.max(0, m.in_secs + dir * step);
+      if (m.out_secs != null) m.out_secs = Math.max(m.in_secs, m.out_secs + dir * step);
+      this._persistMarker(this.editingItemId);
+    },
+
+    // SMPTE readout for the in/out edge of a draft marker (read-only panel).
+    riReadout(id, edge) {
+      const m = this._draftItem(id);
+      const v = m ? (edge === "in" ? m.in_secs : m.out_secs) : null;
+      return v == null ? "—" : this.tc(v);
+    },
+
+    // Persist the *whole* marker value: the backend's COALESCE on edited_value
+    // replaces it wholesale, and write_queue requires {name, in:{secs}} or the
+    // marker is silently dropped on apply. So always send the full shape.
+    _persistMarker(id) {
+      const m = this._draftItem(id); if (!m) return;
+      const edited = {
+        name: m.name || "",
+        category: m.category != null ? m.category : null,
+        description: m.description != null ? m.description : null,
+        in: { secs: m.in_secs },
+      };
+      if (m.color != null) edited.color = m.color;
+      if (m.out_secs != null) edited.out = { secs: m.out_secs };
+      fetch(`/api/review/items/${id}/decision`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision: "accepted", edited_value: edited }),
+      }).catch(() => {});
     },
 
     // ─── transport ────────────────────────────────────────────────
@@ -143,6 +237,14 @@ document.addEventListener("alpine:init", () => {
           e.preventDefault(); this.stepFrame(-1); break;
         case ".":
           e.preventDefault(); this.stepFrame(1); break;
+        case "ArrowLeft":
+          // While a marker is being edited, ←/→ nudge it (Shift = 1 frame);
+          // otherwise fall through to the browser/no-op seek default.
+          if (this.editingItemId != null) { e.preventDefault(); this.nudgeMarker(-1, e.shiftKey); }
+          break;
+        case "ArrowRight":
+          if (this.editingItemId != null) { e.preventDefault(); this.nudgeMarker(1, e.shiftKey); }
+          break;
         case "ArrowUp":
           if (this.activeMarkers().length) { e.preventDefault(); this.prevMarker(); }
           break;
