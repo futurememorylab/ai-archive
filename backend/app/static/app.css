@@ -1816,6 +1816,14 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   min-height: 0;
 }
 
+/* Let the prompt editor fill the full pane height. The wrapper divs are
+   auto-height blocks, so .pc-editor's height:100% had nothing to resolve
+   against and collapsed to its 220px min-height. Giving the wrappers a
+   definite height lets the textarea fill the pane. The output pane is
+   left auto-height so it keeps scrolling via .pc-body's overflow:auto. */
+.studio-prompt-card .pc-panes { height: 100%; }
+.studio-prompt-card .pc-pane-prompt { height: 100%; }
+
 .studio-prompt-card .pc-editor,
 .studio-prompt-card .pc-readonly {
   width: 100%;

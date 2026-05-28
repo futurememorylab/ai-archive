@@ -72,8 +72,8 @@
       </div>
     {% endif %}
 
-    <div {% if side == 'cmp' %}x-show="!diff"{% endif %}>
-      <div x-show="mode === 'prompt'">
+    <div class="pc-panes" {% if side == 'cmp' %}x-show="!diff"{% endif %}>
+      <div class="pc-pane-prompt" x-show="mode === 'prompt'">
         {% if active_version.state == 'draft' and side == 'cur' %}
           <textarea class="pc-editor" x-ref="editor"
                     @input.debounce.700ms="save()"
