@@ -31,6 +31,8 @@ def test_build_draft_view_returns_empty_when_annotation_is_none():
         "markers": [],
         "fields": [],
         "notes": None,
+        "big_notes": None,
+        "fps": 25.0,
     }
 
 

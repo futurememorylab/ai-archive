@@ -32,6 +32,10 @@ def _marker_from_review(item: ReviewItem) -> dict[str, Any]:
 def _field_from_review(item: ReviewItem) -> dict[str, Any]:
     identifier = item.target_identifier or ""
     value = item.proposed_value
+    # Studio schemas wrap field values as {"value": ..., "evidence_secs": [...]}.
+    # Clip-detail annotations historically pass raw values. Unwrap when present.
+    if isinstance(value, dict) and "value" in value:
+        value = value["value"]
     if isinstance(value, list):
         value_str = ", ".join(_fix(str(v)) or "" for v in value)
     elif value is None:
@@ -52,8 +56,14 @@ def build_draft_view(
     prompt_name: str | None = None,
     version_num: int | None = None,
     created_at: str | None = None,
+    fps: float = 25.0,
 ) -> dict[str, Any]:
-    if annotation is None:
+    """Returns the `panels` dict consumed by templates/pages/_anno_panels.html.
+
+    Used by both the clip-detail draft view and the studio output card.
+    Studio callers pass `annotation=None` and `review_items` loaded by
+    `studio_run_id`; the dict shape is identical."""
+    if annotation is None and not review_items:
         return {
             "has_draft": False,
             "annotation_id": None,
@@ -64,25 +74,33 @@ def build_draft_view(
             "markers": [],
             "fields": [],
             "notes": None,
+            "big_notes": None,
+            "fps": fps,
         }
     markers = [_marker_from_review(it) for it in review_items if it.kind == "marker"]
     markers.sort(key=lambda m: m["in_secs"])
     fields = [_field_from_review(it) for it in review_items if it.kind == "field"]
     fields.sort(key=lambda f: f["identifier"])
-    note_texts = [
-        _fix(str(it.proposed_value)) or ""
-        for it in review_items
-        if it.kind == "note" and it.proposed_value is not None
-    ]
+    note_texts: list[str] = []
+    for it in review_items:
+        if it.kind != "note" or it.proposed_value is None:
+            continue
+        raw = it.proposed_value
+        if isinstance(raw, dict) and "value" in raw:
+            raw = raw["value"]
+        text = _fix(str(raw)) or ""
+        note_texts.append(text)
     notes = "\n\n".join(t for t in note_texts if t) or None
     return {
         "has_draft": True,
-        "annotation_id": annotation.id,
+        "annotation_id": annotation.id if annotation else None,
         "created_at": created_at,
         "prompt_name": prompt_name,
         "version_num": version_num,
-        "model": annotation.model,
+        "model": annotation.model if annotation else None,
         "markers": markers,
         "fields": fields,
         "notes": notes,
+        "big_notes": None,
+        "fps": fps,
     }
