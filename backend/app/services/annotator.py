@@ -207,8 +207,8 @@ async def _process_item(
 
     if kind == "studio":
         await _finalize_studio(
-            db, item, structured, result, elapsed_s,
-            studio_runs_repo, jobs_repo, event_bus, topic,
+            db, item, version, structured, result, elapsed_s, duration_secs,
+            studio_runs_repo, review_items_repo, jobs_repo, event_bus, topic,
         )
     else:
         await _finalize_annotation(
@@ -220,10 +220,13 @@ async def _process_item(
 
 
 async def _finalize_studio(
-    db, item, structured, result, elapsed_s,
-    studio_runs_repo: StudioRunsRepo, jobs_repo, event_bus, topic,
+    db, item, version, structured, result, elapsed_s, duration_secs,
+    studio_runs_repo: StudioRunsRepo, review_items_repo, jobs_repo,
+    event_bus, topic,
 ) -> None:
-    """Studio path: persist to studio_run, skip annotations + review_items."""
+    """Studio path: persist to studio_run + review_items (linked by
+    studio_run_id), skip annotations. The studio UI renders from
+    review_items through the same panels pipeline clip_detail uses."""
     run_id = await studio_runs_repo.find_latest_id_for_job_clip(
         db, job_id=item.job_id, clip_id=item.catdv_clip_id
     )
@@ -255,6 +258,17 @@ async def _finalize_studio(
         tokens_out=tokens_out,
         cost_usd=cost_usd,
     )
+
+    review = expand(
+        structured,
+        version.target_map,
+        studio_run_id=run_id,
+        catdv_clip_id=item.catdv_clip_id,
+        clip_duration_secs=duration_secs or None,
+    )
+    if review:
+        await review_items_repo.bulk_insert(db, review)
+
     await jobs_repo.update_item_status(db, item.id, "review_ready")
     await event_bus.publish(
         topic, {"item_id": item.id, "status": "review_ready", "studio_run_id": run_id}
