@@ -123,28 +123,66 @@ document.addEventListener('alpine:init', () => {
     mode: 'prompt',  // page-level tab state; Task 11 confirms the lift from card-level.
     focusedClipId: initial.focusedClipId ?? null,
     playerMinimized: false,
+    // ── Run-button state machine ──────────────────────────────────────
     running: false,
+    cancelling: false,
     runId: null,
+    runJobId: null,
     runStartMs: 0,
     runningElapsedLabel: '0:00',
+    doneFlashUntilMs: 0,
+    _nowMs: 0,   // bumped by the 1Hz ticker so runButtonLabel re-evaluates
     pendingRunSwap: 0,
 
     init() {
       // Restore a server-seeded focused clip (e.g. from ?clip_id=…). The
       // server already left `no-player` off the body in that case, so the
-      // slot is visible — we just need to load the player partial. The
-      // matching card's `.selected` class is rendered server-side by
-      // _studio_clip_card.html, so no DOM marking is needed here (cards
-      // aren't in the DOM at init time anyway — HTMX hasn't loaded the
-      // folder's kids yet).
+      // slot is visible — we just need to load the player partial.
       if (this.focusedClipId) this.refreshPlayer();
-      // Tick elapsed-time label while running.
+      // 1Hz ticker drives both the elapsed label and the done-flash expiry.
       setInterval(() => {
+        const now = performance.now();
+        this._nowMs = now;  // touch reactive state so getters re-run
         if (this.running) {
-          const s = Math.floor((performance.now() - this.runStartMs) / 1000);
+          const s = Math.floor((now - this.runStartMs) / 1000);
           this.runningElapsedLabel = window.fmtTimecode(s);
         }
-      }, 500);
+        if (this.doneFlashUntilMs && now >= this.doneFlashUntilMs) {
+          this.doneFlashUntilMs = 0;
+        }
+      }, 1000);
+    },
+
+    runButtonLabel() {
+      // Mirror of tests/_helpers/studio_state.py::run_button_label
+      const now = this._nowMs || performance.now();
+      if (this.doneFlashUntilMs && now < this.doneFlashUntilMs) return '✓ Done';
+      if (this.cancelling) return '⟳ Cancelling…';
+      if (this.running) return `⟳ Running… ${this.runningElapsedLabel}`;
+      const v = (this.activeVersionNum !== null && this.activeVersionNum !== undefined)
+        ? this.activeVersionNum : '?';
+      return `▶ Run on this clip · v${v}`;
+    },
+
+    async runOrCancel() {
+      if (this.cancelling || this.doneFlashUntilMs) return;
+      if (this.running) return this.cancel();
+      return this.runOnFocusedClip();
+    },
+
+    async cancel() {
+      if (!this.runJobId || this.cancelling) return;
+      this.cancelling = true;
+      try {
+        await fetch(`/api/jobs/${this.runJobId}/cancel`, { method: 'POST' });
+      } catch (err) {
+        console.error('cancel failed', err);
+      } finally {
+        // Stop the poll loop; runOnFocusedClip()'s finally tidies up.
+        this.running = false;
+        this.cancelling = false;
+        this.pendingRunSwap++;
+      }
     },
 
     focusClip(clipId) {
@@ -186,6 +224,7 @@ document.addEventListener('alpine:init', () => {
       this.running = true;
       this.runStartMs = performance.now();
       this.runningElapsedLabel = '0:00';
+      let finalStatus = null;
       try {
         const res = await fetch('/api/studio/runs', {
           method: 'POST',
@@ -197,25 +236,35 @@ document.addEventListener('alpine:init', () => {
           }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const {run_id} = await res.json();
+        const {run_id, job_id} = await res.json();
         this.runId = run_id;
-        await this._poll(run_id);
+        this.runJobId = job_id ?? null;
+        finalStatus = await this._poll(run_id);
       } catch (err) {
         console.error('studio run failed', err);
       } finally {
         this.running = false;
+        this.runJobId = null;
         this.pendingRunSwap++;
+        // ✓ Done flash on success only — no flash for error / cancelled.
+        if (finalStatus === 'ok') {
+          this.doneFlashUntilMs = performance.now() + 1200;
+        }
       }
     },
 
     async _poll(runId) {
-      while (true) {
+      while (this.running) {
         await new Promise(r => setTimeout(r, 1000));
+        if (!this.running) return null;  // cancel() flipped it
         const res = await fetch(`/api/studio/runs/${runId}`);
-        if (!res.ok) return;
+        if (!res.ok) return null;
         const run = await res.json();
-        if (run.status === 'ok' || run.status === 'error') return;
+        if (run.status === 'ok' || run.status === 'error' || run.status === 'cancelled') {
+          return run.status;
+        }
       }
+      return null;
     },
 
     async openCompare() {

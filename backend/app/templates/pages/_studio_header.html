@@ -69,15 +69,10 @@
        .studio-page's x-data with no nested scope between, so plain
        `focusedClipId` resolves via normal Alpine scope inheritance. #}
     <button class="btn primary studio-run-btn"
-            :disabled="!focusedClipId || running"
-            @click="runOnFocusedClip()"
+            :disabled="!focusedClipId || cancelling || doneFlashUntilMs > 0"
+            @click="runOrCancel()"
             :title="focusedClipId ? '' : 'Click a clip in a folder to focus it'">
-      <template x-if="!running">
-        <span>▶ Run on this clip · v{{ active_version.version_num }}</span>
-      </template>
-      <template x-if="running">
-        <span>⟳ Running… <span x-text="runningElapsedLabel"></span></span>
-      </template>
+      <span x-text="runButtonLabel()">▶ Run on this clip · v{{ active_version.version_num }}</span>
     </button>
   {% else %}
     <button class="btn primary" disabled title="No version available for this prompt">▶ Run</button>
