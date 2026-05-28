@@ -324,6 +324,16 @@ document.addEventListener('alpine:init', () => {
     side,
     diff: false,
     dirty: false,
+    // _anno_panels.html (the shared output renderer) reads `tab`, `seek`,
+    // `historyLoaded`, `historyHtml`, `loadHistory` from its enclosing
+    // Alpine scope. Clip-detail provides these via `player()` + a tab
+    // mix-in. Studio doesn't have a per-run history view in v1, so the
+    // History tab is suppressed (see _anno_panels.html change) and
+    // loadHistory is a noop.
+    tab: 'markers',
+    historyLoaded: true,
+    historyHtml: '',
+    loadHistory() {},
 
     // Alpine's `$root` refers to the root of the CURRENT component, not
     // the topmost ancestor. Since this card is its own x-data, `$root.X`
