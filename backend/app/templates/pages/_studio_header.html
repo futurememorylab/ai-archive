@@ -52,6 +52,15 @@
 
   <span class="grow"></span>
 
+  {# Restore-player icon. Only meaningful when a clip is focused AND the
+     user has minimised the player — otherwise the player slot's natural
+     visibility is already correct. #}
+  <button type="button" class="studio-show-player"
+          x-show="playerMinimized && focusedClipId"
+          x-cloak
+          @click="restorePlayer()"
+          title="Show player">▭</button>
+
   {% if active_version %}
     {# Bindings drop the `$root.` prefix because Alpine v3 `$root` returns
        the closest x-data *element*, not the data scope — `$root.focusedClipId`

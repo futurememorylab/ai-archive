@@ -38,6 +38,12 @@ window.studio = {
     fetch(`/api/studio/folders/${folderId}/clips/${clipId}`, {method: 'DELETE'})
       .then(() => btnEl.closest('.studio-clip-card').remove());
   },
+  // The minimise button lives inside the player wrapper, whose own
+  // x-data="player(...)" creates a nested scope that doesn't expose
+  // studioPage methods directly. Route the click through this shim.
+  minimizePlayer() {
+    this._root()?.minimizePlayer();
+  },
 };
 
 // Prompt-picker links live inside a nested Alpine x-data, so $root there
@@ -113,6 +119,7 @@ document.addEventListener('alpine:init', () => {
     compareVersionNum: initial.compareVersionNum,
     mode: 'prompt',  // page-level tab state; Task 11 confirms the lift from card-level.
     focusedClipId: initial.focusedClipId ?? null,
+    playerMinimized: false,
     running: false,
     runId: null,
     runStartMs: 0,
@@ -142,10 +149,16 @@ document.addEventListener('alpine:init', () => {
     focusClip(clipId) {
       this.focusedClipId = clipId;
       this.pendingRunSwap++;
-      const body = document.querySelector('.studio-body');
-      if (body) body.classList.remove('no-player');
       this._writeUrl();
       this.refreshPlayer();
+    },
+
+    minimizePlayer() {
+      this.playerMinimized = true;
+    },
+
+    restorePlayer() {
+      this.playerMinimized = false;
     },
 
     refreshPlayer() {
