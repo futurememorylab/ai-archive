@@ -53,6 +53,14 @@ never the raw value** — re-skinning (e.g. the draft pane re-scopes
 | `--good` | `#3ddc84` | success / ok |
 | `--bad` | `#ff5d5d` | error / danger / destructive |
 | `--info` | `#5ac8fa` | info; also the draft colorway |
+| `--range-cur` | `color-mix(--info 45%, transparent)` | studio player overlay: cur version's scene ranges |
+| `--range-cmp` | `color-mix(--accent 45%, transparent)` | studio player overlay: cmp version's scene ranges |
+
+> The two `--range-*` tokens are studio-specific affordances but live
+> in `:root` alongside the palette so they track future palette
+> shifts. Legend dots reuse `--info` / `--accent` directly (no alpha
+> mix). PR3 introduced these to replace hardcoded `rgba(74,144,226,…)`
+> / `rgba(220,140,60,…)` strings.
 
 ### Radii, fonts, component sizing
 
@@ -181,6 +189,22 @@ the user can click it to *do* something, that's a `.btn`. (The
 connection-chip in the topbar uses a sibling variant, `.env-pill`, for the
 same look on the live connection indicator — reuse that for connection
 state rather than re-styling a pill.)
+
+### Prompt state chip
+
+`prompt_state_chip(state)` is the single shared chip for a prompt
+version's `draft` / `production` / `archived` state, used by the prompt
+editor (`_prompt_detail.html`) and Studio (`_studio_version_picker.html`):
+
+```jinja
+{{ ui.prompt_state_chip(selected_version.state) }}
+```
+
+It renders the `.tag` look (`.tag.accent` draft, `.tag.good` production,
+`.tag.muted` archived) with a dot, and a **lock icon for production and
+archived** (the read-only states) via `icons/_lock.svg`. Draft is
+editable and shows no lock. Reuse this macro wherever a version state is
+shown — do not re-inline the `if/elif` chip.
 
 ## 7. JS helpers (`format.js`)
 

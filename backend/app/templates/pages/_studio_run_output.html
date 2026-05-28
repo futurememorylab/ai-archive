@@ -26,11 +26,11 @@
 {% elif run.status in ('pending', 'running') %}
   <div class="run-empty muted">⟳ Running…</div>
 {% else %}
-  {% with show_history = False %}
+  {% with show_history = False, review_mode = False %}
     {% include "pages/_anno_panels.html" %}
   {% endwith %}
   <script type="application/json" data-run-json>{{ run.output_json|tojson }}</script>
-  <div class="run-stats mono-cell muted" style="padding:6px 0;">
+  <div class="run-stats mono-cell muted">
     {{ "%.1f"|format(run.duration_s or 0) }}s · {{ run.tokens_out or 0 }} tok · ${{ "%.4f"|format(run.cost_usd or 0) }} · {{ run.model }}
   </div>
 {% endif %}

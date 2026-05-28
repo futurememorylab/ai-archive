@@ -49,29 +49,29 @@
 
   <div class="transport-row">
     <div class="transport-btns">
-      <button type="button" class="tbtn"
+      <button type="button" class="btn"
               :disabled="!activeMarkers().length"
               @click="prevMarker()"
               title="prev marker (↑)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="12 6 6 12 12 18"/><polyline points="19 6 13 12 19 18"/></svg>
       </button>
-      <button type="button" class="tbtn"
+      <button type="button" class="btn"
               @click="stepFrame(-1)"
               title="step back 1 frame (,)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>
       </button>
-      <button type="button" class="tbtn play"
+      <button type="button" class="btn play"
               @click="togglePlay()"
               title="play/pause (Space)">
         <svg x-show="!playing" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg>
         <svg x-show="playing"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
       </button>
-      <button type="button" class="tbtn"
+      <button type="button" class="btn"
               @click="stepFrame(1)"
               title="step fwd 1 frame (.)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
       </button>
-      <button type="button" class="tbtn"
+      <button type="button" class="btn"
               :disabled="!activeMarkers().length"
               @click="nextMarker()"
               title="next marker (↓)">

@@ -45,7 +45,7 @@
       </div>
       <span class="grow"></span>
       <button type="button" class="btn sm"
-              x-show="compareVersionId === null"
+              x-show="compareVersionId === null && layout === 'under'"
               @click="openCompare()">+ Compare</button>
     {% else %}
       <span class="grow"></span>
@@ -72,8 +72,8 @@
       </div>
     {% endif %}
 
-    <div {% if side == 'cmp' %}x-show="!diff"{% endif %}>
-      <div x-show="mode === 'prompt'">
+    <div class="pc-panes" {% if side == 'cmp' %}x-show="!diff"{% endif %}>
+      <div class="pc-pane-prompt" x-show="mode === 'prompt'">
         {% if active_version.state == 'draft' and side == 'cur' %}
           <textarea class="pc-editor" x-ref="editor"
                     @input.debounce.700ms="save()"

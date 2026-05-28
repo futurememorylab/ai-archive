@@ -52,14 +52,29 @@
 
   <span class="grow"></span>
 
-  {# Restore-player icon. Only meaningful when a clip is focused AND the
-     user has minimised the player — otherwise the player slot's natural
-     visibility is already correct. #}
-  <button type="button" class="studio-show-player"
-          x-show="playerMinimized && focusedClipId"
-          x-cloak
-          @click="restorePlayer()"
-          title="Show player">▭</button>
+  {# Layout toggles (left of Run). Pure view-state on studioPage; each
+     toggles a CSS modifier class via the :class bindings in studio.html.
+     data-studio-toggle markers are asserted by the markup guard test. #}
+  <div class="studio-layout-toggles">
+    <button type="button" class="btn icon sm" data-studio-toggle="list"
+            :class="showList && 'active'"
+            @click="toggleList()"
+            :title="showList ? 'Hide video list' : 'Show video list'">
+      {% include "icons/_panel_left.svg" %}
+    </button>
+    <button type="button" class="btn icon sm" data-studio-toggle="player"
+            :class="showPlayer && 'active'"
+            @click="togglePlayer()"
+            :title="showPlayer ? 'Hide player' : 'Show player'">
+      {% include "icons/_player_frame.svg" %}
+    </button>
+    <button type="button" class="btn icon sm" data-studio-toggle="layout"
+            @click="setLayout(layout === 'under' ? 'right' : 'under')"
+            :title="layout === 'under' ? 'Prompt/output: move right of player' : 'Prompt/output: move under player'">
+      <span x-show="layout === 'under'">{% include "icons/_layout_under.svg" %}</span>
+      <span x-show="layout === 'right'" x-cloak>{% include "icons/_layout_right.svg" %}</span>
+    </button>
+  </div>
 
   {% if active_version %}
     {# Bindings drop the `$root.` prefix because Alpine v3 `$root` returns
@@ -69,15 +84,10 @@
        .studio-page's x-data with no nested scope between, so plain
        `focusedClipId` resolves via normal Alpine scope inheritance. #}
     <button class="btn primary studio-run-btn"
-            :disabled="!focusedClipId || running"
-            @click="runOnFocusedClip()"
+            :disabled="!focusedClipId || cancelling || doneFlashUntilMs > 0"
+            @click="runOrCancel()"
             :title="focusedClipId ? '' : 'Click a clip in a folder to focus it'">
-      <template x-if="!running">
-        <span>▶ Run on this clip · v{{ active_version.version_num }}</span>
-      </template>
-      <template x-if="running">
-        <span>⟳ Running… <span x-text="runningElapsedLabel"></span></span>
-      </template>
+      <span x-text="runButtonLabel()">▶ Run on this clip · v{{ active_version.version_num }}</span>
     </button>
   {% else %}
     <button class="btn primary" disabled title="No version available for this prompt">▶ Run</button>

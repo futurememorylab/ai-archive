@@ -46,3 +46,5 @@ available number. See any existing ADR for the template.
 | 0036 | 2026-05-27 | [Fold draft review into the clips list (supersedes /review page)](./adr/0036-fold-review-into-clips-list.md) |
 | 0037 | 2026-05-27 | [Studio: shared player chrome + focused clip in URL](./adr/0037-studio-shared-player-chrome-and-focused-clip-url.md) |
 | 0038 | 2026-05-28 | [Prompt Studio output renders via review_items, not raw output_json](./adr/0038-studio-output-via-review-items.md) |
+| 0039 | 2026-05-28 | [Prompt Studio PR3 — polish (run-button cancel, empty/error shells, design-language audit)](./adr/0039-prompt-studio-pr3-polish.md) |
+| 0040 | 2026-05-28 | [Studio layout toggles (list / player / prompt-output position)](./adr/0040-studio-layout-toggles.md) |

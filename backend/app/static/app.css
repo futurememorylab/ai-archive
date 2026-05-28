@@ -21,6 +21,9 @@
   --bad:       #ff5d5d;
   --info:      #5ac8fa;
 
+  --range-cur: color-mix(in oklab, var(--info)   45%, transparent);
+  --range-cmp: color-mix(in oklab, var(--accent) 45%, transparent);
+
   --f-sans: "Inter", system-ui, -apple-system, sans-serif;
   --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
@@ -1018,6 +1021,14 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 .tag.info .dot { background: var(--info); }
 .tag.mono-cell { font-family: var(--f-mono); font-size: 10.5px; }
 
+/* Lock affordance on the shared prompt-state chip (production/archived =
+   read-only). Inherits the chip's state color via currentColor. */
+.prompt-state-lock {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+}
+
 /* ─── panel header ───────────────────────────────────────────────────── */
 .panel-h {
   display: flex; align-items: center; justify-content: space-between;
@@ -1484,6 +1495,16 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   flex: 1;
 }
 
+.studio-layout-toggles {
+  display: flex;
+  gap: 4px;
+  margin-right: 4px;
+}
+.studio-layout-toggles .btn.active {
+  background: var(--accent-2);
+  color: var(--text);
+}
+
 .studio-body {
   display: grid;
   grid-template-columns: 320px 1fr;
@@ -1493,6 +1514,30 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 
 .studio-body.no-player .studio-player-slot {
   display: none;
+}
+
+.studio-body.no-list {
+  grid-template-columns: 1fr;
+}
+.studio-body.no-list .studio-videos {
+  display: none;
+}
+
+/* Prompt/output beside the player (vs stacked under it). The player
+   slot and the compare block are siblings in .studio-right; flipping
+   the grid from rows to columns places them side-by-side (player left,
+   prompt/output right) without moving any DOM. */
+.studio-right.layout-right {
+  grid-template-columns: minmax(360px, 1fr) 1fr;
+  grid-template-rows: 1fr;
+}
+.studio-right.layout-right .studio-player-slot {
+  border-bottom: none;
+  border-right: 1px solid var(--line);
+}
+/* With the player hidden in right mode, the prompt/output fills the row. */
+.studio-body.no-player .studio-right.layout-right {
+  grid-template-columns: 1fr;
 }
 
 .studio-videos {
@@ -1531,56 +1576,14 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 /* The player wrapper is the positioning context for the minimise btn. */
 .studio-player { position: relative; }
 
-.studio-player-min {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 2;
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: rgba(20, 24, 29, 0.7);
-  color: var(--text-2);
-  cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-  padding: 0;
-}
-.studio-player-min:hover {
-  color: var(--text);
-  background: var(--surface-2);
-  border-color: var(--line-2);
-}
-
-.studio-show-player {
-  width: 28px;
-  height: 28px;
-  margin-right: 6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-2);
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-  padding: 0;
-}
-.studio-show-player:hover {
-  color: var(--text);
-  background: var(--surface-2);
-  border-color: var(--line-2);
-}
-
 .studio-compare {
   display: grid;
   grid-template-columns: 1fr;
+  /* Bound the single row to the pane height (min 0) so the prompt card
+     is height-clamped and .pc-body's overflow:auto can scroll. An
+     implicit `auto` row would size to content and let the card overflow
+     the pane instead. */
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   min-width: 0;
   padding: 12px;
@@ -1614,6 +1617,15 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   font-weight: 600;
   font-size: 13px;
 }
+
+.studio-folder-new {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.studio-folder-new .txt { flex: 1; }
+.studio-folders-empty { padding: 12px; }
 
 .studio-folders-list {
   overflow: auto;
@@ -1804,6 +1816,14 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   min-height: 0;
 }
 
+/* Let the prompt editor fill the full pane height. The wrapper divs are
+   auto-height blocks, so .pc-editor's height:100% had nothing to resolve
+   against and collapsed to its 220px min-height. Giving the wrappers a
+   definite height lets the textarea fill the pane. The output pane is
+   left auto-height so it keeps scrolling via .pc-body's overflow:auto. */
+.studio-prompt-card .pc-panes { height: 100%; }
+.studio-prompt-card .pc-pane-prompt { height: 100%; }
+
 .studio-prompt-card .pc-editor,
 .studio-prompt-card .pc-readonly {
   width: 100%;
@@ -1976,7 +1996,7 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .pc-vchip .btn.open { background: var(--hover); }
 .pc-vmenu {
   position: absolute; top: calc(100% + 4px); left: 0; min-width: 160px;
-  background: var(--bg-2, #161616); border: 1px solid var(--border, #2a2a2a);
+  background: var(--panel-2); border: 1px solid var(--line);
   border-radius: 6px; padding: 4px; z-index: 20;
   box-shadow: 0 6px 20px rgba(0,0,0,0.4);
 }
@@ -1986,8 +2006,40 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   background: none; border: 0; color: inherit;
   padding: 6px 8px; border-radius: 4px; cursor: pointer;
 }
-.pc-vmenu-item:hover { background: var(--bg-3, #1f1f1f); }
-.pc-vmenu-item.is-current { background: var(--accent-fade, #2b3a4d); }
+.pc-vmenu-item:hover { background: var(--hover); }
+.pc-vmenu-item.is-current { background: var(--accent-2); }
+
+/* === Studio: right-pane empty / error shells ========================= */
+.run-empty {
+  padding: 12px 14px;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.run-empty b { color: var(--text-2); font-weight: 600; }
+
+.run-error {
+  padding: 12px 14px;
+  background: var(--panel-2);
+  border-left: 3px solid var(--bad);
+  border-radius: var(--r-2);
+}
+.run-error-h {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-bottom: 4px;
+}
+.run-error-h b { color: var(--bad); font-weight: 600; }
+.run-error-msg {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.run-stats { padding: 6px 0; }
 
 /* === Studio: prompt-card diff view ==================================== */
 .pc-diff { padding: 8px; }
@@ -1995,39 +2047,48 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .pc-diff-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .pc-diff-table td {
   vertical-align: top; padding: 2px 6px; white-space: pre-wrap;
-  word-break: break-word; border-top: 1px solid var(--border, #1f1f1f);
+  word-break: break-word; border-top: 1px solid var(--line);
 }
 .diff-row.diff-eq td  { opacity: 0.55; }
-.diff-row.diff-del .diff-cell-a { background: rgba(220, 60, 60, 0.18); }
+.diff-row.diff-del .diff-cell-a { background: color-mix(in oklab, var(--bad)  18%, transparent); }
 .diff-row.diff-del .diff-cell-b { background: rgba(0,0,0,0); }
 .diff-row.diff-ins .diff-cell-a { background: rgba(0,0,0,0); }
-.diff-row.diff-ins .diff-cell-b { background: rgba(60, 180, 90, 0.18); }
+.diff-row.diff-ins .diff-cell-b { background: color-mix(in oklab, var(--good) 18%, transparent); }
 
 /* === Studio: compare row + cmp affordances =========================== */
 .studio-compare-row { display: flex; gap: 12px; align-items: stretch; }
 .studio-compare-row .studio-prompt-card { flex: 1 1 0; min-width: 0; }
-.cmp-card { border-left: 3px solid var(--accent, #4a90e2); }
-.pc-hdr .btn.active { background: var(--accent-fade, #2b3a4d); }
+.cmp-card { border-left: 3px solid var(--accent); }
+.pc-hdr .btn.active { background: var(--accent-2); }
 .btn-close-cmp { font-size: 14px; line-height: 1; }
 
 /* === Player overlay: cur / cmp range colors ========================== */
-.ranges.range-cur .range { background: rgba(74, 144, 226, 0.45); }
+.ranges.range-cur .range { background: var(--range-cur); }
 .ranges.range-cmp { top: 60%; }  /* stack below the cur row */
-.ranges.range-cmp .range { background: rgba(220, 140, 60, 0.45); }
+.ranges.range-cmp .range { background: var(--range-cmp); }
 .timeline-legend { display: flex; gap: 12px; padding: 4px 8px; font-size: 11px; }
-.legend-range-cur { color: rgba(74, 144, 226, 0.9); }
-.legend-range-cmp { color: rgba(220, 140, 60, 0.9); }
+.legend-range-cur { color: var(--info); }
+.legend-range-cmp { color: var(--accent); }
+
+/* === Studio: focus-visible outlines ================================= */
+.pc-vchip .btn:focus-visible,
+.pc-vmenu-item:focus-visible,
+.btn-diff-toggle:focus-visible,
+.studio-clip-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 
 /* === Review mode: per-item controls + action bar ==================== */
 .review-actionbar {
   display: flex; align-items: center; gap: 8px;
-  padding: 6px 8px; border-bottom: 1px solid var(--border, #1f1f1f);
-  background: var(--bg-2, #0f1216);
+  padding: 6px 8px; border-bottom: 1px solid var(--line);
+  background: var(--bg-2);
 }
-.review-progress { font-size: 12px; color: var(--fg-muted, #888); }
+.review-progress { font-size: 12px; color: var(--text-3); }
 .review-item-toggle {
   display: inline-flex; align-items: center; gap: 4px;
-  font-size: 11px; color: var(--fg-muted, #888); cursor: pointer;
+  font-size: 11px; color: var(--text-3); cursor: pointer;
   margin-left: auto; white-space: nowrap;
 }
 .review-item-toggle input[type="checkbox"] { cursor: pointer; }
