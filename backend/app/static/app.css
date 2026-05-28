@@ -1992,6 +1992,38 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .pc-vmenu-item:hover { background: var(--hover); }
 .pc-vmenu-item.is-current { background: var(--accent-2); }
 
+/* === Studio: right-pane empty / error shells ========================= */
+.run-empty {
+  padding: 12px 14px;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.run-empty b { color: var(--text-2); font-weight: 600; }
+
+.run-error {
+  padding: 12px 14px;
+  background: var(--panel-2);
+  border-left: 3px solid var(--bad);
+  border-radius: var(--r-2);
+}
+.run-error-h {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-bottom: 4px;
+}
+.run-error-h b { color: var(--bad); font-weight: 600; }
+.run-error-msg {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.run-stats { padding: 6px 0; }
+
 /* === Studio: prompt-card diff view ==================================== */
 .pc-diff { padding: 8px; }
 .pc-diff-hdr { display: flex; align-items: center; padding: 4px 6px 8px; }
