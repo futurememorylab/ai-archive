@@ -76,8 +76,16 @@ def build_draft_view(
     prompt_name: str | None = None,
     version_num: int | None = None,
     created_at: str | None = None,
+    fps: float = 25.0,
 ) -> dict[str, Any]:
-    if annotation is None:
+    """Returns the `panels` dict consumed by templates/pages/_anno_panels.html.
+
+    Used by both the clip-detail draft view and the studio output card.
+    Studio callers pass `annotation=None` and `review_items` loaded by
+    `studio_run_id`; the dict shape is identical. `fps` and `big_notes`
+    are included so studio (which has no enclosing clip.* Alpine scope)
+    can render through the same template without a fallback path."""
+    if annotation is None and not review_items:
         return {
             "has_draft": False,
             "annotation_id": None,
@@ -89,6 +97,8 @@ def build_draft_view(
             "fields": [],
             "notes": None,
             "note_items": [],
+            "big_notes": None,
+            "fps": fps,
         }
     markers = [_marker_from_review(it) for it in review_items if it.kind == "marker"]
     markers.sort(key=lambda m: m["in_secs"])
@@ -113,13 +123,15 @@ def build_draft_view(
     ]
     return {
         "has_draft": True,
-        "annotation_id": annotation.id,
+        "annotation_id": annotation.id if annotation else None,
         "created_at": created_at,
         "prompt_name": prompt_name,
         "version_num": version_num,
-        "model": annotation.model,
+        "model": annotation.model if annotation else None,
         "markers": markers,
         "fields": fields,
         "notes": notes,
         "note_items": note_items,
+        "big_notes": None,
+        "fps": fps,
     }

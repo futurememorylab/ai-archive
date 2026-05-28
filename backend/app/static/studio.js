@@ -38,12 +38,55 @@ window.studio = {
     fetch(`/api/studio/folders/${folderId}/clips/${clipId}`, {method: 'DELETE'})
       .then(() => btnEl.closest('.studio-clip-card').remove());
   },
+  // The minimise button lives inside the player wrapper, whose own
+  // x-data="player(...)" creates a nested scope that doesn't expose
+  // studioPage methods directly. Route the click through this shim.
+  minimizePlayer() {
+    this._root()?.minimizePlayer();
+  },
 };
+
+// Prompt-picker links live inside a nested Alpine x-data, so $root there
+// shadows studioPage and clip_id can't be appended via :href binding.
+// Intercept the click and append clip_id from the live studioPage state
+// before navigation.
+document.body.addEventListener('click', (evt) => {
+  const a = evt.target.closest('a[data-prompt-switch]');
+  if (!a) return;
+  const root = document.querySelector('.studio-page');
+  const fid = root?._x_dataStack?.[0]?.focusedClipId;
+  // Always normalize: if a clip is focused, write it into the href; if
+  // not, strip any previously-baked clip_id. Without the strip branch a
+  // prior click would leave clip_id=N on the anchor forever, so a
+  // later modifier-click after focus was cleared would still navigate
+  // with the stale clip id.
+  const u = new URL(a.href, location.origin);
+  if (fid) u.searchParams.set('clip_id', String(fid));
+  else u.searchParams.delete('clip_id');
+  a.href = u.toString();
+});
 
 document.body.addEventListener('htmx:afterSwap', (evt) => {
   const root = document.querySelector('.studio-page');
   if (!root || !root._x_dataStack) return;
   const page = root._x_dataStack[0];
+
+  // When a folder's clip cards swap in (hx-trigger="intersect once" on
+  // .studio-folder-kids), reconcile `.selected` against the live
+  // focusedClipId. The server bakes a `clip_id=…` into each folder's
+  // hx-get URL at page-load time, so cards arrive pre-selected based on
+  // the URL at that moment — but the user may have focused a different
+  // clip via JS since, and the hx-get URL doesn't update. Clear the
+  // server's guess, then apply the current focus.
+  if (evt.target.classList?.contains('studio-folder-kids')) {
+    evt.target.querySelectorAll('.studio-clip-card.selected')
+      .forEach(el => el.classList.remove('selected'));
+    if (page.focusedClipId) {
+      evt.target.querySelectorAll(`.studio-clip-card[data-clip-id="${page.focusedClipId}"]`)
+        .forEach(el => el.classList.add('selected'));
+    }
+  }
+
   const card = evt.target.closest('.studio-prompt-card');
   if (!card) return;
   // Alpine v3's MutationObserver doesn't reliably re-init x-data subtrees
@@ -78,7 +121,8 @@ document.addEventListener('alpine:init', () => {
     compareVersionId: initial.compareVersionId,
     compareVersionNum: initial.compareVersionNum,
     mode: 'prompt',  // page-level tab state; Task 11 confirms the lift from card-level.
-    focusedClipId: null,
+    focusedClipId: initial.focusedClipId ?? null,
+    playerMinimized: false,
     running: false,
     runId: null,
     runStartMs: 0,
@@ -86,6 +130,14 @@ document.addEventListener('alpine:init', () => {
     pendingRunSwap: 0,
 
     init() {
+      // Restore a server-seeded focused clip (e.g. from ?clip_id=…). The
+      // server already left `no-player` off the body in that case, so the
+      // slot is visible — we just need to load the player partial. The
+      // matching card's `.selected` class is rendered server-side by
+      // _studio_clip_card.html, so no DOM marking is needed here (cards
+      // aren't in the DOM at init time anyway — HTMX hasn't loaded the
+      // folder's kids yet).
+      if (this.focusedClipId) this.refreshPlayer();
       // Tick elapsed-time label while running.
       setInterval(() => {
         if (this.running) {
@@ -98,9 +150,16 @@ document.addEventListener('alpine:init', () => {
     focusClip(clipId) {
       this.focusedClipId = clipId;
       this.pendingRunSwap++;
-      const body = document.querySelector('.studio-body');
-      if (body) body.classList.remove('no-player');
+      this._writeUrl();
       this.refreshPlayer();
+    },
+
+    minimizePlayer() {
+      this.playerMinimized = true;
+    },
+
+    restorePlayer() {
+      this.playerMinimized = false;
     },
 
     refreshPlayer() {
@@ -201,6 +260,7 @@ document.addEventListener('alpine:init', () => {
       if (this.promptId)         p.set('prompt_id', this.promptId);          else p.delete('prompt_id');
       if (this.activeVersionId)  p.set('version_id', this.activeVersionId);  else p.delete('version_id');
       if (this.compareVersionId) p.set('compare_version_id', this.compareVersionId); else p.delete('compare_version_id');
+      if (this.focusedClipId)    p.set('clip_id', this.focusedClipId);       else p.delete('clip_id');
       window.history.replaceState({}, '', `${window.location.pathname}?${p.toString()}`);
     },
   }));
@@ -249,8 +309,8 @@ document.addEventListener('alpine:init', () => {
     },
   }));
 
-  Alpine.data('studioFolders', () => ({
-    expandedId: null,
+  Alpine.data('studioFolders', (initialExpandedId = null) => ({
+    expandedId: initialExpandedId,
     newFolderOpen: false,
     newFolderName: '',
 
@@ -278,6 +338,16 @@ document.addEventListener('alpine:init', () => {
     side,
     diff: false,
     dirty: false,
+    // _anno_panels.html (the shared output renderer) reads `tab`, `seek`,
+    // `historyLoaded`, `historyHtml`, `loadHistory` from its enclosing
+    // Alpine scope. Clip-detail provides these via `player()` + a tab
+    // mix-in. Studio doesn't have a per-run history view in v1, so the
+    // History tab is suppressed (see _anno_panels.html change) and
+    // loadHistory is a noop.
+    tab: 'markers',
+    historyLoaded: true,
+    historyHtml: '',
+    loadHistory() {},
 
     // Alpine's `$root` refers to the root of the CURRENT component, not
     // the topmost ancestor. Since this card is its own x-data, `$root.X`

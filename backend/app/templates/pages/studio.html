@@ -13,11 +13,16 @@
        activeModel: '{{ active_version.model if active_version else '' }}',
        compareVersionId: {{ compare_version.id if compare_version else 'null' }},
        compareVersionNum: {{ compare_version.version_num if compare_version else 'null' }},
+       focusedClipId: {{ focused_clip_id or 'null' }},
      })">
 
   {% include "pages/_studio_header.html" %}
 
-  <div class="studio-body no-player">
+  {# Static class drives correct first-paint before Alpine boots; the
+     :class binding then keeps it in sync as focusedClipId / playerMinimized
+     change at runtime. #}
+  <div class="studio-body{% if not focused_clip_id %} no-player{% endif %}"
+       :class="{ 'no-player': !focusedClipId || playerMinimized }">
     <aside class="studio-videos">
       {% include "pages/_studio_folder_list.html" %}
     </aside>

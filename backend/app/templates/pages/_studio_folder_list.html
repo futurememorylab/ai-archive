@@ -4,7 +4,7 @@
    from /studio/_folder?folder_id=X. "+ Add from archive" inside the
    expanded panel opens the archive picker modal (filled in Task 16).
 #}
-<div class="studio-folders" x-data="studioFolders()">
+<div class="studio-folders" x-data="studioFolders({{ focused_folder_id or 'null' }})">
   <div class="studio-folders-hdr">
     <span>Folders</span>
     <span class="grow"></span>
@@ -26,7 +26,7 @@
           <span class="count">{{ f.clip_count }}</span>
         </div>
         <div class="studio-folder-kids" x-show="expandedId === {{ f.id }}" x-cloak
-             hx-get="/studio/_folder?folder_id={{ f.id }}{% if active_version %}&active_version_id={{ active_version.id }}{% endif %}"
+             hx-get="/studio/_folder?folder_id={{ f.id }}{% if active_version %}&active_version_id={{ active_version.id }}{% endif %}{% if focused_clip_id %}&clip_id={{ focused_clip_id }}{% endif %}"
              hx-trigger="intersect once"
              hx-swap="innerHTML">
           <div class="muted">loading…</div>

@@ -1519,6 +1519,65 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   min-height: 0;
 }
 
+/* Scope the shared _player.html chrome inside the studio slot. The
+   .viewer is flex:1 by default (intended for the full-height clip
+   page); here we cap it so the slot doesn't dominate the studio
+   layout. */
+.studio-player .viewer {
+  height: 320px;
+  flex: none;
+}
+
+/* The player wrapper is the positioning context for the minimise btn. */
+.studio-player { position: relative; }
+
+.studio-player-min {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: rgba(20, 24, 29, 0.7);
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+}
+.studio-player-min:hover {
+  color: var(--text);
+  background: var(--surface-2);
+  border-color: var(--line-2);
+}
+
+.studio-show-player {
+  width: 28px;
+  height: 28px;
+  margin-right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+.studio-show-player:hover {
+  color: var(--text);
+  background: var(--surface-2);
+  border-color: var(--line-2);
+}
+
 .studio-compare {
   display: grid;
   grid-template-columns: 1fr;
@@ -1718,14 +1777,22 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 
 .studio-prompt-card .pc-tab {
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: 11px;
+  font-family: var(--f-display, inherit);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
   border: 1px solid transparent;
   border-radius: 4px;
   background: transparent;
   cursor: pointer;
 }
 
+.studio-prompt-card .pc-tab:hover { color: var(--text-2); }
+
 .studio-prompt-card .pc-tab.active {
+  color: var(--text);
   background: var(--surface-2);
   border-color: var(--line);
 }

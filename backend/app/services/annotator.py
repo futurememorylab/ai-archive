@@ -111,10 +111,22 @@ async def run_job(
                 item.catdv_clip_id,
                 extra={"job_id": job_id, "clip_id": item.catdv_clip_id},
             )
-            await jobs_repo.update_item_status(db, item.id, "error", error=str(exc))
+            msg = str(exc) or exc.__class__.__name__
+            await jobs_repo.update_item_status(db, item.id, "error", error=msg)
             await event_bus.publish(
-                topic, {"item_id": item.id, "status": "error", "error": str(exc)}
+                topic, {"item_id": item.id, "status": "error", "error": msg}
             )
+            # Studio runs need a terminal status of their own — the frontend
+            # polls /api/studio/runs/{id} and waits for status != pending|running.
+            # Without this, a Gemini auth failure (or any other non-ProxyNotFound
+            # exception) leaves the run in "pending" forever and the UI's
+            # "Running…" indicator never clears.
+            if kind == "studio":
+                run_id = await studio_runs_repo.find_latest_id_for_job_clip(
+                    db, job_id=item.job_id, clip_id=item.catdv_clip_id
+                )
+                if run_id is not None:
+                    await studio_runs_repo.complete_error(db, run_id, error=msg)
 
     refreshed = await jobs_repo.list_items(db, job_id)
     final_status = "completed"
@@ -195,8 +207,8 @@ async def _process_item(
 
     if kind == "studio":
         await _finalize_studio(
-            db, item, structured, result, elapsed_s,
-            studio_runs_repo, jobs_repo, event_bus, topic,
+            db, item, version, structured, result, elapsed_s, duration_secs,
+            studio_runs_repo, review_items_repo, jobs_repo, event_bus, topic,
         )
     else:
         await _finalize_annotation(
@@ -208,10 +220,13 @@ async def _process_item(
 
 
 async def _finalize_studio(
-    db, item, structured, result, elapsed_s,
-    studio_runs_repo: StudioRunsRepo, jobs_repo, event_bus, topic,
+    db, item, version, structured, result, elapsed_s, duration_secs,
+    studio_runs_repo: StudioRunsRepo, review_items_repo, jobs_repo,
+    event_bus, topic,
 ) -> None:
-    """Studio path: persist to studio_run, skip annotations + review_items."""
+    """Studio path: persist to studio_run + review_items (linked by
+    studio_run_id), skip annotations. The studio UI renders from
+    review_items through the same panels pipeline clip_detail uses."""
     run_id = await studio_runs_repo.find_latest_id_for_job_clip(
         db, job_id=item.job_id, clip_id=item.catdv_clip_id
     )
@@ -235,6 +250,25 @@ async def _finalize_studio(
         )
         return
 
+    # Order matters: insert review_items BEFORE complete_ok. If
+    # bulk_insert raises, the outer exception handler in run_job calls
+    # complete_error on this same studio_run — if we'd already marked it
+    # 'ok', that would overwrite a successful run with status='error'.
+    #
+    # Also delete any pre-existing review_items for this run first so a
+    # retry (job_item picked up again after restart / error) doesn't
+    # accumulate duplicate markers/fields on the same studio_run_id.
+    review = expand(
+        structured,
+        version.target_map,
+        studio_run_id=run_id,
+        catdv_clip_id=item.catdv_clip_id,
+        clip_duration_secs=duration_secs or None,
+    )
+    await review_items_repo.delete_for_studio_run(db, studio_run_id=run_id)
+    if review:
+        await review_items_repo.bulk_insert(db, review)
+
     await studio_runs_repo.complete_ok(
         db, run_id,
         output_json=structured,
@@ -243,6 +277,7 @@ async def _finalize_studio(
         tokens_out=tokens_out,
         cost_usd=cost_usd,
     )
+
     await jobs_repo.update_item_status(db, item.id, "review_ready")
     await event_bus.publish(
         topic, {"item_id": item.id, "status": "review_ready", "studio_run_id": run_id}

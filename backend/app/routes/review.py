@@ -59,6 +59,12 @@ async def _resolve_and_enqueue_clip(
     accepted = await ctx.review_items_repo.list_by_clip(ctx.db, clip_id, decision="accepted")
     if kinds is not None:
         accepted = [it for it in accepted if it.kind in kinds]
+    # list_by_clip mixes annotation-bound and studio-bound rows (CHECK
+    # constraint guarantees exactly one). Studio outputs are local-only
+    # per ADR 0036 — drop them before resolving an annotation row,
+    # otherwise the next line dereferences None and the SyncEngine
+    # would also try to push studio outputs upstream.
+    accepted = [it for it in accepted if it.annotation_id is not None]
     if not accepted:
         return 0
     annotation = await ctx.annotations_repo.get(ctx.db, accepted[0].annotation_id)

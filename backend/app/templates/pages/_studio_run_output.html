@@ -9,7 +9,7 @@
    Inputs (from the route):
      run     — StudioRun.model_dump() | None
      version — PromptVersion.model_dump() | None
-     panels  — dict (already built via panels_from_studio_run)
+     panels  — dict (already built via build_draft_view)
      clip    — { fps: float } (consumed by _anno_panels.html's smpte() fallback)
 #}
 {% if not version %}

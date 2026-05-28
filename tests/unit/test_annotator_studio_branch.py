@@ -1,9 +1,11 @@
-"""Annotator service — studio path persists to studio_run and skips CatDV-write.
+"""Annotator service — studio path persists to studio_run AND review_items.
 
 We assert that for a job with kind='studio':
   * No annotation row is inserted (annotations_repo.insert not called).
   * The matching studio_run row transitions to status='ok' with output_json.
-  * review_items are not inserted (target_map.expand not called).
+  * review_items ARE inserted, linked by studio_run_id (so the UI can
+    render markers/fields/notes through the same panels pipeline the
+    clip-detail page uses).
 """
 
 import json
@@ -98,7 +100,13 @@ async def test_studio_kind_persists_run_skips_catdv_write(db):
     ai_store.reference_for_gemini = AsyncMock(return_value={"uri": "gs://x"})
     gemini = MagicMock()
     gemini.annotate = MagicMock(return_value={
-        "text": json.dumps({"scenes": [{"name": "s1", "in_secs": 0, "out_secs": 5}]}),
+        "text": json.dumps({
+            "scenes": [
+                {"name": "s1",
+                 "in":  {"secs": 0.0},
+                 "out": {"secs": 5.0}},
+            ],
+        }),
         "raw": {"usageMetadata": {"promptTokenCount": 100, "candidatesTokenCount": 50}},
     })
 
@@ -118,14 +126,25 @@ async def test_studio_kind_persists_run_skips_catdv_write(db):
         studio_runs_repo=runs,
     )
 
-    # Assertion: CatDV-side writes were NOT called
+    # Assertion: CatDV-side annotations write was NOT called
     annotations.insert.assert_not_called()
-    review_items.bulk_insert.assert_not_called()
+
+    # review_items WERE inserted — once for the marker. Verify the items
+    # carry studio_run_id (not annotation_id) so the studio render path
+    # can find them.
+    assert review_items.bulk_insert.await_count == 1
+    inserted_items = review_items.bulk_insert.await_args.args[1]
+    assert len(inserted_items) == 1
+    assert inserted_items[0].kind == "marker"
+    assert inserted_items[0].studio_run_id == run_id
+    assert inserted_items[0].annotation_id is None
 
     # studio_run completed ok with output
     run = await runs.get(db, run_id)
     assert run.status == "ok"
-    assert run.output_json == {"scenes": [{"name": "s1", "in_secs": 0, "out_secs": 5}]}
+    assert run.output_json == {
+        "scenes": [{"name": "s1", "in": {"secs": 0.0}, "out": {"secs": 5.0}}],
+    }
 
 
 @pytest.mark.asyncio

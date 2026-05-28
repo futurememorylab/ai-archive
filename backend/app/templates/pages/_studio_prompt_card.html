@@ -9,7 +9,7 @@
      versions         — list[dict]  (all versions of the prompt, for the picker)
      clip_id          — int | None
      run              — dict | None  (latest run for active_version + clip)
-     panels           — dict | None  (built via panels_from_studio_run)
+     panels           — dict | None  (built via build_draft_view)
      clip             — { fps: float }  (consumed by _anno_panels.html)
 #}
 <div class="studio-prompt-card{% if side == 'cmp' %} cmp-card{% endif %}"

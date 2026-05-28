@@ -24,7 +24,8 @@ class Annotation(BaseModel):
 
 class ReviewItem(BaseModel):
     id: int | None = None
-    annotation_id: int
+    annotation_id: int | None = None
+    studio_run_id: int | None = None
     catdv_clip_id: int
     kind: Literal["marker", "note", "field"]
     target_identifier: str | None = None

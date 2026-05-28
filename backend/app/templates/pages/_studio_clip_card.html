@@ -11,7 +11,7 @@
    call into the page-level Alpine root via the global window.studio
    shim defined in studio.js.
 #}
-<div class="studio-clip-card"
+<div class="studio-clip-card{% if focused_clip_id is defined and focused_clip_id == c.clip_id %} selected{% endif %}"
      onclick="window.studio.focusClip({{ c.clip_id }})"
      data-clip-id="{{ c.clip_id }}">
   <div class="thumb"

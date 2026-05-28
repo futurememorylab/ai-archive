@@ -8,8 +8,10 @@
    `prompts`, `selected_prompt`, `versions`, `active_version` come from the
    page route, all as dicts (model_dump'd).
 #}
-{# No x-data on the header — bindings inside use $root.focusedClipId etc.,
-   which resolve to .studio-page only if no nested x-data hides it. #}
+{# No x-data on the header — bindings inside inherit the studioPage
+   scope from the enclosing <div class="studio-page" x-data="studioPage(...)">.
+   Don't use `$root.X` to reach studioPage: $root is the closest x-data
+   *element*, not the data scope, so $root.X is always undefined. #}
 <header class="studio-hdr">
   <span class="exp-icn">{% include "icons/_flask.svg" %}</span>
 
@@ -24,7 +26,14 @@
         <div class="hdr-tmenu" x-show="open" x-cloak>
           <div class="hdr-tmenu-h mono-cell">prompts</div>
           {% for p in prompts %}
+            {# data-prompt-switch is intercepted in studio.js to append the
+               currently-focused clip_id at click time. We can't use Alpine
+               :href here because this menu lives inside a nested
+               x-data="{ open: false }", which shadows the studioPage root —
+               $root would resolve to the inner div, where focusedClipId is
+               undefined. #}
             <a class="hdr-tmenu-item {% if selected_prompt and p.id == selected_prompt.id %}is-current{% endif %}"
+               data-prompt-switch
                href="/studio?prompt_id={{ p.id }}">
               <span class="hdr-tmenu-lbl">
                 <span class="hdr-tmenu-name">{{ p.name }}</span>
@@ -43,16 +52,31 @@
 
   <span class="grow"></span>
 
+  {# Restore-player icon. Only meaningful when a clip is focused AND the
+     user has minimised the player — otherwise the player slot's natural
+     visibility is already correct. #}
+  <button type="button" class="studio-show-player"
+          x-show="playerMinimized && focusedClipId"
+          x-cloak
+          @click="restorePlayer()"
+          title="Show player">▭</button>
+
   {% if active_version %}
+    {# Bindings drop the `$root.` prefix because Alpine v3 `$root` returns
+       the closest x-data *element*, not the data scope — `$root.focusedClipId`
+       would read a property off <div class="studio-page"> (undefined) and
+       :disabled would always be true. The button is a direct descendant of
+       .studio-page's x-data with no nested scope between, so plain
+       `focusedClipId` resolves via normal Alpine scope inheritance. #}
     <button class="btn primary studio-run-btn"
-            :disabled="!$root.focusedClipId || $root.running"
-            @click="$root.runOnFocusedClip()"
-            :title="$root.focusedClipId ? '' : 'Click a clip in a folder to focus it'">
-      <template x-if="!$root.running">
+            :disabled="!focusedClipId || running"
+            @click="runOnFocusedClip()"
+            :title="focusedClipId ? '' : 'Click a clip in a folder to focus it'">
+      <template x-if="!running">
         <span>▶ Run on this clip · v{{ active_version.version_num }}</span>
       </template>
-      <template x-if="$root.running">
-        <span>⟳ Running… <span x-text="$root.runningElapsedLabel"></span></span>
+      <template x-if="running">
+        <span>⟳ Running… <span x-text="runningElapsedLabel"></span></span>
       </template>
     </button>
   {% else %}

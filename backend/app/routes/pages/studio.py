@@ -4,7 +4,7 @@ Subsequent tasks add HTMX partial endpoints (folders, clips, archive
 picker, run output, player).
 """
 
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -21,6 +21,7 @@ async def studio_page(
     prompt_id: int | None = None,
     version_id: int | None = None,
     compare_version_id: int | None = None,
+    clip_id: int | None = None,
 ):
     ctx = get_ctx(request)
     prompts = await ctx.prompts_repo.list_active(ctx.db)
@@ -63,6 +64,16 @@ async def studio_page(
     ):
         compare_version = next(v for v in versions if v.id == compare_version_id)
 
+    # Find the folder that holds the focused clip so the sidebar can
+    # auto-expand it on load — otherwise after a prompt switch the player
+    # restores but the clip's card is buried inside a collapsed folder,
+    # which looks like focus was lost.
+    focused_folder_id: int | None = None
+    if clip_id is not None:
+        focused_folder_id = await ctx.studio_folders_repo.folder_id_for_clip(
+            ctx.db, clip_id
+        )
+
     return templates.TemplateResponse(
         request,
         "pages/studio.html",
@@ -73,6 +84,8 @@ async def studio_page(
             "active_version": active_version.model_dump() if active_version else None,
             "compare_version": compare_version.model_dump() if compare_version else None,
             "folders": folders,
+            "focused_clip_id": clip_id,
+            "focused_folder_id": focused_folder_id,
         },
     )
 
@@ -89,8 +102,18 @@ async def _studio_folders(request: Request):
 
 
 @router.get("/studio/_folder", response_class=HTMLResponse)
-async def _studio_folder(request: Request, folder_id: int, active_version_id: int | None = None):
-    """Expanded folder view — clip cards with run-dots."""
+async def _studio_folder(
+    request: Request,
+    folder_id: int,
+    active_version_id: int | None = None,
+    clip_id: int | None = None,
+):
+    """Expanded folder view — clip cards with run-dots.
+
+    `clip_id` (when provided) is the currently-focused clip — used so the
+    matching card renders with the `.selected` class from the start,
+    instead of relying on a JS post-swap pass.
+    """
     ctx = get_ctx(request)
     clips_rows = await ctx.studio_folders_repo.list_clips(ctx.db, folder_id)
 
@@ -119,7 +142,7 @@ async def _studio_folder(request: Request, folder_id: int, active_version_id: in
     return templates.TemplateResponse(
         request,
         "pages/_studio_folder.html",
-        {"folder_id": folder_id, "clips": enriched},
+        {"folder_id": folder_id, "clips": enriched, "focused_clip_id": clip_id},
     )
 
 
@@ -159,12 +182,9 @@ async def _studio_archive_picker(
 async def _build_overlay_row(
     ctx, clip_id: int, version_id: int, *, cls: str
 ) -> dict | None:
-    """Resolve scenes + label for one version on one clip.
-
-    Returns the row dict consumed by _player_overlay.html, or None if
-    the version doesn't exist (we skip the row rather than emit a
-    placeholder label).
-    """
+    """Resolve scenes + label for one version on one clip, sourced from
+    review_items (not raw output_json) so the timeline overlay matches
+    the Output card."""
     try:
         v = await ctx.prompts_repo.get_version(ctx.db, version_id)
     except LookupError:
@@ -172,10 +192,29 @@ async def _build_overlay_row(
     run = await ctx.studio_runs_repo.latest_for_pair(
         ctx.db, prompt_version_id=version_id, clip_id=clip_id
     )
-    scenes = list((run.output_json or {}).get("scenes") or []) if run else []
+    from backend.app.services.draft_view import _marker_from_review
+
+    ranges: list[dict] = []
+    if run is not None and run.id is not None:
+        items = await ctx.review_items_repo.list_by_studio_run(ctx.db, run.id)
+        # Reuse the same marker shape adapter the Output card uses, so
+        # the overlay's timecode/name parsing can't drift from the
+        # panel's. Drop entries that parsed to in_secs=0 only when the
+        # underlying proposed_value lacked usable in.secs — but
+        # target_map._filter_markers already enforced that at write
+        # time, so list_by_studio_run never returns a missing-secs row.
+        for it in items:
+            if it.kind != "marker":
+                continue
+            m = _marker_from_review(it)
+            ranges.append({
+                "in_secs": m["in_secs"],
+                "out_secs": m["out_secs"],
+                "name": m["name"],
+            })
     return {
         "key": f"v{v.version_num}",
-        "ranges": scenes,
+        "ranges": ranges,
         "cls": cls,
         "alpine_list": None,
         "x_show": None,
@@ -247,6 +286,40 @@ async def _studio_player(
     )
 
 
+async def _load_studio_panels(ctx, *, version, clip_id: int) -> tuple[Any, dict, float]:
+    """Resolve (latest run, panels dict, fps) for a (version, clip) pair.
+
+    Shared by `_studio_run` and `_studio_prompt_card` — both routes need
+    the same triple, and the load was duplicated nearly verbatim before.
+    Returns (run, panels, fps); `run` may be None when no run exists,
+    in which case `panels` is an empty-shaped draft view."""
+    from backend.app.services.draft_view import build_draft_view
+
+    run = await ctx.studio_runs_repo.latest_for_pair(
+        ctx.db, prompt_version_id=version.id, clip_id=clip_id
+    )
+    fps = 25.0
+    if ctx.archive:
+        try:
+            clip = await ctx.archive.get_clip(str(clip_id))
+            fps = float(clip.fps or 25.0)
+        except Exception:  # noqa: BLE001
+            pass
+    items = (
+        await ctx.review_items_repo.list_by_studio_run(ctx.db, run.id)
+        if run is not None and run.id is not None
+        else []
+    )
+    panels = build_draft_view(
+        annotation=None,
+        review_items=items,
+        version_num=version.version_num,
+        created_at=run.finished_at if run else None,
+        fps=fps,
+    )
+    return run, panels, fps
+
+
 @router.get("/studio/_prompt_card", response_class=HTMLResponse)
 async def _studio_prompt_card(
     request: Request,
@@ -261,8 +334,6 @@ async def _studio_prompt_card(
     run partial; without, the Output tab shows the focus-a-clip
     empty-state.
     """
-    from backend.app.services.studio_panels import panels_from_studio_run
-
     ctx = get_ctx(request)
     try:
         version = await ctx.prompts_repo.get_version(ctx.db, prompt_version_id)
@@ -276,16 +347,7 @@ async def _studio_prompt_card(
     panels: dict | None = None
     fps = 25.0
     if clip_id is not None:
-        run = await ctx.studio_runs_repo.latest_for_pair(
-            ctx.db, prompt_version_id=prompt_version_id, clip_id=clip_id
-        )
-        if ctx.archive:
-            try:
-                clip = await ctx.archive.get_clip(str(clip_id))
-                fps = float(clip.fps or 25.0)
-            except Exception:  # noqa: BLE001
-                pass
-        panels = panels_from_studio_run(run, version, fps=fps)
+        run, panels, fps = await _load_studio_panels(ctx, version=version, clip_id=clip_id)
 
     version_dict = version.model_dump()
     return templates.TemplateResponse(
@@ -310,34 +372,29 @@ async def _studio_run(
     prompt_version_id: int,
     clip_id: int,
 ):
-    from backend.app.services.studio_panels import panels_from_studio_run
-
     ctx = get_ctx(request)
-    run = await ctx.studio_runs_repo.latest_for_pair(
-        ctx.db, prompt_version_id=prompt_version_id, clip_id=clip_id
-    )
     try:
         version = await ctx.prompts_repo.get_version(ctx.db, prompt_version_id)
     except LookupError:
         version = None
 
-    # fps lookup for SMPTE rendering inside _anno_panels.html (best-effort).
-    fps = 25.0
-    if ctx.archive:
-        try:
-            clip = await ctx.archive.get_clip(str(clip_id))
-            fps = float(clip.fps or 25.0)
-        except Exception:  # noqa: BLE001
-            pass
+    if version is None:
+        # Render the empty-state branch in the template; no run/panels
+        # to resolve without a version.
+        return templates.TemplateResponse(
+            request,
+            "pages/_studio_run_output.html",
+            {"run": None, "version": None, "panels": None, "clip": {"fps": 25.0}},
+        )
 
-    panels = panels_from_studio_run(run, version, fps=fps)
+    run, panels, fps = await _load_studio_panels(ctx, version=version, clip_id=clip_id)
 
     return templates.TemplateResponse(
         request,
         "pages/_studio_run_output.html",
         {
             "run": run.model_dump() if run else None,
-            "version": version.model_dump() if version else None,
+            "version": version.model_dump(),
             "panels": panels,
             "clip": {"fps": fps},  # _anno_panels.html references clip.fps in its tc()
         },
