@@ -22,17 +22,38 @@
      :class binding then keeps it in sync as focusedClipId / playerMinimized
      change at runtime. #}
   <div class="studio-body{% if not focused_clip_id %} no-player{% endif %}"
-       :class="{ 'no-player': !focusedClipId || playerMinimized }">
+       :class="{ 'no-list': !showList, 'no-player': !showPlayer || !focusedClipId }">
     <aside class="studio-videos">
       {% include "pages/_studio_folder_list.html" %}
     </aside>
-    <section class="studio-right">
+    <section class="studio-right" :class="{ 'layout-right': layout === 'right' }">
       <div class="studio-player-slot" data-studio-player-slot></div>
       <div class="studio-compare">
         {% include "pages/_studio_compare.html" %}
       </div>
     </section>
   </div>
+  {# First-paint layout from saved prefs, before Alpine boots, to avoid a
+     flash of the default layout. Sets window.__studioPrefs (read by the
+     studioPage factory so its initial :class eval already matches) and
+     stamps the modifier classes synchronously. #}
+  <script>
+    (function () {
+      var prefs = { showList: true, showPlayer: true, layout: 'under' };
+      try {
+        var p = JSON.parse(localStorage.getItem('studio.layoutPrefs') || '{}');
+        if (p.showList === false) prefs.showList = false;
+        if (p.showPlayer === false) prefs.showPlayer = false;
+        if (p.layout === 'right') prefs.layout = 'right';
+      } catch (e) {}
+      window.__studioPrefs = prefs;
+      var body = document.querySelector('.studio-body');
+      var right = document.querySelector('.studio-right');
+      if (body && !prefs.showList) body.classList.add('no-list');
+      if (body && !prefs.showPlayer) body.classList.add('no-player');
+      if (right && prefs.layout === 'right') right.classList.add('layout-right');
+    })();
+  </script>
 
   <script>
     window.__studioVersions = {{ versions|tojson }};

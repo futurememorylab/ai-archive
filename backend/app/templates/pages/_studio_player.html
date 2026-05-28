@@ -14,12 +14,6 @@
      data-clip-player
      data-clip-id="{{ clip_id }}"
      x-data="player({{ fps or 25 }}, {{ duration_secs or 0 }}, [], [])">
-  {# Minimise button. Lives inside the player's nested x-data, so calling
-     a studioPage method directly from Alpine would resolve against
-     player()'s scope. Route through the window.studio shim (same pattern
-     used by clip-card onclick handlers). #}
-  <button type="button" class="studio-player-min" title="Hide player"
-          onclick="window.studio.minimizePlayer()">−</button>
   {% with
       clip_kind = "video",
       media_url = "/api/media/" ~ clip_id,

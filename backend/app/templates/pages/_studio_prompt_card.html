@@ -45,7 +45,7 @@
       </div>
       <span class="grow"></span>
       <button type="button" class="btn sm"
-              x-show="compareVersionId === null"
+              x-show="compareVersionId === null && layout === 'under'"
               @click="openCompare()">+ Compare</button>
     {% else %}
       <span class="grow"></span>
