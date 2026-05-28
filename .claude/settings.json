@@ -11,6 +11,11 @@
     "enabledPlugins": {
         "superpowers@superpowers-marketplace": true
     },
+    "permissions": {
+        "allow": [
+            "Bash($CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh)"
+        ]
+    },
     "hooks": {
         "SessionStart": [
             {
