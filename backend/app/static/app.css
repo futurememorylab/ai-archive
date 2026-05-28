@@ -1618,6 +1618,15 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   font-size: 13px;
 }
 
+.studio-folder-new {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.studio-folder-new .txt { flex: 1; }
+.studio-folders-empty { padding: 12px; }
+
 .studio-folders-list {
   overflow: auto;
   flex: 1;
