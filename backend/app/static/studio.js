@@ -486,6 +486,11 @@ document.addEventListener('alpine:init', () => {
           `/studio/_run?prompt_version_id=${versionId}&clip_id=${clipId}`,
         ).then(r => r.text());
         slot.innerHTML = html;
+        // Alpine doesn't auto-init innerHTML-injected subtrees that have no
+        // x-data of their own — without this the marker @click="seek(...)"
+        // and the Markers/Fields tab switches are dead. The studio output is
+        // read-only (review_mode=False), so no player-only directives throw.
+        window.Alpine?.initTree(slot);
       } catch (err) {
         console.error('loadOutput failed', err);
       }

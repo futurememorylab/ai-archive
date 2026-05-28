@@ -26,7 +26,7 @@
 {% elif run.status in ('pending', 'running') %}
   <div class="run-empty muted">⟳ Running…</div>
 {% else %}
-  {% with show_history = False %}
+  {% with show_history = False, review_mode = False %}
     {% include "pages/_anno_panels.html" %}
   {% endwith %}
   <script type="application/json" data-run-json>{{ run.output_json|tojson }}</script>

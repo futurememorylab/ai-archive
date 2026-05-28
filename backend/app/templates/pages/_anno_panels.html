@@ -4,6 +4,10 @@
      scope  — "published" or "draft" (used only for distinct DOM ids if needed)
 #}
 {% import "components/_ui.html" as ui %}
+{# review_mode (default True) gates the accept/reject ("keep") checkbox +
+   inline edit/drag machinery, which binds to the clip page's player scope.
+   Studio passes review_mode=False for a read-only, click-to-seek view. #}
+{% set review_mode = review_mode if review_mode is defined else true %}
 {% set has_notes = panels.notes or panels.big_notes or panels.note_items %}
 {% set _is_image = clip is defined and clip is not none and clip.kind == 'image' %}
 {% set _show_note_items = panels.note_items %}
@@ -51,7 +55,7 @@
           {{ smpte(m.in_secs, panels.fps or clip.fps) }}{% if m.out_secs is not none %} – {{ smpte(m.out_secs, panels.fps or clip.fps) }}{% endif %}
         </span>
       </header>
-      {% if m.item_id is defined and m.item_id is not none %}
+      {% if m.item_id is defined and m.item_id is not none and review_mode %}
         {# ri-row also carries .ri-marker so review.js _decideMarker can find
            the container via closest('.ri-marker'). #}
         <div class="ri-row ri-marker" data-item-id="{{ m.item_id }}"
@@ -108,7 +112,7 @@
 
 <div class="anno-section" role="tabpanel" x-show="tab === 'fields'" x-cloak>
   {% for f in panels.fields %}
-    {% if f.item_id is defined and f.item_id is not none %}
+    {% if f.item_id is defined and f.item_id is not none and review_mode %}
       <div class="ri-row" data-item-id="{{ f.item_id }}"
            :class="{ editing: editingItemId === {{ f.item_id }} }">
         <div class="ri-readonly">
@@ -143,6 +147,7 @@
 <div class="anno-section" role="tabpanel" x-show="tab === 'notes'" x-cloak>
   {% if _show_note_items %}
     {% for n in panels.note_items %}
+      {% if review_mode %}
       <div class="ri-row ri-note-row" data-item-id="{{ n.item_id }}"
            :class="{ editing: editingItemId === {{ n.item_id }} }">
         <div class="ri-readonly">
@@ -160,6 +165,9 @@
                       input_attrs='data-item-id="' ~ n.item_id ~ '"') }}
         </div>
       </div>
+      {% else %}
+      <p class="note">{{ n.text }}</p>
+      {% endif %}
     {% else %}
       <p class="muted">No notes.</p>
     {% endfor %}
