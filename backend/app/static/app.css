@@ -2062,6 +2062,15 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .legend-range-cur { color: var(--info); }
 .legend-range-cmp { color: var(--accent); }
 
+/* === Studio: focus-visible outlines ================================= */
+.pc-vchip .btn:focus-visible,
+.pc-vmenu-item:focus-visible,
+.btn-diff-toggle:focus-visible,
+.studio-clip-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* === Review mode: per-item controls + action bar ==================== */
 .review-actionbar {
   display: flex; align-items: center; gap: 8px;
