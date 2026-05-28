@@ -2,11 +2,16 @@
 -- studio_run (Studio iteration, never written to CatDV).
 -- SQLite can't ALTER a NOT NULL constraint, so rebuild the table.
 
+-- Provider columns were added by migration 0003 (provider_id /
+-- provider_clip_id). Preserve them on the rebuild — dropping them
+-- would silently lose backfilled values on every upgrade.
 CREATE TABLE review_items_new (
   id                 INTEGER PRIMARY KEY,
   annotation_id      INTEGER REFERENCES annotations(id),
   studio_run_id      INTEGER REFERENCES studio_run(id),
   catdv_clip_id      INTEGER NOT NULL,
+  provider_id        TEXT,
+  provider_clip_id   TEXT,
   kind               TEXT    NOT NULL,
   target_identifier  TEXT,
   proposed_value     TEXT    NOT NULL,
@@ -19,10 +24,12 @@ CREATE TABLE review_items_new (
 );
 
 INSERT INTO review_items_new
-  (id, annotation_id, studio_run_id, catdv_clip_id, kind, target_identifier,
+  (id, annotation_id, studio_run_id, catdv_clip_id, provider_id, provider_clip_id,
+   kind, target_identifier,
    proposed_value, edited_value, decision, decided_at, applied_at)
 SELECT
-   id, annotation_id, NULL,           catdv_clip_id, kind, target_identifier,
+   id, annotation_id, NULL,           catdv_clip_id, provider_id, provider_clip_id,
+   kind, target_identifier,
    proposed_value, edited_value, decision, decided_at, applied_at
 FROM review_items;
 

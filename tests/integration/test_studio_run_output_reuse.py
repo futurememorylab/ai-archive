@@ -26,30 +26,6 @@ def client(monkeypatch, tmp_path):
         yield c
 
 
-def _seed_run(app, *, version_id, clip_id, output_json):
-    """Insert a studio_run row via a fresh aiosqlite connection.
-
-    Uses asyncio.new_event_loop() (Py 3.13 safe — get_event_loop() raises
-    on the main thread). Looks up the db path via ctx.settings.data_dir
-    because ctx.db_path is not exposed.
-    """
-    db_path = app.state.ctx.settings.data_dir / "app.db"
-    async def _go():
-        async with aiosqlite.connect(db_path) as db:
-            await db.execute(
-                "INSERT INTO studio_run(prompt_version_id, clip_id, status, "
-                "output_json, model, finished_at) "
-                "VALUES (?, ?, 'ok', ?, 'gemini-2.5-pro', '2026-05-27T00:00:00Z')",
-                (version_id, clip_id, json.dumps(output_json)),
-            )
-            await db.commit()
-    loop = asyncio.new_event_loop()
-    try:
-        loop.run_until_complete(_go())
-    finally:
-        loop.close()
-
-
 def _seed_run_with_items(
     app, *, version_id, clip_id, scenes=None, fields=None, notes=None,
 ):

@@ -55,11 +55,14 @@ document.body.addEventListener('click', (evt) => {
   if (!a) return;
   const root = document.querySelector('.studio-page');
   const fid = root?._x_dataStack?.[0]?.focusedClipId;
-  if (!fid) return;
-  // Modifier-click (open in new tab/window) should also carry the clip;
-  // setting href before default action handles that case.
+  // Always normalize: if a clip is focused, write it into the href; if
+  // not, strip any previously-baked clip_id. Without the strip branch a
+  // prior click would leave clip_id=N on the anchor forever, so a
+  // later modifier-click after focus was cleared would still navigate
+  // with the stale clip id.
   const u = new URL(a.href, location.origin);
-  u.searchParams.set('clip_id', String(fid));
+  if (fid) u.searchParams.set('clip_id', String(fid));
+  else u.searchParams.delete('clip_id');
   a.href = u.toString();
 });
 

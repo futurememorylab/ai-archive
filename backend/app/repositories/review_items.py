@@ -105,6 +105,20 @@ class ReviewItemsRepo:
         )
         return [self._row(r) for r in await cur.fetchall()]
 
+    async def delete_for_studio_run(
+        self, conn: aiosqlite.Connection, *, studio_run_id: int
+    ) -> int:
+        """Delete all review_items linked to a studio_run. Used by the
+        annotator's studio finalize to ensure a retry doesn't accumulate
+        duplicate markers/fields on the same run_id. Safe on empty sets.
+        """
+        cur = await conn.execute(
+            "DELETE FROM review_items WHERE studio_run_id = ?",
+            (studio_run_id,),
+        )
+        await conn.commit()
+        return cur.rowcount or 0
+
     async def set_decision(
         self,
         conn: aiosqlite.Connection,

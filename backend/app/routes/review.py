@@ -54,7 +54,14 @@ async def apply_clip(request: Request, clip_id: int):
     if ctx.write_queue is None:
         raise HTTPException(503, "write queue not initialized")
 
-    accepted = await ctx.review_items_repo.list_by_clip(ctx.db, clip_id, decision="accepted")
+    # list_by_clip mixes annotation-bound and studio-bound rows (the
+    # CHECK constraint guarantees one or the other, never both). Studio
+    # outputs are local-only by design (ADR 0036) and must NOT be pushed
+    # upstream — filter them out before enqueueing.
+    accepted_all = await ctx.review_items_repo.list_by_clip(
+        ctx.db, clip_id, decision="accepted"
+    )
+    accepted = [it for it in accepted_all if it.annotation_id is not None]
     if not accepted:
         return {"queued": 0, "applied": 0}
 

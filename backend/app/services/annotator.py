@@ -250,6 +250,25 @@ async def _finalize_studio(
         )
         return
 
+    # Order matters: insert review_items BEFORE complete_ok. If
+    # bulk_insert raises, the outer exception handler in run_job calls
+    # complete_error on this same studio_run — if we'd already marked it
+    # 'ok', that would overwrite a successful run with status='error'.
+    #
+    # Also delete any pre-existing review_items for this run first so a
+    # retry (job_item picked up again after restart / error) doesn't
+    # accumulate duplicate markers/fields on the same studio_run_id.
+    review = expand(
+        structured,
+        version.target_map,
+        studio_run_id=run_id,
+        catdv_clip_id=item.catdv_clip_id,
+        clip_duration_secs=duration_secs or None,
+    )
+    await review_items_repo.delete_for_studio_run(db, studio_run_id=run_id)
+    if review:
+        await review_items_repo.bulk_insert(db, review)
+
     await studio_runs_repo.complete_ok(
         db, run_id,
         output_json=structured,
@@ -258,16 +277,6 @@ async def _finalize_studio(
         tokens_out=tokens_out,
         cost_usd=cost_usd,
     )
-
-    review = expand(
-        structured,
-        version.target_map,
-        studio_run_id=run_id,
-        catdv_clip_id=item.catdv_clip_id,
-        clip_duration_secs=duration_secs or None,
-    )
-    if review:
-        await review_items_repo.bulk_insert(db, review)
 
     await jobs_repo.update_item_status(db, item.id, "review_ready")
     await event_bus.publish(
