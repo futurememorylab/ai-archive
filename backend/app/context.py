@@ -229,6 +229,23 @@ async def _build_archive_subsystem(ctx: AppContext) -> _OnlineFlags:
     forced_offline = bool(getattr(settings, "catdv_offline", False)) and use_catdv
     login_failed = False
 
+    # Bridge GOOGLE_APPLICATION_CREDENTIALS from the .env-loaded Settings
+    # object back into os.environ before constructing any Google client
+    # (GcsService and GeminiService both call google.auth.default()).
+    # pydantic-settings parses .env into the Settings instance only; the
+    # google-auth SDK reads ADC sources from os.environ directly. Without
+    # this bridge, ADC silently falls through to the user's gcloud creds
+    # at ~/.config/gcloud/application_default_credentials.json, whose
+    # OAuth refresh token expires hourly and then breaks every annotate
+    # call with `invalid_grant: Bad Request`.
+    if settings.google_application_credentials:
+        import os
+
+        os.environ.setdefault(
+            "GOOGLE_APPLICATION_CREDENTIALS",
+            str(settings.google_application_credentials),
+        )
+
     if use_catdv and not forced_offline:
         ctx.catdv = CatdvClient(
             base_url=settings.catdv_base_url,

@@ -111,10 +111,22 @@ async def run_job(
                 item.catdv_clip_id,
                 extra={"job_id": job_id, "clip_id": item.catdv_clip_id},
             )
-            await jobs_repo.update_item_status(db, item.id, "error", error=str(exc))
+            msg = str(exc) or exc.__class__.__name__
+            await jobs_repo.update_item_status(db, item.id, "error", error=msg)
             await event_bus.publish(
-                topic, {"item_id": item.id, "status": "error", "error": str(exc)}
+                topic, {"item_id": item.id, "status": "error", "error": msg}
             )
+            # Studio runs need a terminal status of their own — the frontend
+            # polls /api/studio/runs/{id} and waits for status != pending|running.
+            # Without this, a Gemini auth failure (or any other non-ProxyNotFound
+            # exception) leaves the run in "pending" forever and the UI's
+            # "Running…" indicator never clears.
+            if kind == "studio":
+                run_id = await studio_runs_repo.find_latest_id_for_job_clip(
+                    db, job_id=item.job_id, clip_id=item.catdv_clip_id
+                )
+                if run_id is not None:
+                    await studio_runs_repo.complete_error(db, run_id, error=msg)
 
     refreshed = await jobs_repo.list_items(db, job_id)
     final_status = "completed"
