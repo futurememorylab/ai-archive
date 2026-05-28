@@ -38,12 +38,6 @@ window.studio = {
     fetch(`/api/studio/folders/${folderId}/clips/${clipId}`, {method: 'DELETE'})
       .then(() => btnEl.closest('.studio-clip-card').remove());
   },
-  // The minimise button lives inside the player wrapper, whose own
-  // x-data="player(...)" creates a nested scope that doesn't expose
-  // studioPage methods directly. Route the click through this shim.
-  minimizePlayer() {
-    this._root()?.minimizePlayer();
-  },
 };
 
 // Prompt-picker links live inside a nested Alpine x-data, so $root there
@@ -113,7 +107,9 @@ document.body.addEventListener('htmx:afterSwap', (evt) => {
 });
 
 document.addEventListener('alpine:init', () => {
-  Alpine.data('studioPage', (initial) => ({
+  Alpine.data('studioPage', (initial) => {
+    const prefs = window.__studioPrefs || { showList: true, showPlayer: true, layout: 'under' };
+    return {
     promptId: initial.promptId,
     activeVersionId: initial.activeVersionId,
     activeVersionNum: initial.activeVersionNum,
@@ -122,7 +118,9 @@ document.addEventListener('alpine:init', () => {
     compareVersionNum: initial.compareVersionNum,
     mode: 'prompt',  // page-level tab state; Task 11 confirms the lift from card-level.
     focusedClipId: initial.focusedClipId ?? null,
-    playerMinimized: false,
+    showList: prefs.showList,
+    showPlayer: prefs.showPlayer,
+    layout: prefs.layout,            // 'under' | 'right'
     // ── Run-button state machine ──────────────────────────────────────
     running: false,
     cancelling: false,
@@ -192,12 +190,34 @@ document.addEventListener('alpine:init', () => {
       this.refreshPlayer();
     },
 
-    minimizePlayer() {
-      this.playerMinimized = true;
+    toggleList() {
+      this.showList = !this.showList;
+      this._saveLayoutPrefs();
     },
 
-    restorePlayer() {
-      this.playerMinimized = false;
+    togglePlayer() {
+      this.showPlayer = !this.showPlayer;
+      this._saveLayoutPrefs();
+    },
+
+    setLayout(v) {
+      if (v !== 'under' && v !== 'right') return;
+      this.layout = v;
+      // Compare needs the wide stacked layout; close it when going right.
+      if (v === 'right' && this.compareVersionId) this.closeCompare();
+      this._saveLayoutPrefs();
+    },
+
+    _saveLayoutPrefs() {
+      try {
+        localStorage.setItem('studio.layoutPrefs', JSON.stringify({
+          showList: this.showList,
+          showPlayer: this.showPlayer,
+          layout: this.layout,
+        }));
+      } catch (err) {
+        console.error('studio layout prefs save failed', err);
+      }
     },
 
     refreshPlayer() {
@@ -312,7 +332,8 @@ document.addEventListener('alpine:init', () => {
       if (this.focusedClipId)    p.set('clip_id', this.focusedClipId);       else p.delete('clip_id');
       window.history.replaceState({}, '', `${window.location.pathname}?${p.toString()}`);
     },
-  }));
+  };
+  });
 
   // Cross-component proxy to studioPage.activeModel — necessary because
   // Alpine `$root` only walks to the nearest enclosing `x-data`, and nesting
@@ -409,6 +430,7 @@ document.addEventListener('alpine:init', () => {
     get mode()             { return this._page()?.mode || 'prompt'; },
     set mode(v)            { const p = this._page(); if (p) p.mode = v; },
     get compareVersionId() { return this._page()?.compareVersionId; },
+    get layout()           { return this._page()?.layout; },
     get activeVersionNum() { return this._page()?.activeVersionNum; },
     get pendingRunSwap()   { return this._page()?.pendingRunSwap; },
     openCompare()          { return this._page()?.openCompare(); },
