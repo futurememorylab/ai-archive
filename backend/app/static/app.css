@@ -1571,6 +1571,11 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .studio-compare {
   display: grid;
   grid-template-columns: 1fr;
+  /* Bound the single row to the pane height (min 0) so the prompt card
+     is height-clamped and .pc-body's overflow:auto can scroll. An
+     implicit `auto` row would size to content and let the card overflow
+     the pane instead. */
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   min-width: 0;
   padding: 12px;
