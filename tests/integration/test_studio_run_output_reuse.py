@@ -50,6 +50,66 @@ def _seed_run(app, *, version_id, clip_id, output_json):
         loop.close()
 
 
+def _seed_run_with_items(
+    app, *, version_id, clip_id, scenes=None, fields=None, notes=None,
+):
+    """Seed a studio_run + review_items rows.
+
+    `scenes` is a list of dicts in REAL Gemini shape:
+        {"name": "...", "in": {"secs": float}, "out": {"secs": float}}
+    `fields` is a dict identifier→value (passed through as proposed_value).
+    `notes` is a dict identifier→str.
+    """
+    db_path = app.state.ctx.settings.data_dir / "app.db"
+
+    async def _go():
+        async with aiosqlite.connect(db_path) as db:
+            output_json = {}
+            if scenes is not None:
+                output_json["scenes"] = scenes
+            if fields is not None:
+                output_json.update(fields)
+            if notes is not None:
+                output_json.update(notes)
+
+            cur = await db.execute(
+                "INSERT INTO studio_run(prompt_version_id, clip_id, status, "
+                "output_json, model, finished_at) VALUES "
+                "(?, ?, 'ok', ?, 'gemini-2.5-pro', '2026-05-27T00:00:00Z')",
+                (version_id, clip_id, json.dumps(output_json)),
+            )
+            run_id = cur.lastrowid
+
+            for scene in (scenes or []):
+                await db.execute(
+                    "INSERT INTO review_items(studio_run_id, catdv_clip_id, "
+                    "kind, proposed_value, decision) VALUES (?, ?, ?, ?, 'pending')",
+                    (run_id, clip_id, "marker", json.dumps(scene)),
+                )
+            for ident, val in (fields or {}).items():
+                await db.execute(
+                    "INSERT INTO review_items(studio_run_id, catdv_clip_id, "
+                    "kind, target_identifier, proposed_value, decision) "
+                    "VALUES (?, ?, ?, ?, ?, 'pending')",
+                    (run_id, clip_id, "field", ident, json.dumps(val)),
+                )
+            for ident, val in (notes or {}).items():
+                await db.execute(
+                    "INSERT INTO review_items(studio_run_id, catdv_clip_id, "
+                    "kind, target_identifier, proposed_value, decision) "
+                    "VALUES (?, ?, ?, ?, ?, 'pending')",
+                    (run_id, clip_id, "note", ident, json.dumps(val)),
+                )
+            await db.commit()
+            return run_id
+
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(_go())
+    finally:
+        loop.close()
+
+
 def _make_prompt_with_version(client, *, target_map: dict):
     """Create a prompt via POST then read its latest_version_id via GET."""
     r = client.post("/api/prompts", json={
@@ -64,13 +124,15 @@ def _make_prompt_with_version(client, *, target_map: dict):
 
 def test_run_output_uses_anno_panels_and_has_run_json(client):
     pid, vid = _make_prompt_with_version(client, target_map={
+        "scenes": {"kind": "markers"},
         "summary": {"kind": "field", "identifier": "pf.summary"},
     })
     from backend.app import main as main_mod
-    _seed_run(main_mod.app, version_id=vid, clip_id=12041, output_json={
-        "scenes": [{"in_secs": 1.0, "out_secs": 2.0, "name": "scene-a"}],
-        "summary": "krátký",
-    })
+    _seed_run_with_items(
+        main_mod.app, version_id=vid, clip_id=12041,
+        scenes=[{"name": "scene-a", "in": {"secs": 1.0}, "out": {"secs": 2.0}}],
+        fields={"pf.summary": "krátký"},
+    )
 
     r = client.get(f"/studio/_run?prompt_version_id={vid}&clip_id=12041")
     assert r.status_code == 200
@@ -104,11 +166,14 @@ def test_run_output_empty_state_when_no_run(client):
 def test_marker_articles_have_seek_handler(client):
     """Smoke: rendered marker @click attr is present (the seek wiring is
     JS-only — exercised at runtime via studioPromptCard.seek())."""
-    pid, vid = _make_prompt_with_version(client, target_map={})
-    from backend.app import main as main_mod
-    _seed_run(main_mod.app, version_id=vid, clip_id=12041, output_json={
-        "scenes": [{"in_secs": 5.0, "out_secs": 6.0, "name": "s"}],
+    pid, vid = _make_prompt_with_version(client, target_map={
+        "scenes": {"kind": "markers"},
     })
+    from backend.app import main as main_mod
+    _seed_run_with_items(
+        main_mod.app, version_id=vid, clip_id=12041,
+        scenes=[{"name": "s", "in": {"secs": 5.0}, "out": {"secs": 6.0}}],
+    )
     r = client.get(f"/studio/_run?prompt_version_id={vid}&clip_id=12041")
     assert r.status_code == 200
     # _anno_panels.html marker articles call seek(secs) — present in the rendered HTML.

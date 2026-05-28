@@ -26,9 +26,10 @@ def client(monkeypatch, tmp_path):
 
 
 def _seed_run(client, *, version_id, clip_id, scenes):
-    """Insert a studio_run row directly via a fresh sqlite connection on
-    the same on-disk DB. We open a separate connection (and our own event
-    loop) so we don't have to share state with the running app's loop.
+    """Insert a studio_run + review_items rows. Accepts either the legacy
+    flat-shape scenes ({in_secs, out_secs}) or the nested-secs shape, and
+    normalizes to nested before persisting — the overlay reads from
+    review_items (kind='marker') which always carry the nested shape.
     """
     import aiosqlite
 
@@ -36,14 +37,33 @@ def _seed_run(client, *, version_id, clip_id, scenes):
 
     db_path = main_mod.app.state.ctx.settings.data_dir / "app.db"
 
+    def _to_nested(s: dict) -> dict:
+        if "in" in s and isinstance(s["in"], dict):
+            return s
+        nested = {"name": s.get("name", "")}
+        if "in_secs" in s:
+            nested["in"] = {"secs": float(s["in_secs"])}
+        if "out_secs" in s and s["out_secs"] is not None:
+            nested["out"] = {"secs": float(s["out_secs"])}
+        return nested
+
+    normalized = [_to_nested(s) for s in scenes]
+
     async def _go():
         async with aiosqlite.connect(str(db_path)) as db:
-            await db.execute(
+            cur = await db.execute(
                 "INSERT INTO studio_run(prompt_version_id, clip_id, status, "
                 "output_json, model, finished_at) "
                 "VALUES (?, ?, 'ok', ?, 'gemini-2.5-pro', '2026-05-27T00:00:00Z')",
-                (version_id, clip_id, json.dumps({"scenes": scenes})),
+                (version_id, clip_id, json.dumps({"scenes": normalized})),
             )
+            run_id = cur.lastrowid
+            for scene in normalized:
+                await db.execute(
+                    "INSERT INTO review_items(studio_run_id, catdv_clip_id, "
+                    "kind, proposed_value, decision) VALUES (?, ?, ?, ?, 'pending')",
+                    (run_id, clip_id, "marker", json.dumps(scene)),
+                )
             await db.commit()
 
     loop = asyncio.new_event_loop()
