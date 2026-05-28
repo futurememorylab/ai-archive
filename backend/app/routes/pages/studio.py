@@ -182,12 +182,9 @@ async def _studio_archive_picker(
 async def _build_overlay_row(
     ctx, clip_id: int, version_id: int, *, cls: str
 ) -> dict | None:
-    """Resolve scenes + label for one version on one clip.
-
-    Returns the row dict consumed by _player_overlay.html, or None if
-    the version doesn't exist (we skip the row rather than emit a
-    placeholder label).
-    """
+    """Resolve scenes + label for one version on one clip, sourced from
+    review_items (not raw output_json) so the timeline overlay matches
+    the Output card."""
     try:
         v = await ctx.prompts_repo.get_version(ctx.db, version_id)
     except LookupError:
@@ -195,10 +192,27 @@ async def _build_overlay_row(
     run = await ctx.studio_runs_repo.latest_for_pair(
         ctx.db, prompt_version_id=version_id, clip_id=clip_id
     )
-    scenes = list((run.output_json or {}).get("scenes") or []) if run else []
+    ranges: list[dict] = []
+    if run is not None and run.id is not None:
+        items = await ctx.review_items_repo.list_by_studio_run(ctx.db, run.id)
+        for it in items:
+            if it.kind != "marker" or not isinstance(it.proposed_value, dict):
+                continue
+            pv = it.proposed_value
+            in_part = pv.get("in") or {}
+            out_part = pv.get("out") or {}
+            in_secs = in_part.get("secs") if isinstance(in_part, dict) else None
+            out_secs = out_part.get("secs") if isinstance(out_part, dict) else None
+            if in_secs is None:
+                continue
+            ranges.append({
+                "in_secs": float(in_secs),
+                "out_secs": float(out_secs) if out_secs is not None else None,
+                "name": pv.get("name") or "",
+            })
     return {
         "key": f"v{v.version_num}",
-        "ranges": scenes,
+        "ranges": ranges,
         "cls": cls,
         "alpine_list": None,
         "x_show": None,
@@ -284,7 +298,7 @@ async def _studio_prompt_card(
     run partial; without, the Output tab shows the focus-a-clip
     empty-state.
     """
-    from backend.app.services.studio_panels import panels_from_studio_run
+    from backend.app.services.draft_view import build_draft_view
 
     ctx = get_ctx(request)
     try:
@@ -308,7 +322,19 @@ async def _studio_prompt_card(
                 fps = float(clip.fps or 25.0)
             except Exception:  # noqa: BLE001
                 pass
-        panels = panels_from_studio_run(run, version, fps=fps)
+        items = (
+            await ctx.review_items_repo.list_by_studio_run(ctx.db, run.id)
+            if run is not None and run.id is not None
+            else []
+        )
+        panels = build_draft_view(
+            annotation=None,
+            review_items=items,
+            prompt_name=None,
+            version_num=version.version_num,
+            created_at=run.finished_at if run else None,
+            fps=fps,
+        )
 
     version_dict = version.model_dump()
     return templates.TemplateResponse(
@@ -333,7 +359,7 @@ async def _studio_run(
     prompt_version_id: int,
     clip_id: int,
 ):
-    from backend.app.services.studio_panels import panels_from_studio_run
+    from backend.app.services.draft_view import build_draft_view
 
     ctx = get_ctx(request)
     run = await ctx.studio_runs_repo.latest_for_pair(
@@ -353,7 +379,18 @@ async def _studio_run(
         except Exception:  # noqa: BLE001
             pass
 
-    panels = panels_from_studio_run(run, version, fps=fps)
+    items = (
+        await ctx.review_items_repo.list_by_studio_run(ctx.db, run.id)
+        if run is not None and run.id is not None
+        else []
+    )
+    panels = build_draft_view(
+        annotation=None,
+        review_items=items,
+        version_num=version.version_num if version else None,
+        created_at=run.finished_at if run else None,
+        fps=fps,
+    )
 
     return templates.TemplateResponse(
         request,
