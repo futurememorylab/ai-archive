@@ -44,29 +44,43 @@ def expand(
     structured: dict[str, Any],
     target_map: TargetMap,
     *,
-    annotation_id: int,
     catdv_clip_id: int,
+    annotation_id: int | None = None,
+    studio_run_id: int | None = None,
     clip_duration_secs: float | None = None,
 ) -> list[ReviewItem]:
     """Walk target_map; emit one ReviewItem per concrete change.
 
+    Exactly one of `annotation_id` or `studio_run_id` must be supplied.
     `clip_duration_secs`, if supplied, is used to drop or clamp marker
     timestamps that fall outside the clip — Gemini occasionally hallucinates
     content past the end on multi-minute video.
     """
+    if (annotation_id is None) == (studio_run_id is None):
+        raise ValueError(
+            "expand() requires exactly one of annotation_id or studio_run_id"
+        )
     items: list[ReviewItem] = []
     for key, entry in target_map.fields.items():
         if key not in structured or structured[key] is None:
             continue
         value = structured[key]
-        items.extend(_expand_one(entry, value, annotation_id, catdv_clip_id, clip_duration_secs))
+        items.extend(_expand_one(
+            entry, value,
+            annotation_id=annotation_id,
+            studio_run_id=studio_run_id,
+            catdv_clip_id=catdv_clip_id,
+            clip_duration_secs=clip_duration_secs,
+        ))
     return items
 
 
 def _expand_one(
     entry: TargetEntry,
     value: Any,
-    annotation_id: int,
+    *,
+    annotation_id: int | None,
+    studio_run_id: int | None,
     catdv_clip_id: int,
     clip_duration_secs: float | None = None,
 ) -> list[ReviewItem]:
@@ -79,6 +93,7 @@ def _expand_one(
         return [
             ReviewItem(
                 annotation_id=annotation_id,
+                studio_run_id=studio_run_id,
                 catdv_clip_id=catdv_clip_id,
                 kind="marker",
                 proposed_value=m,
@@ -89,6 +104,7 @@ def _expand_one(
         return [
             ReviewItem(
                 annotation_id=annotation_id,
+                studio_run_id=studio_run_id,
                 catdv_clip_id=catdv_clip_id,
                 kind="field",
                 target_identifier=entry.identifier,
@@ -99,6 +115,7 @@ def _expand_one(
         return [
             ReviewItem(
                 annotation_id=annotation_id,
+                studio_run_id=studio_run_id,
                 catdv_clip_id=catdv_clip_id,
                 kind="note",
                 target_identifier=entry.target,
