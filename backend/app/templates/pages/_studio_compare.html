@@ -16,8 +16,7 @@
     {% include "pages/_studio_prompt_card.html" %}
   {% endwith %}
 
-  <div class="cmp-slot" data-cmp-slot
-       {% if not compare_version %}style="display:none"{% endif %}>
+  <div class="cmp-slot" data-cmp-slot>
     {% if compare_version %}
       {% with side='cmp', active_version=compare_version, version=compare_version,
              versions=versions, clip_id=None, run=None, panels=None, clip={'fps': 25.0} %}
