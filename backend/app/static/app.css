@@ -1487,6 +1487,16 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   flex: 1;
 }
 
+.studio-layout-toggles {
+  display: flex;
+  gap: 4px;
+  margin-right: 4px;
+}
+.studio-layout-toggles .btn.active {
+  background: var(--accent-2);
+  color: var(--text);
+}
+
 .studio-body {
   display: grid;
   grid-template-columns: 320px 1fr;
@@ -1496,6 +1506,30 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 
 .studio-body.no-player .studio-player-slot {
   display: none;
+}
+
+.studio-body.no-list {
+  grid-template-columns: 1fr;
+}
+.studio-body.no-list .studio-videos {
+  display: none;
+}
+
+/* Prompt/output beside the player (vs stacked under it). The player
+   slot and the compare block are siblings in .studio-right; flipping
+   the grid from rows to columns places them side-by-side (player left,
+   prompt/output right) without moving any DOM. */
+.studio-right.layout-right {
+  grid-template-columns: minmax(360px, 1fr) 1fr;
+  grid-template-rows: 1fr;
+}
+.studio-right.layout-right .studio-player-slot {
+  border-bottom: none;
+  border-right: 1px solid var(--line);
+}
+/* With the player hidden in right mode, the prompt/output fills the row. */
+.studio-body.no-player .studio-right.layout-right {
+  grid-template-columns: 1fr;
 }
 
 .studio-videos {
@@ -1533,53 +1567,6 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 
 /* The player wrapper is the positioning context for the minimise btn. */
 .studio-player { position: relative; }
-
-.studio-player-min {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 2;
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: rgba(20, 24, 29, 0.7);
-  color: var(--text-2);
-  cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-  padding: 0;
-}
-.studio-player-min:hover {
-  color: var(--text);
-  background: var(--surface-2);
-  border-color: var(--line-2);
-}
-
-.studio-show-player {
-  width: 28px;
-  height: 28px;
-  margin-right: 6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-2);
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-  padding: 0;
-}
-.studio-show-player:hover {
-  color: var(--text);
-  background: var(--surface-2);
-  border-color: var(--line-2);
-}
 
 .studio-compare {
   display: grid;
