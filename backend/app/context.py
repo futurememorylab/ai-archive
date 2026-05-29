@@ -212,6 +212,7 @@ async def _build_archive_subsystem(ctx: AppContext) -> _OnlineFlags:
     ConnectionMonitor. Lazy imports here avoid pulling httpx / google libs
     when init_external=False (tests, CLI tools).
     """
+    import asyncio
     import logging
 
     from backend.app.services.catdv_client import (
@@ -257,8 +258,18 @@ async def _build_archive_subsystem(ctx: AppContext) -> _OnlineFlags:
         # lazy. Force one round-trip so an unreachable host or bad
         # credentials degrade us to offline cleanly at startup
         # instead of half-booting and tripping the first request.
+        #
+        # Bound this probe with catdv_startup_login_timeout_s: the client's
+        # own 60s timeout is sized for large downloads, but a silently
+        # unreachable host (VPN drop, server off) would otherwise stall every
+        # restart for that full window. A timeout here is transport-like, so
+        # it lands in the generic `except` below — client kept alive, booted
+        # offline, recoverable via the Reconnect button.
         try:
-            await ctx.catdv.login()
+            await asyncio.wait_for(
+                ctx.catdv.login(),
+                timeout=settings.catdv_startup_login_timeout_s,
+            )
         except CatdvAuthError as exc:
             # Bad credentials — retry won't help. Tear down the client
             # so the monitor cannot misread "client present" as

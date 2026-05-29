@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     # connection monitor
     health_probe_interval_s: int = 30
     health_probe_timeout_s: int = 5
+    # boot-time CatDV login probe. Bounds how long startup can block on an
+    # unreachable CatDV before degrading to offline (reconnect later via the
+    # Reconnect button / the background probe). Kept short so dev restarts are
+    # snappy; distinct from the 60s client timeout used for real downloads.
+    catdv_startup_login_timeout_s: float = 2.0
     # set by run.sh when launching uvicorn with --reload; disables the
     # in-app shutdown button (the reloader supervisor may respawn the worker)
     dev_reload: bool = False

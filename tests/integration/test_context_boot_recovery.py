@@ -5,6 +5,7 @@ ConnectionMonitor can recover via retry_now() without a process
 restart.
 """
 
+import asyncio
 from collections.abc import Callable
 
 import pytest
@@ -105,6 +106,56 @@ async def test_transport_error_at_boot_keeps_client_and_recovers(tmp_path, monke
         _set_env(monkeypatch, tmp_path, base_url)
         ctx = await AppContext.build(Settings(), init_external=True)
         try:
+            assert ctx.catdv is not None
+            assert ctx.connection_monitor is not None
+            assert ctx.connection_monitor.current_state() == ConnectionState.offline
+
+            new_state = await ctx.connection_monitor.retry_now()
+            assert new_state == ConnectionState.online
+        finally:
+            await ctx.aclose()
+
+
+def _patch_hanging_login(monkeypatch, hang_for: float) -> dict[str, int]:
+    """Replace CatdvClient.login so the first call hangs for `hang_for`
+    seconds (simulating an unreachable host that silently drops the TCP
+    connection), then subsequent calls fall through to the real impl.
+    """
+    calls = {"n": 0}
+    original = CatdvClient.login
+
+    async def patched(self) -> None:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            await asyncio.sleep(hang_for)
+            return
+        await original(self)
+
+    monkeypatch.setattr(CatdvClient, "login", patched)
+    return calls
+
+
+@pytest.mark.asyncio
+async def test_hanging_login_at_boot_is_bounded_and_recovers(tmp_path, monkeypatch):
+    """An unreachable CatDV that silently hangs must NOT block startup for
+    the full client timeout. The boot login is bounded by
+    CATDV_STARTUP_LOGIN_TIMEOUT_S; on timeout we boot offline but keep the
+    client so the monitor can recover."""
+    monkeypatch.setattr(gcs_mod, "GcsService", _StubGcs)
+    monkeypatch.setattr(gemini_mod, "GeminiService", _StubGemini)
+    _patch_hanging_login(monkeypatch, hang_for=30.0)
+    monkeypatch.setenv("CATDV_STARTUP_LOGIN_TIMEOUT_S", "0.1")
+
+    with running_fake_catdv() as (base_url, _fake):
+        _set_env(monkeypatch, tmp_path, base_url)
+        # If the boot login were unbounded it would hang ~30s; guard the
+        # whole build with a 5s wall-clock budget so the failure mode is a
+        # clear timeout rather than a 30s stall.
+        ctx = await asyncio.wait_for(
+            AppContext.build(Settings(), init_external=True), timeout=5.0
+        )
+        try:
+            # Timeout is transport-like: keep the client alive for retry.
             assert ctx.catdv is not None
             assert ctx.connection_monitor is not None
             assert ctx.connection_monitor.current_state() == ConnectionState.offline
