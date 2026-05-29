@@ -20,6 +20,7 @@ If you have **two hours**, read everything here in order. If you have
 | 5 | [`05-catdv-license-discipline.md`](./05-catdv-license-discipline.md) | The 2-seat CatDV limit — **read before starting any process** |
 | 6 | [`06-coding-standards.md`](./06-coding-standards.md) | Ruff, basedpyright, import-linter, ADR practice |
 | 7 | [`07-codebase-tour.md`](./07-codebase-tour.md) | Where things live; symptom→file table; further reading |
+| 8 | [`development-workflow.md`](./development-workflow.md) | Trunk-based branching, the Superpowers per-task loop, and the per-PR checklist |
 
 ## After onboarding — where to go next
 
