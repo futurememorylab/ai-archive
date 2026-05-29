@@ -66,7 +66,10 @@ For each implementation branch:
    squashed at merge.
 5. **Self-review** — fresh-agent review pass. This is pre-PR hygiene, **not** a
    substitute for human review.
-6. **Finish** — push, open PR.
+6. **Simplify** — run `/simplify` to review the diff and apply reuse,
+   simplification, and efficiency cleanups. Shrinks the diff before humans
+   look at it.
+7. **Finish** — push, open PR.
 
 Worktrees are per-machine. One developer may run several loops in parallel
 worktrees; this is invisible to the rest of the team. A worktree maps to one
@@ -171,6 +174,7 @@ develop on trunk.
 - [ ] Scoped to one slice of `plan.md`
 - [ ] Tests written and passing locally
 - [ ] Fresh-agent self-review done
+- [ ] `/simplify` run on the diff
 - [ ] Rebased onto the latest `origin/main`
 
 **Before merging**
