@@ -59,50 +59,9 @@ document.body.addEventListener('click', (evt) => {
   a.href = u.toString();
 });
 
-document.body.addEventListener('htmx:afterSwap', (evt) => {
-  const page = window.Alpine?.store('studio');
-  if (!page) return;
-
-  // When a folder's clip cards swap in (hx-trigger="intersect once" on
-  // .studio-folder-kids), reconcile `.selected` against the live
-  // focusedClipId. The server bakes a `clip_id=…` into each folder's
-  // hx-get URL at page-load time, so cards arrive pre-selected based on
-  // the URL at that moment — but the user may have focused a different
-  // clip via JS since, and the hx-get URL doesn't update. Clear the
-  // server's guess, then apply the current focus.
-  if (evt.target.classList?.contains('studio-folder-kids')) {
-    evt.target.querySelectorAll('.studio-clip-card.selected')
-      .forEach(el => el.classList.remove('selected'));
-    if (page.focusedClipId) {
-      evt.target.querySelectorAll(`.studio-clip-card[data-clip-id="${page.focusedClipId}"]`)
-        .forEach(el => el.classList.add('selected'));
-    }
-  }
-
-  const card = evt.target.closest('.studio-prompt-card');
-  if (!card) return;
-  // Alpine v3's MutationObserver doesn't reliably re-init x-data subtrees
-  // swapped by HTMX hx-swap="outerHTML" — after a few cycles the card
-  // comes back un-initialized, then every directive in it
-  // (picker, close, diff-toggle, tab clicks) becomes a dead click.
-  // Initialize the swapped subtree explicitly to keep it alive.
-  window.Alpine?.initTree(card);
-  const side = card.getAttribute('data-side');
-  const vId  = parseInt(card.getAttribute('data-version-id'), 10);
-  const vNum = parseInt(card.getAttribute('data-version-num'), 10);
-  if (Number.isNaN(vId)) return;
-  if (side === 'cur') {
-    page.activeVersionId = vId;
-    page.activeVersionNum = vNum;
-    page.pendingRunSwap++;
-  } else if (side === 'cmp') {
-    page.compareVersionId = vId;
-    page.compareVersionNum = vNum;
-    page.pendingRunSwap++;
-  }
-  page._writeUrl();
-  if (page.focusedClipId) page.refreshPlayer();
-});
+// The global `htmx:afterSwap` listener (studio-folder-kids `.selected`
+// reconciliation + prompt-card re-init + version-state reconciliation)
+// lives in htmxAlpine.js — the single owner of HTMX↔Alpine lifecycle.
 
 document.addEventListener('alpine:init', () => {
   // studioPage — THIN delegator. The shared state + logic live in
@@ -218,8 +177,11 @@ document.addEventListener('alpine:init', () => {
         );
         if (kidsEl) {
           kidsEl.innerHTML = html;
-          window.Alpine?.initTree(kidsEl);
-          window.htmx?.process(kidsEl);
+          window.htmxAlpine.reinit(kidsEl);
+        } else {
+          console.warn(
+            `archivePicker.addSelected: .studio-folder-kids not found for folder ${this.folderId}`
+          );
         }
         this.close();  // close the archive picker modal
         Alpine.store('toast').push(
@@ -262,9 +224,18 @@ document.addEventListener('alpine:init', () => {
         const folderList = document.querySelector('.studio-folders-list');
         if (folderList) {
           folderList.insertAdjacentHTML('beforeend', html);
-          const newCard = folderList.lastElementChild;
-          window.Alpine?.initTree(newCard);
-          window.htmx?.process(newCard);
+          // Select the appended folder card by its stable root class rather
+          // than `lastElementChild`, so this survives _studio_folder_card.html
+          // gaining trailing sibling root nodes (e.g. a comment or wrapper).
+          const cards = folderList.querySelectorAll('.studio-folder');
+          const newCard = cards[cards.length - 1];
+          if (newCard) {
+            window.htmxAlpine.reinit(newCard);
+          } else {
+            console.warn('studioFolders.createFolder: no .studio-folder card after insert');
+          }
+        } else {
+          console.warn('studioFolders.createFolder: .studio-folders-list not found');
         }
         this.newFolderName = '';
         this.newFolderOpen = false;
@@ -373,7 +344,9 @@ document.addEventListener('alpine:init', () => {
         // x-data of their own — without this the marker @click="seek(...)"
         // and the Markers/Fields tab switches are dead. The studio output is
         // read-only (review_mode=False), so no player-only directives throw.
-        window.Alpine?.initTree(slot);
+        // (htmxAlpine.reinit also runs an idempotent HTMX re-scan — harmless
+        // on this read-only output.)
+        window.htmxAlpine.reinit(slot);
       } catch (err) {
         console.error('loadOutput failed', err);
         Alpine.store('toast').push(

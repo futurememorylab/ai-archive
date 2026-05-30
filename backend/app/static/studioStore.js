@@ -269,11 +269,10 @@ document.addEventListener('alpine:init', () => {
       if (this.focusedClipId) params.set('clip_id', this.focusedClipId);
       const html = await fetch(`/studio/_prompt_card?${params.toString()}`).then(r => r.text());
       slot.innerHTML = html;
-      window.Alpine?.initTree(slot);
-      // HTMX doesn't auto-scan DOM we injected ourselves — without this,
-      // the cmp card's version-picker hx-* attributes never get wired
-      // and picking a different cmp version is a dead click.
-      window.htmx?.process(slot);
+      // Re-init the injected cmp card: Alpine re-scans its directives and
+      // HTMX wires the version-picker hx-* attributes (without process, the
+      // cmp version-pick would be a dead click). htmxAlpine owns both.
+      window.htmxAlpine.reinit(slot);
       this.refreshPlayer();
     },
 
