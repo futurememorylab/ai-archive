@@ -206,15 +206,23 @@ class SyncEngine:
                 # transient (transport bug, adapter glitch). The
                 # max-attempts ceiling prevents an infinitely-retried row
                 # from blocking the queue. See ADR 0042 (added in this PR).
-                attempts_so_far = max(int(r.get("attempts") or 0) for r in rows) + 1
+                #
+                # Use min(attempts) across the group: ceiling fires only
+                # when the YOUNGEST op in the batch has hit the cap. Using
+                # max would kill younger ops early when sibling ops on the
+                # same clip have divergent attempt counts.
+                next_attempts = min(int(r.get("attempts") or 0) for r in rows) + 1
                 err_msg = f"{type(exc).__name__}: {exc}"
-                if attempts_so_far >= self._max_attempts:
-                    # Bump attempts first so the final row reflects the true
-                    # count, then flip to terminal-failed.
-                    await self._pending.mark_retryable(db, op_ids, error=err_msg)
+                if next_attempts >= self._max_attempts:
+                    # Atomic: status='failed' AND attempts+=1 in one SQL
+                    # statement. A two-call sequence (mark_retryable then
+                    # mark_failed) would leave a crash window where the
+                    # row stays 'pending' at the ceiling and gets retried
+                    # past it.
                     await self._pending.mark_failed(
                         db, op_ids,
-                        error=f"{err_msg} (max_attempts reached)",
+                        error=f"{err_msg}; max_attempts={self._max_attempts} reached",
+                        bump_attempts=True,
                     )
                 else:
                     await self._pending.mark_retryable(db, op_ids, error=err_msg)

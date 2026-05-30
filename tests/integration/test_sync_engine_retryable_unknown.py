@@ -87,16 +87,18 @@ async def test_unknown_exception_eventually_fails_at_max_attempts(tmp_path):
             tick_interval_s=0.01,
             retry_base_s=0.001,
             retry_max_s=0.001,
+            max_attempts=3,
         )
-        # Ten drains, each separated by enough wall time to clear backoff.
+        # Three drains, each separated by enough wall time to clear backoff.
         # retry_base_s=0.001 means backoff is 1ms; sleep 5ms to ensure the
         # wall clock advances past the backoff window on every iteration.
-        for _ in range(10):
+        for _ in range(3):
             await asyncio.sleep(0.005)
             await engine.drain_once()
 
         repo = PendingOperationsRepo()
         row = await repo.get(conn, op_id)
-        # After max_attempts (default 10), the row should be terminal-failed.
+        # Exactly max_attempts attempts — the atomic mark_failed(bump_attempts=True)
+        # at the ceiling means we land at exactly the cap, never above.
         assert row["status"] == "failed", row
-        assert row["attempts"] >= 10
+        assert row["attempts"] == 3, row
