@@ -1,6 +1,7 @@
 """Startup helpers — stale-session cleanup and external-dependency
 liveness checks. Called from the FastAPI lifespan before serving."""
 
+import logging
 from dataclasses import dataclass, field
 
 import aiosqlite
@@ -56,3 +57,23 @@ async def run_checks(
             result.failures.append(f"Proxy resolver failed for clip {sample_clip_id}: {exc}")
 
     return result
+
+
+def warn_browser_secret_exposure(settings) -> None:
+    """Log a WARNING when GEMINI_API_KEY is configured.
+
+    live_sessions.mint_ephemeral_token returns the raw key to the
+    browser because the ephemeral-token flow (authTokens.create) closes
+    the WSS handshake with code 1007 'API key not valid' the moment the
+    client sends `setup`. The accepted threat model is single-operator
+    local app over VPN — see ADR 0043. This log line ensures the
+    exposure is visible to the operator on every boot, not just to
+    someone reading the code comment in live_sessions.py.
+    """
+    if getattr(settings, "gemini_api_key", None):
+        logging.getLogger(__name__).warning(
+            "GEMINI_API_KEY is configured; the raw key will be exposed to the "
+            "browser during Live sessions. This is accepted under the "
+            "single-operator local + VPN threat model — see ADR 0043. If your "
+            "deployment falls outside that model, unset GEMINI_API_KEY."
+        )
