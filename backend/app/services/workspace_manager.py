@@ -31,6 +31,7 @@ from typing import Any
 
 import aiosqlite
 
+from backend.app.archive.errors import is_provider_not_found
 from backend.app.archive.model import ClipKey
 from backend.app.repositories.workspaces import WorkspacesRepo
 
@@ -129,11 +130,24 @@ class WorkspaceManager:
                 # 1. metadata
                 try:
                     await self._provider.get_clip(key[1])
-                except Exception as exc:  # noqa: BLE001 — provider surface varies
-                    await self._repo.set_cache_state(
-                        db, ws_id, key, "error", error=f"metadata: {exc}"
-                    )
-                    yield PrepEvent(clip_key=key, state="error", error=str(exc))
+                except Exception as exc:  # noqa: BLE001
+                    # Narrow per ADR 0042 (added in this PR): only documented
+                    # absence (NotFoundError / 404) is terminal 'error'.
+                    # Transient failures get 'transient_error' which is
+                    # retryable. asyncio.CancelledError is a BaseException
+                    # not Exception, so cancellation still propagates.
+                    if is_provider_not_found(exc):
+                        await self._repo.set_cache_state(
+                            db, ws_id, key, "error", error=f"metadata: {exc}"
+                        )
+                        yield PrepEvent(clip_key=key, state="error", error=str(exc))
+                    else:
+                        await self._repo.set_cache_state(
+                            db, ws_id, key, "transient_error", error=f"metadata: {exc}"
+                        )
+                        yield PrepEvent(
+                            clip_key=key, state="transient_error", error=str(exc)
+                        )
                     continue
                 await self._repo.set_primary_pin(db, key, ws_id)
                 await self._repo.set_cache_state(db, ws_id, key, "metadata")
@@ -158,10 +172,20 @@ class WorkspaceManager:
                     try:
                         await self._resolver.path_for_clip_id(int(key[1]))
                     except Exception as exc:  # noqa: BLE001
-                        await self._repo.set_cache_state(
-                            db, ws_id, key, "error", error=f"media: {exc}"
-                        )
-                        yield PrepEvent(clip_key=key, state="error", error=str(exc))
+                        # Same narrowing as metadata: only NotFoundError / 404
+                        # is terminal; everything else is transient_error.
+                        if is_provider_not_found(exc):
+                            await self._repo.set_cache_state(
+                                db, ws_id, key, "error", error=f"media: {exc}"
+                            )
+                            yield PrepEvent(clip_key=key, state="error", error=str(exc))
+                        else:
+                            await self._repo.set_cache_state(
+                                db, ws_id, key, "transient_error", error=f"media: {exc}"
+                            )
+                            yield PrepEvent(
+                                clip_key=key, state="transient_error", error=str(exc)
+                            )
                         continue
                     await self._repo.set_cache_state(db, ws_id, key, "media")
                     yield PrepEvent(clip_key=key, state="media")

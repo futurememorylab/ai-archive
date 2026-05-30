@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from backend.app.archive.errors import NotFoundError
 from backend.app.archive.provider import ProviderCapabilities
 from backend.app.repositories.workspaces import WorkspacesRepo
 from backend.app.services.workspace_manager import (
@@ -28,7 +29,7 @@ class FakeProvider:
     async def get_clip(self, clip_id: str):
         self.get_calls.append(clip_id)
         if clip_id in self._fail_on:
-            raise RuntimeError(f"boom {clip_id}")
+            raise NotFoundError(f"clip {clip_id} not found")
         return None  # workspace_manager doesn't use the return value
 
 

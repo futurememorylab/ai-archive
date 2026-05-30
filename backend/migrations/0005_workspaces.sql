@@ -23,7 +23,7 @@ CREATE TABLE workspace_clips (
   provider_id       TEXT NOT NULL,
   provider_clip_id  TEXT NOT NULL,
   added_at          TEXT NOT NULL,
-  cache_state       TEXT NOT NULL,    -- pending | metadata | media | ready | error
+  cache_state       TEXT NOT NULL,    -- pending | metadata | media | ready | error | transient_error
   cache_error       TEXT,
   PRIMARY KEY (workspace_id, provider_id, provider_clip_id)
 );
