@@ -13,7 +13,8 @@
 <div class="studio-player"
      data-clip-player
      data-clip-id="{{ clip_id }}"
-     x-data="player({{ fps or 25 }}, {{ duration_secs or 0 }}, [], [])">
+     x-data="player({{ fps or 25 }}, {{ duration_secs or 0 }}, [], [])"
+     x-on:studio-seek="seek($event.detail)">
   {% with
       clip_kind = "video",
       media_url = "/api/media/" ~ clip_id,

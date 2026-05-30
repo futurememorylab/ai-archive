@@ -1,16 +1,16 @@
-/* Studio page — Alpine root state.
+/* Studio page — thin Alpine delegator over `Alpine.store('studio')`.
 
-   The page template puts `x-data="studioPage(...)"` on .studio-page.
-   Child components read parent scope via $root so the header, folder
-   list, and prompt card all share the same focused-clip / running flag.
+   The shared page state (focused clip, run-button machine, layout
+   prefs, compare/version state) lives in the `studio` store, registered
+   in studioStore.js. The page template still puts
+   `x-data="studioPage(...)"` on .studio-page so existing template
+   bindings keep resolving — but studioPage is now a THIN delegator that
+   forwards every field/method to `$store.studio`. Cross-component
+   readers (the window.studio shim, htmx:afterSwap, modelPicker,
+   studioPromptCard, cmpDiff) read `Alpine.store('studio')` directly,
+   replacing the old reach-ins into Alpine's private data-stack internal.
 
-   Run lifecycle:
-     1. POST /api/studio/runs {prompt_version_id, clip_id, model}
-        → {run_id, job_id}
-     2. Poll GET /api/studio/runs/{run_id} every 1s until status != pending|running
-     3. On completion (ok or error), trigger a UI refresh by incrementing
-        pendingRunSwap; the prompt card watches that and re-fetches its
-        output partial.
+   See studioStore.js for the run lifecycle and the actual logic.
 */
 
 // window.studio — vanilla-JS shim for HTMX-injected content (clip cards,
@@ -19,10 +19,10 @@
 // the inserted nodes have no `x-data` of their own (they would rely on
 // inherited scope, which initTree doesn't wire up after the fact).
 // Rather than fight that, dynamic content uses vanilla `onclick` and
-// calls these shim methods, which proxy to the Alpine root.
+// calls these shim methods, which proxy to the studio store.
 window.studio = {
   _root() {
-    return document.querySelector('.studio-page')?._x_dataStack?.[0] ?? null;
+    return window.Alpine?.store('studio') ?? null;
   },
   focusClip(clipId) {
     this._root()?.focusClip(clipId);
@@ -47,8 +47,7 @@ window.studio = {
 document.body.addEventListener('click', (evt) => {
   const a = evt.target.closest('a[data-prompt-switch]');
   if (!a) return;
-  const root = document.querySelector('.studio-page');
-  const fid = root?._x_dataStack?.[0]?.focusedClipId;
+  const fid = window.Alpine?.store('studio')?.focusedClipId;
   // Always normalize: if a clip is focused, write it into the href; if
   // not, strip any previously-baked clip_id. Without the strip branch a
   // prior click would leave clip_id=N on the anchor forever, so a
@@ -61,9 +60,8 @@ document.body.addEventListener('click', (evt) => {
 });
 
 document.body.addEventListener('htmx:afterSwap', (evt) => {
-  const root = document.querySelector('.studio-page');
-  if (!root || !root._x_dataStack) return;
-  const page = root._x_dataStack[0];
+  const page = window.Alpine?.store('studio');
+  if (!page) return;
 
   // When a folder's clip cards swap in (hx-trigger="intersect once" on
   // .studio-folder-kids), reconcile `.selected` against the live
@@ -85,7 +83,7 @@ document.body.addEventListener('htmx:afterSwap', (evt) => {
   if (!card) return;
   // Alpine v3's MutationObserver doesn't reliably re-init x-data subtrees
   // swapped by HTMX hx-swap="outerHTML" — after a few cycles the card
-  // comes back with no _x_dataStack, then every directive in it
+  // comes back un-initialized, then every directive in it
   // (picker, close, diff-toggle, tab clicks) becomes a dead click.
   // Initialize the swapped subtree explicitly to keep it alive.
   window.Alpine?.initTree(card);
@@ -107,270 +105,86 @@ document.body.addEventListener('htmx:afterSwap', (evt) => {
 });
 
 document.addEventListener('alpine:init', () => {
+  // studioPage — THIN delegator. The shared state + logic live in
+  // Alpine.store('studio') (studioStore.js). This component stays the
+  // x-data on .studio-page so every existing template binding still
+  // resolves, but each field/method just forwards to the store. The
+  // boilerplate is the deliberate safe trade-off: it keeps template
+  // churn at zero while removing the private-internal reach-ins. Same
+  // delegation pattern as the CoreCtx/LiveCtx property proxies elsewhere
+  // in this codebase.
   Alpine.data('studioPage', (initial) => {
-    const prefs = window.__studioPrefs || { showList: true, showPlayer: true, layout: 'under' };
+    const store = () => Alpine.store('studio');
     return {
-    promptId: initial.promptId,
-    activeVersionId: initial.activeVersionId,
-    activeVersionNum: initial.activeVersionNum,
-    activeModel: initial.activeModel,
-    compareVersionId: initial.compareVersionId,
-    compareVersionNum: initial.compareVersionNum,
-    mode: 'prompt',  // page-level tab state; Task 11 confirms the lift from card-level.
-    focusedClipId: initial.focusedClipId ?? null,
-    showList: prefs.showList,
-    showPlayer: prefs.showPlayer,
-    layout: prefs.layout,            // 'under' | 'right'
-    // ── Run-button state machine ──────────────────────────────────────
-    running: false,
-    cancelling: false,
-    runId: null,
-    runJobId: null,
-    runStartMs: 0,
-    runningElapsedLabel: '0:00',
-    doneFlashUntilMs: 0,
-    cancelledFlashUntilMs: 0,
-    _cancelRequested: false,
-    _nowMs: 0,   // bumped by the 1Hz ticker so runButtonLabel re-evaluates
-    pendingRunSwap: 0,
+      init() { store().hydrate(initial); },
 
-    init() {
-      // Restore a server-seeded focused clip (e.g. from ?clip_id=…). The
-      // server already left `no-player` off the body in that case, so the
-      // slot is visible — we just need to load the player partial.
-      if (this.focusedClipId) this.refreshPlayer();
-      // 1Hz ticker drives both the elapsed label and the done-flash expiry.
-      setInterval(() => {
-        const now = performance.now();
-        this._nowMs = now;  // touch reactive state so getters re-run
-        if (this.running) {
-          const s = Math.floor((now - this.runStartMs) / 1000);
-          this.runningElapsedLabel = window.fmtTimecode(s);
-        }
-        if (this.doneFlashUntilMs && now >= this.doneFlashUntilMs) {
-          this.doneFlashUntilMs = 0;
-        }
-        if (this.cancelledFlashUntilMs && now >= this.cancelledFlashUntilMs) {
-          this.cancelledFlashUntilMs = 0;
-        }
-      }, 1000);
-    },
+      // ── State delegators (getters/setters → store) ────────────────
+      get promptId()             { return store().promptId; },
+      set promptId(v)            { store().promptId = v; },
+      get activeVersionId()      { return store().activeVersionId; },
+      set activeVersionId(v)     { store().activeVersionId = v; },
+      get activeVersionNum()     { return store().activeVersionNum; },
+      set activeVersionNum(v)    { store().activeVersionNum = v; },
+      get activeModel()          { return store().activeModel; },
+      set activeModel(v)         { store().activeModel = v; },
+      get compareVersionId()     { return store().compareVersionId; },
+      set compareVersionId(v)    { store().compareVersionId = v; },
+      get compareVersionNum()    { return store().compareVersionNum; },
+      set compareVersionNum(v)   { store().compareVersionNum = v; },
+      get mode()                 { return store().mode; },
+      set mode(v)                { store().mode = v; },
+      get focusedClipId()        { return store().focusedClipId; },
+      set focusedClipId(v)       { store().focusedClipId = v; },
+      get showList()             { return store().showList; },
+      set showList(v)            { store().showList = v; },
+      get showPlayer()           { return store().showPlayer; },
+      set showPlayer(v)          { store().showPlayer = v; },
+      get layout()               { return store().layout; },
+      set layout(v)              { store().layout = v; },
+      get running()              { return store().running; },
+      set running(v)             { store().running = v; },
+      get cancelling()           { return store().cancelling; },
+      set cancelling(v)          { store().cancelling = v; },
+      get runId()                { return store().runId; },
+      set runId(v)               { store().runId = v; },
+      get runJobId()             { return store().runJobId; },
+      set runJobId(v)            { store().runJobId = v; },
+      get runStartMs()           { return store().runStartMs; },
+      set runStartMs(v)          { store().runStartMs = v; },
+      get runningElapsedLabel()  { return store().runningElapsedLabel; },
+      set runningElapsedLabel(v) { store().runningElapsedLabel = v; },
+      get doneFlashUntilMs()     { return store().doneFlashUntilMs; },
+      set doneFlashUntilMs(v)    { store().doneFlashUntilMs = v; },
+      get cancelledFlashUntilMs(){ return store().cancelledFlashUntilMs; },
+      set cancelledFlashUntilMs(v){ store().cancelledFlashUntilMs = v; },
+      get pendingRunSwap()       { return store().pendingRunSwap; },
+      set pendingRunSwap(v)      { store().pendingRunSwap = v; },
 
-    runButtonLabel() {
-      // Mirror of tests/_helpers/studio_state.py::run_button_label
-      const now = this._nowMs || performance.now();
-      if (this.doneFlashUntilMs && now < this.doneFlashUntilMs) return '✓ Done';
-      if (this.cancelledFlashUntilMs && now < this.cancelledFlashUntilMs) return '⊘ Cancelled';
-      if (this.cancelling) return '⟳ Cancelling…';
-      if (this.running) return `⟳ Running… ${this.runningElapsedLabel}`;
-      const v = (this.activeVersionNum !== null && this.activeVersionNum !== undefined)
-        ? this.activeVersionNum : '?';
-      return `▶ Run on this clip · v${v}`;
-    },
-
-    async runOrCancel() {
-      // Both flashes block re-entry — otherwise a double-click during
-      // either flash would start a new run while the button still
-      // visually shows ✓/⊘.
-      if (this.cancelling || this.doneFlashUntilMs || this.cancelledFlashUntilMs) return;
-      if (this.running) return this.cancel();
-      return this.runOnFocusedClip();
-    },
-
-    async cancel() {
-      if (!this.runJobId || this.cancelling) return;
-      this._cancelRequested = true;
-      this.cancelling = true;
-      try {
-        await fetch(`/api/jobs/${this.runJobId}/cancel`, { method: 'POST' });
-      } catch (err) {
-        console.error('cancel request failed', err);
-        // Keep polling; if the server didn't get the cancel, the run
-        // will finish normally and we'll surface that.
-      }
-      // Do NOT flip this.running here. Let _poll() observe the terminal
-      // status and dispatch the right UI state (Cancelled / Done /
-      // Completed-before-cancel).
-    },
-
-    focusClip(clipId) {
-      this.focusedClipId = clipId;
-      this.pendingRunSwap++;
-      this._writeUrl();
-      this.refreshPlayer();
-    },
-
-    toggleList() {
-      this.showList = !this.showList;
-      this._saveLayoutPrefs();
-    },
-
-    togglePlayer() {
-      this.showPlayer = !this.showPlayer;
-      this._saveLayoutPrefs();
-    },
-
-    setLayout(v) {
-      if (v !== 'under' && v !== 'right') return;
-      this.layout = v;
-      // Compare needs the wide stacked layout; close it when going right.
-      if (v === 'right' && this.compareVersionId) this.closeCompare();
-      this._saveLayoutPrefs();
-    },
-
-    _saveLayoutPrefs() {
-      try {
-        localStorage.setItem('studio.layoutPrefs', JSON.stringify({
-          showList: this.showList,
-          showPlayer: this.showPlayer,
-          layout: this.layout,
-        }));
-      } catch (err) {
-        console.error('studio layout prefs save failed', err);
-      }
-    },
-
-    refreshPlayer() {
-      const slot = document.querySelector('[data-studio-player-slot]');
-      if (!slot || !this.focusedClipId) return;
-      const params = new URLSearchParams();
-      params.set('clip_id', this.focusedClipId);
-      if (this.activeVersionId)  params.set('version_id', this.activeVersionId);
-      if (this.compareVersionId) params.set('compare_id', this.compareVersionId);
-      fetch(`/studio/_player?${params.toString()}`)
-        .then(r => r.text())
-        .then(html => { slot.innerHTML = html; });
-    },
-
-    seekFocusedClip(secs) {
-      const playerEl = document.querySelector('.studio-player');
-      if (!playerEl || !playerEl._x_dataStack) return;
-      const player = playerEl._x_dataStack[0];
-      if (typeof player.seek === 'function') player.seek(secs);
-    },
-
-    async runOnFocusedClip() {
-      if (!this.activeVersionId || !this.focusedClipId || this.running) return;
-      this.running = true;
-      this.runStartMs = performance.now();
-      this.runningElapsedLabel = '0:00';
-      let finalStatus = null;
-      try {
-        const res = await fetch('/api/studio/runs', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({
-            prompt_version_id: this.activeVersionId,
-            clip_id: this.focusedClipId,
-            model: this.activeModel || null,
-          }),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const {run_id, job_id} = await res.json();
-        this.runId = run_id;
-        this.runJobId = job_id ?? null;
-        finalStatus = await this._poll(run_id);
-      } catch (err) {
-        console.error('studio run failed', err);
-        Alpine.store('toast').push(
-          `Run failed: ${err.message || err}`,
-          { level: 'error' },
-        );
-      } finally {
-        this.running = false;
-        this.cancelling = false;
-        this.runJobId = null;
-        this.pendingRunSwap++;
-        if (finalStatus === 'ok') {
-          this.doneFlashUntilMs = performance.now() + 1200;
-          // If the user had pressed Cancel but the server completed first,
-          // tell them via the toast layer (added in T2-3, guarded behind
-          // window.Alpine?.store?.('toast')).
-          if (window.Alpine?.store?.('toast') && this._cancelRequested) {
-            window.Alpine.store('toast').push(
-              'Completed before cancel landed — output saved.',
-              { level: 'info' },
-            );
-          }
-        } else if (finalStatus === 'cancelled') {
-          this.cancelledFlashUntilMs = performance.now() + 1200;
-        }
-        // No flash for error — error state is surfaced by the run-output partial.
-        this._cancelRequested = false;
-      }
-    },
-
-    async _poll(runId) {
-      while (this.running) {
-        await new Promise(r => setTimeout(r, 1000));
-        const res = await fetch(`/api/studio/runs/${runId}`);
-        if (!res.ok) {
-          // Network blip; keep trying.
-          continue;
-        }
-        const run = await res.json();
-        if (run.status === 'ok' || run.status === 'error' || run.status === 'cancelled') {
-          return run.status;
-        }
-      }
-      return null;
-    },
-
-    async openCompare() {
-      const versions = window.__studioVersions || [];
-      const cur = this.activeVersionId;
-      const drafts = versions.filter(v => v.id !== cur && v.state === 'draft');
-      const prods  = versions.filter(v => v.id !== cur && v.state === 'production');
-      const others = versions.filter(v => v.id !== cur);
-      const pick = (drafts[0] || prods[0] || others[0]);
-      if (!pick) return;
-      this.compareVersionId = pick.id;
-      this.compareVersionNum = pick.version_num;
-      this._writeUrl();
-      const slot = document.querySelector('[data-cmp-slot]');
-      if (!slot) return;
-      slot.style.display = '';
-      const params = new URLSearchParams();
-      params.set('side', 'cmp');
-      params.set('prompt_version_id', pick.id);
-      if (this.focusedClipId) params.set('clip_id', this.focusedClipId);
-      const html = await fetch(`/studio/_prompt_card?${params.toString()}`).then(r => r.text());
-      slot.innerHTML = html;
-      window.Alpine?.initTree(slot);
-      // HTMX doesn't auto-scan DOM we injected ourselves — without this,
-      // the cmp card's version-picker hx-* attributes never get wired
-      // and picking a different cmp version is a dead click.
-      window.htmx?.process(slot);
-      this.refreshPlayer();
-    },
-
-    closeCompare() {
-      this.compareVersionId = null;
-      this.compareVersionNum = null;
-      this._writeUrl();
-      const slot = document.querySelector('[data-cmp-slot]');
-      if (slot) { slot.innerHTML = ''; slot.style.display = 'none'; }
-      this.refreshPlayer();
-    },
-
-    _writeUrl() {
-      const p = new URLSearchParams(window.location.search);
-      if (this.promptId)         p.set('prompt_id', this.promptId);          else p.delete('prompt_id');
-      if (this.activeVersionId)  p.set('version_id', this.activeVersionId);  else p.delete('version_id');
-      if (this.compareVersionId) p.set('compare_version_id', this.compareVersionId); else p.delete('compare_version_id');
-      if (this.focusedClipId)    p.set('clip_id', this.focusedClipId);       else p.delete('clip_id');
-      window.history.replaceState({}, '', `${window.location.pathname}?${p.toString()}`);
-    },
-  };
+      // ── Method delegators ─────────────────────────────────────────
+      runButtonLabel()       { return store().runButtonLabel(); },
+      runOrCancel()          { return store().runOrCancel(); },
+      cancel()               { return store().cancel(); },
+      focusClip(clipId)      { return store().focusClip(clipId); },
+      toggleList()           { return store().toggleList(); },
+      togglePlayer()         { return store().togglePlayer(); },
+      setLayout(v)           { return store().setLayout(v); },
+      refreshPlayer()        { return store().refreshPlayer(); },
+      seekFocusedClip(secs)  { return store().seekFocusedClip(secs); },
+      runOnFocusedClip()     { return store().runOnFocusedClip(); },
+      openCompare()          { return store().openCompare(); },
+      closeCompare()         { return store().closeCompare(); },
+      _writeUrl()            { return store()._writeUrl(); },
+    };
   });
 
-  // Cross-component proxy to studioPage.activeModel — necessary because
-  // Alpine `$root` only walks to the nearest enclosing `x-data`, and nesting
-  // `x-data="{ open: false }"` on the picker hides the page scope.
+  // Cross-component proxy to the studio store's activeModel — necessary
+  // because Alpine `$root` only walks to the nearest enclosing `x-data`,
+  // and nesting `x-data="{ open: false }"` on the picker hides the page
+  // scope. The shared state lives in Alpine.store('studio').
   Alpine.data('modelPicker', () => ({
     open: false,
     _page() {
-      return document.querySelector('.studio-page')._x_dataStack[0];
+      return Alpine.store('studio');
     },
     get model() {
       return this._page().activeModel;
@@ -486,11 +300,11 @@ document.addEventListener('alpine:init', () => {
 
     // Alpine's `$root` refers to the root of the CURRENT component, not
     // the topmost ancestor. Since this card is its own x-data, `$root.X`
-    // resolves to the card itself (where X is undefined), not to
-    // studioPage. So we proxy page state via getters/methods. Same
-    // pattern as `modelPicker`.
+    // resolves to the card itself (where X is undefined), not to the
+    // shared page state. So we proxy page state through the studio store
+    // via getters/methods. Same pattern as `modelPicker`.
     _page() {
-      return document.querySelector('.studio-page')?._x_dataStack?.[0];
+      return Alpine.store('studio');
     },
     get mode()             { return this._page()?.mode || 'prompt'; },
     set mode(v)            { const p = this._page(); if (p) p.mode = v; },
