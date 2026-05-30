@@ -4,7 +4,6 @@ and WorkspaceManager.prepare so transient errors don't get treated as
 permanent absence (which would orphan / fail clips on a VPN flap)."""
 
 import httpx
-import pytest
 
 from backend.app.archive.errors import (
     AuthError,
