@@ -9,13 +9,13 @@
 **Tech Stack:** Python 3.13 + FastAPI + aiosqlite (SQLite WAL); pytest + pytest-asyncio; Alpine.js + HTMX.
 
 **Pre-flight (executor):**
-- Source the worktree via `superpowers:using-git-worktrees`. Branch: `fix/tier-2-user-feel`, based on `main` at the head that contains commit `0a5aa52` (the tier-1 merge). Worktree path: `.claude/worktrees/fix-tier-2-user-feel/`.
+- Source the worktree via `superpowers:using-git-worktrees`. Branch: `fix/tier-2-user-feel`, based on current `main` HEAD (which contains the tier-1 merge `0a5aa52` plus PR #22's bulk-annotate work `24b0864`). Worktree path: `.claude/worktrees/fix-tier-2-user-feel/`.
 - Symlink `.env`, `data/`, `.venv` from the parent checkout (same pattern as the tier-1 worktree). Without these, `./run.sh` won't work and tests that hit the DB will fail.
 - Verify baseline tests pass before starting: `.venv/bin/pytest -q`. Expected: ~917 passing, 1 pre-existing failure (`tests/integration/test_routes_review.py::test_clip_detail_draft_controls_show_without_review_flag`).
 
 **Spec reference:** `docs/specs/2026-05-30-fix-prioritization-design.md` § "Tier 2 — User feel" — read before starting.
 
-**ADR numbers assigned:** 0045 (no N+1, batch with WHERE IN). Highest existing ADR is 0044 (tier 1's migration-numbering ADR).
+**ADR numbers assigned:** 0046 (no N+1, batch with WHERE IN). Highest existing ADR is 0045 (PR #22 bulk-annotate, merged into main after the plan was written). Tier 2 takes 0046.
 
 ---
 
@@ -34,7 +34,7 @@
 - `tests/integration/test_studio_folders_htmx_partials.py` — folder CRUD returns partials when HX-Request.
 - `tests/unit/test_toast_store_registered.py` — layout.html includes the toast root.
 - `tests/unit/test_no_sync_fs_in_async.py` — source-grep regression.
-- `docs/adr/0045-no-n-plus-one-batch-with-where-in.md`
+- `docs/adr/0046-no-n-plus-one-batch-with-where-in.md`
 
 **Modified files:**
 - `backend/app/services/cache_inspector.py` — five loaders collapse to batched queries; misleading docstring at line 151 rewritten.
@@ -49,7 +49,7 @@
 - `backend/app/templates/pages/_studio_folder_list.html` — verify the existing folder-kids partial can be reused for "newly-added clips appear in folder."
 - `backend/app/services/cache_actions.py` — `_evict_local_media_impl` wraps `os.unlink` + `Path.exists` in `asyncio.to_thread`.
 - `CLAUDE.md` — new "Performance discipline" + "Frontend error handling" sections.
-- `docs/decisions.md` — index ADR 0045.
+- `docs/decisions.md` — index ADR 0046.
 
 ---
 
@@ -351,7 +351,7 @@ Replace with:
 ```python
         # Fetch per-layer rows via chunked `WHERE (a, b) IN (...)` queries;
         # one statement per layer per chunk (default chunk_size=400 keys).
-        # See backend/app/repositories/_batch.py for the helper. ADR 0045.
+        # See backend/app/repositories/_batch.py for the helper. ADR 0046.
 ```
 
 - [ ] **Step 11: Run inspector regression tests**
@@ -519,7 +519,7 @@ async def assert_query_count(
         if counter.count > max_n:
             raise AssertionError(
                 f"query count {counter.count} > max_n={max_n}; "
-                "an N+1 may have been reintroduced. See ADR 0045."
+                "an N+1 may have been reintroduced. See ADR 0046."
             )
     finally:
         conn.execute = orig_execute  # type: ignore[method-assign]
@@ -628,7 +628,7 @@ git commit -m "test(perf): assert_query_count helper + CacheInspector N+1 guard
 
 New tests/_helpers/query_count.py wraps execute/executemany/executescript
 to count statements during an async with block. Asserts no more than
-max_n statements ran; raises if exceeded with a pointer to ADR 0045.
+max_n statements ran; raises if exceeded with a pointer to ADR 0046.
 
 The cache-inspector regression test pins the post-T2-1 invariant: 5
 loaders × 1 chunk = exactly 5 statements for any N ≤ 400 clips. Without
@@ -1200,18 +1200,18 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>"
 
 ---
 
-## Task 5: ADR 0045 — no N+1, batch with WHERE IN
+## Task 5: ADR 0046 — no N+1, batch with WHERE IN
 
 **Files:**
-- Create: `docs/adr/0045-no-n-plus-one-batch-with-where-in.md`
+- Create: `docs/adr/0046-no-n-plus-one-batch-with-where-in.md`
 - Modify: `docs/decisions.md`
 
 - [ ] **Step 1: Write the ADR**
 
-Create `docs/adr/0045-no-n-plus-one-batch-with-where-in.md`:
+Create `docs/adr/0046-no-n-plus-one-batch-with-where-in.md`:
 
 ```markdown
-# 0045. No N+1 — batch repository reads with WHERE IN
+# 0046. No N+1 — batch repository reads with WHERE IN
 
 **Date:** 2026-05-30
 **Status:** Accepted
@@ -1295,14 +1295,14 @@ operation on the shared aiosqlite connection.
 Open `docs/decisions.md` (read it first if not in context). Add at the end of the index table:
 
 ```
-| 0045 | 2026-05-30 | [No N+1 — batch repository reads with WHERE IN](./adr/0045-no-n-plus-one-batch-with-where-in.md) |
+| 0046 | 2026-05-30 | [No N+1 — batch repository reads with WHERE IN](./adr/0046-no-n-plus-one-batch-with-where-in.md) |
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add docs/adr/0045-no-n-plus-one-batch-with-where-in.md docs/decisions.md
-git commit -m "docs(adr): 0045 — no N+1, batch repository reads with WHERE IN
+git add docs/adr/0046-no-n-plus-one-batch-with-where-in.md docs/decisions.md
+git commit -m "docs(adr): 0046 — no N+1, batch repository reads with WHERE IN
 
 Records the anti-pattern collapsed by T2-1: per-key loops in
 repository helpers. New chunked_in_clause helper + assert_query_count
@@ -1868,7 +1868,7 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>"
 ## Task 9: HTMX-aware folder CRUD endpoints (T2-4 part 1)
 
 **Files:**
-- Modify: `backend/app/routes/studio.py` — `create_folder` (line 50), `add_clips` (line 88); add `templates` import from shared module
+- Modify: `backend/app/routes/studio.py` — `create_folder` (line 50), `add_folder_clips` (line 86); add `templates` import from shared module
 - Create: `backend/app/templates/pages/_studio_folder_card.html` — NEW single-folder card partial (extracted from `_studio_folder_list.html`'s `{% for f in folders %}` loop)
 - Modify: `backend/app/templates/pages/_studio_folder_list.html` — replace inline folder card with `{% include "pages/_studio_folder_card.html" with context %}` so both the page render and the HTMX response use the same partial
 - Create: `tests/integration/test_studio_folders_htmx_partials.py`
@@ -2022,14 +2022,14 @@ async def create_folder(
     return {"id": fid, "name": body.name}
 ```
 
-Find `add_clips` (around line 88) and modify likewise:
+Find `add_folder_clips` (around line 86) and modify likewise. The existing function is named `add_folder_clips` (not `add_clips`) and uses the `AddClips` body model:
 
 ```python
-@router.post("/api/studio/folders/{folder_id}/clips")
-async def add_clips(
+@router.post("/folders/{folder_id}/clips")
+async def add_folder_clips(
     request: Request,
     folder_id: int,
-    body: FolderClipIds,
+    body: AddClips,
     hx_request: str | None = Header(None, alias="HX-Request"),
 ):
     ctx = get_ctx(request)
@@ -2048,7 +2048,7 @@ async def add_clips(
     return {"added": added}
 ```
 
-(The exact parameter names — `FolderCreate`, `FolderClipIds` — should match the existing pydantic models in studio.py. Read the current `create_folder` and `add_clips` signatures and reuse the names.)
+(The path is `/folders/...` not `/api/studio/folders/...` because the router has its own prefix — verify by checking the `APIRouter(prefix=...)` definition at the top of studio.py. The test in Step 1 uses the absolute path including the prefix; adjust if the prefix differs.)
 
 - [ ] **Step 5: Run tests to verify pass**
 
@@ -2372,7 +2372,7 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `CLAUDE.md` — add "Performance discipline" + "Frontend error handling" sections
-- Modify: `docs/decisions.md` — verify ADR 0045 indexed (T2-1 part 5 should have done this)
+- Modify: `docs/decisions.md` — verify ADR 0046 indexed (T2-1 part 5 should have done this)
 
 - [ ] **Step 1: Add the discipline sections to CLAUDE.md**
 
@@ -2393,14 +2393,14 @@ go through the helper.
 
 `tests/_helpers/query_count.py::assert_query_count(conn, max_n)` is an
 async context manager that counts SQL statements during a block.
-Asserts no more than `max_n` ran; raises with a pointer to ADR 0045
+Asserts no more than `max_n` ran; raises with a pointer to ADR 0046
 if exceeded.
 
 When adding a new method that hydrates per-key state, ALSO add a
 query-count test: assert the same statement count for 10 vs 100 vs
 1000 keys. If the count scales with the input, it's an N+1.
 
-See ADR 0045 for the full rationale.
+See ADR 0046 for the full rationale.
 
 ## Frontend error handling
 
@@ -2419,12 +2419,12 @@ back CRUD actions should return HTMX partials on `HX-Request: true`;
 JS swaps the partial in place and pushes a success toast.
 ```
 
-- [ ] **Step 2: Verify decisions.md has ADR 0045**
+- [ ] **Step 2: Verify decisions.md has ADR 0046**
 
-Read `docs/decisions.md`. If ADR 0045 is not in the index table, add it (it should have landed in Task 5 step 2):
+Read `docs/decisions.md`. If ADR 0046 is not in the index table, add it (it should have landed in Task 5 step 2):
 
 ```
-| 0045 | 2026-05-30 | [No N+1 — batch repository reads with WHERE IN](./adr/0045-no-n-plus-one-batch-with-where-in.md) |
+| 0046 | 2026-05-30 | [No N+1 — batch repository reads with WHERE IN](./adr/0046-no-n-plus-one-batch-with-where-in.md) |
 ```
 
 - [ ] **Step 3: Commit**
@@ -2439,7 +2439,7 @@ Two new top-level sections:
 - 'Frontend error handling' — Alpine.store('toast') for user-visible
   errors; the bans on alert(), silent .catch(), location.reload().
 
-Both reference ADR 0045 for the underlying decisions.
+Both reference ADR 0046 for the underlying decisions.
 
 Refs: tier-2 close-out per docs/specs/2026-05-30-fix-prioritization-design.md.
 
@@ -2489,7 +2489,7 @@ shared primitives (chunked_in_clause, assert_query_count,
 Alpine.store('toast')) that tier 3 will use for broader sweeps.
 
 ### Fixes
-- **T2-1:** Cache page N+1 killed — CacheInspector batched via WHERE IN, cache_page filters + pagination pushed into SQL. Bounded query count regardless of clip count. ADR 0045.
+- **T2-1:** Cache page N+1 killed — CacheInspector batched via WHERE IN, cache_page filters + pagination pushed into SQL. Bounded query count regardless of clip count. ADR 0046.
 - **T2-2:** Studio cancel waits for server confirm + visible Cancelled state. Completion-during-cancel race no longer drops the result silently.
 - **T2-3:** Alpine.store('toast') replaces alert() / silent catches across studio.js / review.js / clipAnnotate.js / liveSession.js / promptEditor.js.
 - **T2-4:** Folder CRUD endpoints return HTMX partials on HX-Request; studio.js swaps in place. No more location.reload() in the folder flow.
