@@ -231,6 +231,45 @@ job error messages today; **all new user-facing surfaces should use it
 instead of `str(exc) or exc.__class__.__name__`** — the latter
 silently returns `'HTTPStatusError'` for the most common SDK failures.
 
+## Performance discipline
+
+### Batched repository reads
+
+`backend/app/repositories/_batch.py::chunked_in_clause(keys, chunk_size=400)`
+is the helper for `WHERE (a, b) IN ((?,?), …)` queries that don't blow
+SQLite's parameter limit. Any repository method that takes a list of
+keys MUST use it instead of looping. Single-key reads are fine; lists
+go through the helper.
+
+### N+1 regression guard
+
+`tests/_helpers/query_count.py::assert_query_count(conn, max_n)` is an
+async context manager that counts SQL statements during a block.
+Asserts no more than `max_n` ran; raises with a pointer to ADR 0046
+if exceeded.
+
+When adding a new method that hydrates per-key state, ALSO add a
+query-count test: assert the same statement count for 10 vs 100 vs
+1000 keys. If the count scales with the input, it's an N+1.
+
+See ADR 0046 for the full rationale.
+
+## Frontend error handling
+
+User-visible errors go through `Alpine.store('toast').push(message,
+{level})` where level is `'info'` | `'success'` | `'error'`. The store
+is registered by `backend/app/static/toast.js` and rendered into
+`<div id="toast-root">` which `layout.html` unconditionally includes.
+
+**Never:** `alert()`, silent `.catch()`, or `console.error` for
+user-meaningful failures. `console.error` is fine for diagnostic
+noise (background polls, localStorage save failures) that the user
+cannot act on.
+
+**Never:** `location.reload()` after a CRUD action. Endpoints that
+back CRUD actions should return HTMX partials on `HX-Request: true`;
+JS swaps the partial in place and pushes a success toast.
+
 ## Shell Environment
 
 - This machine uses nvm; non-interactive shells don't have node/npm/npx on PATH. Source ~/.nvm/nvm.sh first, or use absolute paths.
