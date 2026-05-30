@@ -28,10 +28,13 @@ async def create_job(request: Request, body: JobCreate, background: BackgroundTa
         prompt_version_id=body.prompt_version_id,
         clip_ids=body.clip_ids,
     )
-    if body.auto_start and ctx.archive and ctx.ai_store and ctx.gemini and ctx.proxy_resolver:
+    started = bool(
+        body.auto_start and ctx.archive and ctx.ai_store and ctx.gemini and ctx.proxy_resolver
+    )
+    if started:
         task = asyncio.create_task(_run_in_bg(ctx, job_id))
         ctx._running_jobs[job_id] = task
-    return {"id": job_id}
+    return {"id": job_id, "started": started}
 
 
 async def _run_in_bg(ctx, job_id: int) -> None:

@@ -84,7 +84,14 @@ function bulkAnnotateMixin() {
               auto_start: true,
             }),
           });
-          if (!r.ok) failures.push(`${g.kind}: HTTP ${r.status}`);
+          if (!r.ok) {
+            failures.push(`${g.kind}: HTTP ${r.status}`);
+          } else {
+            const data = await r.json();
+            if (data.started === false) {
+              failures.push(`${g.kind}: not started (services offline)`);
+            }
+          }
         } catch (e) {
           failures.push(`${g.kind}: ${e}`);
         }

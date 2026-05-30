@@ -90,3 +90,16 @@ async def test_list_running_returns_only_running_jobs(db):
 
     running = await jobs.list_running(db)
     assert [j.id for j in running] == [running_id]
+
+
+@pytest.mark.asyncio
+async def test_list_running_excludes_studio_jobs(db):
+    vid = await _seed_version(db)
+    jobs = JobsRepo()
+    anno_id = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[1])
+    studio_id = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[2], kind="studio")
+    await jobs.update_status(db, anno_id, "running")
+    await jobs.update_status(db, studio_id, "running")
+
+    running = await jobs.list_running(db)
+    assert [j.id for j in running] == [anno_id]

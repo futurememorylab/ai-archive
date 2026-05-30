@@ -99,7 +99,8 @@ async def run_job(
     kind = job.kind
     version = await prompts_repo.get_version(db, job.prompt_version_id)
     await jobs_repo.update_status(db, job_id, "running")
-    await publish_job_progress(event_bus, jobs_repo, db, job_id, status="running")
+    if kind != "studio":
+        await publish_job_progress(event_bus, jobs_repo, db, job_id, status="running")
 
     items = await jobs_repo.list_items(db, job_id)
     topic = f"job:{job_id}"
@@ -153,7 +154,8 @@ async def run_job(
                 )
                 if run_id is not None:
                     await studio_runs_repo.complete_error(db, run_id, error=msg)
-        await publish_job_progress(event_bus, jobs_repo, db, job_id, status="running")
+        if kind != "studio":
+            await publish_job_progress(event_bus, jobs_repo, db, job_id, status="running")
 
     refreshed = await jobs_repo.list_items(db, job_id)
     final_status = "completed"
@@ -162,7 +164,8 @@ async def run_job(
     if (await jobs_repo.get_job(db, job_id)).status == "cancelled":
         final_status = "cancelled"
     await jobs_repo.update_status(db, job_id, final_status)
-    await publish_job_progress(event_bus, jobs_repo, db, job_id, status=final_status)
+    if kind != "studio":
+        await publish_job_progress(event_bus, jobs_repo, db, job_id, status=final_status)
 
 
 async def _process_item(

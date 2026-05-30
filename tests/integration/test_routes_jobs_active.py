@@ -56,6 +56,28 @@ def test_active_jobs_lists_running_with_progress(monkeypatch, tmp_path):
     assert body[0]["status"] == "running"
 
 
+def test_create_job_reports_started_flag(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.ctx
+
+        async def seed_version():
+            from backend.app.repositories.prompts import PromptsRepo
+            _, vid = await PromptsRepo().create_with_initial_version(
+                ctx.db, name="t", description=None, body="p",
+                target_map={"x": {"kind": "markers"}}, output_schema={}, model="m",
+            )
+            return vid
+
+        vid = client.portal.call(seed_version)
+        r = client.post("/api/jobs", json={"prompt_version_id": vid, "clip_ids": [1], "auto_start": True})
+
+    assert r.status_code == 201
+    body = r.json()
+    assert "id" in body
+    assert isinstance(body["started"], bool)
+
+
 def test_jobs_events_route_resolves_before_job_id(monkeypatch, tmp_path):
     """Regression: /api/jobs/events must not be shadowed by /api/jobs/{job_id}."""
     app = _make_app(monkeypatch, tmp_path)
