@@ -11,6 +11,7 @@ from typing import Any
 from backend.app.archive.errors import (
     AuthError,
     FatalProviderError,
+    NotFoundError,
     RetryableError,
 )
 from backend.app.archive.model import (
@@ -96,7 +97,10 @@ class CatdvArchiveAdapter:
         except CatdvBusyError as exc:
             return ProviderHealth(ok=False, detail=f"busy: {exc}")
         except CatdvError as exc:
-            return ProviderHealth(ok=False, detail=str(exc))
+            msg = str(exc)
+            if msg.startswith("NOT_FOUND") or "not found" in msg.lower():
+                raise NotFoundError(msg) from exc
+            return ProviderHealth(ok=False, detail=msg)
         latency_ms = (perf_counter() - t0) * 1000.0
         return ProviderHealth(ok=True, latency_ms=latency_ms)
 
@@ -122,7 +126,10 @@ class CatdvArchiveAdapter:
         except CatdvBusyError:
             return await self._list_clips_from_cache(catalog, query)
         except CatdvError as exc:
-            raise FatalProviderError(str(exc)) from exc
+            msg = str(exc)
+            if msg.startswith("NOT_FOUND") or "not found" in msg.lower():
+                raise NotFoundError(msg) from exc
+            raise FatalProviderError(msg) from exc
 
         now = self._clock()
         raw_items = data.get("items") if isinstance(data, dict) else []
@@ -172,7 +179,10 @@ class CatdvArchiveAdapter:
                 return stale
             raise RetryableError(str(exc)) from exc
         except CatdvError as exc:
-            raise FatalProviderError(str(exc)) from exc
+            msg = str(exc)
+            if msg.startswith("NOT_FOUND") or "not found" in msg.lower():
+                raise NotFoundError(msg) from exc
+            raise FatalProviderError(msg) from exc
 
         canonical = from_catdv_clip(raw, fetched_at=self._clock())
         await self._write_clip_through(canonical, raw)
@@ -197,7 +207,10 @@ class CatdvArchiveAdapter:
                 return stale
             raise RetryableError(str(exc)) from exc
         except CatdvError as exc:
-            raise FatalProviderError(str(exc)) from exc
+            msg = str(exc)
+            if msg.startswith("NOT_FOUND") or "not found" in msg.lower():
+                raise NotFoundError(msg) from exc
+            raise FatalProviderError(msg) from exc
 
         defs = [field_def_from_catdv(r) for r in rows]
         await self._write_field_defs_through(defs)
@@ -222,7 +235,10 @@ class CatdvArchiveAdapter:
         except CatdvBusyError as exc:
             raise RetryableError(str(exc)) from exc
         except CatdvError as exc:
-            raise FatalProviderError(str(exc)) from exc
+            msg = str(exc)
+            if msg.startswith("NOT_FOUND") or "not found" in msg.lower():
+                raise NotFoundError(msg) from exc
+            raise FatalProviderError(msg) from exc
 
         live_etag = self._etag_from_raw(current)
         if (
@@ -252,7 +268,10 @@ class CatdvArchiveAdapter:
         except CatdvBusyError as exc:
             raise RetryableError(str(exc)) from exc
         except CatdvError as exc:
-            raise FatalProviderError(str(exc)) from exc
+            msg = str(exc)
+            if msg.startswith("NOT_FOUND") or "not found" in msg.lower():
+                raise NotFoundError(msg) from exc
+            raise FatalProviderError(msg) from exc
 
         new_etag = self._etag_from_raw(response) or live_etag
         return WriteResult(status="ok", upstream_response=response, new_etag=new_etag)
