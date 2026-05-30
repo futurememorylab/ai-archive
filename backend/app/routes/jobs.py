@@ -58,6 +58,26 @@ async def list_jobs(request: Request, limit: int = 50):
     return [j.model_dump() for j in await ctx.jobs_repo.list_jobs(ctx.db, limit=limit)]
 
 
+@router.get("/active")
+async def list_active_jobs(request: Request):
+    """Running jobs with progress counts — powers the topbar indicator."""
+    ctx = get_ctx(request)
+    out = []
+    for job in await ctx.jobs_repo.list_running(ctx.db):
+        done, total, errors = await ctx.jobs_repo.progress(ctx.db, job.id)
+        out.append(
+            {
+                "id": job.id,
+                "kind": job.kind,
+                "status": job.status,
+                "done": done,
+                "total": total,
+                "errors": errors,
+            }
+        )
+    return out
+
+
 @router.get("/{job_id}")
 async def get_job(request: Request, job_id: int):
     ctx = get_ctx(request)

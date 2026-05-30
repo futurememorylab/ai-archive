@@ -8,6 +8,7 @@ from fastapi import APIRouter, Request
 from sse_starlette.sse import EventSourceResponse
 
 from backend.app.deps import get_ctx
+from backend.app.services.annotator import JOBS_TOPIC
 from backend.app.services.events import EventBus
 
 router = APIRouter(tags=["events"])
@@ -36,6 +37,19 @@ async def job_events(request: Request, job_id: int):
 
     async def stream():
         async for frame in _event_generator(ctx.event_bus, topic=topic):
+            if await request.is_disconnected():
+                return
+            yield {"data": frame.removeprefix("data: ").rstrip("\n")}
+
+    return EventSourceResponse(stream())
+
+
+@router.get("/api/jobs/events")
+async def jobs_events(request: Request):
+    ctx = get_ctx(request)
+
+    async def stream():
+        async for frame in _event_generator(ctx.event_bus, topic=JOBS_TOPIC):
             if await request.is_disconnected():
                 return
             yield {"data": frame.removeprefix("data: ").rstrip("\n")}
