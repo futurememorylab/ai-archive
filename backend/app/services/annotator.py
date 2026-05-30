@@ -24,6 +24,7 @@ from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.studio_runs import StudioRunsRepo
+from backend.app.services.errors import humanise as _humanise_error
 from backend.app.services.events import EventBus
 from backend.app.services.proxy_resolver import ProxyNotFound
 from backend.app.services.target_map import expand
@@ -139,7 +140,7 @@ async def run_job(
                 item.catdv_clip_id,
                 extra={"job_id": job_id, "clip_id": item.catdv_clip_id},
             )
-            msg = str(exc) or exc.__class__.__name__
+            msg = _humanise_error(exc)
             await jobs_repo.update_item_status(db, item.id, "error", error=msg)
             await event_bus.publish(
                 topic, {"item_id": item.id, "status": "error", "error": msg}

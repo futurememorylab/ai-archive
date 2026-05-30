@@ -29,6 +29,7 @@ class FakeCatdv:
         self.force_auth_until: float = 0.0
         self.put_log: list[tuple[int, dict]] = []
         self.logout_count: int = 0
+        self.login_call_count: int = 0
         self.field_defs: list[dict] = []
         self.last_list_params: dict[str, str] = {}
         self._register_routes()
@@ -39,6 +40,7 @@ class FakeCatdv:
     def _register_routes(self) -> None:
         @self.app.post("/catdv/api/9/session")
         async def login(req: Request):
+            self.login_call_count += 1
             body = await req.json()
             if self.valid_creds.get(body.get("username")) == body.get("password"):
                 response = Response(
@@ -56,6 +58,8 @@ class FakeCatdv:
 
         @self.app.get("/catdv/api/info")
         async def server_info(request: Request):
+            if time.time() < self.force_auth_until:
+                return self._envelope("AUTH")
             return self._envelope("OK", data={"name": "fake-catdv", "version": "9"})
 
         @self.app.get("/catdv/api/9/fields")

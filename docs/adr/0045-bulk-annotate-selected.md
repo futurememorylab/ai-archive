@@ -1,4 +1,4 @@
-# 0042. Bulk "Annotate selected" — one job per media kind, ephemeral progress indicator
+# 0045. Bulk "Annotate selected" — one job per media kind, ephemeral progress indicator
 
 **Date:** 2026-05-30
 **Status:** Accepted

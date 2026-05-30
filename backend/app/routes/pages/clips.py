@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from backend.app.archive.errors import ProviderError
+from backend.app.archive.errors import ProviderError, is_provider_not_found
 from backend.app.archive.model import CanonicalClip, ClipQuery
 from backend.app.deps import get_ctx
 from backend.app.repositories.live_sessions import LiveSessionsRepo
@@ -320,10 +320,13 @@ async def _hydrate_clip(ctx, clip_id: int) -> CanonicalClip | None:
         return clip
     try:
         return await ctx.archive.get_clip(str(clip_id))
-    except ProviderError:
-        # Stale ID (e.g. local cache row whose upstream clip was removed)
-        # — skip silently so one orphan doesn't blow up the whole page.
-        return None
+    except ProviderError as exc:
+        # Only a genuine NOT_FOUND (stale id / removed upstream) is safe to
+        # skip silently; a transient error must NOT be read as absence (it
+        # would drop live clips from the filtered/batch view). See ADR 0042.
+        if is_provider_not_found(exc):
+            return None
+        raise
 
 
 async def _build_draft_for_clip(ctx, clip_id: int) -> dict:

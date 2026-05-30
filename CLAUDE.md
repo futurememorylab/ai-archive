@@ -193,6 +193,44 @@ If you are doing any of these, stop and reuse the existing service:
    an `is_online_provider` gate — over wedging it into an existing
    one.
 
+## Error handling discipline
+
+Two helpers exist; route through them.
+
+### Narrowing provider errors
+
+`backend/app/archive/errors.py::is_provider_not_found(exc) -> bool` is
+the **only** way to decide "this clip is gone" from a caught exception.
+Recognises `NotFoundError` (the explicit type adapters raise for
+documented absence) and `httpx.HTTPStatusError(404)`. Anything else is
+transient by definition — treat as "try later", never as evidence of
+absence.
+
+Bare `except Exception:` is allowed only in event-loop watchdog code
+(e.g. `sync_engine._loop`). Anywhere a caller might infer absence,
+narrow with `is_provider_not_found(exc)`. Anywhere a caller has to mark
+a record terminal (failed, error, orphan), get explicit evidence — do
+not assume.
+
+The `sync_engine._tick` catchall defaults to `mark_retryable` and
+honours `settings.sync_max_attempts` before flipping to `mark_failed`.
+The terminal transition uses `mark_failed(bump_attempts=True)` to do
+status + attempts in one atomic SQL — never two separate commits.
+Adding a new external-system caller? Mirror the same shape.
+
+Catch `Exception`, not `BaseException` — the latter swallows
+`asyncio.CancelledError` and breaks task cancellation.
+
+See ADR 0042 for the full rationale.
+
+### User-facing error strings
+
+`backend/app/services/errors.py::humanise(exc) -> str` produces an
+actionable, non-empty string for any exception. Used by `annotator`
+job error messages today; **all new user-facing surfaces should use it
+instead of `str(exc) or exc.__class__.__name__`** — the latter
+silently returns `'HTTPStatusError'` for the most common SDK failures.
+
 ## Shell Environment
 
 - This machine uses nvm; non-interactive shells don't have node/npm/npx on PATH. Source ~/.nvm/nvm.sh first, or use absolute paths.

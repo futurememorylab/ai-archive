@@ -1,6 +1,6 @@
 import pytest
 
-from backend.app.archive.errors import FatalProviderError
+from backend.app.archive.errors import FatalProviderError, NotFoundError
 from backend.app.archive.model import (
     AddMarkers,
     ChangeSet,
@@ -104,7 +104,10 @@ async def test_apply_changes_setfield_writes_minimal_payload():
 
 
 @pytest.mark.asyncio
-async def test_apply_changes_returns_fatal_on_catdv_error():
+async def test_apply_changes_raises_not_found_when_clip_missing():
+    # Previously expected FatalProviderError; since T1-1 the adapter narrows
+    # "Not found" CatdvError → NotFoundError so callers can distinguish
+    # 'clip is gone' from 'transport failed'.
     with running_fake_catdv() as (base_url, fake):
         async with CatdvClient(base_url, "klientAI", "secret") as client:
             adapter = CatdvArchiveAdapter(client=client)
@@ -112,7 +115,7 @@ async def test_apply_changes_returns_fatal_on_catdv_error():
                 clip_key=("catdv", "99"),
                 ops=[SetField(identifier="x", value=1)],
             )
-            with pytest.raises(FatalProviderError):
+            with pytest.raises(NotFoundError):
                 await adapter.apply_changes(cs)
 
 

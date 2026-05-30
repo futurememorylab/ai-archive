@@ -9,8 +9,9 @@ transition per clip, so the route can stream them via SSE without
 holding the request thread. State machine per clip:
 
   pending → metadata → media → ready
-                     ↘ media (skipped when capabilities.media_is_local) ↘
-                     ↘ error (stays terminal until prep is re-run)      ↘
+                     ↘ media (skipped when capabilities.media_is_local)   ↘
+                     ↘ error            (terminal: documented absence)    ↘
+                     ↘ transient_error  (retryable: transport / auth)     ↘
 
 The clip's metadata row in `clip_cache` gets `pinned_to_workspace_id`
 set to this workspace as soon as metadata is fetched; it stays pinned
@@ -31,6 +32,7 @@ from typing import Any
 
 import aiosqlite
 
+from backend.app.archive.errors import is_provider_not_found
 from backend.app.archive.model import ClipKey
 from backend.app.repositories.workspaces import WorkspacesRepo
 
@@ -38,7 +40,7 @@ from backend.app.repositories.workspaces import WorkspacesRepo
 @dataclass(frozen=True)
 class PrepEvent:
     clip_key: ClipKey
-    state: str  # "metadata" | "media" | "ready" | "error"
+    state: str  # "metadata" | "media" | "ready" | "error" | "transient_error"
     error: str | None = None
 
 
@@ -129,11 +131,24 @@ class WorkspaceManager:
                 # 1. metadata
                 try:
                     await self._provider.get_clip(key[1])
-                except Exception as exc:  # noqa: BLE001 — provider surface varies
-                    await self._repo.set_cache_state(
-                        db, ws_id, key, "error", error=f"metadata: {exc}"
-                    )
-                    yield PrepEvent(clip_key=key, state="error", error=str(exc))
+                except Exception as exc:  # noqa: BLE001
+                    # Narrow per ADR 0042 (added in this PR): only documented
+                    # absence (NotFoundError / 404) is terminal 'error'.
+                    # Transient failures get 'transient_error' which is
+                    # retryable. asyncio.CancelledError is a BaseException
+                    # and escapes this handler — cancellation propagates.
+                    if is_provider_not_found(exc):
+                        await self._repo.set_cache_state(
+                            db, ws_id, key, "error", error=f"metadata: {exc}"
+                        )
+                        yield PrepEvent(clip_key=key, state="error", error=str(exc))
+                    else:
+                        await self._repo.set_cache_state(
+                            db, ws_id, key, "transient_error", error=f"metadata: {exc}"
+                        )
+                        yield PrepEvent(
+                            clip_key=key, state="transient_error", error=str(exc)
+                        )
                     continue
                 await self._repo.set_primary_pin(db, key, ws_id)
                 await self._repo.set_cache_state(db, ws_id, key, "metadata")
@@ -158,10 +173,20 @@ class WorkspaceManager:
                     try:
                         await self._resolver.path_for_clip_id(int(key[1]))
                     except Exception as exc:  # noqa: BLE001
-                        await self._repo.set_cache_state(
-                            db, ws_id, key, "error", error=f"media: {exc}"
-                        )
-                        yield PrepEvent(clip_key=key, state="error", error=str(exc))
+                        # Same narrowing as metadata: only NotFoundError / 404
+                        # is terminal; everything else is transient_error.
+                        if is_provider_not_found(exc):
+                            await self._repo.set_cache_state(
+                                db, ws_id, key, "error", error=f"media: {exc}"
+                            )
+                            yield PrepEvent(clip_key=key, state="error", error=str(exc))
+                        else:
+                            await self._repo.set_cache_state(
+                                db, ws_id, key, "transient_error", error=f"media: {exc}"
+                            )
+                            yield PrepEvent(
+                                clip_key=key, state="transient_error", error=str(exc)
+                            )
                         continue
                     await self._repo.set_cache_state(db, ws_id, key, "media")
                     yield PrepEvent(clip_key=key, state="media")
