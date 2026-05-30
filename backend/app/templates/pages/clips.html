@@ -101,6 +101,9 @@
           <button type="button" class="actions-item" @click="open = false; applyDrafts()">
             Apply drafts (selected)
           </button>
+          <button type="button" class="actions-item" @click="open = false; openAnnotate()">
+            Annotate selected →
+          </button>
           <div class="actions-sep" role="separator"></div>
           {% if not host_local_proxies and mode == "online" %}
           <button type="button"
@@ -122,6 +125,7 @@
   </form>
 
   {% include "pages/_clips_tbody.html" %}
+  {% include "pages/_bulk_annotate_modal.html" %}
 </div>
 
 <script>
@@ -178,7 +182,7 @@
   }
 
   function bulkSel() {
-    return Object.assign(rowSelect(), {
+    return Object.assign(rowSelect(), bulkAnnotateMixin(), {
       kinds: { marker: true, field: true, note: true },
       init() { this.initSelection(); },
       _selectedClipIds() {

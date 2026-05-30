@@ -2124,3 +2124,9 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 /* keep note rows visually separated when collapsed */
 .ri-note-row { border-bottom: 1px solid var(--line, rgba(255,255,255,0.07)); }
 .ri-note-row:last-child { border-bottom: none; }
+
+/* Bulk-annotate picker */
+.ba-groups { display: flex; flex-direction: column; gap: 12px; }
+.ba-group-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.ba-select { width: 100%; }
+.ba-skip-note { margin-top: 12px; color: var(--bad); font-size: 12px; }
