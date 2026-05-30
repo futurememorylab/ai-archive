@@ -13,7 +13,7 @@
       <template x-if="annoLoading"><p class="muted">Loading prompts…</p></template>
       <template x-if="annoError"><p class="muted" style="color:var(--bad)" x-text="annoError"></p></template>
 
-      <template x-if="!annoLoading">
+      <template x-if="!annoLoading && !annoError">
         <div class="ba-groups">
           <template x-for="g in annoGroups" :key="g.kind">
             <div class="ba-group">
@@ -22,8 +22,8 @@
                 <span class="muted" x-text="g.clipIds.length + ' clip(s)'"></span>
               </div>
               <template x-if="(annoPromptsByKind[g.kind] || []).length">
-                <select x-model.number="g.promptVersionId" class="ba-select">
-                  <option :value="null">— skip this kind —</option>
+                <select x-model="g.promptVersionId" class="ba-select">
+                  <option value="">— skip this kind —</option>
                   <template x-for="p in annoPromptsByKind[g.kind]" :key="p.id">
                     <option :value="p.current_production_version_id"
                             x-text="p.name"></option>

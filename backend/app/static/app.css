@@ -2127,6 +2127,8 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 
 /* Bulk-annotate picker */
 .ba-groups { display: flex; flex-direction: column; gap: 12px; }
+.ba-group { display: flex; flex-direction: column; gap: 4px; }
 .ba-group-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .ba-select { width: 100%; }
+.ba-skip { margin: 0; }
 .ba-skip-note { margin-top: 12px; color: var(--bad); font-size: 12px; }

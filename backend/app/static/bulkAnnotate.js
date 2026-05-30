@@ -26,7 +26,7 @@ function bulkAnnotateMixin() {
       this.annoGroups = Object.entries(groups).map(([kind, clipIds]) => ({
         kind,
         clipIds,
-        promptVersionId: null,
+        promptVersionId: "",
       }));
       if (!this.annoGroups.length) return;
       this.annoOpen = true;
@@ -70,17 +70,28 @@ function bulkAnnotateMixin() {
 
     async runAnnotate() {
       if (!this.annoRunnable()) return;
+      this.annoError = null;
+      const failures = [];
       for (const g of this.annoGroups) {
         if (!g.promptVersionId) continue;
-        await fetch("/api/jobs", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            prompt_version_id: g.promptVersionId,
-            clip_ids: g.clipIds,
-            auto_start: true,
-          }),
-        });
+        try {
+          const r = await fetch("/api/jobs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              prompt_version_id: Number(g.promptVersionId),
+              clip_ids: g.clipIds,
+              auto_start: true,
+            }),
+          });
+          if (!r.ok) failures.push(`${g.kind}: HTTP ${r.status}`);
+        } catch (e) {
+          failures.push(`${g.kind}: ${e}`);
+        }
+      }
+      if (failures.length) {
+        this.annoError = "Failed to start: " + failures.join(", ");
+        return; // keep the modal open so the user sees the error
       }
       this.annoOpen = false;
       // Nudge the topbar indicator to pick up the new jobs immediately.
