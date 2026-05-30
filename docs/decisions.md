@@ -49,3 +49,5 @@ available number. See any existing ADR for the template.
 | 0039 | 2026-05-28 | [Prompt Studio PR3 — polish (run-button cancel, empty/error shells, design-language audit)](./adr/0039-prompt-studio-pr3-polish.md) |
 | 0040 | 2026-05-28 | [Studio layout toggles (list / player / prompt-output position)](./adr/0040-studio-layout-toggles.md) |
 | 0041 | 2026-05-29 | [Bound the boot-time CatDV login with a short, separate timeout](./adr/0041-bound-boot-login-timeout.md) |
+| 0042 | 2026-05-30 | [Narrow provider errors — never treat exceptions as "not found"](./adr/0042-narrow-provider-errors-never-treat-exceptions-as-not-found.md) |
+| 0043 | 2026-05-30 | [Gemini Live API key browser exposure — accepted risk](./adr/0043-gemini-live-api-key-exposure-accepted-risk.md) |
