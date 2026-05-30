@@ -19,6 +19,7 @@
   <script defer src="/static/nav-feedback.js"></script>
   <script defer src="/static/row_select.js"></script>
   <script defer src="/static/review.js"></script>
+  <script defer src="/static/toast.js"></script>
   <script defer src="/static/vendor/alpine.min.js"></script>
 </head>
 <body>
@@ -46,5 +47,6 @@
     <main class="main">{% block body %}{% endblock %}</main>
   </div>
 <div id="modal-root"></div>
+<div id="toast-root" aria-live="polite" aria-atomic="false"></div>
 </body>
 </html>
