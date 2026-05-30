@@ -208,3 +208,24 @@ async def test_run_job_marks_item_error_when_gemini_raises(db, tmp_path):
     items = await jobs_repo.list_items(db, job_id)
     assert items[0].status == "error"
     assert "blocked" in (items[0].error_message or "")
+
+
+@pytest.mark.asyncio
+async def test_job_error_message_includes_status_code_for_httpx_failure(tmp_path):
+    """T1-3: Annotator-level error messages must carry actionable detail.
+
+    Bare str(httpx.HTTPStatusError) is the empty string; without the
+    humanise() wrapper the user sees only 'HTTPStatusError' with no
+    status code or body — unactionable."""
+    import httpx
+    from backend.app.services import annotator as annotator_mod
+
+    request = httpx.Request("POST", "http://example/x")
+    response = httpx.Response(503, request=request, text='{"error": "EBUSY"}')
+    exc = httpx.HTTPStatusError("503", request=request, response=response)
+
+    # Use the same humanise the annotator uses, then assert the message
+    # contains the status code and a body fragment.
+    msg = annotator_mod._humanise_error(exc)
+    assert "503" in msg
+    assert "EBUSY" in msg
