@@ -49,3 +49,4 @@ available number. See any existing ADR for the template.
 | 0039 | 2026-05-28 | [Prompt Studio PR3 — polish (run-button cancel, empty/error shells, design-language audit)](./adr/0039-prompt-studio-pr3-polish.md) |
 | 0040 | 2026-05-28 | [Studio layout toggles (list / player / prompt-output position)](./adr/0040-studio-layout-toggles.md) |
 | 0041 | 2026-05-29 | [Bound the boot-time CatDV login with a short, separate timeout](./adr/0041-bound-boot-login-timeout.md) |
+| 0042 | 2026-05-30 | [Bulk "Annotate selected" — one job per media kind, ephemeral progress indicator](./adr/0042-bulk-annotate-selected.md) |
