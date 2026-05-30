@@ -81,6 +81,7 @@ class SyncEngine:
         tick_interval_s: float = 5.0,
         retry_base_s: float = 2.0,
         retry_max_s: float = 300.0,
+        max_attempts: int = 10,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._provider = provider
@@ -92,6 +93,7 @@ class SyncEngine:
         self._tick_interval_s = tick_interval_s
         self._retry_base_s = retry_base_s
         self._retry_max_s = retry_max_s
+        self._max_attempts = max_attempts
         self._clock = clock or _now
         self._notify_evt: asyncio.Event = asyncio.Event()
         self._stop_evt: asyncio.Event = asyncio.Event()
@@ -200,7 +202,22 @@ class SyncEngine:
                 await self._pending.mark_failed(db, op_ids, error=str(exc))
                 continue
             except Exception as exc:  # noqa: BLE001 — unknown adapter bug
-                await self._pending.mark_failed(db, op_ids, error=str(exc))
+                # Default to retryable: unknown exception is most often
+                # transient (transport bug, adapter glitch). The
+                # max-attempts ceiling prevents an infinitely-retried row
+                # from blocking the queue. See ADR 0042 (added in this PR).
+                attempts_so_far = max(int(r.get("attempts") or 0) for r in rows) + 1
+                err_msg = f"{type(exc).__name__}: {exc}"
+                if attempts_so_far >= self._max_attempts:
+                    # Bump attempts first so the final row reflects the true
+                    # count, then flip to terminal-failed.
+                    await self._pending.mark_retryable(db, op_ids, error=err_msg)
+                    await self._pending.mark_failed(
+                        db, op_ids,
+                        error=f"{err_msg} (max_attempts reached)",
+                    )
+                else:
+                    await self._pending.mark_retryable(db, op_ids, error=err_msg)
                 continue
 
             await self._handle_result(

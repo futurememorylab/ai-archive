@@ -423,6 +423,7 @@ async def _build_sync_subsystem(ctx: AppContext, flags: _OnlineFlags) -> None:
         tick_interval_s=float(settings.sync_tick_interval_s),
         retry_base_s=float(settings.sync_retry_base_s),
         retry_max_s=float(settings.sync_retry_max_s),
+        max_attempts=int(settings.sync_max_attempts),
     )
     ctx.workspace_manager = WorkspaceManager(
         workspaces_repo=ctx.workspaces_repo,
