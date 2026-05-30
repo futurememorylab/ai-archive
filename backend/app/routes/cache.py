@@ -193,6 +193,14 @@ async def cache_page(
     tab_val = tab if tab in _VALID_TABS else "all"
     is_htmx = request.headers.get("HX-Request") == "true"
 
+    # Single-fetch resources: every later code path that needs these
+    # uses these references. Without this, the function used to call
+    # _all_cached_keys() twice and list_orphans() twice per render.
+    all_keys = await _all_cached_keys(ctx.db)
+    orphan_statuses = await insp.list_orphans()
+    all_statuses = await insp.status_for_clips(all_keys)
+    summary = await insp.summary()
+
     # Always load queue rows — both the queue tab and the metric strip
     # use them, and the queries are cheap (status indexed).
     queue_active = await ctx.prefetch_queue_repo.list_active(ctx.db)
@@ -200,52 +208,32 @@ async def cache_page(
     queue_counts = await ctx.prefetch_queue_repo.count_by_status(ctx.db)
 
     if tab_val == "queue":
-        # Queue tab doesn't need the inventory pass.
         rows_for_template: list = []
+        total = 0
+        prev_offset = next_offset = None
+        page_rows: list = []
     else:
-        if orphans:
-            statuses = await insp.list_orphans()
-        else:
-            keys = await _all_cached_keys(ctx.db)
-            statuses = await insp.status_for_clips(keys)
-        rows = []
-        for status in statuses:
-            if store:
-                ai_layer = status.layers[2]
-                if not ai_layer.present or store not in (ai_layer.location or ""):
-                    continue
-            if workspace is not None:
-                md_layer = status.layers[0]
-                if workspace not in md_layer.pinned_by_workspaces:
-                    continue
-            if evictable:
-                if not any(layer.evictable for layer in status.layers):
-                    continue
-            if tab_val == "local" and not status.layers[1].present:
-                continue
-            if tab_val == "ai" and not status.layers[2].present:
-                continue
-            rows.append(status)
-        rows_for_template = [_cache_row(s) for s in rows]
+        statuses, total = await insp.list_for_inventory(
+            tab=tab_val,
+            store=store,
+            workspace=workspace,
+            orphans=bool(orphans),
+            evictable=bool(evictable),
+            offset=offset,
+            limit=limit,
+        )
+        rows_for_template = [_cache_row(s) for s in statuses]
+        page_rows = rows_for_template
+        prev_offset, next_offset = page_offsets(offset, limit, total)
 
-    total = len(rows_for_template)
-    page_rows = rows_for_template[offset : offset + limit]
-    prev_offset, next_offset = page_offsets(offset, limit, total)
-
-    summary = await insp.summary()
-
-    # Orphan totals for the metric strip. Computed once per request from
-    # list_orphans() since CacheSummary does not surface these yet.
-    orphan_statuses = await insp.list_orphans()
+    # Orphan totals for the metric strip — reuse the single fetch.
     orphan_count = len(orphan_statuses)
     orphan_bytes = sum(
         sum((layer.size_bytes or 0) for layer in s.layers if layer.evictable)
         for s in orphan_statuses
     )
 
-    # Per-tab counts for the tab badges (always shown for all four).
-    all_keys = await _all_cached_keys(ctx.db)
-    all_statuses = await insp.status_for_clips(all_keys)
+    # Per-tab counts for the tab badges — reuse the single fetch.
     counts = {
         "all": len(all_statuses),
         "local": sum(1 for s in all_statuses if s.layers[1].present),

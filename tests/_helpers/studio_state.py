@@ -1,6 +1,6 @@
 """Pure-Python mirror of studio.js's runButtonLabel().
 
-Keep this function ≤ 10 lines and verbatim-equivalent to the JS in
+Keep this function ≤ 15 lines and verbatim-equivalent to the JS in
 backend/app/static/studio.js. When the JS changes, this file changes
 in the same commit; both implementations are reviewed together.
 """
@@ -13,12 +13,15 @@ def run_button_label(
     running: bool,
     cancelling: bool,
     done_flash_until_ms: float,
+    cancelled_flash_until_ms: float,
     now_ms: float,
     active_version_num: int | None,
     elapsed_label: str,
 ) -> str:
     if done_flash_until_ms and now_ms < done_flash_until_ms:
         return "✓ Done"
+    if cancelled_flash_until_ms and now_ms < cancelled_flash_until_ms:
+        return "⊘ Cancelled"
     if cancelling:
         return "⟳ Cancelling…"
     if running:

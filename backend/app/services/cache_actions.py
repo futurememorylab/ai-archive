@@ -21,6 +21,7 @@ state. PR 6 just calls it and prunes the `ai_store_files` row.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from collections.abc import Callable, Sequence
@@ -314,12 +315,17 @@ class CacheActions:
             return EvictOutcome("skipped", detail, 0, log_id)
 
         # delete the on-disk file (best-effort) then the row.
+        # asyncio.to_thread keeps the event loop responsive when the file
+        # is on a slow network mount (e.g. /Volumes/ARECA* on the CatDV
+        # host deployment) — otherwise unlink() blocks every other
+        # request including the keepalive probe.
         unlink_detail: str | None = None
         try:
             if file_path:
                 p = Path(file_path)
-                if p.exists():
-                    os.unlink(p)
+                exists = await asyncio.to_thread(p.exists)
+                if exists:
+                    await asyncio.to_thread(os.unlink, p)
                 else:
                     unlink_detail = "file_missing"
         except OSError as exc:

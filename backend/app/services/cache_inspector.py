@@ -27,6 +27,7 @@ import aiosqlite
 
 from backend.app.archive.errors import is_provider_not_found
 from backend.app.archive.model import ClipKey
+from backend.app.repositories._batch import chunked_in_clause
 
 Layer = Literal["metadata", "media-local", "media-ai"]
 
@@ -149,7 +150,9 @@ class CacheInspector:
         if not keys:
             return []
 
-        # Fetch per-layer rows in one batched pass each.
+        # Fetch per-layer rows via chunked `WHERE (a, b) IN (...)` queries;
+        # one statement per layer per chunk (default chunk_size=400 keys).
+        # See backend/app/repositories/_batch.py for the helper. ADR 0046.
         metadata = await self._load_metadata(db, keys)
         media_local = {} if self._host_local else await self._load_media_local(db, keys)
         media_ai = await self._load_media_ai(db, keys)
@@ -234,6 +237,149 @@ class CacheInspector:
                 )
             )
         return out
+
+    async def list_for_inventory(
+        self,
+        *,
+        tab: str = "all",
+        store: str | None = None,
+        workspace: int | None = None,
+        orphans: bool = False,
+        evictable: bool = False,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[ClipCacheStatus], int]:
+        """Inventory rows for the cache page, filtered and paginated in SQL.
+
+        Returns (page_rows, total_matching_count). The COUNT and the
+        page SELECT use the same WHERE clause so the pager stays
+        consistent. Statuses are hydrated only for the page-rows slice,
+        so per-render cost is bounded by `limit` not by total clip count.
+        """
+        db = self._db_provider()
+
+        # Build the WHERE clause + params common to count and page select.
+        # The driving table depends on the filters:
+        #   - orphans=True: rows in proxy_cache OR ai_store_files whose
+        #     clip_cache entry is absent.
+        #   - tab='local': rows in clip_cache that also have a proxy_cache row.
+        #   - tab='ai':    rows in clip_cache that also have an ai_store_files row.
+        #   - tab='all':   rows in clip_cache.
+        #   - workspace=N: rows pinned by workspace N.
+        #   - store=S:     ai_store_files where S is a substring of
+        #     either store_id (e.g. 'gcs:catdav-proxies') or gcs_uri
+        #     (e.g. 'gs://catdav-proxies/...'). Substring rather than
+        #     exact match because the cache-page Store filter input
+        #     historically accepted the bucket name on its own
+        #     ('catdav-proxies'), which appears in both forms.
+        #   - evictable=True: rows with no pending operations. This is
+        #     a simplification of the pre-T2.4 behavior which checked
+        #     `any(layer.evictable for layer in status.layers)` after
+        #     hydration. The shift is bounded: 'evictable' here means
+        #     "AT LEAST ONE layer could be evicted right now" — clips
+        #     with pending ops are correctly excluded; the only
+        #     divergence is for clips that exist *only* in proxy_cache
+        #     (no clip_cache, no ai_store_files) AND are pinned — those
+        #     would have been EXCLUDED by the old logic but are
+        #     INCLUDED here. That state is essentially "orphaned and
+        #     pinned" which the inventory already surfaces via the
+        #     orphans filter.
+
+        where_clauses: list[str] = []
+        params: list = []
+
+        if orphans:
+            # Orphans: clip_keys in proxy_cache or ai_store_files where
+            # clip_cache row is absent. Drive from a UNION.
+            base_sql = """
+                SELECT pc.provider_id, pc.provider_clip_id
+                  FROM proxy_cache pc
+                  LEFT JOIN clip_cache cc
+                    ON cc.provider_id = pc.provider_id
+                   AND cc.provider_clip_id = pc.provider_clip_id
+                 WHERE cc.provider_id IS NULL
+                UNION
+                SELECT asf.provider_id, asf.provider_clip_id
+                  FROM ai_store_files asf
+                  LEFT JOIN clip_cache cc
+                    ON cc.provider_id = asf.provider_id
+                   AND cc.provider_clip_id = asf.provider_clip_id
+                 WHERE cc.provider_id IS NULL
+            """
+        else:
+            base_sql = (
+                "SELECT provider_id, provider_clip_id FROM clip_cache"
+            )
+
+        # Wrap as subquery so the filters apply uniformly.
+        from_sql = f"FROM ({base_sql}) AS k"
+
+        if tab == "local":
+            where_clauses.append(
+                "EXISTS (SELECT 1 FROM proxy_cache pc "
+                "WHERE pc.provider_id = k.provider_id "
+                "AND pc.provider_clip_id = k.provider_clip_id)"
+            )
+        elif tab == "ai":
+            where_clauses.append(
+                "EXISTS (SELECT 1 FROM ai_store_files asf "
+                "WHERE asf.provider_id = k.provider_id "
+                "AND asf.provider_clip_id = k.provider_clip_id)"
+            )
+        if store:
+            # Substring match on BOTH store_id and gcs_uri — preserves
+            # the pre-T2.4 UI behavior where users typed the bucket name
+            # alone ('catdav-proxies') and matched both
+            # 'gcs:catdav-proxies' (store_id) and
+            # 'gs://catdav-proxies/...' (gcs_uri).
+            where_clauses.append(
+                "EXISTS (SELECT 1 FROM ai_store_files asf "
+                "WHERE asf.provider_id = k.provider_id "
+                "AND asf.provider_clip_id = k.provider_clip_id "
+                "AND (asf.store_id LIKE ? OR asf.gcs_uri LIKE ?))"
+            )
+            pattern = f"%{store}%"
+            params.append(pattern)
+            params.append(pattern)
+        if workspace is not None:
+            where_clauses.append(
+                "EXISTS (SELECT 1 FROM workspace_clips wc "
+                "WHERE wc.provider_id = k.provider_id "
+                "AND wc.provider_clip_id = k.provider_clip_id "
+                "AND wc.workspace_id = ?)"
+            )
+            params.append(workspace)
+        if evictable:
+            where_clauses.append(
+                "NOT EXISTS (SELECT 1 FROM pending_operations po "
+                "WHERE po.provider_id = k.provider_id "
+                "AND po.provider_clip_id = k.provider_clip_id "
+                "AND po.status IN ('pending', 'in_flight', 'conflict'))"
+            )
+
+        where_sql = ""
+        if where_clauses:
+            where_sql = " WHERE " + " AND ".join(where_clauses)
+
+        # COUNT
+        count_cur = await db.execute(
+            f"SELECT COUNT(*) {from_sql}{where_sql}", params
+        )
+        total = int((await count_cur.fetchone())[0])
+
+        # Page SELECT
+        page_cur = await db.execute(
+            f"SELECT provider_id, provider_clip_id {from_sql}{where_sql} "
+            "ORDER BY provider_id, provider_clip_id "
+            "LIMIT ? OFFSET ?",
+            [*params, limit, offset],
+        )
+        page_keys: list[ClipKey] = [
+            (row[0], row[1]) for row in await page_cur.fetchall()
+        ]
+
+        statuses = await self.status_for_clips(page_keys)
+        return statuses, total
 
     # --- summary + orphans -------------------------------------------
 
@@ -344,19 +490,18 @@ class CacheInspector:
         self, db: aiosqlite.Connection, keys: Sequence[ClipKey]
     ) -> dict[ClipKey, dict[str, Any]]:
         out: dict[ClipKey, dict[str, Any]] = {}
-        for key in keys:
+        for in_sql, params in chunked_in_clause(keys):
             cur = await db.execute(
-                "SELECT name, canonical_json, fetched_at "
+                "SELECT provider_id, provider_clip_id, name, canonical_json, fetched_at "
                 "FROM clip_cache "
-                "WHERE provider_id = ? AND provider_clip_id = ?",
-                (key[0], key[1]),
+                f"WHERE (provider_id, provider_clip_id) IN ({in_sql})",
+                params,
             )
-            row = await cur.fetchone()
-            if row is not None:
-                out[key] = {
-                    "name": row[0],
-                    "canonical_json": row[1],
-                    "fetched_at": row[2],
+            for row in await cur.fetchall():
+                out[(row[0], row[1])] = {
+                    "name": row[2],
+                    "canonical_json": row[3],
+                    "fetched_at": row[4],
                 }
         return out
 
@@ -364,22 +509,20 @@ class CacheInspector:
         self, db: aiosqlite.Connection, keys: Sequence[ClipKey]
     ) -> dict[ClipKey, dict[str, Any]]:
         out: dict[ClipKey, dict[str, Any]] = {}
-        for key in keys:
+        for in_sql, params in chunked_in_clause(keys):
             cur = await db.execute(
-                """
-                SELECT file_path, size_bytes, downloaded_at, last_used_at
-                  FROM proxy_cache
-                 WHERE provider_id = ? AND provider_clip_id = ?
-                """,
-                (key[0], key[1]),
+                "SELECT provider_id, provider_clip_id, "
+                "file_path, size_bytes, downloaded_at, last_used_at "
+                "FROM proxy_cache "
+                f"WHERE (provider_id, provider_clip_id) IN ({in_sql})",
+                params,
             )
-            row = await cur.fetchone()
-            if row is not None:
-                out[key] = {
-                    "file_path": row[0],
-                    "size_bytes": row[1],
-                    "downloaded_at": row[2],
-                    "last_used_at": row[3],
+            for row in await cur.fetchall():
+                out[(row[0], row[1])] = {
+                    "file_path": row[2],
+                    "size_bytes": row[3],
+                    "downloaded_at": row[4],
+                    "last_used_at": row[5],
                 }
         return out
 
@@ -387,65 +530,60 @@ class CacheInspector:
         self, db: aiosqlite.Connection, keys: Sequence[ClipKey]
     ) -> dict[ClipKey, list[dict[str, Any]]]:
         out: dict[ClipKey, list[dict[str, Any]]] = {}
-        for key in keys:
+        for in_sql, params in chunked_in_clause(keys):
             cur = await db.execute(
-                """
-                SELECT store_id, gcs_uri, mime_type, size_bytes,
-                       uploaded_at, last_used_at
-                  FROM ai_store_files
-                 WHERE provider_id = ? AND provider_clip_id = ?
-                """,
-                (key[0], key[1]),
+                "SELECT provider_id, provider_clip_id, store_id, gcs_uri, "
+                "mime_type, size_bytes, uploaded_at, last_used_at "
+                "FROM ai_store_files "
+                f"WHERE (provider_id, provider_clip_id) IN ({in_sql})",
+                params,
             )
-            rows = await cur.fetchall()
-            if rows:
-                out[key] = [
-                    {
-                        "store_id": r[0],
-                        "gcs_uri": r[1],
-                        "mime_type": r[2],
-                        "size_bytes": r[3],
-                        "uploaded_at": r[4],
-                        "last_used_at": r[5],
-                    }
-                    for r in rows
-                ]
+            for row in await cur.fetchall():
+                key = (row[0], row[1])
+                out.setdefault(key, []).append({
+                    "store_id": row[2],
+                    "gcs_uri": row[3],
+                    "mime_type": row[4],
+                    "size_bytes": row[5],
+                    "uploaded_at": row[6],
+                    "last_used_at": row[7],
+                })
         return out
 
     async def _load_pins(
         self, db: aiosqlite.Connection, keys: Sequence[ClipKey]
     ) -> dict[ClipKey, list[int]]:
         out: dict[ClipKey, list[int]] = {}
-        for key in keys:
+        for in_sql, params in chunked_in_clause(keys):
             cur = await db.execute(
-                """
-                SELECT workspace_id FROM workspace_clips
-                 WHERE provider_id = ? AND provider_clip_id = ?
-                 ORDER BY workspace_id
-                """,
-                (key[0], key[1]),
+                "SELECT provider_id, provider_clip_id, workspace_id "
+                "FROM workspace_clips "
+                f"WHERE (provider_id, provider_clip_id) IN ({in_sql}) "
+                "ORDER BY provider_id, provider_clip_id, workspace_id",
+                params,
             )
-            ws_ids = [int(r[0]) for r in await cur.fetchall()]
-            if ws_ids:
-                out[key] = ws_ids
+            for row in await cur.fetchall():
+                key = (row[0], row[1])
+                out.setdefault(key, []).append(int(row[2]))
         return out
 
     async def _load_pending_counts(
         self, db: aiosqlite.Connection, keys: Sequence[ClipKey]
     ) -> dict[ClipKey, int]:
         out: dict[ClipKey, int] = {}
-        for key in keys:
+        for in_sql, params in chunked_in_clause(keys):
             cur = await db.execute(
-                """
-                SELECT COUNT(*) FROM pending_operations
-                 WHERE provider_id = ? AND provider_clip_id = ?
-                   AND status IN ('pending', 'in_flight', 'conflict')
-                """,
-                (key[0], key[1]),
+                "SELECT provider_id, provider_clip_id, COUNT(*) "
+                "FROM pending_operations "
+                f"WHERE (provider_id, provider_clip_id) IN ({in_sql}) "
+                "AND status IN ('pending', 'in_flight', 'conflict') "
+                "GROUP BY provider_id, provider_clip_id",
+                params,
             )
-            n = int((await cur.fetchone())[0])
-            if n:
-                out[key] = n
+            for row in await cur.fetchall():
+                n = int(row[2])
+                if n:
+                    out[(row[0], row[1])] = n
         return out
 
 

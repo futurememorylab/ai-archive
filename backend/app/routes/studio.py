@@ -6,11 +6,12 @@ All under /api/studio. See docs/specs/2026-05-26-prompt-studio-design.md.
 import asyncio
 
 import aiosqlite
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Header, HTTPException, Request, status
 from fastapi.responses import Response
 from pydantic import BaseModel
 
 from backend.app.deps import get_ctx
+from backend.app.routes.pages.templates import templates
 from backend.app.services.annotator import run_job
 
 router = APIRouter(prefix="/api/studio", tags=["studio"])
@@ -47,12 +48,24 @@ async def list_folders(request: Request):
 
 
 @router.post("/folders", status_code=status.HTTP_201_CREATED)
-async def create_folder(request: Request, body: FolderCreate):
+async def create_folder(
+    request: Request,
+    body: FolderCreate,
+    hx_request: str | None = Header(None, alias="HX-Request"),
+):
     ctx = get_ctx(request)
     try:
         fid = await ctx.studio_folders_repo.create_folder(ctx.db, name=body.name)
     except aiosqlite.IntegrityError as exc:
         raise HTTPException(409, f"folder name {body.name!r} already exists") from exc
+
+    if hx_request == "true":
+        f = {"id": fid, "name": body.name, "clip_count": 0}
+        return templates.TemplateResponse(
+            request,
+            "pages/_studio_folder_card.html",
+            {"f": f, "active_version": None, "focused_clip_id": None},
+        )
     return {"id": fid}
 
 
@@ -83,11 +96,23 @@ async def list_folder_clips(request: Request, folder_id: int):
 
 
 @router.post("/folders/{folder_id}/clips")
-async def add_folder_clips(request: Request, folder_id: int, body: AddClips):
+async def add_folder_clips(
+    request: Request,
+    folder_id: int,
+    body: AddClips,
+    hx_request: str | None = Header(None, alias="HX-Request"),
+):
     ctx = get_ctx(request)
     added = await ctx.studio_folders_repo.add_clips(
         ctx.db, folder_id, clip_ids=body.clip_ids
     )
+    if hx_request == "true":
+        clips = await ctx.studio_folders_repo.list_clips(ctx.db, folder_id)
+        return templates.TemplateResponse(
+            request,
+            "pages/_studio_folder.html",
+            {"clips": clips, "folder_id": folder_id},
+        )
     return {"added": added}
 
 

@@ -1,0 +1,20 @@
+{# Single folder card — rendered both:
+   - inside _studio_folder_list.html's `{% for f in folders %}` loop
+   - as the HTMX response to POST /api/studio/folders (in-place insert)
+
+   Expects `f` (folder) in context, with id / name / clip_count. Also
+   honours `active_version` and `focused_clip_id` if present (passed
+   through from the parent page render). #}
+<div class="studio-folder" data-folder-id="{{ f.id }}" :class="expandedId === {{ f.id }} && 'open'">
+  <div class="studio-folder-row" @click="toggle({{ f.id }})">
+    <span class="twist" x-text="expandedId === {{ f.id }} ? '▾' : '▸'"></span>
+    <span class="name">{{ f.name }}</span>
+    <span class="count">{{ f.clip_count }}</span>
+  </div>
+  <div class="studio-folder-kids" x-show="expandedId === {{ f.id }}" x-cloak
+       hx-get="/studio/_folder?folder_id={{ f.id }}{% if active_version %}&active_version_id={{ active_version.id }}{% endif %}{% if focused_clip_id %}&clip_id={{ focused_clip_id }}{% endif %}"
+       hx-trigger="intersect once"
+       hx-swap="innerHTML">
+    <div class="muted">loading…</div>
+  </div>
+</div>
