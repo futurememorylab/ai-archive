@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from backend.app.archive.errors import ProviderError
+from backend.app.archive.errors import ProviderError, is_provider_not_found
 from backend.app.archive.model import CanonicalClip, ClipQuery
 from backend.app.deps import get_ctx
 from backend.app.repositories.live_sessions import LiveSessionsRepo
@@ -50,6 +50,64 @@ def _humanize_age(fetched_at_iso: str | None) -> str | None:
     return f"{days}d ago"
 
 
+# Maps a job_item status to a clip-row batch pill (label, pill state class).
+# States: "" neutral, "accent" in-flight, "ok" green, "bad" red.
+_BATCH_STATUS_VIEW: dict[str, tuple[str, str]] = {
+    "pending": ("Queued", ""),
+    "resolving": ("Processing", "accent"),
+    "uploading": ("Processing", "accent"),
+    "prompting": ("Processing", "accent"),
+    "annotated": ("Done", "ok"),
+    "review_ready": ("Done", "ok"),
+    "applied": ("Applied", "ok"),
+    "rejected": ("Rejected", ""),
+    "error": ("Failed", "bad"),
+}
+
+
+def _batch_status_view(status: str | None) -> dict[str, str] | None:
+    if status is None:
+        return None
+    label, state = _BATCH_STATUS_VIEW.get(status, (status, ""))
+    return {"label": label, "state": state}
+
+
+def _batch_options(jobs: list) -> list[dict[str, str]]:
+    """Batch-filter dropdown entries. The per-kind jobs of one bulk action
+    share a run_group and collapse into a single entry (value = all their job
+    ids); single-clip / studio jobs stay individual."""
+    by_group: dict[str, list] = {}
+    for j in jobs:
+        if j.run_group:
+            by_group.setdefault(j.run_group, []).append(j)
+
+    options: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for j in jobs:
+        if j.run_group:
+            if j.run_group in seen:
+                continue
+            seen.add(j.run_group)
+            members = by_group[j.run_group]
+            ids = sorted(int(m.id) for m in members)
+            total = sum(m.total_clips for m in members)
+            options.append(
+                {
+                    "value": ",".join(str(i) for i in ids),
+                    "label": "#" + "+".join(str(i) for i in ids) + f" · bulk ({total})",
+                }
+            )
+        else:
+            label = f"#{j.id}"
+            if j.notes:
+                label += f" · {j.notes}"
+            elif j.kind:
+                label += f" · {j.kind}"
+            label += f" ({j.total_clips})"
+            options.append({"value": str(j.id), "label": label})
+    return options
+
+
 router = APIRouter(tags=["pages"])
 
 
@@ -71,9 +129,14 @@ async def clips_list(
     catalog_id = str(ctx.settings.catdv_catalog_id)
     cache_f = normalize_cache(cache)
     anno_f = normalize_anno(anno)
-    # `batch` arrives as a query string; the "Any" option submits an empty
-    # string, which must coerce to None (an `int | None` param 422s on "").
-    batch_id = int(batch) if batch and batch.isdigit() else None
+    # `batch` arrives as a comma-separated query string of job ids: the
+    # indicator links to every per-kind job of one bulk action at once, the
+    # dropdown submits a single id, and the "Any" option submits empty.
+    batch_ids = [int(b) for b in (batch or "").split(",") if b.strip().isdigit()]
+    # Canonical (sorted) form so it matches the grouped dropdown option values.
+    batch_query = ",".join(str(b) for b in sorted(batch_ids))
+    # The dropdown's selected-state only makes sense for a single id.
+    batch_id = batch_ids[0] if len(batch_ids) == 1 else None
     host_local_proxies = getattr(getattr(ctx, "proxy_resolver", None), "is_host_local", False)
 
     # `?refresh=1` lets the user bypass the list cache when they suspect
@@ -92,7 +155,7 @@ async def clips_list(
     effective_cache_f = "any" if (host_local_proxies and cache_f == "local") else cache_f
 
     try:
-        if filters_active(effective_cache_f, anno_f, batch_id):
+        if filters_active(effective_cache_f, anno_f, batch_ids):
             clips, total = await _filtered_page(
                 ctx,
                 catalog_id=catalog_id,
@@ -102,7 +165,7 @@ async def clips_list(
                 cache_filter=effective_cache_f,
                 anno_filter=anno_f,
                 host_local_proxies=host_local_proxies,
-                batch=batch_id,
+                batch=batch_ids,
             )
         else:
             page = await ctx.archive.list_clips(
@@ -140,8 +203,10 @@ async def clips_list(
         "cache_filter": cache_f,
         "anno_filter": anno_f,
         "batch_filter": batch_id,
+        "batch_query": batch_query,
         "jobs": jobs,
-        "filters_active": filters_active(effective_cache_f, anno_f, batch_id),
+        "batch_options": _batch_options(jobs),
+        "filters_active": filters_active(effective_cache_f, anno_f, batch_ids),
         "host_local_proxies": host_local_proxies,
         "catalog": {
             "id": ctx.settings.catdv_catalog_id,
@@ -154,10 +219,19 @@ async def clips_list(
         "cache_age": _humanize_age(cache_fetched_at),
     }
 
+    # When viewing a batch, surface each clip's per-item run status (queued /
+    # processing / done / failed) from the job's items, merged across all the
+    # per-kind jobs of the bulk action.
+    batch_status_map: dict[int, str] = {}
+    for jid in batch_ids:
+        for it in await ctx.jobs_repo.list_items(ctx.db, jid):
+            batch_status_map[it.catdv_clip_id] = it.status
+
     # Annotate each row with its pending-draft counts and batch job id.
     pending_rows = await ctx.review_items_repo.list_pending_clips(ctx.db, limit=2000, offset=0)
     pmap = {r["catdv_clip_id"]: r for r in pending_rows}
     for row in ctx_dict["clips"]:
+        row["batch_status"] = _batch_status_view(batch_status_map.get(row["id"]))
         p = pmap.get(row["id"])
         mc = p["marker_count"] if p else 0
         fc = p["field_count"] if p else 0
@@ -190,7 +264,7 @@ async def _filtered_page(
     cache_filter,
     anno_filter,
     host_local_proxies: bool = False,
-    batch: int | None = None,
+    batch: list[int] | None = None,
 ) -> tuple[list[CanonicalClip], int]:
     """Local-first paginated list when any filter is active.
 
@@ -213,9 +287,17 @@ async def _filtered_page(
 
     needle = (q or "").strip().casefold() or None
 
+    # Hydrate locally: the clips were almost certainly listed already, so a
+    # single read of the cached list pages avoids a per-clip CatDV round-trip
+    # (the old behavior that made the Batch view slow). Falls back to the
+    # per-clip resolver only for genuine misses.
+    list_cache = await ctx.clip_list_cache_repo.clips_for_catalog(
+        ctx.db, provider_id="catdv", catalog_id=catalog_id
+    )
+
     hydrated: list[CanonicalClip] = []
     for cid in candidate_ids:
-        clip = await _hydrate_clip(ctx, cid)
+        clip = list_cache.get(str(cid)) or await _hydrate_clip(ctx, cid)
         if clip is None:
             continue
         if needle is not None and needle not in clip.name.casefold():
@@ -238,10 +320,13 @@ async def _hydrate_clip(ctx, clip_id: int) -> CanonicalClip | None:
         return clip
     try:
         return await ctx.archive.get_clip(str(clip_id))
-    except ProviderError:
-        # Stale ID (e.g. local cache row whose upstream clip was removed)
-        # — skip silently so one orphan doesn't blow up the whole page.
-        return None
+    except ProviderError as exc:
+        # Only a genuine NOT_FOUND (stale id / removed upstream) is safe to
+        # skip silently; a transient error must NOT be read as absence (it
+        # would drop live clips from the filtered/batch view). See ADR 0042.
+        if is_provider_not_found(exc):
+            return None
+        raise
 
 
 async def _build_draft_for_clip(ctx, clip_id: int) -> dict:

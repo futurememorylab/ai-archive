@@ -70,11 +70,9 @@
       <label class="filter-field">
         <span class="filter-lbl">Batch</span>
         <select name="batch" onchange="this.form.requestSubmit()">
-          <option value="" {% if not batch_filter %}selected{% endif %}>Any</option>
-          {% for j in jobs %}
-            <option value="{{ j.id }}" {% if batch_filter == j.id %}selected{% endif %}>
-              #{{ j.id }}{% if j.notes %} · {{ j.notes }}{% elif j.kind %} · {{ j.kind }}{% endif %} ({{ j.total_clips }})
-            </option>
+          <option value="" {% if not batch_query %}selected{% endif %}>Any</option>
+          {% for opt in batch_options %}
+            <option value="{{ opt.value }}" {% if opt.value == batch_query %}selected{% endif %}>{{ opt.label }}</option>
           {% endfor %}
         </select>
       </label>
@@ -101,6 +99,9 @@
           <button type="button" class="actions-item" @click="open = false; applyDrafts()">
             Apply drafts (selected)
           </button>
+          <button type="button" class="actions-item" @click="open = false; openAnnotate()">
+            Annotate selected →
+          </button>
           <div class="actions-sep" role="separator"></div>
           {% if not host_local_proxies and mode == "online" %}
           <button type="button"
@@ -122,6 +123,7 @@
   </form>
 
   {% include "pages/_clips_tbody.html" %}
+  {% include "pages/_bulk_annotate_modal.html" %}
 </div>
 
 <script>
@@ -178,7 +180,7 @@
   }
 
   function bulkSel() {
-    return Object.assign(rowSelect(), {
+    return Object.assign(rowSelect(), bulkAnnotateMixin(), {
       kinds: { marker: true, field: true, note: true },
       init() { this.initSelection(); },
       _selectedClipIds() {

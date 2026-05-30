@@ -41,3 +41,4 @@ async def job_events(request: Request, job_id: int):
             yield {"data": frame.removeprefix("data: ").rstrip("\n")}
 
     return EventSourceResponse(stream())
+

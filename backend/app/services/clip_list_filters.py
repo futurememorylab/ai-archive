@@ -44,8 +44,12 @@ def normalize_anno(value: str | None) -> AnnoFilter:
     return value if value in ANNO_VALUES else "any"  # type: ignore[return-value]
 
 
-def is_active(cache: CacheFilter, anno: AnnoFilter, batch: int | None = None) -> bool:
-    return cache != "any" or anno != "any" or batch is not None
+def is_active(
+    cache: CacheFilter, anno: AnnoFilter, batch: int | list[int] | None = None
+) -> bool:
+    # `batch` may be a single job id, a list of job ids, or None — a non-empty
+    # value of either form means the batch filter is active.
+    return cache != "any" or anno != "any" or bool(batch)
 
 
 async def _ids_with_media_local(db: aiosqlite.Connection, provider_id: str) -> set[int]:
@@ -73,16 +77,18 @@ async def _ids_with_annotation_review_state(db: aiosqlite.Connection, *, applied
     return {int(r[0]) for r in await cur.fetchall()}
 
 
-async def _ids_with_pending_in_job(db: aiosqlite.Connection, job_id: int) -> set[int]:
-    """Clip IDs with >=1 un-applied review_item belonging to the given job."""
+async def _ids_in_jobs(db: aiosqlite.Connection, job_ids: list[int]) -> set[int]:
+    """All clip IDs belonging to the given jobs (every job_item), regardless
+    of per-item status — so the Batch view shows the whole run and each
+    clip's progress (queued / processing / done / failed) is surfaced
+    separately. Accepts several job ids because one bulk action creates one
+    job per media kind; the indicator links to all of them at once."""
+    if not job_ids:
+        return set()
+    placeholders = ",".join("?" * len(job_ids))
     cur = await db.execute(
-        """
-        SELECT DISTINCT ri.catdv_clip_id
-        FROM review_items ri
-        JOIN annotations a ON a.id = ri.annotation_id
-        WHERE ri.applied_at IS NULL AND a.job_id = ?
-        """,
-        (job_id,),
+        f"SELECT DISTINCT catdv_clip_id FROM job_items WHERE job_id IN ({placeholders})",
+        job_ids,
     )
     return {int(r[0]) for r in await cur.fetchall()}
 
@@ -151,7 +157,7 @@ async def resolve(
     cache: CacheFilter,
     anno: AnnoFilter,
     host_local_proxies: bool = False,
-    batch: int | None = None,
+    batch: int | list[int] | None = None,
 ) -> set[int] | None:
     """Resolve filters to a candidate clip_id set.
 
@@ -203,8 +209,9 @@ async def resolve(
             anno_set = (await get_universe()) - ann
         candidate = anno_set if candidate is None else candidate & anno_set
 
-    if batch is not None:
-        batch_set = await _ids_with_pending_in_job(db, batch)
+    if batch:
+        job_ids = [batch] if isinstance(batch, int) else list(batch)
+        batch_set = await _ids_in_jobs(db, job_ids)
         candidate = batch_set if candidate is None else candidate & batch_set
 
     assert candidate is not None  # at least one filter active by definition

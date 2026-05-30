@@ -132,6 +132,10 @@ a { color: inherit; text-decoration: none; }
 .pill .led { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
 .pill.ok { color: var(--good); border-color: color-mix(in oklab, var(--good) 35%, transparent); }
 .pill.ok .led { background: var(--good); box-shadow: 0 0 6px var(--good); }
+.pill.accent { color: var(--accent); border-color: color-mix(in oklab, var(--accent) 35%, transparent); }
+.pill.accent .led { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.pill.bad { color: var(--bad); border-color: color-mix(in oklab, var(--bad) 35%, transparent); }
+.pill.bad .led { background: var(--bad); box-shadow: 0 0 6px var(--bad); }
 .pillset {
   display: inline-flex; align-items: center; gap: 8px;
   padding-right: 4px;
@@ -315,7 +319,7 @@ a { color: inherit; text-decoration: none; }
   color: var(--text-3); font-size: 10.5px;
   letter-spacing: 0.06em; text-transform: uppercase;
 }
-.filter-form select {
+.filter-form select, .ba-select {
   height: 28px; padding: 0 24px 0 10px;
   background: var(--bg-2);
   color: var(--text);
@@ -329,7 +333,7 @@ a { color: inherit; text-decoration: none; }
   background-position: right 8px center;
   background-size: 10px 6px;
 }
-.filter-form select:focus {
+.filter-form select:focus, .ba-select:focus {
   outline: none;
   border-color: color-mix(in oklab, var(--accent) 50%, var(--line));
 }
@@ -2124,3 +2128,28 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 /* keep note rows visually separated when collapsed */
 .ri-note-row { border-bottom: 1px solid var(--line, rgba(255,255,255,0.07)); }
 .ri-note-row:last-child { border-bottom: none; }
+
+/* Bulk-annotate picker */
+.ba-groups { display: flex; flex-direction: column; gap: 12px; }
+.ba-group { display: flex; flex-direction: column; gap: 4px; }
+.ba-group-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.ba-select { width: 100%; }
+.ba-skip { margin: 0; }
+
+/* Top-bar batch indicator */
+.job-indicator {
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.job-indicator-main, .job-indicator-x {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 22px; padding: 0 8px; border-radius: 11px;
+  border: 1px solid var(--line-2); background: transparent;
+  font-family: var(--f-mono); font-size: 10.5px; letter-spacing: 0.04em;
+  color: var(--text-2); cursor: pointer;
+}
+.job-indicator-x { padding: 0 6px; }
+.job-indicator--error .job-indicator-main {
+  border-color: color-mix(in oklab, var(--bad) 45%, transparent);
+  color: var(--bad);
+}
+.ba-skip-note { margin-top: 12px; color: var(--bad); font-size: 12px; }

@@ -93,6 +93,27 @@ class ClipListCacheRepo:
         )
         await conn.commit()
 
+    async def clips_for_catalog(
+        self,
+        conn: aiosqlite.Connection,
+        *,
+        provider_id: str,
+        catalog_id: str,
+    ) -> dict[str, CanonicalClip]:
+        """Every clip we've cached in any list page for this catalog, keyed by
+        provider_clip_id. Lets filtered views hydrate locally in one query
+        instead of a per-clip CatDV round-trip."""
+        cur = await conn.execute(
+            "SELECT items_json FROM clip_list_cache "
+            "WHERE provider_id = ? AND catalog_id = ?",
+            (provider_id, catalog_id),
+        )
+        out: dict[str, CanonicalClip] = {}
+        for (items_json,) in await cur.fetchall():
+            for clip in _deserialize_items(items_json):
+                out[str(clip.key[1])] = clip
+        return out
+
     async def invalidate_catalog(
         self,
         conn: aiosqlite.Connection,

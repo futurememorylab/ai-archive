@@ -5,9 +5,11 @@ import asyncio
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from pydantic import BaseModel
+from sse_starlette.sse import EventSourceResponse
 
 from backend.app.deps import get_ctx
-from backend.app.services.annotator import run_job
+from backend.app.routes.events import _event_generator
+from backend.app.services.annotator import JOBS_TOPIC, run_job
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -16,6 +18,9 @@ class JobCreate(BaseModel):
     prompt_version_id: int
     clip_ids: list[int]
     auto_start: bool = True
+    # Shared token tying together the per-kind jobs of one bulk action so the
+    # Batch filter can present them as a single run.
+    run_group: str | None = None
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -25,11 +30,15 @@ async def create_job(request: Request, body: JobCreate, background: BackgroundTa
         ctx.db,
         prompt_version_id=body.prompt_version_id,
         clip_ids=body.clip_ids,
+        run_group=body.run_group,
     )
-    if body.auto_start and ctx.archive and ctx.ai_store and ctx.gemini and ctx.proxy_resolver:
+    started = bool(
+        body.auto_start and ctx.archive and ctx.ai_store and ctx.gemini and ctx.proxy_resolver
+    )
+    if started:
         task = asyncio.create_task(_run_in_bg(ctx, job_id))
         ctx._running_jobs[job_id] = task
-    return {"id": job_id}
+    return {"id": job_id, "started": started}
 
 
 async def _run_in_bg(ctx, job_id: int) -> None:
@@ -56,6 +65,40 @@ async def _run_in_bg(ctx, job_id: int) -> None:
 async def list_jobs(request: Request, limit: int = 50):
     ctx = get_ctx(request)
     return [j.model_dump() for j in await ctx.jobs_repo.list_jobs(ctx.db, limit=limit)]
+
+
+@router.get("/active")
+async def list_active_jobs(request: Request):
+    """Running jobs with progress counts — powers the topbar indicator."""
+    ctx = get_ctx(request)
+    out = []
+    for job in await ctx.jobs_repo.list_running(ctx.db):
+        done, total, errors = await ctx.jobs_repo.progress(ctx.db, job.id)
+        out.append(
+            {
+                "id": job.id,
+                "kind": job.kind,
+                "status": job.status,
+                "done": done,
+                "total": total,
+                "errors": errors,
+            }
+        )
+    return out
+
+
+@router.get("/events")
+async def jobs_events(request: Request):
+    """SSE stream of the global `jobs` topic — powers the topbar indicator."""
+    ctx = get_ctx(request)
+
+    async def stream():
+        async for frame in _event_generator(ctx.event_bus, topic=JOBS_TOPIC):
+            if await request.is_disconnected():
+                return
+            yield {"data": frame.removeprefix("data: ").rstrip("\n")}
+
+    return EventSourceResponse(stream())
 
 
 @router.get("/{job_id}")

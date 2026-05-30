@@ -52,3 +52,4 @@ available number. See any existing ADR for the template.
 | 0042 | 2026-05-30 | [Narrow provider errors — never treat exceptions as "not found"](./adr/0042-narrow-provider-errors-never-treat-exceptions-as-not-found.md) |
 | 0043 | 2026-05-30 | [Gemini Live API key browser exposure — accepted risk](./adr/0043-gemini-live-api-key-exposure-accepted-risk.md) |
 | 0044 | 2026-05-30 | [Migration numbering and the 0011 gap](./adr/0044-migration-numbering-and-the-0011-gap.md) |
+| 0045 | 2026-05-30 | [Bulk "Annotate selected" — one job per media kind, ephemeral progress indicator](./adr/0045-bulk-annotate-selected.md) |

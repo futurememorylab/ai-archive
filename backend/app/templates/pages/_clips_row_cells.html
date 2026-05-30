@@ -1,7 +1,12 @@
+{% import "components/_ui.html" as ui %}
 <td class="mono num col-year">{{ row.year or "—" }}</td>
 <td class="col-decade">{{ row.decade or "—" }}</td>
 <td class="mono num col-dur">{{ "%d:%02d"|format((row.duration_secs|int)//60, (row.duration_secs|int)%60) }}</td>
 <td class="mono num col-mk">{{ row.marker_count }}</td>
 <td class="col-type mono">{{ row.kind }}</td>
-<td class="num col-batch mono">{{ ("#" ~ row.batch) if row.batch is not none else "—" }}</td>
+<td class="num col-batch mono">
+  {%- if row.batch_status -%}{{ ui.status_pill(row.batch_status.label, row.batch_status.state) }}
+  {%- elif row.batch is not none -%}#{{ row.batch }}
+  {%- else -%}—{%- endif -%}
+</td>
 <td class="col-drafts mono">{{ row.draft_label or "—" }}</td>

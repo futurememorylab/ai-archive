@@ -26,6 +26,7 @@ class Job(BaseModel):
     total_clips: int
     notes: str | None = None
     kind: str | None = None
+    run_group: str | None = None
 
 
 class JobItem(BaseModel):
