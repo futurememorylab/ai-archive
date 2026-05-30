@@ -2131,4 +2131,21 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .ba-group-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .ba-select { width: 100%; }
 .ba-skip { margin: 0; }
+
+/* Top-bar batch indicator */
+.job-indicator {
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.job-indicator-main, .job-indicator-x {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 22px; padding: 0 8px; border-radius: 11px;
+  border: 1px solid var(--line-2); background: transparent;
+  font-family: var(--f-mono); font-size: 10.5px; letter-spacing: 0.04em;
+  color: var(--text-2); cursor: pointer;
+}
+.job-indicator-x { padding: 0 6px; }
+.job-indicator--error .job-indicator-main {
+  border-color: color-mix(in oklab, var(--bad) 45%, transparent);
+  color: var(--bad);
+}
 .ba-skip-note { margin-top: 12px; color: var(--bad); font-size: 12px; }

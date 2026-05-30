@@ -3,6 +3,17 @@
    wiring is required. #}
 {% set _settings = request.app.state.ctx.settings %}
 <span class="pillset">
+  <span class="job-indicator" x-data="jobsIndicator()" x-show="visible()" x-cloak
+        :class="{ 'job-indicator--error': hasErrors() }">
+    <button type="button" class="job-indicator-main" @click="open()"
+            :title="hasErrors() ? 'Batch finished with errors — click to view' : 'Click to view batch'">
+      <span class="ca-spinner" x-show="!hasErrors() && total() > done()" aria-hidden="true"></span>
+      <span x-show="!hasErrors()" x-text="'Annotating ' + done() + '/' + total()"></span>
+      <span x-show="hasErrors()">Annotation failed</span>
+    </button>
+    <button type="button" class="job-indicator-x" @click="hasErrors() ? dismiss() : cancel()"
+            :title="hasErrors() ? 'Dismiss' : 'Cancel batch'">✕</button>
+  </span>
   {% include "_connection_chip.html" %}
   {% if _settings.dev_reload %}
     <button type="button" class="shutdown-btn" disabled
