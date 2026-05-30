@@ -33,9 +33,19 @@ def _make_app(monkeypatch, tmp_path):
     return main_mod.app
 
 
+def test_cache_route_helpers_removed(monkeypatch, tmp_path: Path):
+    """T3-A2: the per-request _inspector/_actions helpers are gone — cache
+    handlers reach ctx.cache_inspector / ctx.cache_actions directly off the
+    CoreCtx."""
+    import backend.app.routes.cache as c
+
+    assert not hasattr(c, "_inspector")
+    assert not hasattr(c, "_actions")
+
+
 def _seed_clip(client, *, key, proxy_path=None, proxy_size=0, ai_size=0):
     """Seed test data via the running app's DB connection."""
-    ctx = client.app.state.ctx
+    ctx = client.app.state.core_ctx
     db = ctx.db
     import asyncio
 
@@ -165,7 +175,7 @@ def test_cache_orphans_endpoint(monkeypatch, tmp_path: Path):
     """proxy_cache with no clip_cache → orphan list."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
         import asyncio
 
         proxy = tmp_path / "33.mov"
@@ -219,7 +229,7 @@ def test_cache_page_orphans_tile(monkeypatch, tmp_path: Path):
     proxy = tmp_path / "orph.mov"
     proxy.write_bytes(b"o" * 42)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
         import asyncio
 
         now = datetime.now(UTC).isoformat()

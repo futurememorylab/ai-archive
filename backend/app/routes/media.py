@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 
-from backend.app.deps import get_ctx
+from backend.app.deps import get_live_ctx
 
 router = APIRouter(prefix="/api/media", tags=["media"])
 
@@ -16,8 +16,8 @@ _DEFAULT_CHUNK = 1 << 16
 
 @router.get("/{clip_id}/thumb")
 async def stream_thumbnail(request: Request, clip_id: int):
-    ctx = get_ctx(request)
-    svc = getattr(ctx, "thumbnail_service", None)
+    ctx = get_live_ctx(request)
+    svc = ctx.thumbnail_service
     if svc is None:
         raise HTTPException(404, "thumbnails unavailable")
     path = await svc.get_or_fetch(clip_id)
@@ -32,7 +32,7 @@ async def stream_thumbnail(request: Request, clip_id: int):
 
 @router.get("/{clip_id}")
 async def stream_media(request: Request, clip_id: int):
-    ctx = get_ctx(request)
+    ctx = get_live_ctx(request)
     if ctx.proxy_resolver is None:
         raise HTTPException(503, "proxy resolver not initialized")
 

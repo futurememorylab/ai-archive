@@ -1,6 +1,25 @@
-"""AppContext composition root — owns the DB connection, repos, services,
-and the archive/ai-store/proxy stack. Built once at FastAPI startup and
-stashed on `app.state` so routes can pull it via `get_ctx`."""
+"""Composition root, split into two dataclasses by lifetime.
+
+``CoreCtx`` owns everything that is **always present**, even when
+``init_external=False`` (offline boot, CLI tools, tests): the DB
+connection, every repository, the write queue, the event bus, and the
+two DB-first cache services (``cache_inspector`` / ``cache_actions``).
+
+``LiveCtx`` *composes* a ``CoreCtx`` (it carries a ``core`` field, not
+inheritance) and adds the genuinely-external services that only exist
+when ``init_external=True``: the archive provider, the AI input store,
+Gemini, the proxy resolver, the connection monitor, the sync engine,
+the workspace manager, LRU eviction and the media prefetcher. The
+type system therefore carries the offline/online contract — live-only
+routes depend on ``get_live_ctx`` and get a typed 503 when offline,
+instead of scattered ``assert ctx.foo is not None``.
+
+``LiveCtx`` exposes every ``CoreCtx`` field via a thin typed property
+delegator, so handlers that touch both core and live fields read them
+off one object with no per-field rewrite.
+
+Build returns a ``CoreCtx`` always and a ``LiveCtx | None`` (None when
+``init_external=False``). The lifespan stashes both on ``app.state``."""
 
 from __future__ import annotations
 
@@ -55,7 +74,9 @@ MIGRATIONS = Path(__file__).resolve().parents[1] / "migrations"
 
 
 @dataclass
-class AppContext:
+class CoreCtx:
+    """Always-present state. No Optional service fields."""
+
     settings: Settings
     db: aiosqlite.Connection
     db_cm: object
@@ -80,39 +101,204 @@ class AppContext:
 
     _running_jobs: dict[int, object] = field(default_factory=dict)
 
-    catdv: CatdvClient | None = None
-    archive: ArchiveProvider | None = None
-    ai_store: AIInputStore | None = None
-    gemini: GeminiService | None = None
-    proxy_resolver: ProxyResolver | None = None
-    thumbnail_service: ThumbnailService | None = None
-    # low-level GcsService kept only as a wiring detail
-    _gcs_service: GcsService | None = None
-    write_queue: WriteQueue | None = None
-    sync_engine: SyncEngine | None = None
-    connection_monitor: ConnectionMonitor | None = None
-    workspace_manager: WorkspaceManager | None = None
-    cache_inspector: CacheInspector | None = None
-    cache_actions: CacheActions | None = None
-    lru_eviction: LruEviction | None = None
-    media_prefetcher: MediaPrefetcher | None = None
+    write_queue: WriteQueue = field(init=False)
+    # Cache services are DB-first (offline-required). Their live
+    # augmentations (deep-orphan provider checks, bucket-side AI
+    # eviction) are each a single None-guarded call site, so they live
+    # on CoreCtx and are built with possibly-None live deps.
+    cache_inspector: CacheInspector = field(init=False)
+    cache_actions: CacheActions = field(init=False)
 
     @classmethod
-    async def build(cls, settings: Settings, *, init_external: bool = True) -> AppContext:
-        # Build proceeds top-down through four subsystem builders. Each one
-        # mutates the passed-in ctx; many also install closures over ctx so
-        # they can defer-read fields populated by *later* builders (e.g.
-        # ConnectionMonitor's is_online_provider reads ctx.connection_monitor
-        # which the same builder assigns moments later). Keep the same ctx
-        # threaded through so those closures stay valid — see ARCHITECTURE.md.
-        ctx = await _build_core(settings)
-        await _build_cache_subsystem(ctx)
-        if init_external:
-            online_flags = await _build_archive_subsystem(ctx)
-            await _build_sync_subsystem(ctx, online_flags)
+    async def build(cls, settings: Settings) -> CoreCtx:
+        """Open the DB, run migrations, recover crashed write rows.
+
+        Builds the WriteQueue (no external deps). Cache services are
+        wired separately, *after* the archive subsystem, so they can
+        receive the (possibly-None) provider / ai_store directly — see
+        ``build_context``.
+        """
+        settings.data_dir.mkdir(parents=True, exist_ok=True)
+        db_path = settings.data_dir / "app.db"
+        cm = open_db(db_path)
+        conn = await cm.__aenter__()
+        await apply_migrations(conn, MIGRATIONS)
+        # Crash recovery: any rows left mid-flight from a previous process
+        # become pending again. Idempotent; runs every startup.
+        await conn.execute(
+            "UPDATE pending_operations SET status='pending', attempted_at=NULL "
+            "WHERE status='in_flight'"
+        )
+        await conn.commit()
+
+        ctx = cls(settings=settings, db=conn, db_cm=cm)
+        # WriteQueue has no external deps; always available.
+        ctx.write_queue = WriteQueue(
+            pending_ops_repo=ctx.pending_ops_repo,
+            review_items_repo=ctx.review_items_repo,
+        )
         return ctx
 
+    def _wire_cache_services(
+        self,
+        *,
+        provider: ArchiveProvider | None,
+        ai_store: AIInputStore | None,
+        host_local_proxies: bool,
+    ) -> None:
+        """Build cache_inspector / cache_actions with their (possibly-None)
+        live deps passed directly to the constructors. Called once during
+        build, after the archive subsystem (if any) is wired."""
+        cap_bytes = int(self.settings.media_cache_cap_gb) * 1024**3
+        self.cache_inspector = CacheInspector(
+            db_provider=lambda: self.db,
+            media_cache_cap_bytes=cap_bytes,
+            provider=provider,
+            host_local_proxies=host_local_proxies,
+        )
+        self.cache_actions = CacheActions(
+            db_provider=lambda: self.db,
+            inspector=self.cache_inspector,
+            log_repo=self.cache_actions_log_repo,
+            ai_store=ai_store,
+        )
+
     async def aclose(self) -> None:
+        await self.db_cm.__aexit__(None, None, None)  # type: ignore[attr-defined]
+
+
+@dataclass
+class LiveCtx:
+    """Composes a CoreCtx and adds the genuinely-external services.
+
+    ``archive`` / ``ai_store`` / ``gemini`` are always built when
+    ``init_external=True`` (non-Optional). ``catdv`` is legitimately
+    ``CatdvClient | None`` — the app can boot "live" with CatDV offline
+    (forced offline, auth failure, seat limit). ``proxy_resolver`` is
+    None in fs mode, ``thumbnail_service`` is built only for CatDV, and
+    ``media_prefetcher`` is None for a cache-only resolver.
+    """
+
+    core: CoreCtx
+
+    archive: ArchiveProvider
+    ai_store: AIInputStore
+    gemini: GeminiService
+    sync_engine: SyncEngine
+    connection_monitor: ConnectionMonitor
+    workspace_manager: WorkspaceManager
+    lru_eviction: LruEviction
+    _gcs_service: GcsService
+
+    catdv: CatdvClient | None = None
+    proxy_resolver: ProxyResolver | None = None
+    thumbnail_service: ThumbnailService | None = None
+    media_prefetcher: MediaPrefetcher | None = None
+
+    # --- thin delegators to the composed CoreCtx -------------------
+    # Live-route handlers touch both core fields (db, repos) and live
+    # fields (archive) off one object; these keep the per-handler diff
+    # to just the accessor name.
+
+    @property
+    def settings(self) -> Settings:
+        return self.core.settings
+
+    @property
+    def db(self) -> aiosqlite.Connection:
+        return self.core.db
+
+    @property
+    def db_cm(self) -> object:
+        return self.core.db_cm
+
+    @property
+    def prompts_repo(self) -> PromptsRepo:
+        return self.core.prompts_repo
+
+    @property
+    def jobs_repo(self) -> JobsRepo:
+        return self.core.jobs_repo
+
+    @property
+    def annotations_repo(self) -> AnnotationsRepo:
+        return self.core.annotations_repo
+
+    @property
+    def review_items_repo(self) -> ReviewItemsRepo:
+        return self.core.review_items_repo
+
+    @property
+    def write_log_repo(self) -> WriteLogRepo:
+        return self.core.write_log_repo
+
+    @property
+    def proxy_cache_repo(self) -> ProxyCacheRepo:
+        return self.core.proxy_cache_repo
+
+    @property
+    def ai_store_files_repo(self) -> AIStoreFilesRepo:
+        return self.core.ai_store_files_repo
+
+    @property
+    def clip_cache_repo(self) -> ClipCacheRepo:
+        return self.core.clip_cache_repo
+
+    @property
+    def clip_list_cache_repo(self) -> ClipListCacheRepo:
+        return self.core.clip_list_cache_repo
+
+    @property
+    def field_def_cache_repo(self) -> FieldDefCacheRepo:
+        return self.core.field_def_cache_repo
+
+    @property
+    def pending_ops_repo(self) -> PendingOperationsRepo:
+        return self.core.pending_ops_repo
+
+    @property
+    def workspaces_repo(self) -> WorkspacesRepo:
+        return self.core.workspaces_repo
+
+    @property
+    def cache_actions_log_repo(self) -> CacheActionsLogRepo:
+        return self.core.cache_actions_log_repo
+
+    @property
+    def prefetch_queue_repo(self) -> PrefetchQueueRepo:
+        return self.core.prefetch_queue_repo
+
+    @property
+    def studio_folders_repo(self) -> StudioFoldersRepo:
+        return self.core.studio_folders_repo
+
+    @property
+    def studio_runs_repo(self) -> StudioRunsRepo:
+        return self.core.studio_runs_repo
+
+    @property
+    def event_bus(self) -> EventBus:
+        return self.core.event_bus
+
+    @property
+    def write_queue(self) -> WriteQueue:
+        return self.core.write_queue
+
+    @property
+    def cache_inspector(self) -> CacheInspector:
+        return self.core.cache_inspector
+
+    @property
+    def cache_actions(self) -> CacheActions:
+        return self.core.cache_actions
+
+    @property
+    def _running_jobs(self) -> dict[int, object]:
+        return self.core._running_jobs
+
+    async def aclose(self) -> None:
+        # Stop the live services in the documented order, then close the
+        # core (DB). Order matches the pre-split teardown exactly.
         if self.media_prefetcher is not None:
             await self.media_prefetcher.stop()
         if self.lru_eviction is not None:
@@ -123,7 +309,7 @@ class AppContext:
             await self.connection_monitor.stop()
         if self.catdv is not None:
             await self.catdv.__aexit__(None, None, None)
-        await self.db_cm.__aexit__(None, None, None)
+        await self.core.aclose()
 
 
 class _OnlineFlags(NamedTuple):
@@ -138,79 +324,83 @@ class _OnlineFlags(NamedTuple):
     login_failed: bool
 
 
-async def _build_core(settings: Settings) -> AppContext:
-    """Open the DB, run migrations, recover crashed write rows, instantiate ctx.
+class _ArchiveSubsystem(NamedTuple):
+    """Everything the archive builder produces, threaded to the sync builder."""
 
-    Also wires WriteQueue (no external deps, always available).
+    archive: ArchiveProvider
+    ai_store: AIInputStore
+    gemini: GeminiService
+    gcs_service: GcsService
+    catdv: CatdvClient | None
+    proxy_resolver: ProxyResolver | None
+    thumbnail_service: ThumbnailService | None
+    flags: _OnlineFlags
+
+
+async def build_context(
+    settings: Settings, *, init_external: bool = True
+) -> tuple[CoreCtx, LiveCtx | None]:
+    """Composition root. Always returns a CoreCtx; returns a LiveCtx too
+    when ``init_external`` is True.
+
+    Build order:
+      1. core (repos, write_queue)
+      2. if init_external: archive subsystem (archive, ai_store, gemini,
+         proxy_resolver, thumbnail, gcs) — installs the is_online closure
+         that defer-reads the connection monitor built in step 4.
+      3. wire cache services with the (possibly-None) provider / ai_store.
+      4. if init_external: sync subsystem (connection_monitor, sync_engine,
+         workspace_manager, lru_eviction, media_prefetcher).
+      5. if init_external: assemble LiveCtx(core=core, ...).
     """
-    settings.data_dir.mkdir(parents=True, exist_ok=True)
-    db_path = settings.data_dir / "app.db"
-    cm = open_db(db_path)
-    conn = await cm.__aenter__()
-    await apply_migrations(conn, MIGRATIONS)
-    # Crash recovery: any rows left mid-flight from a previous process
-    # become pending again. Idempotent; runs every startup.
-    await conn.execute(
-        "UPDATE pending_operations SET status='pending', attempted_at=NULL WHERE status='in_flight'"
+    core = await CoreCtx.build(settings)
+    await _reconcile_proxy_cache(core)
+
+    if not init_external:
+        core._wire_cache_services(provider=None, ai_store=None, host_local_proxies=False)
+        return core, None
+
+    # The is_online closure (built inside the archive subsystem) reads the
+    # connection monitor that the sync subsystem assigns moments later. We
+    # thread a mutable holder so the closure can find the monitor once it
+    # exists — preserving the previous defer-read behaviour exactly.
+    monitor_holder: dict[str, ConnectionMonitor | None] = {"monitor": None}
+    arch = await _build_archive_subsystem(core, monitor_holder)
+    core._wire_cache_services(
+        provider=arch.archive,
+        ai_store=arch.ai_store,
+        host_local_proxies=getattr(arch.proxy_resolver, "is_host_local", False),
     )
-    await conn.commit()
-
-    ctx = AppContext(settings=settings, db=conn, db_cm=cm)
-
-    # WriteQueue has no external deps; always available.
-    ctx.write_queue = WriteQueue(
-        pending_ops_repo=ctx.pending_ops_repo,
-        review_items_repo=ctx.review_items_repo,
-    )
-    return ctx
+    live = await _build_sync_subsystem(core, arch, monitor_holder)
+    return core, live
 
 
-async def _build_cache_subsystem(ctx: AppContext) -> None:
-    """Reconcile on-disk proxy cache and wire CacheInspector/Actions.
+async def _reconcile_proxy_cache(core: CoreCtx) -> None:
+    """Reconcile the on-disk proxy cache against the DB index.
 
-    These are pure-DB services with no external dependencies, so we wire them
-    up even when init_external=False. When init_external runs, the archive
-    subsystem calls `attach_provider` / `attach_ai_store` on the *same*
-    instances so they pick up provider (for deep-orphan checks) and ai_store
-    (for bucket-side evictions). The instances themselves are never replaced
-    — see PR H / ADR 0021.
+    Cheap, idempotent, touches local disk + SQLite only — safe to run
+    before init_external. Keeps the cache view honest about what's
+    actually on disk on every restart.
     """
-    settings = ctx.settings
-
-    # Reconcile the proxy cache against on-disk files. Cheap, idempotent,
-    # touches local disk + SQLite only — safe to run before init_external.
-    # Keeps the cache view honest about what's actually on disk on every
-    # restart (handles files left from older builds or manual downloads).
+    settings = core.settings
     cache_dir = settings.data_dir / "cache" / "proxies"
     reconciler = ProxyCacheReconciler(
         cache_dir=cache_dir,
-        proxy_cache_repo=ctx.proxy_cache_repo,
-        db_provider=lambda c=ctx: c.db,
+        proxy_cache_repo=core.proxy_cache_repo,
+        db_provider=lambda: core.db,
     )
     await reconciler.reconcile()
 
-    # CacheInspector + CacheActions are pure-DB; always wire them now and
-    # mutate to attach the provider/ai_store later. `ctx.cache_inspector`
-    # and `ctx.cache_actions` are bound exactly once for the ctx lifetime.
-    cap_bytes = int(settings.media_cache_cap_gb) * 1024**3
-    ctx.cache_inspector = CacheInspector(
-        db_provider=lambda c=ctx: c.db,
-        media_cache_cap_bytes=cap_bytes,
-    )
-    ctx.cache_actions = CacheActions(
-        db_provider=lambda c=ctx: c.db,
-        inspector=ctx.cache_inspector,
-        log_repo=ctx.cache_actions_log_repo,
-        ai_store=None,  # filled in by _build_sync_subsystem via attach_ai_store
-    )
 
+async def _build_archive_subsystem(
+    core: CoreCtx,
+    monitor_holder: dict[str, ConnectionMonitor | None],
+) -> _ArchiveSubsystem:
+    """Log into CatDV (if configured) and build archive, AI store, gemini,
+    resolver, thumbnail.
 
-async def _build_archive_subsystem(ctx: AppContext) -> _OnlineFlags:
-    """Log into CatDV (if configured) and wire archive, AI store, gemini, resolver.
-
-    Returns the boot-time online flags so the sync builder can pass them to
-    ConnectionMonitor. Lazy imports here avoid pulling httpx / google libs
-    when init_external=False (tests, CLI tools).
+    Lazy imports here avoid pulling httpx / google libs when
+    init_external=False (tests, CLI tools).
     """
     import asyncio
     import logging
@@ -225,10 +415,11 @@ async def _build_archive_subsystem(ctx: AppContext) -> _OnlineFlags:
     from backend.app.services.proxy_resolver import build_resolver
     from backend.app.services.thumbnail_service import ThumbnailService
 
-    settings = ctx.settings
+    settings = core.settings
     use_catdv = settings.archive_provider == "catdv"
     forced_offline = bool(getattr(settings, "catdv_offline", False)) and use_catdv
     login_failed = False
+    catdv: CatdvClient | None = None
 
     # Bridge GOOGLE_APPLICATION_CREDENTIALS from the .env-loaded Settings
     # object back into os.environ before constructing any Google client
@@ -248,12 +439,12 @@ async def _build_archive_subsystem(ctx: AppContext) -> _OnlineFlags:
         )
 
     if use_catdv and not forced_offline:
-        ctx.catdv = CatdvClient(
+        catdv = CatdvClient(
             base_url=settings.catdv_base_url,
             username=settings.catdv_username or "",
             password=settings.catdv_password or "",
         )
-        await ctx.catdv.__aenter__()
+        await catdv.__aenter__()
         # CatdvClient.__aenter__ only opens the httpx pool; auth is
         # lazy. Force one round-trip so an unreachable host or bad
         # credentials degrade us to offline cleanly at startup
@@ -267,7 +458,7 @@ async def _build_archive_subsystem(ctx: AppContext) -> _OnlineFlags:
         # offline, recoverable via the Reconnect button.
         try:
             await asyncio.wait_for(
-                ctx.catdv.login(),
+                catdv.login(),
                 timeout=settings.catdv_startup_login_timeout_s,
             )
         except CatdvAuthError as exc:
@@ -280,8 +471,8 @@ async def _build_archive_subsystem(ctx: AppContext) -> _OnlineFlags:
                 "CatDV login rejected at startup (%s); booting offline",
                 humanise(exc),
             )
-            await ctx.catdv.__aexit__(None, None, None)
-            ctx.catdv = None
+            await catdv.__aexit__(None, None, None)
+            catdv = None
             login_failed = True
         except CatdvBusyError as exc:
             # Seat limit reached — recoverable. Keep the client alive so
@@ -310,47 +501,49 @@ async def _build_archive_subsystem(ctx: AppContext) -> _OnlineFlags:
             )
             login_failed = True
 
-    # The is_online provider closes over ctx so it can read the
-    # monitor's state once the monitor is constructed below. We delegate
-    # to the monitor instead of latching `login_failed` here, so that a
-    # successful retry_now() (e.g. after a seat frees up) actually flips
-    # the app back to online for routes and services.
-    def _is_online(c=ctx, forced=forced_offline):
+    # The is_online provider reads the monitor's state once the sync
+    # subsystem constructs it (via the shared holder). We delegate to the
+    # monitor instead of latching `login_failed` here, so a successful
+    # retry_now() (e.g. after a seat frees up) actually flips the app back
+    # to online for routes and services.
+    def _is_online(forced=forced_offline):
         if forced:
             return False
-        if c.connection_monitor is None:
+        monitor = monitor_holder["monitor"]
+        if monitor is None:
             return True
         from backend.app.services.connection_monitor import ConnectionState
 
-        return c.connection_monitor.current_state() == ConnectionState.online
+        return monitor.current_state() == ConnectionState.online
 
-    ctx.archive = build_archive_provider(
+    archive = build_archive_provider(
         settings,
-        catdv_client=ctx.catdv,
-        clip_cache_repo=ctx.clip_cache_repo,
-        field_def_cache_repo=ctx.field_def_cache_repo,
-        clip_list_cache_repo=ctx.clip_list_cache_repo,
-        db_provider=lambda c=ctx: c.db,
+        catdv_client=catdv,
+        clip_cache_repo=core.clip_cache_repo,
+        field_def_cache_repo=core.field_def_cache_repo,
+        clip_list_cache_repo=core.clip_list_cache_repo,
+        db_provider=lambda: core.db,
         is_online_provider=_is_online if use_catdv else None,
     )
-    ctx._gcs_service = GcsService(settings.gcs_bucket_name)
-    ctx.ai_store = build_ai_input_store(
+    gcs_service = GcsService(settings.gcs_bucket_name)
+    ai_store = build_ai_input_store(
         settings,
-        gcs_service=ctx._gcs_service,
-        files_repo=ctx.ai_store_files_repo,
-        db_provider=lambda c=ctx: c.db,
+        gcs_service=gcs_service,
+        files_repo=core.ai_store_files_repo,
+        db_provider=lambda: core.db,
     )
-    ctx.gemini = GeminiService(
+    gemini = GeminiService(
         project=settings.gcp_project_id,
         location=settings.gcp_location,
     )
+    proxy_resolver: ProxyResolver | None
     if use_catdv and (forced_offline or login_failed):
-        ctx.proxy_resolver = build_resolver(
+        proxy_resolver = build_resolver(
             source="cache-only",
             catdv_client=None,
             cache_dir=settings.data_dir / "cache" / "proxies",
-            proxy_cache_repo=ctx.proxy_cache_repo,
-            db_provider=lambda c=ctx: c.db,
+            proxy_cache_repo=core.proxy_cache_repo,
+            db_provider=lambda: core.db,
         )
     elif use_catdv:
         media_store_map = None
@@ -359,108 +552,123 @@ async def _build_archive_subsystem(ctx: AppContext) -> _OnlineFlags:
                 fetch_media_store_map,
             )
 
-            media_store_map = await fetch_media_store_map(ctx.catdv)
-        ctx.proxy_resolver = build_resolver(
+            media_store_map = await fetch_media_store_map(catdv)
+        proxy_resolver = build_resolver(
             source=settings.proxy_source,
-            catdv_client=ctx.catdv,
+            catdv_client=catdv,
             cache_dir=settings.data_dir / "cache" / "proxies",
-            archive=ctx.archive,
+            archive=archive,
             media_store_map=media_store_map,
-            proxy_cache_repo=ctx.proxy_cache_repo,
-            db_provider=lambda c=ctx: c.db,
+            proxy_cache_repo=core.proxy_cache_repo,
+            db_provider=lambda: core.db,
         )
     else:
         # FS adapter has media_is_local=True; the workspace
         # manager skips the proxy-resolver step entirely.
-        ctx.proxy_resolver = None
+        proxy_resolver = None
 
     # Thumbnail cache: plain JPEG files alongside the proxy cache. Pass the
     # CatDV client only when we actually have one (online or seat-recoverable);
     # in cache-only / fs modes the service still serves already-cached files.
     # is_online_provider gates network fetches: when the connection monitor
     # reports offline, cache misses are terminal (no network attempts).
+    thumbnail_service: ThumbnailService | None = None
     if use_catdv:
-        ctx.thumbnail_service = ThumbnailService(
+        thumbnail_service = ThumbnailService(
             cache_dir=settings.data_dir / "cache" / "thumbs",
-            archive=ctx.archive,
-            catdv=ctx.catdv,
+            archive=archive,
+            catdv=catdv,
             is_online_provider=_is_online,
         )
 
-    return _OnlineFlags(forced_offline=forced_offline, login_failed=login_failed)
+    return _ArchiveSubsystem(
+        archive=archive,
+        ai_store=ai_store,
+        gemini=gemini,
+        gcs_service=gcs_service,
+        catdv=catdv,
+        proxy_resolver=proxy_resolver,
+        thumbnail_service=thumbnail_service,
+        flags=_OnlineFlags(forced_offline=forced_offline, login_failed=login_failed),
+    )
 
 
-async def _build_sync_subsystem(ctx: AppContext, flags: _OnlineFlags) -> None:
+async def _build_sync_subsystem(
+    core: CoreCtx,
+    arch: _ArchiveSubsystem,
+    monitor_holder: dict[str, ConnectionMonitor | None],
+) -> LiveCtx:
     """Wire ConnectionMonitor, SyncEngine, WorkspaceManager, LRU eviction,
-    and (if the resolver supports it) MediaPrefetcher.
-
-    The cache_inspector / cache_actions instances are *already* built by
-    _build_cache_subsystem; here we only `attach_provider` /
-    `attach_ai_store` so deep-orphan and bucket-side eviction code paths
-    pick up the now-wired archive provider and AI store. See ADR 0021.
+    and (if the resolver supports it) MediaPrefetcher, then assemble LiveCtx.
     """
     from backend.app.services.connection_monitor import ConnectionState
     from backend.app.services.proxy_resolver import LocalCacheOnlyResolver
 
-    settings = ctx.settings
+    settings = core.settings
     cap_bytes = int(settings.media_cache_cap_gb) * 1024**3
+    flags = arch.flags
 
-    # archive is guaranteed populated by _build_archive_subsystem.
-    assert ctx.archive is not None
-    # cache services were wired by _build_cache_subsystem; we only mutate
-    # them here, never re-bind ctx.cache_inspector / ctx.cache_actions.
-    assert ctx.cache_inspector is not None
-    assert ctx.cache_actions is not None
-
-    ctx.connection_monitor = ConnectionMonitor(
-        provider=ctx.archive,
-        db_provider=lambda c=ctx: c.db,
+    connection_monitor = ConnectionMonitor(
+        provider=arch.archive,
+        db_provider=lambda: core.db,
         interval_s=float(settings.health_probe_interval_s),
         timeout_s=float(settings.health_probe_timeout_s),
-        event_bus=ctx.event_bus,
+        event_bus=core.event_bus,
         forced_offline=flags.forced_offline,
         initial_state=(ConnectionState.offline if flags.login_failed else ConnectionState.online),
     )
-    ctx.sync_engine = SyncEngine(
-        provider=ctx.archive,
-        pending_ops_repo=ctx.pending_ops_repo,
-        write_log_repo=ctx.write_log_repo,
-        connection_monitor=ctx.connection_monitor,
-        db_provider=lambda c=ctx: c.db,
-        event_bus=ctx.event_bus,
+    # Publish the monitor so the archive subsystem's is_online closure can
+    # read it (defer-read; the closure was installed before this point).
+    monitor_holder["monitor"] = connection_monitor
+
+    sync_engine = SyncEngine(
+        provider=arch.archive,
+        pending_ops_repo=core.pending_ops_repo,
+        write_log_repo=core.write_log_repo,
+        connection_monitor=connection_monitor,
+        db_provider=lambda: core.db,
+        event_bus=core.event_bus,
         tick_interval_s=float(settings.sync_tick_interval_s),
         retry_base_s=float(settings.sync_retry_base_s),
         retry_max_s=float(settings.sync_retry_max_s),
         max_attempts=int(settings.sync_max_attempts),
     )
-    ctx.workspace_manager = WorkspaceManager(
-        workspaces_repo=ctx.workspaces_repo,
-        provider=ctx.archive,
-        proxy_resolver=ctx.proxy_resolver,
-        db_provider=lambda c=ctx: c.db,
+    workspace_manager = WorkspaceManager(
+        workspaces_repo=core.workspaces_repo,
+        provider=arch.archive,
+        proxy_resolver=arch.proxy_resolver,
+        db_provider=lambda: core.db,
     )
-    # Attach the late-bound deps to the cache services. The instances
-    # themselves were created in _build_cache_subsystem and stay the
-    # same object identity for the ctx's lifetime — this is the
-    # acceptance criterion for PR H / ADR 0021.
-    ctx.cache_inspector.attach_provider(
-        ctx.archive,
-        host_local_proxies=getattr(ctx.proxy_resolver, "is_host_local", False),
-    )
-    ctx.cache_actions.attach_ai_store(ctx.ai_store)
-    ctx.lru_eviction = LruEviction(
-        actions=ctx.cache_actions,
-        log_repo=ctx.cache_actions_log_repo,
-        db_provider=lambda c=ctx: c.db,
+    lru_eviction = LruEviction(
+        actions=core.cache_actions,
+        log_repo=core.cache_actions_log_repo,
+        db_provider=lambda: core.db,
         media_cache_cap_bytes=cap_bytes,
         tick_interval_s=float(settings.lru_tick_interval_s),
     )
-    if ctx.proxy_resolver is not None and not isinstance(
-        ctx.proxy_resolver, LocalCacheOnlyResolver
+    media_prefetcher: MediaPrefetcher | None = None
+    if arch.proxy_resolver is not None and not isinstance(
+        arch.proxy_resolver, LocalCacheOnlyResolver
     ):
-        ctx.media_prefetcher = MediaPrefetcher(
-            queue_repo=ctx.prefetch_queue_repo,
-            resolver=ctx.proxy_resolver,
-            db_provider=lambda c=ctx: c.db,
+        media_prefetcher = MediaPrefetcher(
+            queue_repo=core.prefetch_queue_repo,
+            resolver=arch.proxy_resolver,
+            db_provider=lambda: core.db,
             tick_interval_s=float(settings.prefetch_tick_interval_s),
         )
+
+    return LiveCtx(
+        core=core,
+        archive=arch.archive,
+        ai_store=arch.ai_store,
+        gemini=arch.gemini,
+        sync_engine=sync_engine,
+        connection_monitor=connection_monitor,
+        workspace_manager=workspace_manager,
+        lru_eviction=lru_eviction,
+        _gcs_service=arch.gcs_service,
+        catdv=arch.catdv,
+        proxy_resolver=arch.proxy_resolver,
+        thumbnail_service=arch.thumbnail_service,
+        media_prefetcher=media_prefetcher,
+    )

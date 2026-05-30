@@ -38,7 +38,7 @@ def _make_prompt(client):
 
 
 def _seed_run(app, *, version_id, clip_id, status, output_json=None, error=None):
-    db_path = app.state.ctx.settings.data_dir / "app.db"
+    db_path = app.state.core_ctx.settings.data_dir / "app.db"
 
     async def _go():
         async with aiosqlite.connect(db_path) as db:

@@ -32,7 +32,7 @@ def test_create_job_lists_and_cancels(monkeypatch, tmp_path):
     app = main_mod.app
 
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
         # Seed a prompt + version via PromptsRepo directly — the prompts
         # REST API arrives in a later task.
         _, vid = _run(

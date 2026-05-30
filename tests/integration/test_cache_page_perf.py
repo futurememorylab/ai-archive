@@ -62,7 +62,7 @@ def test_cache_page_does_not_double_compute_all_keys(tmp_path, monkeypatch):
     monkeypatch.setattr(cache_route, "_all_cached_keys", _counting_all_keys)
 
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
         asyncio.run(_seed_clip(ctx))
 
         # Monkeypatch the bound method on the live instance (TestClient

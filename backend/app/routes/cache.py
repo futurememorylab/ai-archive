@@ -21,7 +21,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from backend.app.archive.model import ClipKey
-from backend.app.deps import get_ctx
+from backend.app.deps import get_core_ctx
 from backend.app.ui.pagination import page_offsets
 from backend.app.ui.view_models import cache_status_view
 
@@ -65,70 +65,55 @@ class BulkEvictBody(BaseModel):
     force: bool = False
 
 
-def _inspector(request: Request):
-    ctx = get_ctx(request)
-    if getattr(ctx, "cache_inspector", None) is None:
-        raise HTTPException(503, "cache inspector not initialized")
-    return ctx.cache_inspector
-
-
-def _actions(request: Request):
-    ctx = get_ctx(request)
-    if getattr(ctx, "cache_actions", None) is None:
-        raise HTTPException(503, "cache actions not initialized")
-    return ctx.cache_actions
-
-
 # --- JSON endpoints ------------------------------------------------
 
 
 @api_router.get("/summary")
 async def get_summary(request: Request) -> dict[str, Any]:
-    insp = _inspector(request)
-    return (await insp.summary()).to_dict()
+    ctx = get_core_ctx(request)
+    return (await ctx.cache_inspector.summary()).to_dict()
 
 
 @api_router.get("/orphans")
 async def get_orphans(request: Request, deep: bool = False) -> list[dict]:
-    insp = _inspector(request)
-    statuses = await insp.list_orphans(deep=deep)
+    ctx = get_core_ctx(request)
+    statuses = await ctx.cache_inspector.list_orphans(deep=deep)
     return [s.to_dict() for s in statuses]
 
 
 @api_router.get("/clip/{provider_id}/{clip_id}")
 async def get_clip_status(request: Request, provider_id: str, clip_id: str) -> dict[str, Any]:
-    insp = _inspector(request)
+    ctx = get_core_ctx(request)
     key: ClipKey = (provider_id, clip_id)
-    return (await insp.status_for_clip(key)).to_dict()
+    return (await ctx.cache_inspector.status_for_clip(key)).to_dict()
 
 
 @api_router.post("/clip/{provider_id}/{clip_id}/evict")
 async def evict_clip_layers(
     request: Request, provider_id: str, clip_id: str, body: EvictBody
 ) -> dict[str, Any]:
-    actions = _actions(request)
-    insp = _inspector(request)
+    ctx = get_core_ctx(request)
     key: ClipKey = (provider_id, clip_id)
     if not body.layers:
-        result = await actions.evict_clip_everywhere(key, force=body.force)
+        result = await ctx.cache_actions.evict_clip_everywhere(key, force=body.force)
     else:
-        result = await actions.bulk_evict([key], body.layers, force=body.force)
-    status = await insp.status_for_clip(key)
+        result = await ctx.cache_actions.bulk_evict([key], body.layers, force=body.force)
+    status = await ctx.cache_inspector.status_for_clip(key)
     return {"status": status.to_dict(), "result": result.to_dict()}
 
 
 @api_router.post("/bulk-evict")
 async def bulk_evict(request: Request, body: BulkEvictBody) -> dict[str, Any]:
-    actions = _actions(request)
+    ctx = get_core_ctx(request)
     keys = [(p, c) for p, c in body.clip_keys]
-    result = await actions.bulk_evict(keys, body.layers, force=body.force)
+    result = await ctx.cache_actions.bulk_evict(keys, body.layers, force=body.force)
     return result.to_dict()
 
 
 @api_router.post("/orphans/evict")
 async def evict_orphans(request: Request) -> dict[str, Any]:
-    actions = _actions(request)
-    return (await actions.evict_orphans()).to_dict()
+    ctx = get_core_ctx(request)
+    return (await ctx.cache_actions.evict_orphans()).to_dict()
 
 
 class PrefetchBody(BaseModel):
@@ -137,7 +122,7 @@ class PrefetchBody(BaseModel):
 
 @api_router.post("/prefetch")
 async def prefetch_enqueue(request: Request, body: PrefetchBody) -> dict[str, Any]:
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     ids: list[int] = []
     for prov, clip_id in body.clip_keys:
         rid = await ctx.prefetch_queue_repo.enqueue(
@@ -151,7 +136,7 @@ async def prefetch_enqueue(request: Request, body: PrefetchBody) -> dict[str, An
 
 @api_router.get("/prefetch/queue")
 async def prefetch_queue_list(request: Request) -> dict[str, Any]:
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     active = await ctx.prefetch_queue_repo.list_active(ctx.db)
     recent = await ctx.prefetch_queue_repo.list_recent(ctx.db, limit=50)
     counts = await ctx.prefetch_queue_repo.count_by_status(ctx.db)
@@ -160,7 +145,7 @@ async def prefetch_queue_list(request: Request) -> dict[str, Any]:
 
 @api_router.post("/prefetch/{rid}/cancel")
 async def prefetch_cancel(request: Request, rid: int) -> dict[str, Any]:
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     ok = await ctx.prefetch_queue_repo.mark_cancelled(ctx.db, rid)
     if not ok:
         raise HTTPException(
@@ -187,8 +172,8 @@ async def cache_page(
     offset: int = 0,
     limit: int = 50,
 ) -> HTMLResponse:
-    insp = _inspector(request)
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
+    insp = ctx.cache_inspector
 
     tab_val = tab if tab in _VALID_TABS else "all"
     is_htmx = request.headers.get("HX-Request") == "true"
@@ -279,8 +264,8 @@ async def cache_page(
 
 @ui_router.get("/cache-badge/{provider_id}/{clip_id}", response_class=HTMLResponse)
 async def cache_badge(request: Request, provider_id: str, clip_id: str) -> HTMLResponse:
-    insp = _inspector(request)
-    status = await insp.status_for_clip((provider_id, clip_id))
+    ctx = get_core_ctx(request)
+    status = await ctx.cache_inspector.status_for_clip((provider_id, clip_id))
     return templates.TemplateResponse(
         request,
         "cache_badge.html",
@@ -290,10 +275,13 @@ async def cache_badge(request: Request, provider_id: str, clip_id: str) -> HTMLR
 
 @ui_router.get("/cache-popover/{provider_id}/{clip_id}", response_class=HTMLResponse)
 async def cache_popover(request: Request, provider_id: str, clip_id: str) -> HTMLResponse:
-    insp = _inspector(request)
-    status = await insp.status_for_clip((provider_id, clip_id))
-    ctx = get_ctx(request)
-    host_local_proxies = getattr(getattr(ctx, "proxy_resolver", None), "is_host_local", False)
+    ctx = get_core_ctx(request)
+    status = await ctx.cache_inspector.status_for_clip((provider_id, clip_id))
+    # is_host_local is a live-resolver detail; absent (False) when offline.
+    live = request.app.state.live_ctx
+    host_local_proxies = getattr(
+        getattr(live, "proxy_resolver", None), "is_host_local", False
+    )
     return templates.TemplateResponse(
         request,
         "cache_popover.html",
@@ -306,7 +294,7 @@ async def cache_popover(request: Request, provider_id: str, clip_id: str) -> HTM
 
 @ui_router.get("/cache/queue", response_class=HTMLResponse)
 async def cache_queue_panel(request: Request) -> HTMLResponse:
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     queue_active = await ctx.prefetch_queue_repo.list_active(ctx.db)
     queue_recent = await ctx.prefetch_queue_repo.list_recent(ctx.db, limit=50)
     queue_counts = await ctx.prefetch_queue_repo.count_by_status(ctx.db)

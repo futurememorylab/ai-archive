@@ -17,7 +17,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.templating import Jinja2Templates
 
-from backend.app.deps import get_ctx
+from backend.app.deps import get_core_ctx
 from backend.app.shutdown import schedule_graceful_shutdown
 
 router = APIRouter(prefix="/api/connection", tags=["connection"])
@@ -36,10 +36,15 @@ def _mode(monitor) -> str:
     return "online" if monitor.current_state() == ConnectionState.online else "offline"
 
 
+def _monitor(request: Request):
+    """The connection monitor lives on the LiveCtx; None when offline."""
+    live = request.app.state.live_ctx
+    return live.connection_monitor if live is not None else None
+
+
 @router.get("/state")
 async def get_state(request: Request) -> dict:
-    ctx = get_ctx(request)
-    monitor = getattr(ctx, "connection_monitor", None)
+    monitor = _monitor(request)
     if monitor is None:
         return {"state": "online", "mode": "online"}
     return {
@@ -50,8 +55,7 @@ async def get_state(request: Request) -> dict:
 
 @router.post("/retry")
 async def retry_now(request: Request):
-    ctx = get_ctx(request)
-    monitor = getattr(ctx, "connection_monitor", None)
+    monitor = _monitor(request)
     is_htmx = request.headers.get("HX-Request") == "true"
 
     if monitor is None:
@@ -83,11 +87,11 @@ async def shutdown(request: Request):
     """Release the CatDV seat and stop the server.
 
     Schedules a self-SIGTERM a beat after the response flushes; uvicorn's
-    graceful shutdown then runs the lifespan teardown (AppContext.aclose),
+    graceful shutdown then runs the lifespan teardown (LiveCtx.aclose),
     which stops the connection monitor before logging out so the seat can't
     be re-grabbed. Refused under --reload (the reloader may respawn us).
     """
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     if getattr(ctx.settings, "dev_reload", False):
         raise HTTPException(
             status_code=409,
@@ -100,26 +104,26 @@ async def shutdown(request: Request):
 @router.post("/offline")
 async def set_offline(request: Request) -> dict:
     """Manual override: pin state to offline until cleared."""
-    ctx = get_ctx(request)
-    if getattr(ctx, "connection_monitor", None) is None:
+    monitor = _monitor(request)
+    if monitor is None:
         return {"state": "offline"}
-    ctx.connection_monitor.set_manual_offline(True)
-    return {"state": str(ctx.connection_monitor.current_state().value)}
+    monitor.set_manual_offline(True)
+    return {"state": str(monitor.current_state().value)}
 
 
 @router.post("/online")
 async def set_online(request: Request) -> dict:
     """Clear the manual-offline override; state reverts to last probe."""
-    ctx = get_ctx(request)
-    if getattr(ctx, "connection_monitor", None) is None:
+    monitor = _monitor(request)
+    if monitor is None:
         return {"state": "online"}
-    ctx.connection_monitor.set_manual_offline(False)
-    return {"state": str(ctx.connection_monitor.current_state().value)}
+    monitor.set_manual_offline(False)
+    return {"state": str(monitor.current_state().value)}
 
 
 @router.get("/events")
 async def stream_events(request: Request) -> StreamingResponse:
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     bus = ctx.event_bus
     queue = bus.subscribe("connection")
 

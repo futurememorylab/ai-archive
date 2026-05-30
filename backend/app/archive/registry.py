@@ -1,5 +1,5 @@
 """ArchiveProvider registry — `build_archive_provider` picks catdv or fs
-from settings. Called by `AppContext.build`."""
+from settings. Called by `build_context`."""
 
 from __future__ import annotations
 

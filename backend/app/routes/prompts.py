@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from backend.app.deps import get_ctx
+from backend.app.deps import get_core_ctx
 from backend.app.models.prompt import Prompt, PromptVersion, TargetMap
 from backend.app.repositories.prompts import VersionImmutableError
 
@@ -88,7 +88,7 @@ def _version_envelope(v: PromptVersion) -> dict[str, Any]:
 
 @router.get("")
 async def list_prompts(request: Request, archived: int = 0):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     if archived:
         rows = await ctx.prompts_repo.list_archived(ctx.db)
     else:
@@ -109,7 +109,7 @@ async def list_prompts(request: Request, archived: int = 0):
 
 @router.get("/{prompt_id}")
 async def get_prompt(request: Request, prompt_id: int):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     try:
         prompt, versions = await ctx.prompts_repo.get_with_versions(ctx.db, prompt_id)
     except LookupError as exc:
@@ -119,7 +119,7 @@ async def get_prompt(request: Request, prompt_id: int):
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_prompt(request: Request, body: PromptCreate):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     try:
         pid, _ = await ctx.prompts_repo.create_with_initial_version(
             ctx.db,
@@ -138,7 +138,7 @@ async def create_prompt(request: Request, body: PromptCreate):
 
 @router.patch("/{prompt_id}")
 async def patch_prompt(request: Request, prompt_id: int, body: PromptPatch):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     try:
         await ctx.prompts_repo.update_metadata(
             ctx.db,
@@ -154,21 +154,21 @@ async def patch_prompt(request: Request, prompt_id: int, body: PromptPatch):
 
 @router.post("/{prompt_id}:archive")
 async def archive_prompt(request: Request, prompt_id: int):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     await ctx.prompts_repo.archive(ctx.db, prompt_id)
     return {"id": prompt_id, "archived": True}
 
 
 @router.post("/{prompt_id}:restore")
 async def restore_prompt(request: Request, prompt_id: int):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     await ctx.prompts_repo.restore(ctx.db, prompt_id)
     return {"id": prompt_id, "archived": False}
 
 
 @router.post("/{prompt_id}:duplicate", status_code=status.HTTP_201_CREATED)
 async def duplicate_prompt(request: Request, prompt_id: int, body: PromptDuplicate | None = None):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     name = (body.name.strip() if body and body.name else None) or None
     description = body.description if body else None
     try:
@@ -187,7 +187,7 @@ async def duplicate_prompt(request: Request, prompt_id: int, body: PromptDuplica
 
 @router.get("/{prompt_id}/versions/{version_id}")
 async def get_version(request: Request, prompt_id: int, version_id: int):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     try:
         v = await ctx.prompts_repo.get_version(ctx.db, version_id)
     except LookupError as exc:
@@ -199,7 +199,7 @@ async def get_version(request: Request, prompt_id: int, version_id: int):
 
 @router.post("/{prompt_id}/versions", status_code=status.HTTP_201_CREATED)
 async def create_version(request: Request, prompt_id: int, body: VersionCreate):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     try:
         new_vid = await ctx.prompts_repo.create_version(
             ctx.db, prompt_id, from_version_id=body.from_version_id
@@ -211,7 +211,7 @@ async def create_version(request: Request, prompt_id: int, body: VersionCreate):
 
 @router.put("/{prompt_id}/versions/{version_id}")
 async def update_version(request: Request, prompt_id: int, version_id: int, body: VersionEdit):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     try:
         v = await ctx.prompts_repo.get_version(ctx.db, version_id)
     except LookupError as exc:
@@ -237,7 +237,7 @@ async def update_version(request: Request, prompt_id: int, version_id: int, body
 
 @router.post("/{prompt_id}/versions/{version_id}:promote")
 async def promote_version(request: Request, prompt_id: int, version_id: int):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     try:
         v = await ctx.prompts_repo.get_version(ctx.db, version_id)
     except LookupError as exc:
@@ -256,7 +256,7 @@ async def promote_version(request: Request, prompt_id: int, version_id: int):
 
 @router.get("/{prompt_id}/versions/{version_id}/export")
 async def export_version(request: Request, prompt_id: int, version_id: int):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     try:
         prompt, _ = await ctx.prompts_repo.get_with_versions(ctx.db, prompt_id)
         v = await ctx.prompts_repo.get_version(ctx.db, version_id)

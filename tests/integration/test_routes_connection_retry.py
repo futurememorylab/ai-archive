@@ -42,7 +42,9 @@ def _build_app(monitor: StubMonitor) -> FastAPI:
         connection_monitor = monitor
         event_bus = None
 
-    app.state.ctx = Ctx()
+    ctx = Ctx()
+    app.state.core_ctx = ctx
+    app.state.live_ctx = ctx
     return app
 
 

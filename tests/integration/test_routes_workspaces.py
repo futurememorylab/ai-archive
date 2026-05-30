@@ -51,12 +51,18 @@ class _FakeProvider:
         return None
 
 
-def _attach_manager(ctx):
-    ctx.workspace_manager = WorkspaceManager(
-        workspaces_repo=WorkspacesRepo(),
-        provider=_FakeProvider(),
-        proxy_resolver=None,
-        db_provider=lambda c=ctx: c.db,
+def _attach_manager(app):
+    from tests._helpers.live_ctx import install_live_ctx
+
+    core = app.state.core_ctx
+    install_live_ctx(
+        app,
+        workspace_manager=WorkspaceManager(
+            workspaces_repo=WorkspacesRepo(),
+            provider=_FakeProvider(),
+            proxy_resolver=None,
+            db_provider=lambda c=core: c.db,
+        ),
     )
 
 
@@ -71,7 +77,7 @@ def _run(coro):
 def test_create_and_list_workspace(monkeypatch, tmp_path: Path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        _attach_manager(client.app.state.ctx)
+        _attach_manager(client.app)
         r = client.post(
             "/api/workspaces",
             json={
@@ -99,7 +105,7 @@ def test_create_and_list_workspace(monkeypatch, tmp_path: Path):
 def test_add_remove_clip_routes(monkeypatch, tmp_path: Path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        _attach_manager(client.app.state.ctx)
+        _attach_manager(client.app)
         r = client.post(
             "/api/workspaces",
             json={"name": "w", "catalog_id": "1", "clip_keys": []},
@@ -123,7 +129,7 @@ def test_add_remove_clip_routes(monkeypatch, tmp_path: Path):
 def test_prepare_streams_events(monkeypatch, tmp_path: Path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        _attach_manager(client.app.state.ctx)
+        _attach_manager(client.app)
         r = client.post(
             "/api/workspaces",
             json={
@@ -145,7 +151,7 @@ def test_prepare_streams_events(monkeypatch, tmp_path: Path):
 def test_release_does_not_delete_workspace_by_default(monkeypatch, tmp_path: Path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        _attach_manager(client.app.state.ctx)
+        _attach_manager(client.app)
         r = client.post(
             "/api/workspaces",
             json={"name": "w", "catalog_id": "1", "clip_keys": [["catdv", "1"]]},
@@ -161,7 +167,7 @@ def test_release_does_not_delete_workspace_by_default(monkeypatch, tmp_path: Pat
 def test_release_with_delete_removes_workspace(monkeypatch, tmp_path: Path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        _attach_manager(client.app.state.ctx)
+        _attach_manager(client.app)
         r = client.post(
             "/api/workspaces",
             json={"name": "w", "catalog_id": "1", "clip_keys": []},

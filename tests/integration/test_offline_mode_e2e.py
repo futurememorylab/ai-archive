@@ -64,7 +64,7 @@ async def test_forced_offline_boots_and_serves_health(tmp_path, monkeypatch):
         r = c.post("/api/connection/retry")
         assert r.status_code == 409
 
-        ctx = c.app.state.ctx
+        ctx = c.app.state.live_ctx
         # Forced offline never creates a CatDV client → no seat held.
         assert ctx.catdv is None
         # Proxy resolver is the cache-only flavour, so no proxy downloads.
@@ -85,7 +85,7 @@ async def test_catdv_unreachable_at_startup_boots_offline(tmp_path, monkeypatch)
 
     app = _reload_app()
     with TestClient(app) as c:
-        ctx = c.app.state.ctx
+        ctx = c.app.state.live_ctx
         # Transport-level failures at boot are recoverable: the client is
         # preserved so ConnectionMonitor.retry_now() can re-probe once
         # the network is back. The monitor reports offline until then.
@@ -105,7 +105,7 @@ async def test_offline_clip_list_serves_empty_when_no_cache(tmp_path, monkeypatc
 
     app = _reload_app()
     with TestClient(app) as c:
-        ctx = c.app.state.ctx
+        ctx = c.app.state.live_ctx
         from backend.app.archive.model import ClipQuery
 
         page = await ctx.archive.list_clips("881507", ClipQuery(text=None, offset=0, limit=10))

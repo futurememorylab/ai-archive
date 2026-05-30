@@ -26,7 +26,7 @@ def _make_app(monkeypatch, tmp_path):
 def test_active_jobs_lists_running_with_progress(monkeypatch, tmp_path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
 
         async def seed():
             from backend.app.repositories.prompts import PromptsRepo
@@ -59,7 +59,7 @@ def test_active_jobs_lists_running_with_progress(monkeypatch, tmp_path):
 def test_create_job_reports_started_flag(monkeypatch, tmp_path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
 
         async def seed_version():
             from backend.app.repositories.prompts import PromptsRepo

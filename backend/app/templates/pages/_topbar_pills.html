@@ -1,7 +1,7 @@
 {# Default right-side pillset for the topbar.
-   Reads settings from request.app.state.ctx.settings so no per-handler
+   Reads settings from request.app.state.core_ctx.settings so no per-handler
    wiring is required. #}
-{% set _settings = request.app.state.ctx.settings %}
+{% set _settings = request.app.state.core_ctx.settings %}
 <span class="pillset">
   <span class="job-indicator" x-data="jobsIndicator()" x-show="visible()" x-cloak
         :class="{ 'job-indicator--error': hasErrors() }">

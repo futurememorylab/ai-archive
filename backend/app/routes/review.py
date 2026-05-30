@@ -7,9 +7,16 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from backend.app.context import AppContext
-from backend.app.deps import get_ctx
+from backend.app.context import CoreCtx
+from backend.app.deps import get_core_ctx
 from backend.app.services.write_queue import etag_from_snapshot, fps_from_snapshot
+
+
+def _notify_sync(request: Request) -> None:
+    """Nudge the sync engine to drain immediately, if live."""
+    live = request.app.state.live_ctx
+    if live is not None:
+        live.sync_engine.notify()
 
 router = APIRouter(prefix="/api/review", tags=["review"])
 
@@ -29,14 +36,14 @@ class ApplyBatch(BaseModel):
 
 @router.get("/clips/{clip_id}/items")
 async def list_items_for_clip(request: Request, clip_id: int):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     items = await ctx.review_items_repo.list_by_clip(ctx.db, clip_id)
     return [it.model_dump() for it in items]
 
 
 @router.post("/items/{item_id}/decision")
 async def set_decision(request: Request, item_id: int, body: Decision):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     if body.decision not in ("accepted", "rejected", "pending"):
         raise HTTPException(400, "decision must be accepted|rejected|pending")
     await ctx.review_items_repo.set_decision(
@@ -49,7 +56,7 @@ async def set_decision(request: Request, item_id: int, body: Decision):
 
 
 async def _resolve_and_enqueue_clip(
-    ctx: AppContext, clip_id: int, *, kinds: set[str] | None = None
+    ctx: CoreCtx, clip_id: int, *, kinds: set[str] | None = None
 ) -> int:
     """Resolve a clip's accepted items + apply context and enqueue them.
 
@@ -90,7 +97,7 @@ async def apply_batch(request: Request, body: ApplyBatch):
     silently (contribute 0); the loop is not atomic across clips (partial
     progress is recoverable via the durable pending-ops queue).
     """
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     if ctx.write_queue is None:
         raise HTTPException(503, "write queue not initialized")
     kinds = set(body.kinds) if body.kinds else set(_VALID_KINDS)
@@ -110,8 +117,8 @@ async def apply_batch(request: Request, body: ApplyBatch):
         if queued:
             clips_touched += 1
             total_queued += queued
-    if total_queued and ctx.sync_engine is not None:
-        ctx.sync_engine.notify()
+    if total_queued:
+        _notify_sync(request)
     return {"clips": clips_touched, "queued": total_queued}
 
 
@@ -126,10 +133,10 @@ async def apply_clip(request: Request, clip_id: int):
     user-observable behaviour is unchanged ("applied: N"); when offline
     the ops sit in the queue until reconnection.
     """
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     if ctx.write_queue is None:
         raise HTTPException(503, "write queue not initialized")
     queued = await _resolve_and_enqueue_clip(ctx, clip_id)
-    if queued and ctx.sync_engine is not None:
-        ctx.sync_engine.notify()
+    if queued:
+        _notify_sync(request)
     return {"queued": queued, "applied": queued}

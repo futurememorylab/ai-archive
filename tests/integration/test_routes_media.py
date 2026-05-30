@@ -3,6 +3,8 @@ from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
+from tests._helpers.live_ctx import install_live_ctx
+
 
 def _setenv(monkeypatch, tmp_path):
     monkeypatch.setenv("APP_ENV", "dev")
@@ -27,7 +29,6 @@ def _app(monkeypatch, tmp_path):
 def test_media_streams_full_file(monkeypatch, tmp_path):
     app = _app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
         proxy = tmp_path / "42.mov"
         proxy.write_bytes(b"V" * 1000)
 
@@ -35,7 +36,10 @@ def test_media_streams_full_file(monkeypatch, tmp_path):
             assert clip_id == 42
             return proxy
 
-        ctx.proxy_resolver = MagicMock(path_for_clip_id=path_for_clip_id)
+        install_live_ctx(
+            client.app,
+            proxy_resolver=MagicMock(path_for_clip_id=path_for_clip_id),
+        )
 
         r = client.get("/api/media/42")
         assert r.status_code == 200
@@ -46,14 +50,16 @@ def test_media_streams_full_file(monkeypatch, tmp_path):
 def test_media_serves_range(monkeypatch, tmp_path):
     app = _app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
         proxy = tmp_path / "42.mov"
         proxy.write_bytes(b"X" * 100 + b"Y" * 100)
 
         async def path_for_clip_id(clip_id):
             return proxy
 
-        ctx.proxy_resolver = MagicMock(path_for_clip_id=path_for_clip_id)
+        install_live_ctx(
+            client.app,
+            proxy_resolver=MagicMock(path_for_clip_id=path_for_clip_id),
+        )
 
         r = client.get("/api/media/42", headers={"Range": "bytes=100-199"})
         assert r.status_code == 206
@@ -64,7 +70,6 @@ def test_media_serves_range(monkeypatch, tmp_path):
 def test_thumb_serves_jpeg(monkeypatch, tmp_path):
     app = _app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
         thumb = tmp_path / "42.jpg"
         thumb.write_bytes(b"\xff\xd8\xffJPEG")
 
@@ -72,7 +77,10 @@ def test_thumb_serves_jpeg(monkeypatch, tmp_path):
             assert clip_id == 42
             return thumb
 
-        ctx.thumbnail_service = MagicMock(get_or_fetch=get_or_fetch)
+        install_live_ctx(
+            client.app,
+            thumbnail_service=MagicMock(get_or_fetch=get_or_fetch),
+        )
 
         r = client.get("/api/media/42/thumb")
         assert r.status_code == 200
@@ -83,12 +91,13 @@ def test_thumb_serves_jpeg(monkeypatch, tmp_path):
 def test_thumb_404_when_unavailable(monkeypatch, tmp_path):
     app = _app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
-
         async def get_or_fetch(clip_id):
             return None
 
-        ctx.thumbnail_service = MagicMock(get_or_fetch=get_or_fetch)
+        install_live_ctx(
+            client.app,
+            thumbnail_service=MagicMock(get_or_fetch=get_or_fetch),
+        )
 
         r = client.get("/api/media/42/thumb")
         assert r.status_code == 404

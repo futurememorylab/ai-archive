@@ -13,6 +13,7 @@ from backend.app.archive.model import (
     MediaRef,
     Timecode,
 )
+from tests._helpers.live_ctx import install_live_ctx
 
 
 def _canonical(clip_id: int = 12041, name: str = "Abramcukova_Anna_09") -> CanonicalClip:
@@ -93,7 +94,7 @@ class FakeArchive:
 
 def test_clips_list_returns_full_page(monkeypatch, tmp_path):
     with _make_client(monkeypatch, tmp_path) as client:
-        client.app.state.ctx.archive = FakeArchive((_canonical(),))
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
         r = client.get("/")
         assert r.status_code == 200
         assert "text/html" in r.headers["content-type"]
@@ -107,7 +108,7 @@ def test_clips_list_returns_full_page(monkeypatch, tmp_path):
 
 def test_clips_list_htmx_returns_partial(monkeypatch, tmp_path):
     with _make_client(monkeypatch, tmp_path) as client:
-        client.app.state.ctx.archive = FakeArchive((_canonical(),))
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
         r = client.get("/", headers={"HX-Request": "true"})
         assert r.status_code == 200
         assert "<!doctype html>" not in r.text.lower()
@@ -117,7 +118,7 @@ def test_clips_list_htmx_returns_partial(monkeypatch, tmp_path):
 def test_clips_list_passes_query_to_adapter(monkeypatch, tmp_path):
     with _make_client(monkeypatch, tmp_path) as client:
         fake = FakeArchive((_canonical(),))
-        client.app.state.ctx.archive = fake
+        install_live_ctx(client.app, archive=fake)
         r = client.get("/?q=Anna&offset=20&limit=10")
         assert r.status_code == 200
         assert fake.last_query.text == "Anna"
@@ -127,7 +128,7 @@ def test_clips_list_passes_query_to_adapter(monkeypatch, tmp_path):
 
 def test_clip_detail_renders(monkeypatch, tmp_path):
     with _make_client(monkeypatch, tmp_path) as client:
-        client.app.state.ctx.archive = FakeArchive((_canonical(),))
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
         r = client.get("/clips/12041")
         assert r.status_code == 200
         assert "Abramcukova_Anna_09" in r.text
@@ -137,7 +138,7 @@ def test_clip_detail_renders(monkeypatch, tmp_path):
 
 def test_clip_detail_404_when_missing(monkeypatch, tmp_path):
     with _make_client(monkeypatch, tmp_path) as client:
-        client.app.state.ctx.archive = FakeArchive(())
+        install_live_ctx(client.app, archive=FakeArchive(()))
         r = client.get("/clips/99999")
         assert r.status_code == 404
 
@@ -152,7 +153,7 @@ def test_static_mount(monkeypatch, tmp_path):
 def test_clip_detail_renders_without_timeline_when_duration_zero(monkeypatch, tmp_path):
     with _make_client(monkeypatch, tmp_path) as client:
         zero_dur = dataclasses.replace(_canonical(), duration_secs=0.0)
-        client.app.state.ctx.archive = FakeArchive((zero_dur,))
+        install_live_ctx(client.app, archive=FakeArchive((zero_dur,)))
         r = client.get("/clips/12041")
         assert r.status_code == 200
         assert "Abramcukova_Anna_09" in r.text
@@ -176,10 +177,10 @@ class SpyListCacheRepo:
 
 def test_refresh_query_invalidates_list_cache(monkeypatch, tmp_path):
     with _make_client(monkeypatch, tmp_path) as client:
-        ctx = client.app.state.ctx
-        ctx.archive = FakeArchive((_canonical(),))
+        ctx = client.app.state.core_ctx
         spy = SpyListCacheRepo()
         ctx.clip_list_cache_repo = spy
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
 
         r = client.get("/?refresh=1")
         assert r.status_code == 200
@@ -188,10 +189,10 @@ def test_refresh_query_invalidates_list_cache(monkeypatch, tmp_path):
 
 def test_no_refresh_query_does_not_invalidate(monkeypatch, tmp_path):
     with _make_client(monkeypatch, tmp_path) as client:
-        ctx = client.app.state.ctx
-        ctx.archive = FakeArchive((_canonical(),))
+        ctx = client.app.state.core_ctx
         spy = SpyListCacheRepo()
         ctx.clip_list_cache_repo = spy
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
 
         r = client.get("/")
         assert r.status_code == 200
@@ -200,8 +201,7 @@ def test_no_refresh_query_does_not_invalidate(monkeypatch, tmp_path):
 
 def test_cache_age_displayed_when_entry_present(monkeypatch, tmp_path):
     with _make_client(monkeypatch, tmp_path) as client:
-        ctx = client.app.state.ctx
-        ctx.archive = FakeArchive((_canonical(),))
+        ctx = client.app.state.core_ctx
         spy = SpyListCacheRepo()
         # Pretend the list cache has a row 2 minutes old.
         from datetime import datetime, timedelta
@@ -209,6 +209,7 @@ def test_cache_age_displayed_when_entry_present(monkeypatch, tmp_path):
         two_min_ago = (datetime.now(UTC) - timedelta(minutes=2)).isoformat()
         spy.entry = {"fetched_at": two_min_ago, "total": 1, "items": ()}
         ctx.clip_list_cache_repo = spy
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
 
         r = client.get("/")
         assert r.status_code == 200
@@ -220,7 +221,7 @@ def test_cache_age_displayed_when_entry_present(monkeypatch, tmp_path):
 def test_clips_page_marks_clips_rail_active(monkeypatch, tmp_path):
     """Clips list sets rail_active so the Clips icon gets `.active`."""
     with _make_client(monkeypatch, tmp_path) as client:
-        client.app.state.ctx.archive = FakeArchive((_canonical(),))
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
         r = client.get("/")
         assert r.status_code == 200
         # exactly one rail button should be active; the first one is Clips
@@ -234,7 +235,7 @@ def test_clips_page_marks_clips_rail_active(monkeypatch, tmp_path):
 def test_clip_detail_marks_preview_rail_active(monkeypatch, tmp_path):
     """Detail page activates the Preview rail icon and writes lastClipId."""
     with _make_client(monkeypatch, tmp_path) as client:
-        client.app.state.ctx.archive = FakeArchive((_canonical(),))
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
         r = client.get("/clips/12041")
         assert r.status_code == 200
         assert "rail-btn active" in r.text
@@ -243,7 +244,7 @@ def test_clip_detail_marks_preview_rail_active(monkeypatch, tmp_path):
 
 def test_pager_url_encodes_search_query(monkeypatch, tmp_path):
     with _make_client(monkeypatch, tmp_path) as client:
-        client.app.state.ctx.archive = FakeArchive((_canonical(),), total=100)
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),), total=100))
         r = client.get("/?q=hello+world%26x&offset=10&limit=10")
         assert r.status_code == 200
         assert "q=hello%20world%26x" in r.text
@@ -253,7 +254,7 @@ def test_pager_url_encodes_search_query(monkeypatch, tmp_path):
 def test_clips_list_batch_filter_dropdown(monkeypatch, tmp_path):
     """Batch <select> renders on GET / (even with no jobs = empty dropdown)."""
     with _make_client(monkeypatch, tmp_path) as client:
-        client.app.state.ctx.archive = FakeArchive((_canonical(),))
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
         r = client.get("/")
         assert r.status_code == 200
         assert 'select name="batch"' in r.text
@@ -265,7 +266,7 @@ def test_clips_list_empty_batch_param_is_not_422(monkeypatch, tmp_path):
     """The 'Any' batch option submits batch= (empty); it must coerce to None,
     not 422. Regression for the filter form breaking on every change."""
     with _make_client(monkeypatch, tmp_path) as client:
-        client.app.state.ctx.archive = FakeArchive((_canonical(),))
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
         r = client.get("/?q=&cache=any&anno=for_review&batch=")
         assert r.status_code == 200
         # A real job id still works.

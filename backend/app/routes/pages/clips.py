@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 
 from backend.app.archive.errors import ProviderError, is_provider_not_found
 from backend.app.archive.model import CanonicalClip, ClipQuery
-from backend.app.deps import get_ctx
+from backend.app.deps import get_core_ctx, get_live_ctx
 from backend.app.repositories.live_sessions import LiveSessionsRepo
 from backend.app.routes.pages.templates import templates
 from backend.app.services.clip_list_filters import (
@@ -122,9 +122,7 @@ async def clips_list(
     anno: str | None = None,
     batch: str | None = None,
 ):
-    ctx = get_ctx(request)
-    if ctx.archive is None:
-        raise HTTPException(503, "archive provider not initialized")
+    ctx = get_live_ctx(request)
 
     catalog_id = str(ctx.settings.catdv_catalog_id)
     cache_f = normalize_cache(cache)
@@ -188,7 +186,7 @@ async def clips_list(
 
     # Bulk cache lookup so each row gets a badge with no per-row HTMX hop.
     statuses: dict[tuple[str, str], object] = {}
-    if ctx.cache_inspector is not None and clips:
+    if clips:
         keys = [c.key for c in clips]
         rows = await ctx.cache_inspector.status_for_clips(keys)
         statuses = {r.clip_key: r for r in rows}
@@ -451,9 +449,7 @@ async def _build_draft_view_model_for_live(ctx, clip_id: int) -> dict:
 
 @router.get("/clips/{clip_id}", response_class=HTMLResponse)
 async def clip_detail_page(request: Request, clip_id: int, review: int | None = None):
-    ctx = get_ctx(request)
-    if ctx.archive is None:
-        raise HTTPException(503, "archive provider not initialized")
+    ctx = get_live_ctx(request)
     try:
         clip = await ctx.archive.get_clip(str(clip_id))
     except ProviderError as exc:
@@ -466,9 +462,7 @@ async def clip_detail_page(request: Request, clip_id: int, review: int | None = 
             )
         raise HTTPException(404, f"clip not found: {exc}") from exc
 
-    cache_status = None
-    if ctx.cache_inspector is not None:
-        cache_status = await ctx.cache_inspector.status_for_clip(clip.key)
+    cache_status = await ctx.cache_inspector.status_for_clip(clip.key)
 
     ctx_dict = clip_detail(clip, cache_status=cache_status)
     ctx_dict["duration_smpte"] = secs_to_smpte(
@@ -489,9 +483,7 @@ async def clip_detail_page(request: Request, clip_id: int, review: int | None = 
 
 @router.get("/clips/{clip_id}/draft", response_class=HTMLResponse)
 async def clip_draft_partial(request: Request, clip_id: int):
-    ctx = get_ctx(request)
-    if ctx.archive is None:
-        raise HTTPException(503, "archive provider not initialized")
+    ctx = get_live_ctx(request)
     try:
         # Confirm the clip exists so we 404 properly; we don't render it here.
         await ctx.archive.get_clip(str(clip_id))
@@ -506,7 +498,7 @@ async def clip_draft_partial(request: Request, clip_id: int):
 
 @router.get("/clips/{clip_id}/live-history", response_class=HTMLResponse)
 async def clip_live_history(request: Request, clip_id: int):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     repo = LiveSessionsRepo()
     rows = await repo.list_by_clip(ctx.db, clip_id)
     sessions = []

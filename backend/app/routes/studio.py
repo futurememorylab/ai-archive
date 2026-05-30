@@ -10,7 +10,7 @@ from fastapi import APIRouter, Header, HTTPException, Request, status
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from backend.app.deps import get_ctx
+from backend.app.deps import get_core_ctx
 from backend.app.routes.pages.templates import templates
 from backend.app.services.annotator import run_job
 
@@ -43,7 +43,7 @@ class RunCreate(BaseModel):
 
 @router.get("/folders")
 async def list_folders(request: Request):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     return await ctx.studio_folders_repo.list_folders_with_counts(ctx.db)
 
 
@@ -53,7 +53,7 @@ async def create_folder(
     body: FolderCreate,
     hx_request: str | None = Header(None, alias="HX-Request"),
 ):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     try:
         fid = await ctx.studio_folders_repo.create_folder(ctx.db, name=body.name)
     except aiosqlite.IntegrityError as exc:
@@ -71,7 +71,7 @@ async def create_folder(
 
 @router.patch("/folders/{folder_id}")
 async def rename_folder(request: Request, folder_id: int, body: FolderPatch):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     try:
         await ctx.studio_folders_repo.rename_folder(ctx.db, folder_id, name=body.name)
     except aiosqlite.IntegrityError as exc:
@@ -81,7 +81,7 @@ async def rename_folder(request: Request, folder_id: int, body: FolderPatch):
 
 @router.delete("/folders/{folder_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_folder(request: Request, folder_id: int):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     await ctx.studio_folders_repo.delete_folder(ctx.db, folder_id)
     return Response(status_code=204)
 
@@ -91,7 +91,7 @@ async def delete_folder(request: Request, folder_id: int):
 
 @router.get("/folders/{folder_id}/clips")
 async def list_folder_clips(request: Request, folder_id: int):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     return await ctx.studio_folders_repo.list_clips(ctx.db, folder_id)
 
 
@@ -102,7 +102,7 @@ async def add_folder_clips(
     body: AddClips,
     hx_request: str | None = Header(None, alias="HX-Request"),
 ):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     added = await ctx.studio_folders_repo.add_clips(
         ctx.db, folder_id, clip_ids=body.clip_ids
     )
@@ -120,7 +120,7 @@ async def add_folder_clips(
     "/folders/{folder_id}/clips/{clip_id}", status_code=status.HTTP_204_NO_CONTENT
 )
 async def remove_folder_clip(request: Request, folder_id: int, clip_id: int):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     await ctx.studio_folders_repo.remove_clip(ctx.db, folder_id, clip_id=clip_id)
     return Response(status_code=204)
 
@@ -130,7 +130,7 @@ async def remove_folder_clip(request: Request, folder_id: int, clip_id: int):
 
 @router.post("/runs", status_code=status.HTTP_201_CREATED)
 async def create_run(request: Request, body: RunCreate):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     try:
         version = await ctx.prompts_repo.get_version(ctx.db, body.prompt_version_id)
     except LookupError as exc:
@@ -151,8 +151,11 @@ async def create_run(request: Request, body: RunCreate):
     )
     await ctx.studio_runs_repo.attach_job(ctx.db, run_id, job_id=job_id)
 
-    if ctx.archive and ctx.ai_store and ctx.gemini and ctx.proxy_resolver:
-        task = asyncio.create_task(_run_in_bg(ctx, job_id))
+    # Auto-run only when the full live stack is wired (and the resolver is
+    # not fs-only). Offline → run row is created but left for a later run.
+    live = request.app.state.live_ctx
+    if live is not None and live.proxy_resolver is not None:
+        task = asyncio.create_task(_run_in_bg(live, job_id))
         ctx._running_jobs[job_id] = task
 
     return {"run_id": run_id, "job_id": job_id}
@@ -180,7 +183,7 @@ async def _run_in_bg(ctx, job_id: int) -> None:
 
 @router.get("/runs/{run_id}")
 async def get_run(request: Request, run_id: int):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     try:
         run = await ctx.studio_runs_repo.get(ctx.db, run_id)
     except LookupError as exc:
@@ -198,7 +201,7 @@ async def latest_run(
     """Latest run for (version, clip). `latest=1` is the only supported mode in v1."""
     if latest != 1:
         raise HTTPException(400, "only latest=1 is supported in v1")
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     run = await ctx.studio_runs_repo.latest_for_pair(
         ctx.db, prompt_version_id=prompt_version_id, clip_id=clip_id
     )
