@@ -57,6 +57,27 @@ B. Persist a "failed until dismissed" banner across navigations, which
   `POST /api/jobs` returns `started: false` when `auto_start` can't fire
   (annotation services unavailable); the picker collects these and shows
   an error, keeping the modal open instead of closing as if jobs ran.
+
+## Post-QA fixes
+
+Manual QA surfaced four issues; the notable design calls:
+
+- **`batch=` now resolves to every clip in the job** (`job_items`), not
+  just clips with pending review drafts. The indicator is only visible
+  while a job runs — when no drafts exist yet — so the old "pending-only"
+  resolution made the Batch view empty mid-run. The clips list now shows a
+  per-clip run-status pill (Queued / Processing / Done / Applied / Failed)
+  derived from `job_items.status`. This also changes the existing Batch
+  dropdown to the same "all clips in the run" meaning.
+- **Filtered/batch views hydrate from the local list cache**
+  (`ClipListCacheRepo.clips_for_catalog`) before any per-clip
+  `archive.get_clip`. The previous per-clip CatDV round-trip made the Batch
+  view slow; parallelizing those fetches was rejected (it would hammer the
+  seat-limited CatDV server, violating the session discipline).
+- **Gemini calls run off the event loop.** `gemini.annotate()` is a
+  synchronous Vertex AI call; it now runs via `asyncio.to_thread`, so a
+  running batch no longer freezes page requests. (Pre-existing blocking,
+  but bulk runs made it continuous.)
 - **Known limitation:** because `/api/jobs/active` returns only running
   jobs and the indicator's `failed` flag resets on each page load, a
   *completed-with-errors* batch is only noticeable until the user

@@ -211,3 +211,31 @@ async def test_invalidate_catalog_wipes_only_that_catalog(db):
         )
         is not None
     )
+
+
+@pytest.mark.asyncio
+async def test_clips_for_catalog_unions_pages_keyed_by_clip_id(db):
+    """clips_for_catalog returns every cached clip across all pages of a
+    catalog, keyed by provider_clip_id — powering local-first hydration of
+    filtered/batch views without per-clip CatDV fetches."""
+    repo = ClipListCacheRepo()
+    await repo.upsert(
+        db, provider_id="catdv", catalog_id="881507", query_text=None,
+        offset=0, limit=2, total=4,
+        items=(_make_clip("1", name="A"), _make_clip("2", name="B")),
+        fetched_at_iso="2026-05-19T10:00:00+00:00",
+    )
+    await repo.upsert(
+        db, provider_id="catdv", catalog_id="881507", query_text=None,
+        offset=2, limit=2, total=4,
+        items=(_make_clip("3", name="C"),),
+        fetched_at_iso="2026-05-19T10:00:00+00:00",
+    )
+
+    out = await repo.clips_for_catalog(db, provider_id="catdv", catalog_id="881507")
+    assert set(out.keys()) == {"1", "2", "3"}
+    assert out["2"].name == "B"
+
+    # A different catalog is not included.
+    other = await repo.clips_for_catalog(db, provider_id="catdv", catalog_id="999999")
+    assert other == {}

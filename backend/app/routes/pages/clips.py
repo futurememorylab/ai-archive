@@ -50,6 +50,28 @@ def _humanize_age(fetched_at_iso: str | None) -> str | None:
     return f"{days}d ago"
 
 
+# Maps a job_item status to a clip-row batch pill (label, pill state class).
+# States: "" neutral, "accent" in-flight, "ok" green, "bad" red.
+_BATCH_STATUS_VIEW: dict[str, tuple[str, str]] = {
+    "pending": ("Queued", ""),
+    "resolving": ("Processing", "accent"),
+    "uploading": ("Processing", "accent"),
+    "prompting": ("Processing", "accent"),
+    "annotated": ("Done", "ok"),
+    "review_ready": ("Done", "ok"),
+    "applied": ("Applied", "ok"),
+    "rejected": ("Rejected", ""),
+    "error": ("Failed", "bad"),
+}
+
+
+def _batch_status_view(status: str | None) -> dict[str, str] | None:
+    if status is None:
+        return None
+    label, state = _BATCH_STATUS_VIEW.get(status, (status, ""))
+    return {"label": label, "state": state}
+
+
 router = APIRouter(tags=["pages"])
 
 
@@ -154,10 +176,20 @@ async def clips_list(
         "cache_age": _humanize_age(cache_fetched_at),
     }
 
+    # When viewing a batch, surface each clip's per-item run status (queued /
+    # processing / done / failed) from the job's items.
+    batch_status_map: dict[int, str] = {}
+    if batch_id is not None:
+        batch_status_map = {
+            it.catdv_clip_id: it.status
+            for it in await ctx.jobs_repo.list_items(ctx.db, batch_id)
+        }
+
     # Annotate each row with its pending-draft counts and batch job id.
     pending_rows = await ctx.review_items_repo.list_pending_clips(ctx.db, limit=2000, offset=0)
     pmap = {r["catdv_clip_id"]: r for r in pending_rows}
     for row in ctx_dict["clips"]:
+        row["batch_status"] = _batch_status_view(batch_status_map.get(row["id"]))
         p = pmap.get(row["id"])
         mc = p["marker_count"] if p else 0
         fc = p["field_count"] if p else 0
@@ -213,9 +245,17 @@ async def _filtered_page(
 
     needle = (q or "").strip().casefold() or None
 
+    # Hydrate locally: the clips were almost certainly listed already, so a
+    # single read of the cached list pages avoids a per-clip CatDV round-trip
+    # (the old behavior that made the Batch view slow). Falls back to the
+    # per-clip resolver only for genuine misses.
+    list_cache = await ctx.clip_list_cache_repo.clips_for_catalog(
+        ctx.db, provider_id="catdv", catalog_id=catalog_id
+    )
+
     hydrated: list[CanonicalClip] = []
     for cid in candidate_ids:
-        clip = await _hydrate_clip(ctx, cid)
+        clip = list_cache.get(str(cid)) or await _hydrate_clip(ctx, cid)
         if clip is None:
             continue
         if needle is not None and needle not in clip.name.casefold():

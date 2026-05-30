@@ -7,6 +7,7 @@ For jobs with `kind='studio'`, output is persisted to studio_run instead
 and the CatDV-write step is skipped entirely.
 """
 
+import asyncio
 import json
 import logging
 import mimetypes
@@ -222,7 +223,11 @@ async def _process_item(
     await event_bus.publish(topic, {"item_id": item.id, "status": "prompting"})
     rendered_body = _render_prompt(version.body, duration_secs=duration_secs)
     t0 = time.monotonic()
-    result = gemini.annotate(
+    # The Vertex AI client is synchronous and each call takes seconds; run it
+    # off the event loop so concurrent jobs and ordinary page requests stay
+    # responsive while Gemini works.
+    result = await asyncio.to_thread(
+        gemini.annotate,
         file_ref=file_ref,
         prompt=rendered_body,
         schema=version.output_schema,

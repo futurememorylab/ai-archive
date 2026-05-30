@@ -73,15 +73,12 @@ async def _ids_with_annotation_review_state(db: aiosqlite.Connection, *, applied
     return {int(r[0]) for r in await cur.fetchall()}
 
 
-async def _ids_with_pending_in_job(db: aiosqlite.Connection, job_id: int) -> set[int]:
-    """Clip IDs with >=1 un-applied review_item belonging to the given job."""
+async def _ids_in_job(db: aiosqlite.Connection, job_id: int) -> set[int]:
+    """All clip IDs belonging to a job (every job_item), regardless of
+    per-item status — so the Batch view shows the whole run and each clip's
+    progress (queued / processing / done / failed) is surfaced separately."""
     cur = await db.execute(
-        """
-        SELECT DISTINCT ri.catdv_clip_id
-        FROM review_items ri
-        JOIN annotations a ON a.id = ri.annotation_id
-        WHERE ri.applied_at IS NULL AND a.job_id = ?
-        """,
+        "SELECT DISTINCT catdv_clip_id FROM job_items WHERE job_id = ?",
         (job_id,),
     )
     return {int(r[0]) for r in await cur.fetchall()}
@@ -204,7 +201,7 @@ async def resolve(
         candidate = anno_set if candidate is None else candidate & anno_set
 
     if batch is not None:
-        batch_set = await _ids_with_pending_in_job(db, batch)
+        batch_set = await _ids_in_job(db, batch)
         candidate = batch_set if candidate is None else candidate & batch_set
 
     assert candidate is not None  # at least one filter active by definition
