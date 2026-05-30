@@ -244,7 +244,7 @@ async def cache_badge(request: Request, provider_id: str, clip_id: str) -> HTMLR
     return templates.TemplateResponse(
         request,
         "cache_badge.html",
-        {"status": _status_for_template(status)},
+        {"status": status},
     )
 
 
@@ -261,7 +261,7 @@ async def cache_popover(request: Request, provider_id: str, clip_id: str) -> HTM
         request,
         "cache_popover.html",
         {
-            "status": _status_for_template(status),
+            "status": status,
             "host_local_proxies": host_local_proxies,
         },
     )
@@ -331,36 +331,3 @@ def _cache_row(status) -> dict:
     }
 
 
-def _status_for_template(status) -> dict[str, Any]:
-    """Templates expect dict-like access (e.g. `status.layers[0].present`).
-
-    Jinja accepts attribute access on dicts but not tuples-of-dataclasses
-    inside dataclasses cleanly. Convert to a plain dict tree via the
-    inspector's `to_dict()`, then wrap layer dicts in a small dot-access
-    shim so the templates can write `layer.present`.
-    """
-    d = status.to_dict()
-    d["layers"] = [_DictWrap(layer) for layer in d["layers"]]
-    return _DictWrap(d)
-
-
-class _DictWrap:
-    """Trivial attr-access over a dict for Jinja templates."""
-
-    def __init__(self, data: dict[str, Any]) -> None:
-        self._data = data
-
-    def __getattr__(self, name: str) -> Any:
-        try:
-            return self._data[name]
-        except KeyError as exc:
-            raise AttributeError(name) from exc
-
-    def __getitem__(self, key) -> Any:
-        return self._data[key]
-
-    def __iter__(self):
-        return iter(self._data)
-
-    def keys(self):
-        return self._data.keys()
