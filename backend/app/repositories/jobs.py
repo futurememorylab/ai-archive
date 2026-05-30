@@ -128,6 +128,38 @@ class JobsRepo:
         )
         await conn.commit()
 
+    async def list_running(self, conn: aiosqlite.Connection) -> list[Job]:
+        cur = await conn.execute(
+            "SELECT id, prompt_version_id, status, total_clips, notes, kind "
+            "FROM jobs WHERE status = 'running' ORDER BY id DESC",
+        )
+        return [
+            Job(
+                id=r[0], prompt_version_id=r[1], status=r[2],
+                total_clips=r[3], notes=r[4], kind=r[5],
+            )
+            for r in await cur.fetchall()
+        ]
+
+    async def progress(
+        self, conn: aiosqlite.Connection, job_id: int
+    ) -> tuple[int, int, int]:
+        """(done, total, errors) for a job. 'done' = items past the
+        in-flight statuses (pending/resolving/uploading/prompting)."""
+        cur = await conn.execute(
+            """
+            SELECT
+              SUM(CASE WHEN status NOT IN
+                  ('pending','resolving','uploading','prompting') THEN 1 ELSE 0 END),
+              COUNT(*),
+              SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END)
+            FROM job_items WHERE job_id = ?
+            """,
+            (job_id,),
+        )
+        row = await cur.fetchone()
+        return (int(row[0] or 0), int(row[1] or 0), int(row[2] or 0))
+
     async def reset_transient(self, conn: aiosqlite.Connection) -> int:
         cur = await conn.execute(
             f"UPDATE job_items SET status = 'pending' WHERE status IN "

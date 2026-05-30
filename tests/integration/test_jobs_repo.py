@@ -62,3 +62,31 @@ async def test_reset_transient_statuses_on_recovery(db):
     refreshed = await jobs.list_items(db, job_id)
     statuses = sorted(it.status for it in refreshed)
     assert statuses == ["pending", "pending", "review_ready"]
+
+
+@pytest.mark.asyncio
+async def test_progress_counts_done_and_errors(db):
+    vid = await _seed_version(db)
+    jobs = JobsRepo()
+    job_id = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[1, 2, 3, 4])
+    items = await jobs.list_items(db, job_id)
+    # one finished ok, one errored, one mid-flight, one pending
+    await jobs.update_item_status(db, items[0].id, "review_ready")
+    await jobs.update_item_status(db, items[1].id, "error", error="boom")
+    await jobs.update_item_status(db, items[2].id, "uploading")
+
+    done, total, errors = await jobs.progress(db, job_id)
+    assert (done, total, errors) == (2, 4, 1)
+
+
+@pytest.mark.asyncio
+async def test_list_running_returns_only_running_jobs(db):
+    vid = await _seed_version(db)
+    jobs = JobsRepo()
+    running_id = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[1])
+    done_id = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[2])
+    await jobs.update_status(db, running_id, "running")
+    await jobs.update_status(db, done_id, "completed")
+
+    running = await jobs.list_running(db)
+    assert [j.id for j in running] == [running_id]
