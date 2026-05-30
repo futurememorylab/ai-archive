@@ -12,42 +12,17 @@ Two flavours of routes:
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from backend.app.archive.model import ClipKey
 from backend.app.deps import get_core_ctx
+from backend.app.routes.pages.templates import templates
 from backend.app.ui.pagination import page_offsets
 from backend.app.ui.view_models import cache_status_view
-
-TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "templates"
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-
-
-def _bytes_human(n: int | None) -> str:
-    if not n:
-        return "0 B"
-    n = int(n)
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if abs(n) < 1024:
-            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
-        n /= 1024
-    return f"{n:.1f} PB"
-
-
-def _comma(n: int | None) -> str:
-    if n is None:
-        return "0"
-    return f"{int(n):,}"
-
-
-templates.env.filters["bytes_human"] = _bytes_human
-templates.env.filters["comma"] = _comma
 
 api_router = APIRouter(prefix="/api/cache", tags=["cache"])
 page_router = APIRouter(tags=["cache"])

@@ -11,19 +11,15 @@ ship the endpoint without a template so the wire shape is locked.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from fastapi.templating import Jinja2Templates
 
 from backend.app.deps import get_core_ctx
+from backend.app.routes.pages.templates import templates as _templates
 from backend.app.shutdown import schedule_graceful_shutdown
 
 router = APIRouter(prefix="/api/connection", tags=["connection"])
-
-_TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "templates"
-_templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
 
 def _mode(monitor) -> str:

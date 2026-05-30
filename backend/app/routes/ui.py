@@ -6,16 +6,11 @@ id on the page and HTMX swaps it via outerHTML.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 
 from backend.app.deps import get_core_ctx
-
-TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "templates"
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+from backend.app.routes.pages.templates import templates
 
 router = APIRouter(prefix="/ui", tags=["ui"])
 
