@@ -47,6 +47,16 @@ B. Persist a "failed until dismissed" banner across navigations, which
   aiosqlite connection; writes are serialized by aiosqlite. Acceptable at
   current scale.
 - No DB migration required.
+- **Studio jobs are excluded from the global indicator.** Prompt Studio
+  runs go through the same `run_job` with `kind="studio"` and have their
+  own progress UI. The three global-topic publishes in `run_job` are
+  guarded by `kind != "studio"`, and `JobsRepo.list_running` filters
+  `COALESCE(kind,'') != 'studio'`, so only `kind IS NULL` annotation jobs
+  surface in the topbar.
+- **Offline kickoff surfaces a message rather than a silent no-op.**
+  `POST /api/jobs` returns `started: false` when `auto_start` can't fire
+  (annotation services unavailable); the picker collects these and shows
+  an error, keeping the modal open instead of closing as if jobs ran.
 - **Known limitation:** because `/api/jobs/active` returns only running
   jobs and the indicator's `failed` flag resets on each page load, a
   *completed-with-errors* batch is only noticeable until the user
