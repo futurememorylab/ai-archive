@@ -22,7 +22,9 @@ def humanise(exc: BaseException) -> str:
       transport phrase.
     - other exceptions: str(exc) if non-empty, otherwise the class name.
 
-    Always returns a non-empty string bounded to ~500 characters.
+    Always returns a non-empty string; HTTP error bodies truncated at
+    `_MAX_BODY_CHARS`, so total length is bounded to roughly that plus
+    the URL/prefix overhead (~80 chars).
     """
     if isinstance(exc, httpx.HTTPStatusError):
         body = (exc.response.text or "").strip()

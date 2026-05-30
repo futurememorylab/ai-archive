@@ -31,8 +31,20 @@ def test_humanise_handles_httpx_status_error_with_empty_body():
 def test_humanise_handles_connect_error():
     exc = httpx.ConnectError("Connection refused")
     msg = humanise(exc)
-    assert "refused" in msg.lower() or "connect" in msg.lower()
+    # Output is "connect failed: Connection refused" — assert BOTH the
+    # transport-phrase prefix AND that the exception text flows through.
+    assert "refused" in msg.lower()
+    assert "connect" in msg.lower()
     assert msg != "ConnectError"
+
+
+def test_humanise_handles_timeout_error():
+    exc = httpx.ConnectTimeout("read timed out after 30s")
+    msg = humanise(exc)
+    # ConnectTimeout is a TimeoutException (specific branch) — must not
+    # fall through to the generic RequestError branch.
+    assert "timeout" in msg.lower()
+    assert "timed out" in msg.lower()
 
 
 def test_humanise_handles_arbitrary_exception_with_str():
@@ -58,4 +70,7 @@ def test_humanise_truncates_giant_bodies():
     response = httpx.Response(500, request=request, text=body)
     exc = httpx.HTTPStatusError("500", request=request, response=response)
     msg = humanise(exc)
-    assert len(msg) < 1000, f"got {len(msg)} chars; should be bounded"
+    # Expected cap: _MAX_BODY_CHARS (400) + URL/prefix overhead (~80) ≈ 480.
+    # The < 600 bound catches a doubling of _MAX_BODY_CHARS without false
+    # positives from URL length variations.
+    assert len(msg) < 600, f"got {len(msg)} chars; should be bounded"
