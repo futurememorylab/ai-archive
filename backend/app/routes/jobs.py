@@ -18,6 +18,9 @@ class JobCreate(BaseModel):
     prompt_version_id: int
     clip_ids: list[int]
     auto_start: bool = True
+    # Shared token tying together the per-kind jobs of one bulk action so the
+    # Batch filter can present them as a single run.
+    run_group: str | None = None
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -27,6 +30,7 @@ async def create_job(request: Request, body: JobCreate, background: BackgroundTa
         ctx.db,
         prompt_version_id=body.prompt_version_id,
         clip_ids=body.clip_ids,
+        run_group=body.run_group,
     )
     started = bool(
         body.auto_start and ctx.archive and ctx.ai_store and ctx.gemini and ctx.proxy_resolver

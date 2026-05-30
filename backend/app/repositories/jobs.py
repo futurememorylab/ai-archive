@@ -23,13 +23,15 @@ class JobsRepo:
         prompt_version_id: int,
         clip_ids: list[int],
         kind: str | None = None,
+        run_group: str | None = None,
     ) -> int:
         cur = await conn.execute(
             """
-            INSERT INTO jobs (prompt_version_id, status, created_at, total_clips, kind)
-            VALUES (?, 'pending', ?, ?, ?)
+            INSERT INTO jobs
+              (prompt_version_id, status, created_at, total_clips, kind, run_group)
+            VALUES (?, 'pending', ?, ?, ?, ?)
             """,
-            (prompt_version_id, _now_iso(), len(clip_ids), kind),
+            (prompt_version_id, _now_iso(), len(clip_ids), kind, run_group),
         )
         job_id = cur.lastrowid
         assert job_id is not None
@@ -43,7 +45,8 @@ class JobsRepo:
 
     async def get_job(self, conn: aiosqlite.Connection, job_id: int) -> Job:
         cur = await conn.execute(
-            "SELECT id, prompt_version_id, status, total_clips, notes, kind FROM jobs WHERE id = ?",
+            "SELECT id, prompt_version_id, status, total_clips, notes, kind, run_group "
+            "FROM jobs WHERE id = ?",
             (job_id,),
         )
         row = await cur.fetchone()
@@ -51,19 +54,19 @@ class JobsRepo:
             raise LookupError(f"job {job_id} not found")
         return Job(
             id=row[0], prompt_version_id=row[1], status=row[2],
-            total_clips=row[3], notes=row[4], kind=row[5],
+            total_clips=row[3], notes=row[4], kind=row[5], run_group=row[6],
         )
 
     async def list_jobs(self, conn: aiosqlite.Connection, *, limit: int = 50) -> list[Job]:
         cur = await conn.execute(
-            "SELECT id, prompt_version_id, status, total_clips, notes, kind "
+            "SELECT id, prompt_version_id, status, total_clips, notes, kind, run_group "
             "FROM jobs ORDER BY id DESC LIMIT ?",
             (limit,),
         )
         return [
             Job(
                 id=r[0], prompt_version_id=r[1], status=r[2],
-                total_clips=r[3], notes=r[4], kind=r[5],
+                total_clips=r[3], notes=r[4], kind=r[5], run_group=r[6],
             )
             for r in await cur.fetchall()
         ]
@@ -130,13 +133,13 @@ class JobsRepo:
 
     async def list_running(self, conn: aiosqlite.Connection) -> list[Job]:
         cur = await conn.execute(
-            "SELECT id, prompt_version_id, status, total_clips, notes, kind "
+            "SELECT id, prompt_version_id, status, total_clips, notes, kind, run_group "
             "FROM jobs WHERE status = 'running' AND COALESCE(kind, '') != 'studio' ORDER BY id DESC",
         )
         return [
             Job(
                 id=r[0], prompt_version_id=r[1], status=r[2],
-                total_clips=r[3], notes=r[4], kind=r[5],
+                total_clips=r[3], notes=r[4], kind=r[5], run_group=r[6],
             )
             for r in await cur.fetchall()
         ]

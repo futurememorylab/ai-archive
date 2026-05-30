@@ -41,8 +41,11 @@ B. Persist a "failed until dismissed" banner across navigations, which
 
 ## Consequences
 
-- Several batch entries appear in the Batch filter for one user action
-  (one per kind) — acceptable; each is independently reviewable/cancellable.
+- One bulk action still creates one job per kind, but the per-kind jobs
+  share a `run_group` token (jobs migration 0015) so the Batch filter and
+  the indicator present them as a single run: the dropdown collapses them
+  into one entry whose value is all their job ids, and `batch=` accepts a
+  comma-separated id list resolving to the union of their clips.
 - Per-kind jobs run as concurrent asyncio tasks sharing the single
   aiosqlite connection; writes are serialized by aiosqlite. Acceptable at
   current scale.

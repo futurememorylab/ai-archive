@@ -72,6 +72,10 @@ function bulkAnnotateMixin() {
       if (!this.annoRunnable()) return;
       this.annoError = null;
       const failures = [];
+      // One token shared by every per-kind job of this bulk action, so the
+      // Batch filter can group them into a single run.
+      const runGroup =
+        (crypto.randomUUID && crypto.randomUUID()) || `run-${Date.now()}`;
       for (const g of this.annoGroups) {
         if (!g.promptVersionId) continue;
         try {
@@ -82,6 +86,7 @@ function bulkAnnotateMixin() {
               prompt_version_id: Number(g.promptVersionId),
               clip_ids: g.clipIds,
               auto_start: true,
+              run_group: runGroup,
             }),
           });
           if (!r.ok) {

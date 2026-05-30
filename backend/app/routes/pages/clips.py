@@ -72,6 +72,42 @@ def _batch_status_view(status: str | None) -> dict[str, str] | None:
     return {"label": label, "state": state}
 
 
+def _batch_options(jobs: list) -> list[dict[str, str]]:
+    """Batch-filter dropdown entries. The per-kind jobs of one bulk action
+    share a run_group and collapse into a single entry (value = all their job
+    ids); single-clip / studio jobs stay individual."""
+    by_group: dict[str, list] = {}
+    for j in jobs:
+        if j.run_group:
+            by_group.setdefault(j.run_group, []).append(j)
+
+    options: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for j in jobs:
+        if j.run_group:
+            if j.run_group in seen:
+                continue
+            seen.add(j.run_group)
+            members = by_group[j.run_group]
+            ids = sorted(int(m.id) for m in members)
+            total = sum(m.total_clips for m in members)
+            options.append(
+                {
+                    "value": ",".join(str(i) for i in ids),
+                    "label": "#" + "+".join(str(i) for i in ids) + f" · bulk ({total})",
+                }
+            )
+        else:
+            label = f"#{j.id}"
+            if j.notes:
+                label += f" · {j.notes}"
+            elif j.kind:
+                label += f" · {j.kind}"
+            label += f" ({j.total_clips})"
+            options.append({"value": str(j.id), "label": label})
+    return options
+
+
 router = APIRouter(tags=["pages"])
 
 
@@ -97,7 +133,8 @@ async def clips_list(
     # indicator links to every per-kind job of one bulk action at once, the
     # dropdown submits a single id, and the "Any" option submits empty.
     batch_ids = [int(b) for b in (batch or "").split(",") if b.strip().isdigit()]
-    batch_query = ",".join(str(b) for b in batch_ids)  # canonical form for links
+    # Canonical (sorted) form so it matches the grouped dropdown option values.
+    batch_query = ",".join(str(b) for b in sorted(batch_ids))
     # The dropdown's selected-state only makes sense for a single id.
     batch_id = batch_ids[0] if len(batch_ids) == 1 else None
     host_local_proxies = getattr(getattr(ctx, "proxy_resolver", None), "is_host_local", False)
@@ -168,6 +205,7 @@ async def clips_list(
         "batch_filter": batch_id,
         "batch_query": batch_query,
         "jobs": jobs,
+        "batch_options": _batch_options(jobs),
         "filters_active": filters_active(effective_cache_f, anno_f, batch_ids),
         "host_local_proxies": host_local_proxies,
         "catalog": {
