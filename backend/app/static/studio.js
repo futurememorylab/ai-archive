@@ -169,7 +169,10 @@ document.addEventListener('alpine:init', () => {
     },
 
     async runOrCancel() {
-      if (this.cancelling || this.doneFlashUntilMs) return;
+      // Both flashes block re-entry — otherwise a double-click during
+      // either flash would start a new run while the button still
+      // visually shows ✓/⊘.
+      if (this.cancelling || this.doneFlashUntilMs || this.cancelledFlashUntilMs) return;
       if (this.running) return this.cancel();
       return this.runOnFocusedClip();
     },
