@@ -93,9 +93,13 @@ async def clips_list(
     catalog_id = str(ctx.settings.catdv_catalog_id)
     cache_f = normalize_cache(cache)
     anno_f = normalize_anno(anno)
-    # `batch` arrives as a query string; the "Any" option submits an empty
-    # string, which must coerce to None (an `int | None` param 422s on "").
-    batch_id = int(batch) if batch and batch.isdigit() else None
+    # `batch` arrives as a comma-separated query string of job ids: the
+    # indicator links to every per-kind job of one bulk action at once, the
+    # dropdown submits a single id, and the "Any" option submits empty.
+    batch_ids = [int(b) for b in (batch or "").split(",") if b.strip().isdigit()]
+    batch_query = ",".join(str(b) for b in batch_ids)  # canonical form for links
+    # The dropdown's selected-state only makes sense for a single id.
+    batch_id = batch_ids[0] if len(batch_ids) == 1 else None
     host_local_proxies = getattr(getattr(ctx, "proxy_resolver", None), "is_host_local", False)
 
     # `?refresh=1` lets the user bypass the list cache when they suspect
@@ -114,7 +118,7 @@ async def clips_list(
     effective_cache_f = "any" if (host_local_proxies and cache_f == "local") else cache_f
 
     try:
-        if filters_active(effective_cache_f, anno_f, batch_id):
+        if filters_active(effective_cache_f, anno_f, batch_ids):
             clips, total = await _filtered_page(
                 ctx,
                 catalog_id=catalog_id,
@@ -124,7 +128,7 @@ async def clips_list(
                 cache_filter=effective_cache_f,
                 anno_filter=anno_f,
                 host_local_proxies=host_local_proxies,
-                batch=batch_id,
+                batch=batch_ids,
             )
         else:
             page = await ctx.archive.list_clips(
@@ -162,8 +166,9 @@ async def clips_list(
         "cache_filter": cache_f,
         "anno_filter": anno_f,
         "batch_filter": batch_id,
+        "batch_query": batch_query,
         "jobs": jobs,
-        "filters_active": filters_active(effective_cache_f, anno_f, batch_id),
+        "filters_active": filters_active(effective_cache_f, anno_f, batch_ids),
         "host_local_proxies": host_local_proxies,
         "catalog": {
             "id": ctx.settings.catdv_catalog_id,
@@ -177,13 +182,12 @@ async def clips_list(
     }
 
     # When viewing a batch, surface each clip's per-item run status (queued /
-    # processing / done / failed) from the job's items.
+    # processing / done / failed) from the job's items, merged across all the
+    # per-kind jobs of the bulk action.
     batch_status_map: dict[int, str] = {}
-    if batch_id is not None:
-        batch_status_map = {
-            it.catdv_clip_id: it.status
-            for it in await ctx.jobs_repo.list_items(ctx.db, batch_id)
-        }
+    for jid in batch_ids:
+        for it in await ctx.jobs_repo.list_items(ctx.db, jid):
+            batch_status_map[it.catdv_clip_id] = it.status
 
     # Annotate each row with its pending-draft counts and batch job id.
     pending_rows = await ctx.review_items_repo.list_pending_clips(ctx.db, limit=2000, offset=0)
@@ -222,7 +226,7 @@ async def _filtered_page(
     cache_filter,
     anno_filter,
     host_local_proxies: bool = False,
-    batch: int | None = None,
+    batch: list[int] | None = None,
 ) -> tuple[list[CanonicalClip], int]:
     """Local-first paginated list when any filter is active.
 

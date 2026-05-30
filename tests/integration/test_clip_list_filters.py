@@ -376,6 +376,30 @@ async def test_resolve_batch_filter_isolates_job(db):
 
 
 @pytest.mark.asyncio
+async def test_resolve_batch_unions_multiple_jobs(db):
+    """A bulk action creates one job per media kind; resolve with a list of
+    job ids returns the union of all their clips (so the indicator's batch
+    view shows every selected clip, not just one kind's)."""
+    await _seed_list_cache(db, [1, 2, 3])
+    await _seed_prompt_version(db)
+    await _insert_job(db, job_id=10)
+    await _insert_job(db, job_id=11)
+    await _insert_job_item(db, job_id=10, clip_id=1, status="prompting")
+    await _insert_job_item(db, job_id=10, clip_id=2, status="pending")
+    await _insert_job_item(db, job_id=11, clip_id=3, status="review_ready")
+
+    out = await resolve(
+        db,
+        provider_id=PROVIDER,
+        catalog_id=CATALOG,
+        cache="any",
+        anno="any",
+        batch=[10, 11],
+    )
+    assert out == {1, 2, 3}
+
+
+@pytest.mark.asyncio
 async def test_resolve_batch_intersects_with_cache_filter(db):
     """batch AND cache filters intersect — only clips matching both are returned."""
     await _seed_list_cache(db, [1, 2, 3])

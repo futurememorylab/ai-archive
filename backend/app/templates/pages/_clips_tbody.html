@@ -12,7 +12,7 @@
   {% set _pq = 'q=' ~ (q|urlencode) ~ '&limit=' ~ limit %}
   {% if cache_filter and cache_filter != 'any' %}{% set _pq = _pq ~ '&cache=' ~ cache_filter %}{% endif %}
   {% if anno_filter and anno_filter != 'any' %}{% set _pq = _pq ~ '&anno=' ~ anno_filter %}{% endif %}
-  {% if batch_filter is not none %}{% set _pq = _pq ~ '&batch=' ~ batch_filter %}{% endif %}
+  {% if batch_query %}{% set _pq = _pq ~ '&batch=' ~ batch_query %}{% endif %}
   {% set _range = ((offset + 1) ~ '–' ~ (offset + clips|length) ~ ' of ' ~ total) if clips else ('0 of ' ~ total) %}
   {% with prev_url = ('/?' ~ _pq ~ '&offset=' ~ prev_offset) if prev_offset is not none else none,
           next_url = ('/?' ~ _pq ~ '&offset=' ~ next_offset) if next_offset is not none else none,

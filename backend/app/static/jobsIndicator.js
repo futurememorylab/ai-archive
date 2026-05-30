@@ -47,9 +47,11 @@ function jobsIndicator() {
     },
 
     open() {
+      // Link to every active job at once (one bulk action = one job per
+      // media kind) so the batch view shows all selected clips, not just
+      // the first kind's.
       const ids = this.activeIds();
-      const target = ids.length ? ids[0] : null;
-      window.location.href = target ? `/?batch=${target}` : "/";
+      window.location.href = ids.length ? `/?batch=${ids.join(",")}` : "/";
     },
 
     async cancel() {
