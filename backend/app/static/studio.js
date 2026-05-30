@@ -129,6 +129,8 @@ document.addEventListener('alpine:init', () => {
     runStartMs: 0,
     runningElapsedLabel: '0:00',
     doneFlashUntilMs: 0,
+    cancelledFlashUntilMs: 0,
+    _cancelRequested: false,
     _nowMs: 0,   // bumped by the 1Hz ticker so runButtonLabel re-evaluates
     pendingRunSwap: 0,
 
@@ -148,6 +150,9 @@ document.addEventListener('alpine:init', () => {
         if (this.doneFlashUntilMs && now >= this.doneFlashUntilMs) {
           this.doneFlashUntilMs = 0;
         }
+        if (this.cancelledFlashUntilMs && now >= this.cancelledFlashUntilMs) {
+          this.cancelledFlashUntilMs = 0;
+        }
       }, 1000);
     },
 
@@ -155,6 +160,7 @@ document.addEventListener('alpine:init', () => {
       // Mirror of tests/_helpers/studio_state.py::run_button_label
       const now = this._nowMs || performance.now();
       if (this.doneFlashUntilMs && now < this.doneFlashUntilMs) return '✓ Done';
+      if (this.cancelledFlashUntilMs && now < this.cancelledFlashUntilMs) return '⊘ Cancelled';
       if (this.cancelling) return '⟳ Cancelling…';
       if (this.running) return `⟳ Running… ${this.runningElapsedLabel}`;
       const v = (this.activeVersionNum !== null && this.activeVersionNum !== undefined)
@@ -170,17 +176,18 @@ document.addEventListener('alpine:init', () => {
 
     async cancel() {
       if (!this.runJobId || this.cancelling) return;
+      this._cancelRequested = true;
       this.cancelling = true;
       try {
         await fetch(`/api/jobs/${this.runJobId}/cancel`, { method: 'POST' });
       } catch (err) {
-        console.error('cancel failed', err);
-      } finally {
-        // Stop the poll loop; runOnFocusedClip()'s finally tidies up.
-        this.running = false;
-        this.cancelling = false;
-        this.pendingRunSwap++;
+        console.error('cancel request failed', err);
+        // Keep polling; if the server didn't get the cancel, the run
+        // will finish normally and we'll surface that.
       }
+      // Do NOT flip this.running here. Let _poll() observe the terminal
+      // status and dispatch the right UI state (Cancelled / Done /
+      // Completed-before-cancel).
     },
 
     focusClip(clipId) {
@@ -264,21 +271,36 @@ document.addEventListener('alpine:init', () => {
         console.error('studio run failed', err);
       } finally {
         this.running = false;
+        this.cancelling = false;
         this.runJobId = null;
         this.pendingRunSwap++;
-        // ✓ Done flash on success only — no flash for error / cancelled.
         if (finalStatus === 'ok') {
           this.doneFlashUntilMs = performance.now() + 1200;
+          // If the user had pressed Cancel but the server completed first,
+          // tell them via the toast layer (added in T2-3, guarded behind
+          // window.Alpine?.store?.('toast')).
+          if (window.Alpine?.store?.('toast') && this._cancelRequested) {
+            window.Alpine.store('toast').push(
+              'Completed before cancel landed — output saved.',
+              { level: 'info' },
+            );
+          }
+        } else if (finalStatus === 'cancelled') {
+          this.cancelledFlashUntilMs = performance.now() + 1200;
         }
+        // No flash for error — error state is surfaced by the run-output partial.
+        this._cancelRequested = false;
       }
     },
 
     async _poll(runId) {
       while (this.running) {
         await new Promise(r => setTimeout(r, 1000));
-        if (!this.running) return null;  // cancel() flipped it
         const res = await fetch(`/api/studio/runs/${runId}`);
-        if (!res.ok) return null;
+        if (!res.ok) {
+          // Network blip; keep trying.
+          continue;
+        }
         const run = await res.json();
         if (run.status === 'ok' || run.status === 'error' || run.status === 'cancelled') {
           return run.status;
