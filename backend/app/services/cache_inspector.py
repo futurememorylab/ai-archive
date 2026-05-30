@@ -27,6 +27,7 @@ import aiosqlite
 
 from backend.app.archive.errors import is_provider_not_found
 from backend.app.archive.model import ClipKey
+from backend.app.repositories._batch import chunked_in_clause
 
 Layer = Literal["metadata", "media-local", "media-ai"]
 
@@ -149,7 +150,9 @@ class CacheInspector:
         if not keys:
             return []
 
-        # Fetch per-layer rows in one batched pass each.
+        # Fetch per-layer rows via chunked `WHERE (a, b) IN (...)` queries;
+        # one statement per layer per chunk (default chunk_size=400 keys).
+        # See backend/app/repositories/_batch.py for the helper. ADR 0046.
         metadata = await self._load_metadata(db, keys)
         media_local = {} if self._host_local else await self._load_media_local(db, keys)
         media_ai = await self._load_media_ai(db, keys)
@@ -344,19 +347,18 @@ class CacheInspector:
         self, db: aiosqlite.Connection, keys: Sequence[ClipKey]
     ) -> dict[ClipKey, dict[str, Any]]:
         out: dict[ClipKey, dict[str, Any]] = {}
-        for key in keys:
+        for in_sql, params in chunked_in_clause(keys):
             cur = await db.execute(
-                "SELECT name, canonical_json, fetched_at "
+                "SELECT provider_id, provider_clip_id, name, canonical_json, fetched_at "
                 "FROM clip_cache "
-                "WHERE provider_id = ? AND provider_clip_id = ?",
-                (key[0], key[1]),
+                f"WHERE (provider_id, provider_clip_id) IN ({in_sql})",
+                params,
             )
-            row = await cur.fetchone()
-            if row is not None:
-                out[key] = {
-                    "name": row[0],
-                    "canonical_json": row[1],
-                    "fetched_at": row[2],
+            for row in await cur.fetchall():
+                out[(row[0], row[1])] = {
+                    "name": row[2],
+                    "canonical_json": row[3],
+                    "fetched_at": row[4],
                 }
         return out
 
@@ -364,22 +366,20 @@ class CacheInspector:
         self, db: aiosqlite.Connection, keys: Sequence[ClipKey]
     ) -> dict[ClipKey, dict[str, Any]]:
         out: dict[ClipKey, dict[str, Any]] = {}
-        for key in keys:
+        for in_sql, params in chunked_in_clause(keys):
             cur = await db.execute(
-                """
-                SELECT file_path, size_bytes, downloaded_at, last_used_at
-                  FROM proxy_cache
-                 WHERE provider_id = ? AND provider_clip_id = ?
-                """,
-                (key[0], key[1]),
+                "SELECT provider_id, provider_clip_id, "
+                "file_path, size_bytes, downloaded_at, last_used_at "
+                "FROM proxy_cache "
+                f"WHERE (provider_id, provider_clip_id) IN ({in_sql})",
+                params,
             )
-            row = await cur.fetchone()
-            if row is not None:
-                out[key] = {
-                    "file_path": row[0],
-                    "size_bytes": row[1],
-                    "downloaded_at": row[2],
-                    "last_used_at": row[3],
+            for row in await cur.fetchall():
+                out[(row[0], row[1])] = {
+                    "file_path": row[2],
+                    "size_bytes": row[3],
+                    "downloaded_at": row[4],
+                    "last_used_at": row[5],
                 }
         return out
 
@@ -387,65 +387,60 @@ class CacheInspector:
         self, db: aiosqlite.Connection, keys: Sequence[ClipKey]
     ) -> dict[ClipKey, list[dict[str, Any]]]:
         out: dict[ClipKey, list[dict[str, Any]]] = {}
-        for key in keys:
+        for in_sql, params in chunked_in_clause(keys):
             cur = await db.execute(
-                """
-                SELECT store_id, gcs_uri, mime_type, size_bytes,
-                       uploaded_at, last_used_at
-                  FROM ai_store_files
-                 WHERE provider_id = ? AND provider_clip_id = ?
-                """,
-                (key[0], key[1]),
+                "SELECT provider_id, provider_clip_id, store_id, gcs_uri, "
+                "mime_type, size_bytes, uploaded_at, last_used_at "
+                "FROM ai_store_files "
+                f"WHERE (provider_id, provider_clip_id) IN ({in_sql})",
+                params,
             )
-            rows = await cur.fetchall()
-            if rows:
-                out[key] = [
-                    {
-                        "store_id": r[0],
-                        "gcs_uri": r[1],
-                        "mime_type": r[2],
-                        "size_bytes": r[3],
-                        "uploaded_at": r[4],
-                        "last_used_at": r[5],
-                    }
-                    for r in rows
-                ]
+            for row in await cur.fetchall():
+                key = (row[0], row[1])
+                out.setdefault(key, []).append({
+                    "store_id": row[2],
+                    "gcs_uri": row[3],
+                    "mime_type": row[4],
+                    "size_bytes": row[5],
+                    "uploaded_at": row[6],
+                    "last_used_at": row[7],
+                })
         return out
 
     async def _load_pins(
         self, db: aiosqlite.Connection, keys: Sequence[ClipKey]
     ) -> dict[ClipKey, list[int]]:
         out: dict[ClipKey, list[int]] = {}
-        for key in keys:
+        for in_sql, params in chunked_in_clause(keys):
             cur = await db.execute(
-                """
-                SELECT workspace_id FROM workspace_clips
-                 WHERE provider_id = ? AND provider_clip_id = ?
-                 ORDER BY workspace_id
-                """,
-                (key[0], key[1]),
+                "SELECT provider_id, provider_clip_id, workspace_id "
+                "FROM workspace_clips "
+                f"WHERE (provider_id, provider_clip_id) IN ({in_sql}) "
+                "ORDER BY provider_id, provider_clip_id, workspace_id",
+                params,
             )
-            ws_ids = [int(r[0]) for r in await cur.fetchall()]
-            if ws_ids:
-                out[key] = ws_ids
+            for row in await cur.fetchall():
+                key = (row[0], row[1])
+                out.setdefault(key, []).append(int(row[2]))
         return out
 
     async def _load_pending_counts(
         self, db: aiosqlite.Connection, keys: Sequence[ClipKey]
     ) -> dict[ClipKey, int]:
         out: dict[ClipKey, int] = {}
-        for key in keys:
+        for in_sql, params in chunked_in_clause(keys):
             cur = await db.execute(
-                """
-                SELECT COUNT(*) FROM pending_operations
-                 WHERE provider_id = ? AND provider_clip_id = ?
-                   AND status IN ('pending', 'in_flight', 'conflict')
-                """,
-                (key[0], key[1]),
+                "SELECT provider_id, provider_clip_id, COUNT(*) "
+                "FROM pending_operations "
+                f"WHERE (provider_id, provider_clip_id) IN ({in_sql}) "
+                "AND status IN ('pending', 'in_flight', 'conflict') "
+                "GROUP BY provider_id, provider_clip_id",
+                params,
             )
-            n = int((await cur.fetchone())[0])
-            if n:
-                out[key] = n
+            for row in await cur.fetchall():
+                n = int(row[2])
+                if n:
+                    out[(row[0], row[1])] = n
         return out
 
 
