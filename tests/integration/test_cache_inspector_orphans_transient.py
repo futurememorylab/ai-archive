@@ -76,3 +76,26 @@ async def test_deep_orphan_check_orphans_on_not_found(tmp_path):
         orphans = await inspector.list_orphans(deep=True)
         assert len(orphans) == 1
         assert orphans[0].clip_key == ("catdv", "42")
+
+
+@pytest.mark.asyncio
+async def test_deep_orphan_check_propagates_task_cancellation(tmp_path):
+    """The deep-loop catches `Exception`, not `BaseException`, so
+    asyncio.CancelledError (a BaseException) is not silently swallowed.
+    Otherwise a cancelled route handler would keep grinding through clips
+    after the user navigated away."""
+    import asyncio
+
+    db_path = tmp_path / "test.db"
+    async with open_db(db_path) as conn:
+        await apply_migrations(conn, MIGRATIONS)
+        await _seed_one_clip(conn)
+
+        provider = _RaisingProvider(asyncio.CancelledError())
+
+        inspector = CacheInspector(
+            db_provider=lambda: conn,
+            provider=provider,
+        )
+        with pytest.raises(asyncio.CancelledError):
+            await inspector.list_orphans(deep=True)
