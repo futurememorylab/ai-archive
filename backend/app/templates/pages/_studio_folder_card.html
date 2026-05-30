@@ -5,7 +5,7 @@
    Expects `f` (folder) in context, with id / name / clip_count. Also
    honours `active_version` and `focused_clip_id` if present (passed
    through from the parent page render). #}
-<div class="studio-folder" :class="expandedId === {{ f.id }} && 'open'">
+<div class="studio-folder" data-folder-id="{{ f.id }}" :class="expandedId === {{ f.id }} && 'open'">
   <div class="studio-folder-row" @click="toggle({{ f.id }})">
     <span class="twist" x-text="expandedId === {{ f.id }} ? '▾' : '▸'"></span>
     <span class="name">{{ f.name }}</span>

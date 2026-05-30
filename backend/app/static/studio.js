@@ -394,11 +394,29 @@ document.addEventListener('alpine:init', () => {
       if (!ids.length) return;
       const res = await fetch(`/api/studio/folders/${this.folderId}/clips`, {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json', 'HX-Request': 'true'},
         body: JSON.stringify({clip_ids: ids}),
       });
       if (res.ok) {
-        location.reload();
+        const html = await res.text();
+        const kidsEl = document.querySelector(
+          `.studio-folder[data-folder-id="${this.folderId}"] .studio-folder-kids`
+        );
+        if (kidsEl) {
+          kidsEl.innerHTML = html;
+          window.Alpine?.initTree(kidsEl);
+          window.htmx?.process(kidsEl);
+        }
+        this.close();  // close the archive picker modal
+        Alpine.store('toast').push(
+          `Added ${ids.length} clip${ids.length === 1 ? '' : 's'} to folder.`,
+          { level: 'success' },
+        );
+      } else {
+        Alpine.store('toast').push(
+          `Add clips failed (HTTP ${res.status}).`,
+          { level: 'error' },
+        );
       }
     },
 
@@ -422,11 +440,21 @@ document.addEventListener('alpine:init', () => {
       if (!name) return;
       const res = await fetch('/api/studio/folders', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json', 'HX-Request': 'true'},
         body: JSON.stringify({name}),
       });
       if (res.ok) {
-        location.reload();
+        const html = await res.text();
+        const folderList = document.querySelector('.studio-folders-list');
+        if (folderList) {
+          folderList.insertAdjacentHTML('beforeend', html);
+          const newCard = folderList.lastElementChild;
+          window.Alpine?.initTree(newCard);
+          window.htmx?.process(newCard);
+        }
+        this.newFolderName = '';
+        this.newFolderOpen = false;
+        Alpine.store('toast').push(`Created folder "${name}".`, { level: 'success' });
       } else if (res.status === 409) {
         Alpine.store('toast').push(
           `Folder "${name}" already exists.`,
