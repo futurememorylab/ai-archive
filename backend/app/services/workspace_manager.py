@@ -9,8 +9,9 @@ transition per clip, so the route can stream them via SSE without
 holding the request thread. State machine per clip:
 
   pending → metadata → media → ready
-                     ↘ media (skipped when capabilities.media_is_local) ↘
-                     ↘ error (stays terminal until prep is re-run)      ↘
+                     ↘ media (skipped when capabilities.media_is_local)   ↘
+                     ↘ error            (terminal: documented absence)    ↘
+                     ↘ transient_error  (retryable: transport / auth)     ↘
 
 The clip's metadata row in `clip_cache` gets `pinned_to_workspace_id`
 set to this workspace as soon as metadata is fetched; it stays pinned
@@ -39,7 +40,7 @@ from backend.app.repositories.workspaces import WorkspacesRepo
 @dataclass(frozen=True)
 class PrepEvent:
     clip_key: ClipKey
-    state: str  # "metadata" | "media" | "ready" | "error"
+    state: str  # "metadata" | "media" | "ready" | "error" | "transient_error"
     error: str | None = None
 
 
@@ -135,7 +136,7 @@ class WorkspaceManager:
                     # absence (NotFoundError / 404) is terminal 'error'.
                     # Transient failures get 'transient_error' which is
                     # retryable. asyncio.CancelledError is a BaseException
-                    # not Exception, so cancellation still propagates.
+                    # and escapes this handler — cancellation propagates.
                     if is_provider_not_found(exc):
                         await self._repo.set_cache_state(
                             db, ws_id, key, "error", error=f"metadata: {exc}"

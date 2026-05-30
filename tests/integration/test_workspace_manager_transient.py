@@ -61,11 +61,12 @@ async def test_prepare_marks_transient_error_not_permanent(tmp_path):
         events = await mgr.prepare_all(ws_id)
 
         states = [ev.state for ev in events]
-        assert "error" not in states, (
-            f"transient transport error should NOT be terminal; got {states}"
+        # Single-clip workspace + provider that fails on first call → the
+        # only event yielded should be the transient_error one. Tightened
+        # to catch any spurious extra event a future bug might emit.
+        assert states == ["transient_error"], (
+            f"expected exactly ['transient_error']; got {states}"
         )
-        # The state should be 'transient_error' so the user can retry.
-        assert any(ev.state == "transient_error" for ev in events), states
 
 
 @pytest.mark.asyncio
@@ -86,4 +87,5 @@ async def test_prepare_marks_permanent_error_for_not_found(tmp_path):
             db_provider=lambda: conn,
         )
         events = await mgr.prepare_all(ws_id)
-        assert any(ev.state == "error" for ev in events)
+        states = [ev.state for ev in events]
+        assert states == ["error"], f"expected exactly ['error']; got {states}"
