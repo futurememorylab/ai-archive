@@ -1,0 +1,13 @@
+0011 was reverted via commit 1065546 ("revert: PR #9 Prompt Studio").
+
+The number is NOT reused. Replacement migrations went forward:
+- 0012_prompt_media_kind.sql (PR #8)
+- 0013_studio.sql (PR #10)
+
+This .txt sentinel exists so apply_migrations() refuses any future
+0011_*.sql file — dev DBs that ran main during the brief window
+PR #9 was live still have '0011_studio.sql' in their
+schema_migrations table, so reusing the number would create
+inconsistent histories across environments.
+
+See ADR 0044 for the full reasoning.
