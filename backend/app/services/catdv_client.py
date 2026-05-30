@@ -5,6 +5,7 @@ resolver."""
 
 import asyncio
 import logging
+import re
 from pathlib import Path
 from typing import Any, Self
 
@@ -13,6 +14,20 @@ import httpx
 from backend.app.models.catdv import Envelope
 
 _DEFAULT_CHUNK = 1 << 16
+
+_QUERY_ALLOWLIST = re.compile(r"[^\w\s\-.]", re.UNICODE)
+
+
+def _sanitise_query(q: str) -> str:
+    """Strip any character not in the conservative allowlist
+    (alphanumeric, whitespace, hyphen, underscore, dot).
+
+    The CatDV REST query language is parenthesised triples joined with
+    `and`/`or`. The undocumented escape rules make per-character escaping
+    unreliable, so we instead remove anything that could let user input
+    escape its embedding in `(clip.name)contains(<here>)`.
+    """
+    return _QUERY_ALLOWLIST.sub("", q)
 
 
 class CatdvAuthError(RuntimeError):
@@ -123,7 +138,7 @@ class CatdvClient:
         # https://docs.squarebox.com/catdv-server/rest-api/REST-API-Reference.html
         clauses = [f"((catalog.ID)eq({catalog_id}))"]
         if q:
-            sanitised = q.replace("(", "").replace(")", "")
+            sanitised = _sanitise_query(q)
             clauses.append(f"((clip.name)contains({sanitised}))")
         params: dict[str, str] = {
             "query": "and".join(clauses),
