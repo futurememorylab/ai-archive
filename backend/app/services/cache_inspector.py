@@ -320,12 +320,20 @@ class CacheInspector:
             orphans.add((r[0], r[1]))
 
         if deep and self._provider is not None:
+            from backend.app.archive.errors import is_provider_not_found
+
             cur = await db.execute("SELECT provider_id, provider_clip_id FROM clip_cache")
             for prov, pcid in await cur.fetchall():
                 try:
                     await self._provider.get_clip(pcid)
-                except Exception:  # noqa: BLE001
-                    orphans.add((prov, pcid))
+                except BaseException as exc:
+                    # Only documented absence (NotFoundError / 404) is evidence
+                    # of orphaning. Transient errors (transport, auth, retryable)
+                    # MUST NOT mark the clip orphan — Evict orphans would wipe
+                    # legitimately-cached data on a VPN flap. See ADR 0042.
+                    if is_provider_not_found(exc):
+                        orphans.add((prov, pcid))
+                    # else: silently skip; next deep call will retry.
 
         return await self.status_for_clips(sorted(orphans))
 
