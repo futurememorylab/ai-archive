@@ -238,6 +238,128 @@ class CacheInspector:
             )
         return out
 
+    async def list_for_inventory(
+        self,
+        *,
+        tab: str = "all",
+        store: str | None = None,
+        workspace: int | None = None,
+        orphans: bool = False,
+        evictable: bool = False,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[ClipCacheStatus], int]:
+        """Inventory rows for the cache page, filtered and paginated in SQL.
+
+        Returns (page_rows, total_matching_count). The COUNT and the
+        page SELECT use the same WHERE clause so the pager stays
+        consistent. Statuses are hydrated only for the page-rows slice,
+        so per-render cost is bounded by `limit` not by total clip count.
+        """
+        db = self._db_provider()
+
+        # Build the WHERE clause + params common to count and page select.
+        # The driving table depends on the filters:
+        #   - orphans=True: rows in proxy_cache OR ai_store_files whose
+        #     clip_cache entry is absent.
+        #   - tab='local': rows in clip_cache that also have a proxy_cache row.
+        #   - tab='ai':    rows in clip_cache that also have an ai_store_files row.
+        #   - tab='all':   rows in clip_cache.
+        #   - workspace=N: rows pinned by workspace N.
+        #   - store=S:     ai_store_files with store_id matching S.
+        #   - evictable=True: rows where at least one layer is evictable —
+        #     evictable is a derived property; for SQL pre-filter we use
+        #     a conservative proxy ("has any cached layer + no pending ops").
+
+        where_clauses: list[str] = []
+        params: list = []
+
+        if orphans:
+            # Orphans: clip_keys in proxy_cache or ai_store_files where
+            # clip_cache row is absent. Drive from a UNION.
+            base_sql = """
+                SELECT pc.provider_id, pc.provider_clip_id
+                  FROM proxy_cache pc
+                  LEFT JOIN clip_cache cc
+                    ON cc.provider_id = pc.provider_id
+                   AND cc.provider_clip_id = pc.provider_clip_id
+                 WHERE cc.provider_id IS NULL
+                UNION
+                SELECT asf.provider_id, asf.provider_clip_id
+                  FROM ai_store_files asf
+                  LEFT JOIN clip_cache cc
+                    ON cc.provider_id = asf.provider_id
+                   AND cc.provider_clip_id = asf.provider_clip_id
+                 WHERE cc.provider_id IS NULL
+            """
+        else:
+            base_sql = (
+                "SELECT provider_id, provider_clip_id FROM clip_cache"
+            )
+
+        # Wrap as subquery so the filters apply uniformly.
+        from_sql = f"FROM ({base_sql}) AS k"
+
+        if tab == "local":
+            where_clauses.append(
+                "EXISTS (SELECT 1 FROM proxy_cache pc "
+                "WHERE pc.provider_id = k.provider_id "
+                "AND pc.provider_clip_id = k.provider_clip_id)"
+            )
+        elif tab == "ai":
+            where_clauses.append(
+                "EXISTS (SELECT 1 FROM ai_store_files asf "
+                "WHERE asf.provider_id = k.provider_id "
+                "AND asf.provider_clip_id = k.provider_clip_id)"
+            )
+        if store:
+            where_clauses.append(
+                "EXISTS (SELECT 1 FROM ai_store_files asf "
+                "WHERE asf.provider_id = k.provider_id "
+                "AND asf.provider_clip_id = k.provider_clip_id "
+                "AND asf.store_id = ?)"
+            )
+            params.append(store)
+        if workspace is not None:
+            where_clauses.append(
+                "EXISTS (SELECT 1 FROM workspace_clips wc "
+                "WHERE wc.provider_id = k.provider_id "
+                "AND wc.provider_clip_id = k.provider_clip_id "
+                "AND wc.workspace_id = ?)"
+            )
+            params.append(workspace)
+        if evictable:
+            where_clauses.append(
+                "NOT EXISTS (SELECT 1 FROM pending_operations po "
+                "WHERE po.provider_id = k.provider_id "
+                "AND po.provider_clip_id = k.provider_clip_id "
+                "AND po.status IN ('pending', 'in_flight', 'conflict'))"
+            )
+
+        where_sql = ""
+        if where_clauses:
+            where_sql = " WHERE " + " AND ".join(where_clauses)
+
+        # COUNT
+        count_cur = await db.execute(
+            f"SELECT COUNT(*) {from_sql}{where_sql}", params
+        )
+        total = int((await count_cur.fetchone())[0])
+
+        # Page SELECT
+        page_cur = await db.execute(
+            f"SELECT provider_id, provider_clip_id {from_sql}{where_sql} "
+            "ORDER BY provider_id, provider_clip_id "
+            "LIMIT ? OFFSET ?",
+            [*params, limit, offset],
+        )
+        page_keys: list[ClipKey] = [
+            (row[0], row[1]) for row in await page_cur.fetchall()
+        ]
+
+        statuses = await self.status_for_clips(page_keys)
+        return statuses, total
+
     # --- summary + orphans -------------------------------------------
 
     async def summary(self) -> CacheSummary:

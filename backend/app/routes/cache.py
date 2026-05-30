@@ -213,30 +213,17 @@ async def cache_page(
         prev_offset = next_offset = None
         page_rows: list = []
     else:
-        # Source statuses — orphan tab uses orphan_statuses; all/local/ai
-        # tabs use all_statuses.
-        statuses = orphan_statuses if orphans else all_statuses
-        rows = []
-        for status in statuses:
-            if store:
-                ai_layer = status.layers[2]
-                if not ai_layer.present or store not in (ai_layer.location or ""):
-                    continue
-            if workspace is not None:
-                md_layer = status.layers[0]
-                if workspace not in md_layer.pinned_by_workspaces:
-                    continue
-            if evictable:
-                if not any(layer.evictable for layer in status.layers):
-                    continue
-            if tab_val == "local" and not status.layers[1].present:
-                continue
-            if tab_val == "ai" and not status.layers[2].present:
-                continue
-            rows.append(status)
-        rows_for_template = [_cache_row(s) for s in rows]
-        total = len(rows_for_template)
-        page_rows = rows_for_template[offset : offset + limit]
+        statuses, total = await insp.list_for_inventory(
+            tab=tab_val,
+            store=store,
+            workspace=workspace,
+            orphans=bool(orphans),
+            evictable=bool(evictable),
+            offset=offset,
+            limit=limit,
+        )
+        rows_for_template = [_cache_row(s) for s in statuses]
+        page_rows = rows_for_template
         prev_offset, next_offset = page_offsets(offset, limit, total)
 
     # Orphan totals for the metric strip — reuse the single fetch.
