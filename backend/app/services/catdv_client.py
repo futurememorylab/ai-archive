@@ -110,12 +110,14 @@ class CatdvClient:
         finally:
             self._logged_in = False
 
-    async def _call_json(self, method: str, path: str, *, json: Any = None) -> Envelope:
-        """Issue a JSON request. Re-login once on AUTH; raise on ERROR."""
+    async def _call_json(self, method: str, path: str, *, json: Any = None, reauth: bool = True) -> Envelope:
+        """Issue a JSON request. Re-login once on AUTH (unless reauth=False); raise on ERROR."""
         url = f"{self._base}{path}"
         resp = await self.http.request(method, url, json=json)
         env = Envelope.model_validate(resp.json())
         if env.requires_reauth:
+            if not reauth:
+                raise CatdvAuthError(env.error_message or "not authenticated")
             await self.login()
             resp = await self.http.request(method, url, json=json)
             env = Envelope.model_validate(resp.json())
@@ -266,13 +268,15 @@ class CatdvClient:
 
     async def health(self) -> dict[str, Any]:
         """Cheap reachability probe. Returns the envelope `data` payload
-        (which may be {}) on OK; raises CatdvError/CatdvAuthError otherwise.
+        (which may be {}) on OK; raises CatdvAuthError without re-login
+        on missing session; raises CatdvError/CatdvBusyError otherwise.
 
-        The endpoint `GET /catdv/api/info` is documented as anonymous and
-        cheap; some installs require auth, so we re-login on AUTH via the
-        shared `_call_json` helper.
+        A re-login here would itself take the seat the probe is looking
+        for. The connection monitor treats any raise as 'offline', so
+        propagating CatdvAuthError is the right behaviour — Reconnect
+        button triggers a login when the user is ready to spend a seat.
         """
-        env = await self._call_json("GET", "/catdv/api/info")
+        env = await self._call_json("GET", "/catdv/api/info", reauth=False)
         return env.data or {}
 
     async def list_fields(self) -> list[dict[str, Any]]:
