@@ -97,10 +97,14 @@ class CatdvArchiveAdapter:
         except CatdvBusyError as exc:
             return ProviderHealth(ok=False, detail=f"busy: {exc}")
         except CatdvError as exc:
-            msg = str(exc)
-            if msg.startswith("NOT_FOUND") or "not found" in msg.lower():
-                raise NotFoundError(msg) from exc
-            return ProviderHealth(ok=False, detail=msg)
+            # health() has a return-type contract (always ProviderHealth);
+            # the other five except-CatdvError blocks raise NotFoundError on
+            # NOT_FOUND for downstream is_provider_not_found() narrowing.
+            # Here we collapse all CatdvError variants — including NOT_FOUND
+            # (which on the /api/info endpoint means misconfigured base URL,
+            # not a missing clip) — into ok=False so ConnectionMonitor can
+            # report offline cleanly.
+            return ProviderHealth(ok=False, detail=str(exc))
         latency_ms = (perf_counter() - t0) * 1000.0
         return ProviderHealth(ok=True, latency_ms=latency_ms)
 
