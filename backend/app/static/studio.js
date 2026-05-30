@@ -309,7 +309,7 @@ document.addEventListener('alpine:init', () => {
       } catch (err) {
         console.error('studio save failed', err);
         Alpine.store('toast').push(
-          `Save failed: ${err.message || err}`,
+          `Save failed: ${err.message || String(err)}`,
           { level: 'error' },
         );
         this.dirty = false;
@@ -350,7 +350,7 @@ document.addEventListener('alpine:init', () => {
       } catch (err) {
         console.error('loadOutput failed', err);
         Alpine.store('toast').push(
-          `Load failed: ${err.message || err}`,
+          `Load failed: ${err.message || String(err)}`,
           { level: 'error' },
         );
       }

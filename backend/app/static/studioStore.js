@@ -206,7 +206,7 @@ document.addEventListener('alpine:init', () => {
       } catch (err) {
         console.error('studio run failed', err);
         Alpine.store('toast').push(
-          `Run failed: ${err.message || err}`,
+          `Run failed: ${err.message || String(err)}`,
           { level: 'error' },
         );
       } finally {

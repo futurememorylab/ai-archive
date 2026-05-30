@@ -4,11 +4,13 @@ upstream apply via the write queue."""
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel
 
 from backend.app.context import CoreCtx
 from backend.app.deps import get_core_ctx
+from backend.app.routes.pages.clips import _build_draft_for_clip
+from backend.app.routes.pages.templates import templates
 from backend.app.services.write_queue import etag_from_snapshot, fps_from_snapshot
 
 
@@ -123,7 +125,11 @@ async def apply_batch(request: Request, body: ApplyBatch):
 
 
 @router.post("/clips/{clip_id}/apply")
-async def apply_clip(request: Request, clip_id: int):
+async def apply_clip(
+    request: Request,
+    clip_id: int,
+    hx_request: str | None = Header(None, alias="HX-Request"),
+):
     """Enqueue accepted review items for upstream apply.
 
     The route used to PUT to CatDV synchronously. Now it writes one
@@ -132,6 +138,12 @@ async def apply_clip(request: Request, clip_id: int):
     When the engine is online the drain runs immediately, so the
     user-observable behaviour is unchanged ("applied: N"); when offline
     the ops sit in the queue until reconnection.
+
+    HTMX callers (the clip-detail "Accept & apply" button, which stays on
+    the page) send `HX-Request: true` and get the re-rendered draft aside
+    partial back so the JS can swap it in place rather than full-reload.
+    Non-HX callers (e.g. `applyAndNext`, which navigates away on success)
+    keep getting the JSON `{"queued","applied"}` body unchanged.
     """
     ctx = get_core_ctx(request)
     if ctx.write_queue is None:
@@ -139,4 +151,15 @@ async def apply_clip(request: Request, clip_id: int):
     queued = await _resolve_and_enqueue_clip(ctx, clip_id)
     if queued:
         _notify_sync(request)
+    if hx_request == "true":
+        # Re-render the draft aside so its applied/decision state reflects
+        # the just-enqueued apply. `clip=None` mirrors the existing
+        # GET /clips/{id}/draft partial route; _anno_draft.html guards the
+        # clip.* access. Published panels are NOT re-rendered here: the
+        # upstream apply runs asynchronously via the write queue, so they
+        # would not have changed at this point anyway.
+        draft = await _build_draft_for_clip(ctx, clip_id)
+        return templates.TemplateResponse(
+            request, "pages/_anno_draft.html", {"draft": draft, "clip": None}
+        )
     return {"queued": queued, "applied": queued}

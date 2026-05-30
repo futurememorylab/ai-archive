@@ -178,6 +178,51 @@ def test_apply_clip_enqueues_and_drains_via_sync_engine(monkeypatch, tmp_path):
         )
 
 
+def test_apply_clip_returns_json_for_non_hx_caller(monkeypatch, tmp_path):
+    """The non-HX path (e.g. applyAndNext, which navigates away on success)
+    must keep getting the JSON {"queued","applied"} body."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.core_ctx
+        _, _, items = _run(_seed(ctx))
+        for it in items:
+            client.post(
+                f"/api/review/items/{it.id}/decision",
+                json={"decision": "accepted"},
+            )
+        r = client.post("/api/review/clips/1/apply")
+        assert r.status_code == 200
+        assert "application/json" in r.headers["content-type"]
+        body = r.json()
+        assert body["queued"] >= 1
+        assert body["applied"] == body["queued"]
+
+
+def test_apply_clip_returns_partial_for_hx_caller(monkeypatch, tmp_path):
+    """The HTMX path (the clip-detail "Accept & apply" button, which stays
+    on the page) sends HX-Request: true and gets the re-rendered draft aside
+    partial back so the JS can swap it in place instead of full-reloading."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.core_ctx
+        _, _, items = _run(_seed(ctx))
+        for it in items:
+            client.post(
+                f"/api/review/items/{it.id}/decision",
+                json={"decision": "accepted"},
+            )
+        r = client.post(
+            "/api/review/clips/1/apply",
+            headers={"HX-Request": "true"},
+        )
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+        # The draft aside renders the proposed/applied marker + field values.
+        assert "scene-a" in r.text
+        # Sanity: it is the draft-aside partial, not a JSON dump.
+        assert "{" + '"queued"' not in r.text
+
+
 def test_apply_batch_marks_and_enqueues_filtered_by_kind(monkeypatch, tmp_path):
     from backend.app.archive.model import ChangeSet, WriteResult
     from backend.app.repositories.pending_operations import PendingOperationsRepo
