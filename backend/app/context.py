@@ -274,9 +274,11 @@ async def _build_archive_subsystem(ctx: AppContext) -> _OnlineFlags:
             # Bad credentials — retry won't help. Tear down the client
             # so the monitor cannot misread "client present" as
             # "reauthable" later.
+            from backend.app.services.errors import humanise
+
             logging.getLogger(__name__).warning(
                 "CatDV login rejected at startup (%s); booting offline",
-                exc,
+                humanise(exc),
             )
             await ctx.catdv.__aexit__(None, None, None)
             ctx.catdv = None
@@ -285,20 +287,26 @@ async def _build_archive_subsystem(ctx: AppContext) -> _OnlineFlags:
             # Seat limit reached — recoverable. Keep the client alive so
             # ConnectionMonitor.retry_now() can re-probe once the stale
             # session times out or the admin frees the seat.
+            from backend.app.services.errors import humanise
+
             logging.getLogger(__name__).warning(
                 "CatDV seat limit reached at startup (%s); booting offline — "
                 "click Reconnect once a seat frees up",
-                exc,
+                humanise(exc),
             )
             login_failed = True
         except Exception as exc:  # noqa: BLE001 — transport / DNS / parse
             # Network-side failure. Could be VPN flap, server stop, or a
             # non-JSON 5xx body (the seat-limit web servlet sometimes
             # answers with HTML). Keep the client alive for retry.
+            # Route through humanise() so httpx exceptions with empty
+            # str() (e.g. ConnectError on VPN down) don't log as "()".
+            from backend.app.services.errors import humanise
+
             logging.getLogger(__name__).warning(
                 "CatDV unreachable at startup (%s); booting offline — "
                 "click Reconnect once the server is reachable",
-                exc,
+                humanise(exc),
             )
             login_failed = True
 
