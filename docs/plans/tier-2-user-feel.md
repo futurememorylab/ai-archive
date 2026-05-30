@@ -649,48 +649,68 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>"
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/integration/test_cache_page_perf.py`:
+Create `tests/integration/test_cache_page_perf.py`. Uses the
+`_setenv` + `_make_app` + TestClient pattern from
+`tests/integration/test_routes_cache.py` (read that file's top 50 lines
+first if you've never seen it):
 
 ```python
 """cache_page must compute `_all_cached_keys` and `list_orphans` at most
-once per render. The current code calls each twice (once for the inventory
-pass and once for the metric strip), doubling the query load on every page
-view."""
+once per render. The current code calls each twice (once for the
+inventory pass and once for the metric strip), doubling the query load
+on every page view."""
 
-from pathlib import Path
+from __future__ import annotations
+
+import importlib
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.app.db import open_db
-from backend.app.migrations_runner import apply_migrations
-from tests._helpers.query_count import assert_query_count
 
-MIGRATIONS = Path(__file__).resolve().parents[2] / "backend" / "migrations"
+def _setenv(monkeypatch, tmp_path):
+    """Mirror of test_routes_cache.py::_setenv."""
+    monkeypatch.setenv("APP_ENV", "dev")
+    monkeypatch.setenv("CATDV_BASE_URL", "http://localhost:0")
+    monkeypatch.setenv("CATDV_USERNAME", "")
+    monkeypatch.setenv("CATDV_PASSWORD", "p")
+    monkeypatch.setenv("CATDV_CATALOG_ID", "881507")
+    monkeypatch.setenv("GCP_PROJECT_ID", "p")
+    monkeypatch.setenv("GCS_BUCKET_NAME", "b")
+    monkeypatch.setenv("PROXY_SOURCE", "rest")
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
 
 
-async def _seed_some(conn):
-    await conn.execute(
-        "INSERT INTO clip_cache(provider_id, provider_clip_id, catalog_id, "
-        "name, canonical_json, duration_secs, fps, fetched_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))",
-        ("catdv", "42", "1", "clip 42", '{"id":42}', 1.0, 25.0),
+def _make_app(monkeypatch, tmp_path):
+    _setenv(monkeypatch, tmp_path)
+    from backend.app import main as main_mod
+    importlib.reload(main_mod)
+    return main_mod.app
+
+
+async def _seed_clip(ctx):
+    now = datetime.now(UTC).isoformat()
+    await ctx.db.execute(
+        "INSERT INTO clip_cache "
+        "(provider_id, provider_clip_id, name, catalog_id, "
+        "duration_secs, fps, canonical_json, provider_etag, fetched_at) "
+        "VALUES (?, ?, 'n', '1', 1.0, 25.0, '{}', NULL, ?)",
+        ("catdv", "42", now),
     )
-    await conn.commit()
+    await ctx.db.commit()
 
 
-@pytest.mark.asyncio
-async def test_cache_page_does_not_double_compute_all_keys(tmp_path, monkeypatch):
-    """T2-1 part 3: the duplicate `_all_cached_keys` + `list_orphans` calls
-    are gone. Asserted via a call counter on `_all_cached_keys`."""
+def test_cache_page_does_not_double_compute_all_keys(tmp_path, monkeypatch):
+    """T2-1 part 3: duplicate `_all_cached_keys` + `list_orphans` calls
+    are gone. Asserted via call counters on each."""
+    import asyncio
+
     from backend.app.routes import cache as cache_route
 
-    db_path = tmp_path / "test.db"
-    async with open_db(db_path) as conn:
-        await apply_migrations(conn, MIGRATIONS)
-        await _seed_some(conn)
-
+    app = _make_app(monkeypatch, tmp_path)
     call_counts: dict[str, int] = {"_all_cached_keys": 0, "list_orphans": 0}
+
     orig_all_keys = cache_route._all_cached_keys
 
     async def _counting_all_keys(db):
@@ -699,18 +719,18 @@ async def test_cache_page_does_not_double_compute_all_keys(tmp_path, monkeypatch
 
     monkeypatch.setattr(cache_route, "_all_cached_keys", _counting_all_keys)
 
-    from backend.app.main import app
-
     with TestClient(app) as client:
         ctx = client.app.state.ctx
-        # Re-point ctx at our seeded conn
-        ctx.db = await aiosqlite_connect_for_test(db_path)  # NOTE: replace if helper differs
+        asyncio.get_event_loop().run_until_complete(_seed_clip(ctx))
 
-        # Mirror the list_orphans count too.
+        # Monkeypatch the bound method on the live instance (TestClient
+        # has already run the lifespan so ctx.cache_inspector is wired).
         orig_list_orphans = ctx.cache_inspector.list_orphans
+
         async def _counting_list_orphans(*args, **kwargs):
             call_counts["list_orphans"] += 1
             return await orig_list_orphans(*args, **kwargs)
+
         ctx.cache_inspector.list_orphans = _counting_list_orphans  # type: ignore[method-assign]
 
         r = client.get("/cache")
@@ -723,8 +743,6 @@ async def test_cache_page_does_not_double_compute_all_keys(tmp_path, monkeypatch
         f"expected 1 call; got {call_counts['list_orphans']}"
     )
 ```
-
-**Note on test setup:** the TestClient fixture wiring may differ from this snippet. Find the existing cache-page integration test (likely `tests/integration/test_cache_inspector.py` or `tests/integration/test_routes_cache.py`) and mirror its TestClient + ctx setup. The assertions above (`call_counts == 1` for each) are the spec; adapt the fixture mechanics to match.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -1301,68 +1319,95 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `backend/app/static/studio.js` — `cancel()`, `_poll()`, `runButtonLabel()`
-- Create: `tests/integration/test_studio_run_cancel_race.py`
+- Modify: `tests/_helpers/studio_state.py` — extend `run_button_label()` with the new Cancelled-flash state
+- Modify: `tests/unit/test_studio_run_button_label.py` — add tests for the new state
 
-- [ ] **Step 1: Write the failing test**
+**Why this test shape, not a server-side race test:** the bug is purely JS-side. The server already correctly returns the final status (`'ok'` if the run finished, `'cancelled'` if the cancel landed first). The JS used to ignore the server's answer and assume "cancel pressed → cancelled" — that's what we're fixing. The existing pattern for testing studio.js logic in Python is `tests/_helpers/studio_state.py` (a verbatim mirror of `runButtonLabel`) plus `tests/unit/test_studio_run_button_label.py`. We extend both.
 
-Create `tests/integration/test_studio_run_cancel_race.py`:
+- [ ] **Step 1: Extend the Python mirror with the new state**
+
+Open `tests/_helpers/studio_state.py`. Replace the existing `run_button_label` with the extended signature:
 
 ```python
-"""When a studio run completes between cancel-request and cancel-ack,
-the user must see the completion (review_items persisted, toast says
-'Completed before cancel landed') — never a silent drop.
+"""Pure-Python mirror of studio.js's runButtonLabel().
 
-Asserts the server-side invariant: after a cancel request, polling
-/api/studio/runs/{run_id} returns a terminal status that accurately
-reflects what happened on the server (ok|error|cancelled). Studio.js
-will treat the 'ok' case as completion-not-cancel and surface it
-through the toast layer added in T2-3."""
+Keep this function ≤ 15 lines and verbatim-equivalent to the JS in
+backend/app/static/studio.js. When the JS changes, this file changes
+in the same commit; both implementations are reviewed together.
+"""
 
-import pytest
-from fastapi.testclient import TestClient
-
-# This test exercises the cancel race at the server boundary only. The
-# JS side (treat 'ok' as completion, show toast) is covered by the
-# studio.js behavioural test that ships with T2-3.
+from __future__ import annotations
 
 
-@pytest.mark.asyncio
-async def test_cancel_after_completion_returns_ok_status(tmp_path, monkeypatch):
-    """Mirror of the JS race: server completes between cancel and ack.
-
-    1. Start a studio run.
-    2. Wait until status='ok'.
-    3. Cancel the job (would be ignored — run is terminal).
-    4. Poll the run — must report 'ok', not 'cancelled'.
-    """
-    # Skeleton: adapter setup, fake Gemini, etc. Look at existing
-    # `tests/integration/test_studio_run_*` for the right TestClient
-    # fixture pattern.
-
-    # Pseudocode of the assertion (real wiring depends on the existing
-    # studio TestClient setup):
-    #
-    # res = client.post("/api/studio/runs", json={...})
-    # run_id = res.json()["run_id"]
-    # wait_until_status_ok(client, run_id)
-    # client.post(f"/api/jobs/{job_id}/cancel")
-    # final = client.get(f"/api/studio/runs/{run_id}").json()
-    # assert final["status"] == "ok", (
-    #     "cancel after completion must not reverse the run's outcome"
-    # )
-    pytest.skip(
-        "fill in once studio TestClient fixture is identified — "
-        "see tests/integration/test_studio_run_output_reuse.py for shape"
-    )
+def run_button_label(
+    *,
+    running: bool,
+    cancelling: bool,
+    done_flash_until_ms: float,
+    cancelled_flash_until_ms: float,
+    now_ms: float,
+    active_version_num: int | None,
+    elapsed_label: str,
+) -> str:
+    if done_flash_until_ms and now_ms < done_flash_until_ms:
+        return "✓ Done"
+    if cancelled_flash_until_ms and now_ms < cancelled_flash_until_ms:
+        return "⊘ Cancelled"
+    if cancelling:
+        return "⟳ Cancelling…"
+    if running:
+        return f"⟳ Running… {elapsed_label}"
+    v = active_version_num if active_version_num is not None else "?"
+    return f"▶ Run on this clip · v{v}"
 ```
 
-Note: this test is skipped initially because the studio TestClient fixture pattern needs to be located before the test can be wired. The executor should:
+- [ ] **Step 2: Update the existing tests to pass the new keyword arg**
 
-1. Read `tests/integration/test_studio_run_output_reuse.py` for the existing fixture pattern.
-2. Replace the `pytest.skip` with the actual assertion.
-3. Confirm the test fails against the current (broken) JS — actually the *server-side* assertion likely already passes because the server doesn't know about the cancel race; the JS-side fix is the user-visible one. If the server-side test passes immediately, that's evidence the bug is purely in the JS and the assertion's value is "lock in that the server-side stays correct."
+Open `tests/unit/test_studio_run_button_label.py`. Every existing test calls `run_button_label(...)` with the old signature — add `cancelled_flash_until_ms=0` to each call so they still pass under the new signature. Then ADD these new tests at the end of the file:
 
-- [ ] **Step 2: Modify studio.js cancel + poll + runButtonLabel**
+```python
+def test_cancelled_flash_renders():
+    assert run_button_label(
+        running=False, cancelling=False,
+        done_flash_until_ms=0,
+        cancelled_flash_until_ms=2000.0,
+        now_ms=1500.0,
+        active_version_num=3, elapsed_label="0:00",
+    ) == "⊘ Cancelled"
+
+
+def test_cancelled_flash_expires():
+    # Past the flash window — fall through to idle label.
+    assert run_button_label(
+        running=False, cancelling=False,
+        done_flash_until_ms=0,
+        cancelled_flash_until_ms=1000.0,
+        now_ms=2000.0,
+        active_version_num=3, elapsed_label="0:00",
+    ) == "▶ Run on this clip · v3"
+
+
+def test_done_flash_wins_over_cancelled_flash():
+    # Both set (impossible in production but defensive): Done wins because
+    # it appears first in the label function. The JS mirror must match.
+    assert run_button_label(
+        running=False, cancelling=False,
+        done_flash_until_ms=2000.0,
+        cancelled_flash_until_ms=2000.0,
+        now_ms=1500.0,
+        active_version_num=3, elapsed_label="0:00",
+    ) == "✓ Done"
+```
+
+- [ ] **Step 3: Run the tests — they should fail**
+
+Run: `.venv/bin/pytest tests/unit/test_studio_run_button_label.py -v`
+
+Expected: the three NEW tests pass (the helper supports them), but the existing tests FAIL with `TypeError: missing keyword argument 'cancelled_flash_until_ms'`. Add the keyword to the existing test bodies until the whole file is green.
+
+Run again: `.venv/bin/pytest tests/unit/test_studio_run_button_label.py -v` — expect all pass.
+
+- [ ] **Step 4: Modify studio.js — match the Python mirror exactly**
 
 Open `backend/app/static/studio.js`. Find the existing `cancel()` (around line 171) and `_poll()` (around line 276) and `runButtonLabel()` (around line 154).
 
@@ -1467,22 +1512,20 @@ Modify `runOnFocusedClip()` finally-block at line 263-273 to dispatch the correc
 
 Add `this._cancelRequested = true;` at the top of `cancel()`. Also add `_cancelRequested: false,` to the state object alongside `cancelling`.
 
-- [ ] **Step 3: Run the server-side test**
+- [ ] **Step 5: Re-run the JS state-machine tests + studio integration tests**
 
-Run: `.venv/bin/pytest tests/integration/test_studio_run_cancel_race.py -v`
+The JS must match the Python mirror byte-for-byte on the label logic. Run:
 
-Expected: passes (it asserts the server's behavior, which is correct). If skipped because the fixture pattern isn't wired, leave the skip and TODO until T2-3 lands the toast store — the JS test will catch the visible behavior.
+```
+.venv/bin/pytest tests/unit/test_studio_run_button_label.py tests/integration/test_studio_run_*.py tests/integration/test_studio_run_button_state.py -q
+```
 
-- [ ] **Step 4: Run all studio integration tests for regression**
+Expected: all pass. If a Python test fails, the JS diverged from the mirror — fix the JS, not the test.
 
-Run: `.venv/bin/pytest tests/integration/test_studio_run_*.py tests/unit/test_studio_*.py -q`
-
-Expected: all pass.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add backend/app/static/studio.js tests/integration/test_studio_run_cancel_race.py
+git add backend/app/static/studio.js tests/_helpers/studio_state.py tests/unit/test_studio_run_button_label.py
 git commit -m "fix(studio): cancel waits for server confirm; show Cancelled state
 
 Previously cancel() flipped running=false in finally, stopping the
@@ -1825,9 +1868,17 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>"
 ## Task 9: HTMX-aware folder CRUD endpoints (T2-4 part 1)
 
 **Files:**
-- Modify: `backend/app/routes/studio.py` — `create_folder` (line 53), `add_clips` (line 88)
-- Create: `backend/app/templates/pages/_studio_folder.html` — single-folder partial (if absent — check first; `_studio_folder.html` exists per earlier ls but its contents may be a different shape)
+- Modify: `backend/app/routes/studio.py` — `create_folder` (line 50), `add_clips` (line 88); add `templates` import from shared module
+- Create: `backend/app/templates/pages/_studio_folder_card.html` — NEW single-folder card partial (extracted from `_studio_folder_list.html`'s `{% for f in folders %}` loop)
+- Modify: `backend/app/templates/pages/_studio_folder_list.html` — replace inline folder card with `{% include "pages/_studio_folder_card.html" with context %}` so both the page render and the HTMX response use the same partial
 - Create: `tests/integration/test_studio_folders_htmx_partials.py`
+
+**Existing partials — confirmed by inspection:**
+- `_studio_folder_list.html` = the whole `.studio-folders` sidebar (folder header + new-folder input + `for f in folders` loop). Inlines each folder card via Alpine `studioFolders` x-data.
+- `_studio_folder.html` = the folder *kids* partial (clip cards inside one folder + "+ Add from archive" button). Expects `clips` and `folder_id` in context.
+- There is **no single-folder-card partial today** — the card is inlined inside the loop in `_studio_folder_list.html`. This task extracts it.
+
+**Templates instance:** `routes/studio.py` has NO `Jinja2Templates` instance today (it's a JSON-only router). Import the shared one: `from backend.app.routes.pages.templates import templates`. That module already registers the `smpte` global and the cache filters get registered there too post-tier-3.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1896,103 +1947,134 @@ Run: `.venv/bin/pytest tests/integration/test_studio_folders_htmx_partials.py -v
 
 Expected: tests fail — current endpoints always return JSON regardless of HX-Request header.
 
-- [ ] **Step 3: Modify the endpoints**
+- [ ] **Step 3: Extract the folder-card partial from the list partial**
 
-Open `backend/app/routes/studio.py`. Find `create_folder` and `add_clips`. Modify each to detect the HX-Request header and branch:
+Open `backend/app/templates/pages/_studio_folder_list.html`. Locate the `{% for f in folders %}` block (around lines 21-31, which currently inlines the `<div class="studio-folder">` card). MOVE the inner block into a new file:
+
+Create `backend/app/templates/pages/_studio_folder_card.html`:
+
+```html
+{# Single folder card — rendered both:
+   - inside _studio_folder_list.html's `{% for f in folders %}` loop
+   - as the HTMX response to POST /api/studio/folders (in-place insert)
+
+   Expects `f` (folder) in context, with id / name / clip_count. Also
+   honours `active_version` and `focused_clip_id` if present (passed
+   through from the parent page render). #}
+<div class="studio-folder" :class="expandedId === {{ f.id }} && 'open'">
+  <div class="studio-folder-row" @click="toggle({{ f.id }})">
+    <span class="twist" x-text="expandedId === {{ f.id }} ? '▾' : '▸'"></span>
+    <span class="name">{{ f.name }}</span>
+    <span class="count">{{ f.clip_count }}</span>
+  </div>
+  <div class="studio-folder-kids" x-show="expandedId === {{ f.id }}" x-cloak
+       hx-get="/studio/_folder?folder_id={{ f.id }}{% if active_version %}&active_version_id={{ active_version.id }}{% endif %}{% if focused_clip_id %}&clip_id={{ focused_clip_id }}{% endif %}"
+       hx-trigger="intersect once"
+       hx-swap="innerHTML">
+  </div>
+</div>
+```
+
+(Adjust the `hx-get` query string to match what's currently inlined in `_studio_folder_list.html` — Read that file before extracting to make sure you copy exactly.)
+
+Modify `_studio_folder_list.html`: replace the inlined `<div class="studio-folder">…</div>` inside the for-loop with:
+
+```html
+    {% for f in folders %}
+      {% include "pages/_studio_folder_card.html" with context %}
+    {% endfor %}
+```
+
+- [ ] **Step 4: Modify the endpoints**
+
+Open `backend/app/routes/studio.py`. Add the templates import alongside the existing imports:
+
+```python
+from backend.app.routes.pages.templates import templates
+```
+
+(That module exposes the shared `Jinja2Templates(directory=TEMPLATES_DIR)` instance — see `backend/app/routes/pages/templates.py`.)
+
+Find `create_folder` (around line 50) and modify it to branch on `HX-Request`:
 
 ```python
 from fastapi import Header
-from fastapi.responses import HTMLResponse
 
 @router.post("/api/studio/folders")
 async def create_folder(
     request: Request,
-    body: FolderCreateBody,
+    body: FolderCreate,
     hx_request: str | None = Header(None, alias="HX-Request"),
 ):
     ctx = get_ctx(request)
-    fid = await ctx.studio_folders_repo.create_folder(ctx.db, name=body.name)
+    try:
+        fid = await ctx.studio_folders_repo.create_folder(ctx.db, name=body.name)
+    except aiosqlite.IntegrityError:  # name UNIQUE; existing handling
+        raise HTTPException(409, f"folder '{body.name}' already exists")
+
     if hx_request == "true":
-        folder = {
-            "id": fid,
-            "name": body.name,
-            "clip_count": 0,
-        }
+        f = {"id": fid, "name": body.name, "clip_count": 0}
         return templates.TemplateResponse(
             request,
-            "pages/_studio_folder.html",
-            {"folder": folder},
+            "pages/_studio_folder_card.html",
+            {"f": f, "active_version": None, "focused_clip_id": None},
         )
     return {"id": fid, "name": body.name}
 ```
 
-(Use the existing templates instance defined elsewhere in studio.py — look at any other route in the file that returns a TemplateResponse for the import + initialisation pattern.)
-
-Apply the same shape to `add_clips`:
+Find `add_clips` (around line 88) and modify likewise:
 
 ```python
 @router.post("/api/studio/folders/{folder_id}/clips")
-async def add_clips_to_folder(
+async def add_clips(
     request: Request,
     folder_id: int,
-    body: FolderAddClipsBody,
+    body: FolderClipIds,
     hx_request: str | None = Header(None, alias="HX-Request"),
 ):
     ctx = get_ctx(request)
     added = await ctx.studio_folders_repo.add_clips(
-        ctx.db, folder_id=folder_id, clip_ids=body.clip_ids
+        ctx.db, folder_id, clip_ids=body.clip_ids,
     )
     if hx_request == "true":
         clips = await ctx.studio_folders_repo.list_clips(ctx.db, folder_id)
+        # _studio_folder.html is the kids partial (clip cards + add button).
+        # Variables it expects: clips, folder_id.
         return templates.TemplateResponse(
             request,
-            "pages/_studio_folder_list.html",  # reuses the existing folder-kids partial
-            {"folder_id": folder_id, "clips": clips},
+            "pages/_studio_folder.html",
+            {"clips": clips, "folder_id": folder_id},
         )
     return {"added": added}
 ```
 
-The template name (`pages/_studio_folder_list.html`) is what the page render currently uses for the folder's clips. Verify the partial exists and accepts `{folder_id, clips}` — if the existing partial expects different variable names, adapt.
+(The exact parameter names — `FolderCreate`, `FolderClipIds` — should match the existing pydantic models in studio.py. Read the current `create_folder` and `add_clips` signatures and reuse the names.)
 
-If `_studio_folder.html` doesn't exist (only `_studio_folder_list.html` does per the earlier ls), create it as a small new partial:
-
-```html
-{# _studio_folder.html: single folder card; rendered in HTMX response
-   to POST /api/studio/folders for in-place insertion. #}
-<details class="studio-folder" data-folder-id="{{ folder.id }}">
-  <summary>
-    <span class="folder-name">{{ folder.name }}</span>
-    <span class="folder-count">({{ folder.clip_count }})</span>
-  </summary>
-  <div class="studio-folder-kids"
-       hx-get="/api/studio/folders/{{ folder.id }}/clips"
-       hx-trigger="intersect once"
-       hx-swap="innerHTML">
-    <div class="muted">Loading…</div>
-  </div>
-</details>
-```
-
-(If a different folder-card partial exists with a different name, prefer extending or reusing that rather than creating a new one — per CLAUDE.md's "explore before implementing" rule.)
-
-- [ ] **Step 4: Run tests to verify pass**
+- [ ] **Step 5: Run tests to verify pass**
 
 Run: `.venv/bin/pytest tests/integration/test_studio_folders_htmx_partials.py tests/integration/test_studio_page.py tests/integration/test_studio_folder_list_polish.py -q`
 
-Expected: all pass.
+Expected: all pass. The studio page render is regression-tested by the existing tests — the extracted partial must produce identical HTML.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add backend/app/routes/studio.py backend/app/templates/pages/_studio_folder.html tests/integration/test_studio_folders_htmx_partials.py
+git add backend/app/routes/studio.py backend/app/templates/pages/_studio_folder_card.html backend/app/templates/pages/_studio_folder_list.html tests/integration/test_studio_folders_htmx_partials.py
 git commit -m "feat(studio): HTMX-aware folder create / add-clips endpoints
 
-create_folder and add_clips_to_folder now branch on the HX-Request
-header: HTMX requests get an HTML partial (folder card / folder-kids
-list), JSON callers get the existing shape unchanged.
+create_folder branches on HX-Request: HTMX requests get the new
+_studio_folder_card.html partial (extracted from _studio_folder_list.html's
+for-loop); JSON callers get the existing shape unchanged.
 
-This lets studio.js drop its location.reload() calls in the next
-commit. Backwards-compatible — no JSON-only consumer breaks.
+add_clips branches on HX-Request: HTMX requests get the existing
+_studio_folder.html kids partial re-rendered with the new clip list.
+
+Templates instance imported from the shared module in
+backend/app/routes/pages/templates.py — studio.py is no longer JSON-only.
+
+Backwards-compatible: no JSON consumer changes. _studio_folder_list.html
+now {% include %}s the extracted card partial so both the page render
+and the HTMX response use the same template (DRY).
 
 Refs: T2-4 (server side).
 
