@@ -29,7 +29,7 @@ from backend.app.routes.workspaces import router as workspaces_router
 from backend.app.seed import seed_default_prompt, seed_live_system_instruction
 from backend.app.services.connection_monitor import ConnectionState
 from backend.app.settings import Settings
-from backend.app.startup import run_startup_cleanup
+from backend.app.startup import run_startup_cleanup, warn_browser_secret_exposure
 
 SEEDS = Path(__file__).resolve().parents[1] / "seeds"
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -53,6 +53,7 @@ def _real_external_enabled(s: Settings) -> bool:
 async def lifespan(app: FastAPI):
     configure_logging()
     settings = Settings()
+    warn_browser_secret_exposure(settings)
     init_external = settings.app_env == "prod" or _real_external_enabled(settings)
     ctx = await AppContext.build(settings, init_external=init_external)
     app.state.ctx = ctx

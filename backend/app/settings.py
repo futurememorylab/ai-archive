@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     sync_retry_base_s: int = 2
     sync_retry_max_s: int = 300
     sync_tick_interval_s: int = 5
+    # Maximum attempts before a pending_op flips from 'pending' to 'failed'.
+    # Prevents an infinitely-retried row from blocking the queue when the
+    # underlying error never resolves. Default 10 ≈ ~17 min worst case at
+    # default backoff (2,4,8,16,32,64,128,256,300,300 seconds).
+    sync_max_attempts: int = 10
 
     # cache management + LRU eviction
     media_cache_cap_gb: int = 50

@@ -25,6 +25,7 @@ from typing import Any, Literal
 
 import aiosqlite
 
+from backend.app.archive.errors import is_provider_not_found
 from backend.app.archive.model import ClipKey
 
 Layer = Literal["metadata", "media-local", "media-ai"]
@@ -324,8 +325,16 @@ class CacheInspector:
             for prov, pcid in await cur.fetchall():
                 try:
                     await self._provider.get_clip(pcid)
-                except Exception:  # noqa: BLE001
-                    orphans.add((prov, pcid))
+                except Exception as exc:  # noqa: BLE001
+                    # Only documented absence (NotFoundError / 404) is evidence
+                    # of orphaning. Transient errors (transport, auth, retryable)
+                    # MUST NOT mark the clip orphan — Evict orphans would wipe
+                    # legitimately-cached data on a VPN flap. See ADR 0042
+                    # (added in this PR). asyncio.CancelledError is a
+                    # BaseException not Exception, so cancellation propagates.
+                    if is_provider_not_found(exc):
+                        orphans.add((prov, pcid))
+                    # else: silently skip; next deep call will retry.
 
         return await self.status_for_clips(sorted(orphans))
 

@@ -214,13 +214,21 @@ class PendingOperationsRepo:
         op_ids: list[int],
         *,
         error: str,
+        bump_attempts: bool = False,
     ) -> None:
+        """Set status='failed'. When `bump_attempts` is True, also
+        increments `attempts` atomically in the same statement — used by
+        SyncEngine when the unknown-exception ceiling is reached so the
+        attempt count reflects the final try rather than the previous one.
+        """
         if not op_ids:
             return
+        attempts_expr = "attempts + 1" if bump_attempts else "attempts"
         await conn.executemany(
-            "UPDATE pending_operations "
-            "SET status = 'failed', last_error = ?, attempted_at = ? "
-            "WHERE id = ?",
+            f"UPDATE pending_operations "
+            f"SET status = 'failed', attempts = {attempts_expr}, "
+            f"    last_error = ?, attempted_at = ? "
+            f"WHERE id = ?",
             [(error, _now_iso(), oid) for oid in op_ids],
         )
         await conn.commit()
