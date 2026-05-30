@@ -193,6 +193,14 @@ async def cache_page(
     tab_val = tab if tab in _VALID_TABS else "all"
     is_htmx = request.headers.get("HX-Request") == "true"
 
+    # Single-fetch resources: every later code path that needs these
+    # uses these references. Without this, the function used to call
+    # _all_cached_keys() twice and list_orphans() twice per render.
+    all_keys = await _all_cached_keys(ctx.db)
+    orphan_statuses = await insp.list_orphans()
+    all_statuses = await insp.status_for_clips(all_keys)
+    summary = await insp.summary()
+
     # Always load queue rows — both the queue tab and the metric strip
     # use them, and the queries are cheap (status indexed).
     queue_active = await ctx.prefetch_queue_repo.list_active(ctx.db)
@@ -200,14 +208,14 @@ async def cache_page(
     queue_counts = await ctx.prefetch_queue_repo.count_by_status(ctx.db)
 
     if tab_val == "queue":
-        # Queue tab doesn't need the inventory pass.
         rows_for_template: list = []
+        total = 0
+        prev_offset = next_offset = None
+        page_rows: list = []
     else:
-        if orphans:
-            statuses = await insp.list_orphans()
-        else:
-            keys = await _all_cached_keys(ctx.db)
-            statuses = await insp.status_for_clips(keys)
+        # Source statuses — orphan tab uses orphan_statuses; all/local/ai
+        # tabs use all_statuses.
+        statuses = orphan_statuses if orphans else all_statuses
         rows = []
         for status in statuses:
             if store:
@@ -227,25 +235,18 @@ async def cache_page(
                 continue
             rows.append(status)
         rows_for_template = [_cache_row(s) for s in rows]
+        total = len(rows_for_template)
+        page_rows = rows_for_template[offset : offset + limit]
+        prev_offset, next_offset = page_offsets(offset, limit, total)
 
-    total = len(rows_for_template)
-    page_rows = rows_for_template[offset : offset + limit]
-    prev_offset, next_offset = page_offsets(offset, limit, total)
-
-    summary = await insp.summary()
-
-    # Orphan totals for the metric strip. Computed once per request from
-    # list_orphans() since CacheSummary does not surface these yet.
-    orphan_statuses = await insp.list_orphans()
+    # Orphan totals for the metric strip — reuse the single fetch.
     orphan_count = len(orphan_statuses)
     orphan_bytes = sum(
         sum((layer.size_bytes or 0) for layer in s.layers if layer.evictable)
         for s in orphan_statuses
     )
 
-    # Per-tab counts for the tab badges (always shown for all four).
-    all_keys = await _all_cached_keys(ctx.db)
-    all_statuses = await insp.status_for_clips(all_keys)
+    # Per-tab counts for the tab badges — reuse the single fetch.
     counts = {
         "all": len(all_statuses),
         "local": sum(1 for s in all_statuses if s.layers[1].present),
