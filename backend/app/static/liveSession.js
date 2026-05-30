@@ -304,7 +304,12 @@ function liveSession(clipId, config) {
                       { method: "POST", body: blob });
         }
         fetch(`/api/live/sessions/${this.sessionId}/summarize`,
-              { method: "POST" }).catch(() => {});
+              { method: "POST" }).catch(err => {
+          Alpine.store('toast').push(
+            `Session summary failed: ${err.message || String(err)}`,
+            { level: 'error' },
+          );
+        });
       } catch {}
     },
 

@@ -33,9 +33,19 @@ function reviewQueue(clipId) {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
-        if (!r.ok) console.error(`decision persist failed for item ${itemId}: ${r.status}`);
+        if (!r.ok) {
+          console.error(`decision persist failed for item ${itemId}: ${r.status}`);
+          Alpine.store('toast').push(
+            `Decision not saved (HTTP ${r.status}).`,
+            { level: 'error' },
+          );
+        }
       } catch (e) {
         console.error(`decision persist error for item ${itemId}`, e);
+        Alpine.store('toast').push(
+          `Decision not saved: ${e.message || String(e)}`,
+          { level: 'error' },
+        );
       }
     },
     _next() {
@@ -89,7 +99,10 @@ function reviewQueue(clipId) {
       if (r.ok) {
         this._next();
       } else {
-        alert(`Apply failed (${r.status}). Nothing was applied; staying on this clip.`);
+        Alpine.store('toast').push(
+          `Apply failed (${r.status}). Nothing was applied; staying on this clip.`,
+          { level: 'error' },
+        );
       }
     },
     async applyStay() {
@@ -97,7 +110,10 @@ function reviewQueue(clipId) {
       await Promise.all(checked.map(cb => this._decide(cb.dataset.itemId, 'accepted')));
       const r = await fetch(`/api/review/clips/${clipId}/apply`, { method: 'POST' });
       if (r.ok) location.reload();
-      else alert(`Apply failed (${r.status}). Nothing was applied.`);
+      else Alpine.store('toast').push(
+        `Apply failed (${r.status}). Nothing was applied.`,
+        { level: 'error' },
+      );
     },
   };
 }

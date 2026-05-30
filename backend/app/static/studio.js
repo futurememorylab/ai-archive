@@ -272,6 +272,10 @@ document.addEventListener('alpine:init', () => {
         finalStatus = await this._poll(run_id);
       } catch (err) {
         console.error('studio run failed', err);
+        Alpine.store('toast').push(
+          `Run failed: ${err.message || err}`,
+          { level: 'error' },
+        );
       } finally {
         this.running = false;
         this.cancelling = false;
@@ -424,7 +428,15 @@ document.addEventListener('alpine:init', () => {
       if (res.ok) {
         location.reload();
       } else if (res.status === 409) {
-        alert(`Folder "${name}" already exists.`);
+        Alpine.store('toast').push(
+          `Folder "${name}" already exists.`,
+          { level: 'error' },
+        );
+      } else {
+        Alpine.store('toast').push(
+          `Folder create failed (HTTP ${res.status}).`,
+          { level: 'error' },
+        );
       }
     },
   }));
@@ -483,6 +495,10 @@ document.addEventListener('alpine:init', () => {
         this.dirty = !res.ok;
       } catch (err) {
         console.error('studio save failed', err);
+        Alpine.store('toast').push(
+          `Save failed: ${err.message || err}`,
+          { level: 'error' },
+        );
         this.dirty = false;
       }
     },
@@ -518,6 +534,10 @@ document.addEventListener('alpine:init', () => {
         window.Alpine?.initTree(slot);
       } catch (err) {
         console.error('loadOutput failed', err);
+        Alpine.store('toast').push(
+          `Load failed: ${err.message || err}`,
+          { level: 'error' },
+        );
       }
     },
   }));
