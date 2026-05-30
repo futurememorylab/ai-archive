@@ -54,3 +54,24 @@ def test_active_jobs_lists_running_with_progress(monkeypatch, tmp_path):
     assert body[0]["errors"] == 0
     assert body[0]["kind"] == "video"
     assert body[0]["status"] == "running"
+
+
+def test_jobs_events_route_resolves_before_job_id(monkeypatch, tmp_path):
+    """Regression: /api/jobs/events must not be shadowed by /api/jobs/{job_id}."""
+    app = _make_app(monkeypatch, tmp_path)
+    paths = [getattr(r, "path", None) for r in app.routes]
+    assert "/api/jobs/events" in paths, "/api/jobs/events route not registered"
+    assert "/api/jobs/active" in paths, "/api/jobs/active route not registered"
+    # Find the /{job_id} catch-all — it's the one containing {job_id} but not
+    # also containing /events (that's the per-job stream, not the global one).
+    catch_all_paths = [
+        p for p in paths
+        if p is not None and "{job_id}" in p and not p.endswith("/events")
+    ]
+    assert catch_all_paths, "No /api/jobs/{job_id} route found"
+    i_events = paths.index("/api/jobs/events")
+    i_jobid = paths.index(catch_all_paths[0])
+    assert i_events < i_jobid, (
+        f"/api/jobs/events (index {i_events}) is registered AFTER "
+        f"{catch_all_paths[0]} (index {i_jobid}) — it will be shadowed"
+    )

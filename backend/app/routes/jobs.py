@@ -5,9 +5,11 @@ import asyncio
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from pydantic import BaseModel
+from sse_starlette.sse import EventSourceResponse
 
 from backend.app.deps import get_ctx
-from backend.app.services.annotator import run_job
+from backend.app.routes.events import _event_generator
+from backend.app.services.annotator import JOBS_TOPIC, run_job
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -76,6 +78,20 @@ async def list_active_jobs(request: Request):
             }
         )
     return out
+
+
+@router.get("/events")
+async def jobs_events(request: Request):
+    """SSE stream of the global `jobs` topic — powers the topbar indicator."""
+    ctx = get_ctx(request)
+
+    async def stream():
+        async for frame in _event_generator(ctx.event_bus, topic=JOBS_TOPIC):
+            if await request.is_disconnected():
+                return
+            yield {"data": frame.removeprefix("data: ").rstrip("\n")}
+
+    return EventSourceResponse(stream())
 
 
 @router.get("/{job_id}")
