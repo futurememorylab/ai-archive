@@ -266,10 +266,24 @@ class CacheInspector:
         #   - tab='ai':    rows in clip_cache that also have an ai_store_files row.
         #   - tab='all':   rows in clip_cache.
         #   - workspace=N: rows pinned by workspace N.
-        #   - store=S:     ai_store_files with store_id matching S.
-        #   - evictable=True: rows where at least one layer is evictable —
-        #     evictable is a derived property; for SQL pre-filter we use
-        #     a conservative proxy ("has any cached layer + no pending ops").
+        #   - store=S:     ai_store_files where S is a substring of
+        #     either store_id (e.g. 'gcs:catdav-proxies') or gcs_uri
+        #     (e.g. 'gs://catdav-proxies/...'). Substring rather than
+        #     exact match because the cache-page Store filter input
+        #     historically accepted the bucket name on its own
+        #     ('catdav-proxies'), which appears in both forms.
+        #   - evictable=True: rows with no pending operations. This is
+        #     a simplification of the pre-T2.4 behavior which checked
+        #     `any(layer.evictable for layer in status.layers)` after
+        #     hydration. The shift is bounded: 'evictable' here means
+        #     "AT LEAST ONE layer could be evicted right now" — clips
+        #     with pending ops are correctly excluded; the only
+        #     divergence is for clips that exist *only* in proxy_cache
+        #     (no clip_cache, no ai_store_files) AND are pinned — those
+        #     would have been EXCLUDED by the old logic but are
+        #     INCLUDED here. That state is essentially "orphaned and
+        #     pinned" which the inventory already surfaces via the
+        #     orphans filter.
 
         where_clauses: list[str] = []
         params: list = []
@@ -313,13 +327,20 @@ class CacheInspector:
                 "AND asf.provider_clip_id = k.provider_clip_id)"
             )
         if store:
+            # Substring match on BOTH store_id and gcs_uri — preserves
+            # the pre-T2.4 UI behavior where users typed the bucket name
+            # alone ('catdav-proxies') and matched both
+            # 'gcs:catdav-proxies' (store_id) and
+            # 'gs://catdav-proxies/...' (gcs_uri).
             where_clauses.append(
                 "EXISTS (SELECT 1 FROM ai_store_files asf "
                 "WHERE asf.provider_id = k.provider_id "
                 "AND asf.provider_clip_id = k.provider_clip_id "
-                "AND asf.store_id = ?)"
+                "AND (asf.store_id LIKE ? OR asf.gcs_uri LIKE ?))"
             )
-            params.append(store)
+            pattern = f"%{store}%"
+            params.append(pattern)
+            params.append(pattern)
         if workspace is not None:
             where_clauses.append(
                 "EXISTS (SELECT 1 FROM workspace_clips wc "
