@@ -5,8 +5,12 @@ changes across versions. Our own code must reach cross-component state
 through public APIs (`Alpine.store(...)`, custom DOM events) instead.
 
 The vendored `alpine.min.js` legitimately defines `_x_dataStack` as part
-of its own internals — that bundle is excluded from the scan. T3-C2 later
-widens this guard beyond the studio-relevant tree.
+of its own internals — `backend/app/static/vendor/` is excluded from the
+scan.
+
+T3-C2 widened this guard to the WHOLE tree: every file under
+`backend/app/static/` and `backend/app/templates/` (vendor excluded). The
+asserted end state is zero `_x_dataStack` reach-ins anywhere non-vendor.
 """
 
 from pathlib import Path

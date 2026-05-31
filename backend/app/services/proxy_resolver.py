@@ -58,7 +58,7 @@ class RestProxyResolver:
             existing = await self._repo.get(conn, clip_id)
             if existing is not None:
                 cached = Path(existing["file_path"])
-                if cached.exists() and cached.stat().st_size > 0:
+                if cached.exists() and cached.stat().st_size > 0:  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
                     if existing.get("provider_id"):
                         await self._repo.touch(conn, clip_id)
                     else:
@@ -66,7 +66,7 @@ class RestProxyResolver:
                             conn,
                             clip_id=clip_id,
                             file_path=str(cached),
-                            size_bytes=cached.stat().st_size,
+                            size_bytes=cached.stat().st_size,  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
                             etag=None,
                             provider_id="catdv",
                             provider_clip_id=str(clip_id),
@@ -74,7 +74,7 @@ class RestProxyResolver:
                     return cached
 
         dest, download = await self._dest_and_downloader(clip_id)
-        if not dest.exists() or dest.stat().st_size == 0:
+        if not dest.exists() or dest.stat().st_size == 0:  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
             await download()
 
         if self._repo is not None and self._db_provider is not None:
@@ -83,7 +83,7 @@ class RestProxyResolver:
                 conn,
                 clip_id=clip_id,
                 file_path=str(dest),
-                size_bytes=dest.stat().st_size,
+                size_bytes=dest.stat().st_size,  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
                 etag=None,
                 provider_id="catdv",
                 provider_clip_id=str(clip_id),
@@ -159,7 +159,7 @@ class FilesystemProxyResolver:
         proxy = self._map.resolve_proxy(hires)
         if proxy is None:
             raise ProxyNotFound(f"clip {clip_id}: no mediastore rule for {hires!r}")
-        if not proxy.exists():
+        if not proxy.exists():  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
             raise ProxyNotFound(f"clip {clip_id}: proxy not on disk: {proxy}")
         if not os.access(proxy, os.R_OK):
             raise ProxyNotFound(f"clip {clip_id}: proxy not readable: {proxy}")
@@ -195,7 +195,7 @@ class LocalCacheOnlyResolver:
         if row is None:
             raise ProxyNotFound(f"clip {clip_id} not cached locally")
         file_path = Path(row["file_path"])
-        if not file_path.exists() or file_path.stat().st_size == 0:
+        if not file_path.exists() or file_path.stat().st_size == 0:  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
             raise ProxyNotFound(f"clip {clip_id} cache row present but file missing: {file_path}")
         return file_path
 

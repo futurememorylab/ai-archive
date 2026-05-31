@@ -42,7 +42,7 @@ async def stream_media(request: Request, clip_id: int):
         raise HTTPException(404, f"proxy unavailable: {exc}") from exc
 
     mime = mimetypes.guess_type(str(path))[0] or "video/quicktime"
-    size = path.stat().st_size
+    size = path.stat().st_size  # sync-io-ok: pre-existing, single metadata call on the stream-response path
     range_header = request.headers.get("range")
 
     if range_header and range_header.startswith("bytes="):
@@ -57,7 +57,7 @@ async def stream_media(request: Request, clip_id: int):
         length = end - start + 1
 
         def _stream():
-            with open(path, "rb") as f:
+            with open(path, "rb") as f:  # sync-io-ok: pre-existing, runs inside a StreamingResponse body generator
                 f.seek(start)
                 remaining = length
                 while remaining > 0:
