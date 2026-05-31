@@ -1,6 +1,6 @@
 """FastAPI app factory and lifespan. Wires routers, mounts static assets,
-and owns the `AppContext` lifecycle (build at startup, aclose at shutdown
-to release the CatDV session seat)."""
+and owns the context lifecycle (build CoreCtx + LiveCtx at startup, aclose
+at shutdown to release the CatDV session seat)."""
 
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
-from backend.app.context import AppContext
+from backend.app.context import build_context
 from backend.app.logging_setup import configure_logging
 from backend.app.routes.cache import api_router as cache_api_router
 from backend.app.routes.cache import page_router as cache_page_router
@@ -55,31 +55,29 @@ async def lifespan(app: FastAPI):
     settings = Settings()
     warn_browser_secret_exposure(settings)
     init_external = settings.app_env == "prod" or _real_external_enabled(settings)
-    ctx = await AppContext.build(settings, init_external=init_external)
-    app.state.ctx = ctx
+    core, live = await build_context(settings, init_external=init_external)
+    app.state.core_ctx = core
+    app.state.live_ctx = live
     seed_path = SEEDS / "default_template.json"
     if seed_path.exists():
-        await seed_default_prompt(ctx.db, seed_path=seed_path)
+        await seed_default_prompt(core.db, seed_path=seed_path)
     image_seed = SEEDS / "image_template.json"
     if image_seed.exists():
-        await seed_default_prompt(ctx.db, seed_path=image_seed)
+        await seed_default_prompt(core.db, seed_path=image_seed)
     live_seed = SEEDS / "live_system_instruction_cs.json"
     if live_seed.exists():
-        await seed_live_system_instruction(ctx.db, seed_path=live_seed)
-    await run_startup_cleanup(ctx.db)
-    if init_external:
-        if ctx.connection_monitor is not None:
-            await ctx.connection_monitor.start()
-        if ctx.sync_engine is not None:
-            await ctx.sync_engine.start()
-        if ctx.lru_eviction is not None:
-            await ctx.lru_eviction.start()
-        if ctx.media_prefetcher is not None:
-            await ctx.media_prefetcher.start()
+        await seed_live_system_instruction(core.db, seed_path=live_seed)
+    await run_startup_cleanup(core.db)
+    if live is not None:
+        await live.connection_monitor.start()
+        await live.sync_engine.start()
+        await live.lru_eviction.start()
+        if live.media_prefetcher is not None:
+            await live.media_prefetcher.start()
     try:
         yield
     finally:
-        await ctx.aclose()
+        await (live or core).aclose()
 
 
 def register_routers(app: FastAPI) -> None:
@@ -124,8 +122,8 @@ async def _revalidate_static(request: Request, call_next):
 
 @app.get("/api/health")
 async def health(request: Request) -> dict:
-    ctx = getattr(request.app.state, "ctx", None)
-    monitor = getattr(ctx, "connection_monitor", None) if ctx else None
+    live = getattr(request.app.state, "live_ctx", None)
+    monitor = live.connection_monitor if live is not None else None
     if monitor is None:
         mode = "online"
     elif getattr(monitor, "is_forced", False) or getattr(monitor, "_forced_offline", False):

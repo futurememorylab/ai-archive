@@ -4,7 +4,7 @@ A long-lived SSE connection that ignores uvicorn's exit signal (e.g. the raw
 `StreamingResponse` at `/api/connection/events`) used to block uvicorn's
 graceful shutdown *forever* — uvicorn has no graceful-shutdown timeout by
 default, and the lifespan teardown that releases the CatDV seat
-(`AppContext.aclose`) only runs after every connection closes. So the process
+(`LiveCtx.aclose`) only runs after every connection closes. So the process
 hung at "Waiting for connections to close." and the seat leaked.
 
 The fix bounds the wait with `--timeout-graceful-shutdown`, set in both launch

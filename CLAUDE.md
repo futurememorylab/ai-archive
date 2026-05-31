@@ -297,6 +297,55 @@ expected shape. The bar is: a colleague who didn't write the code can
 follow the flows on a running app and either tick them off or report
 exactly which step broke.
 
+## Patterns we've removed (don't reintroduce)
+
+Tier 3 deleted several recurring shapes and added guardrails (tests +
+import-linter contracts) that fail CI if they come back. Before reaching
+for any of these, stop:
+
+- **No app-wide god-context.** There are two contexts:
+  `CoreCtx` (always present: settings, db, repos, write queue, and the
+  DB-first `cache_inspector` / `cache_actions`) and `LiveCtx`
+  (CatDV/Gemini/GCS wired). Routes declare which they need via
+  `Depends(get_core_ctx)` / `get_live_ctx` (the latter returns a typed
+  503 when offline). **Do not** add `Optional` service fields back onto a
+  single context, and **do not** re-introduce `attach_provider` /
+  `attach_ai_store` late-binding or `assert ctx.foo is not None`. Cross-ref
+  ADR 0047; the `CoreCtx`-fields-⊆-`LiveCtx`-accessors drift guard is
+  `tests/unit/test_context_delegation.py`.
+
+- **Cross-component state in Alpine uses `Alpine.store('name')`. Never
+  `_x_dataStack`** (an undocumented Alpine internal that breaks on upgrade).
+  The shared studio state lives in `static/studioStore.js`. Cross-ref ADR
+  0048; enforced by `tests/unit/test_no_x_data_stack.py` (scans
+  `static/` + `templates/`, excludes vendored Alpine).
+
+- **One HTMX↔Alpine lifecycle helper (`static/htmxAlpine.js`).** Don't
+  hand-roll `Alpine.initTree` / `htmx.process` per page — call
+  `window.htmxAlpine.reinit(el)` for fetch-injected subtrees. Enforced by
+  `tests/unit/test_htmx_alpine_single_lifecycle.py` (those two calls may
+  appear in exactly one file).
+
+- **One Jinja environment.** Import `templates` from
+  `backend.app.routes.pages.templates`; it owns the `smpte` global and the
+  `bytes_human` / `comma` filters. Don't instantiate `Jinja2Templates`
+  elsewhere — a render through a second env throws `UndefinedError`.
+  Enforced by `tests/unit/test_templates_shared.py`.
+
+- **No sync filesystem I/O inside `async def`.** Wrap blocking fs calls in
+  `asyncio.to_thread(...)` (see `cache_actions.py`). Enforced by
+  `tests/unit/test_no_sync_fs_in_async.py` (scans all `async def` in
+  `services/` + `routes/`). The escape hatch for a justified pre-existing
+  case is an inline `# sync-io-ok` pragma (or an existing
+  `# noqa: ASYNC2…`) — there is a backlog of these tracked for a future
+  async-io pass; don't add new ones unpragma'd.
+
+The import-linter contracts (`.importlinter`, run `lint-imports`) also
+forbid **routes importing `httpx`** (go through the archive/client layer —
+see "Narrowing provider errors") and **repositories importing services**
+(repos are leaves). The N+1 guards from "Performance discipline" now also
+pin the clips-list render (`tests/integration/test_clips_page_perf.py`).
+
 ## Recording decisions at end of session
 
 When a session involves any non-trivial design call — a schema replacement,

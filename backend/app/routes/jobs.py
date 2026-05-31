@@ -7,7 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
-from backend.app.deps import get_ctx
+from backend.app.deps import get_core_ctx
 from backend.app.routes.events import _event_generator
 from backend.app.services.annotator import JOBS_TOPIC, run_job
 
@@ -25,18 +25,20 @@ class JobCreate(BaseModel):
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_job(request: Request, body: JobCreate, background: BackgroundTasks):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     job_id = await ctx.jobs_repo.create_job(
         ctx.db,
         prompt_version_id=body.prompt_version_id,
         clip_ids=body.clip_ids,
         run_group=body.run_group,
     )
-    started = bool(
-        body.auto_start and ctx.archive and ctx.ai_store and ctx.gemini and ctx.proxy_resolver
-    )
+    # Auto-start requires every live service the annotator needs. When the
+    # app is offline (no LiveCtx) or the resolver is fs-only (None), the job
+    # is created but left for a later run.
+    live = request.app.state.live_ctx
+    started = bool(body.auto_start and live is not None and live.proxy_resolver is not None)
     if started:
-        task = asyncio.create_task(_run_in_bg(ctx, job_id))
+        task = asyncio.create_task(_run_in_bg(live, job_id))
         ctx._running_jobs[job_id] = task
     return {"id": job_id, "started": started}
 
@@ -63,14 +65,14 @@ async def _run_in_bg(ctx, job_id: int) -> None:
 
 @router.get("")
 async def list_jobs(request: Request, limit: int = 50):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     return [j.model_dump() for j in await ctx.jobs_repo.list_jobs(ctx.db, limit=limit)]
 
 
 @router.get("/active")
 async def list_active_jobs(request: Request):
     """Running jobs with progress counts — powers the topbar indicator."""
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     out = []
     for job in await ctx.jobs_repo.list_running(ctx.db):
         done, total, errors = await ctx.jobs_repo.progress(ctx.db, job.id)
@@ -90,7 +92,7 @@ async def list_active_jobs(request: Request):
 @router.get("/events")
 async def jobs_events(request: Request):
     """SSE stream of the global `jobs` topic — powers the topbar indicator."""
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
 
     async def stream():
         async for frame in _event_generator(ctx.event_bus, topic=JOBS_TOPIC):
@@ -103,7 +105,7 @@ async def jobs_events(request: Request):
 
 @router.get("/{job_id}")
 async def get_job(request: Request, job_id: int):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     try:
         job = await ctx.jobs_repo.get_job(ctx.db, job_id)
     except LookupError:
@@ -114,6 +116,6 @@ async def get_job(request: Request, job_id: int):
 
 @router.post("/{job_id}/cancel")
 async def cancel_job(request: Request, job_id: int):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     await ctx.jobs_repo.update_status(ctx.db, job_id, "cancelled")
     return {"id": job_id, "status": "cancelled"}

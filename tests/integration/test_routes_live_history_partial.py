@@ -33,7 +33,8 @@ async def test_clip_live_history_partial_renders(tmp_path):
         mode = "online"
         settings = type("S", (), {})()
 
-    app.state.ctx = _Ctx()
+    app.state.core_ctx = _Ctx()
+    app.state.live_ctx = None
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

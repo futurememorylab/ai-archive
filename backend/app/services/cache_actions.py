@@ -24,7 +24,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -44,6 +44,148 @@ class EvictOutcome:
     detail: str | None
     bytes_freed: int
     log_id: int
+
+
+async def _remove_local_bytes(
+    actions: CacheActions,
+    db: aiosqlite.Connection,
+    key: ClipKey,
+    rows: Sequence[Any],
+) -> tuple[str | None, EvictOutcome | None]:
+    """Unlink the on-disk proxy file (best-effort, async-safe).
+
+    asyncio.to_thread keeps the event loop responsive when the file is
+    on a slow network mount (e.g. /Volumes/ARECA* on the CatDV host
+    deployment) — otherwise unlink() blocks every other request
+    including the keepalive probe. A missing file is not an error
+    (recorded via `file_missing`); an OSError on unlink is.
+    """
+    file_path = rows[0][0]
+    try:
+        if file_path:
+            p = Path(file_path)
+            exists = await asyncio.to_thread(p.exists)
+            if exists:
+                await asyncio.to_thread(os.unlink, p)
+            else:
+                return "file_missing", None
+    except OSError as exc:
+        detail = f"unlink_failed: {exc}"
+        return detail, EvictOutcome("error", detail, 0, 0)
+    return None, None
+
+
+async def _remove_ai_bytes(
+    actions: CacheActions,
+    db: aiosqlite.Connection,
+    key: ClipKey,
+    rows: Sequence[Any],
+) -> tuple[str | None, EvictOutcome | None]:
+    """Delegate bucket-side cleanup to the active store, if present.
+
+    When no store is configured (offline), the on-bucket bytes are left
+    alone but the local index is still pruned by the caller — graceful
+    offline pruning.
+    """
+    if actions._ai_store is not None:
+        try:
+            await actions._ai_store.evict(key)
+        except Exception as exc:  # noqa: BLE001
+            detail = f"ai_store_evict_failed: {exc}"
+            return detail, EvictOutcome("error", detail, 0, 0)
+    return None, None
+
+
+async def _remove_no_bytes(
+    actions: CacheActions,
+    db: aiosqlite.Connection,
+    key: ClipKey,
+    rows: Sequence[Any],
+) -> tuple[str | None, EvictOutcome | None]:
+    return None, None
+
+
+@dataclass(frozen=True)
+class LayerPolicy:
+    """Captures what differs between the three cache-layer evictions.
+
+    The shared skeleton (read → absent-skip → invariant-skips → remove
+    bytes → DELETE+commit → log ok) lives in `CacheActions._evict_impl`;
+    everything below is the per-layer variance.
+    """
+
+    select_sql: str
+    fetch_all: bool
+    size_of: Callable[[Sequence[Any]], int]
+    check_pins: bool
+    check_pending: bool
+    remove_bytes: Callable[
+        [CacheActions, aiosqlite.Connection, ClipKey, Sequence[Any]],
+        Awaitable[tuple[str | None, EvictOutcome | None]],
+    ]
+    delete_sql: str
+    pins_sql: str | None = None
+
+
+_PENDING_SQL = """
+            SELECT COUNT(*) FROM pending_operations
+             WHERE provider_id = ? AND provider_clip_id = ?
+               AND status IN ('pending', 'in_flight', 'conflict')
+            """
+
+LOCAL_MEDIA = LayerPolicy(
+    select_sql=(
+        "SELECT file_path, size_bytes FROM proxy_cache "
+        "WHERE provider_id = ? AND provider_clip_id = ?"
+    ),
+    fetch_all=False,
+    size_of=lambda rows: int(rows[0][1] or 0),
+    check_pins=True,
+    check_pending=False,
+    remove_bytes=_remove_local_bytes,
+    delete_sql=(
+        "DELETE FROM proxy_cache WHERE provider_id = ? AND provider_clip_id = ?"
+    ),
+    pins_sql=(
+        "SELECT workspace_id FROM workspace_clips "
+        "WHERE provider_id = ? AND provider_clip_id = ? "
+        "ORDER BY workspace_id"
+    ),
+)
+
+AI_MEDIA = LayerPolicy(
+    select_sql=(
+        "SELECT store_id, size_bytes FROM ai_store_files "
+        "WHERE provider_id = ? AND provider_clip_id = ?"
+    ),
+    fetch_all=True,
+    size_of=lambda rows: sum(int(r[1] or 0) for r in rows),
+    check_pins=False,
+    check_pending=True,
+    remove_bytes=_remove_ai_bytes,
+    delete_sql=(
+        "DELETE FROM ai_store_files WHERE provider_id = ? AND provider_clip_id = ?"
+    ),
+)
+
+METADATA = LayerPolicy(
+    select_sql=(
+        "SELECT length(canonical_json) FROM clip_cache "
+        "WHERE provider_id = ? AND provider_clip_id = ?"
+    ),
+    fetch_all=False,
+    size_of=lambda rows: int(rows[0][0] or 0),
+    check_pins=True,
+    check_pending=True,
+    remove_bytes=_remove_no_bytes,
+    delete_sql=(
+        "DELETE FROM clip_cache WHERE provider_id = ? AND provider_clip_id = ?"
+    ),
+    pins_sql=(
+        "SELECT workspace_id FROM workspace_clips "
+        "WHERE provider_id = ? AND provider_clip_id = ?"
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -80,16 +222,6 @@ class CacheActions:
         self._ai_store = ai_store
         self._who_provider = who_provider or (lambda: "request")
 
-    def attach_ai_store(self, ai_store: Any | None) -> None:
-        """Late-bind the AIInputStore for bucket-side evictions.
-
-        See `CacheInspector.attach_provider` for the rationale — both services
-        are constructed once in `_build_cache_subsystem` with their external
-        deps set to `None`, then receive them via these attach methods once
-        `_build_sync_subsystem` has wired the archive subsystem.
-        """
-        self._ai_store = ai_store
-
     # --- single-layer evictions --------------------------------------
 
     async def evict_local_media(
@@ -99,7 +231,8 @@ class CacheActions:
         force: bool = False,
         who: str | None = None,
     ) -> EvictOutcome:
-        return await self._evict_local_media_impl(
+        return await self._evict_impl(
+            LOCAL_MEDIA,
             key,
             force=force,
             who=who or self._who_provider(),
@@ -113,7 +246,8 @@ class CacheActions:
         force: bool = False,
         who: str | None = None,
     ) -> EvictOutcome:
-        return await self._evict_ai_media_impl(
+        return await self._evict_impl(
+            AI_MEDIA,
             key,
             force=force,
             who=who or self._who_provider(),
@@ -127,7 +261,8 @@ class CacheActions:
         force: bool = False,
         who: str | None = None,
     ) -> EvictOutcome:
-        return await self._evict_metadata_impl(
+        return await self._evict_impl(
+            METADATA,
             key,
             force=force,
             who=who or self._who_provider(),
@@ -152,7 +287,8 @@ class CacheActions:
         """
         who = who or self._who_provider()
         outcomes: list[EvictOutcome] = []
-        a = await self._evict_ai_media_impl(
+        a = await self._evict_impl(
+            AI_MEDIA,
             key,
             force=force,
             who=who,
@@ -160,7 +296,8 @@ class CacheActions:
         )
         outcomes.append(a)
         if force or a.result != "skipped":
-            b = await self._evict_local_media_impl(
+            b = await self._evict_impl(
+                LOCAL_MEDIA,
                 key,
                 force=force,
                 who=who,
@@ -168,7 +305,8 @@ class CacheActions:
             )
             outcomes.append(b)
             if force or b.result != "skipped":
-                c = await self._evict_metadata_impl(
+                c = await self._evict_impl(
+                    METADATA,
                     key,
                     force=force,
                     who=who,
@@ -204,7 +342,8 @@ class CacheActions:
             for layer in layers:
                 if layer == "media-local":
                     outcomes.append(
-                        await self._evict_local_media_impl(
+                        await self._evict_impl(
+                            LOCAL_MEDIA,
                             key,
                             force=force,
                             who=who,
@@ -213,7 +352,8 @@ class CacheActions:
                     )
                 elif layer == "media-ai":
                     outcomes.append(
-                        await self._evict_ai_media_impl(
+                        await self._evict_impl(
+                            AI_MEDIA,
                             key,
                             force=force,
                             who=who,
@@ -222,7 +362,8 @@ class CacheActions:
                     )
                 elif layer == "metadata":
                     outcomes.append(
-                        await self._evict_metadata_impl(
+                        await self._evict_impl(
+                            METADATA,
                             key,
                             force=force,
                             who=who,
@@ -244,7 +385,8 @@ class CacheActions:
                     continue
                 if layer.layer == "media-local":
                     outcomes.append(
-                        await self._evict_local_media_impl(
+                        await self._evict_impl(
+                            LOCAL_MEDIA,
                             status.clip_key,
                             force=False,
                             who=who,
@@ -253,7 +395,8 @@ class CacheActions:
                     )
                 elif layer.layer == "media-ai":
                     outcomes.append(
-                        await self._evict_ai_media_impl(
+                        await self._evict_impl(
+                            AI_MEDIA,
                             status.clip_key,
                             force=False,
                             who=who,
@@ -267,22 +410,36 @@ class CacheActions:
 
     # --- internals ---------------------------------------------------
 
-    async def _evict_local_media_impl(
+    async def _evict_impl(
         self,
+        policy: LayerPolicy,
         key: ClipKey,
         *,
         force: bool,
         who: str,
         action: str,
     ) -> EvictOutcome:
+        """Single LayerPolicy-driven eviction.
+
+        Shared skeleton: read → absent-skip → (pins-skip) →
+        (pending-skip) → remove bytes → DELETE + commit → log ok. The
+        per-layer variance (which table, single vs many rows, how to
+        size, which invariants, how to free bytes) lives in `policy`.
+
+        Invariant ordering matters: for the metadata layer, pins are
+        checked *before* pending_ops — preserved here by checking
+        `check_pins` ahead of `check_pending`.
+        """
         db = self._db_provider()
-        cur = await db.execute(
-            "SELECT file_path, size_bytes FROM proxy_cache "
-            "WHERE provider_id = ? AND provider_clip_id = ?",
-            (key[0], key[1]),
-        )
-        row = await cur.fetchone()
-        if row is None:
+        cur = await db.execute(policy.select_sql, (key[0], key[1]))
+        if policy.fetch_all:
+            rows: Sequence[Any] = list(await cur.fetchall())
+            absent = not rows
+        else:
+            single = await cur.fetchone()
+            rows = [single] if single is not None else []
+            absent = single is None
+        if absent:
             log_id = await self._log_repo.append(
                 db,
                 who=who,
@@ -293,57 +450,52 @@ class CacheActions:
             )
             return EvictOutcome("skipped", "absent", 0, log_id)
 
-        file_path, size_bytes = row[0], int(row[1] or 0)
+        bytes_freed = policy.size_of(rows)
 
-        cur = await db.execute(
-            "SELECT workspace_id FROM workspace_clips "
-            "WHERE provider_id = ? AND provider_clip_id = ? "
-            "ORDER BY workspace_id",
-            (key[0], key[1]),
-        )
-        pins = [int(r[0]) for r in await cur.fetchall()]
-        if pins and not force:
-            detail = f"pinned_by_workspaces={pins}"
-            log_id = await self._log_repo.append(
-                db,
-                who=who,
-                action=action,
-                clip_keys=[key],
-                result="skipped",
-                detail=detail,
-            )
-            return EvictOutcome("skipped", detail, 0, log_id)
+        if policy.check_pins:
+            assert policy.pins_sql is not None
+            cur = await db.execute(policy.pins_sql, (key[0], key[1]))
+            pins = [int(r[0]) for r in await cur.fetchall()]
+            if pins and not force:
+                detail = f"pinned_by_workspaces={pins}"
+                log_id = await self._log_repo.append(
+                    db,
+                    who=who,
+                    action=action,
+                    clip_keys=[key],
+                    result="skipped",
+                    detail=detail,
+                )
+                return EvictOutcome("skipped", detail, 0, log_id)
 
-        # delete the on-disk file (best-effort) then the row.
-        # asyncio.to_thread keeps the event loop responsive when the file
-        # is on a slow network mount (e.g. /Volumes/ARECA* on the CatDV
-        # host deployment) — otherwise unlink() blocks every other
-        # request including the keepalive probe.
-        unlink_detail: str | None = None
-        try:
-            if file_path:
-                p = Path(file_path)
-                exists = await asyncio.to_thread(p.exists)
-                if exists:
-                    await asyncio.to_thread(os.unlink, p)
-                else:
-                    unlink_detail = "file_missing"
-        except OSError as exc:
-            unlink_detail = f"unlink_failed: {exc}"
+        if policy.check_pending:
+            cur = await db.execute(_PENDING_SQL, (key[0], key[1]))
+            n_pending = int((await cur.fetchone())[0])
+            if n_pending and not force:
+                detail = f"pending_ops={n_pending}"
+                log_id = await self._log_repo.append(
+                    db,
+                    who=who,
+                    action=action,
+                    clip_keys=[key],
+                    result="skipped",
+                    detail=detail,
+                )
+                return EvictOutcome("skipped", detail, 0, log_id)
+
+        ok_detail, error_outcome = await policy.remove_bytes(self, db, key, rows)
+        if error_outcome is not None:
             log_id = await self._log_repo.append(
                 db,
                 who=who,
                 action=action,
                 clip_keys=[key],
                 result="error",
-                detail=unlink_detail,
+                detail=error_outcome.detail,
             )
-            return EvictOutcome("error", unlink_detail, 0, log_id)
+            return EvictOutcome("error", error_outcome.detail, 0, log_id)
 
-        await db.execute(
-            "DELETE FROM proxy_cache WHERE provider_id = ? AND provider_clip_id = ?",
-            (key[0], key[1]),
-        )
+        await db.execute(policy.delete_sql, (key[0], key[1]))
         await db.commit()
 
         log_id = await self._log_repo.append(
@@ -352,175 +504,10 @@ class CacheActions:
             action=action,
             clip_keys=[key],
             result="ok",
-            detail=unlink_detail,
-            bytes_freed=size_bytes,
-        )
-        return EvictOutcome("ok", unlink_detail, size_bytes, log_id)
-
-    async def _evict_ai_media_impl(
-        self,
-        key: ClipKey,
-        *,
-        force: bool,
-        who: str,
-        action: str,
-    ) -> EvictOutcome:
-        db = self._db_provider()
-        cur = await db.execute(
-            "SELECT store_id, size_bytes FROM ai_store_files "
-            "WHERE provider_id = ? AND provider_clip_id = ?",
-            (key[0], key[1]),
-        )
-        rows = await cur.fetchall()
-        if not rows:
-            log_id = await self._log_repo.append(
-                db,
-                who=who,
-                action=action,
-                clip_keys=[key],
-                result="skipped",
-                detail="absent",
-            )
-            return EvictOutcome("skipped", "absent", 0, log_id)
-
-        cur = await db.execute(
-            """
-            SELECT COUNT(*) FROM pending_operations
-             WHERE provider_id = ? AND provider_clip_id = ?
-               AND status IN ('pending', 'in_flight', 'conflict')
-            """,
-            (key[0], key[1]),
-        )
-        n_pending = int((await cur.fetchone())[0])
-        if n_pending and not force:
-            detail = f"pending_ops={n_pending}"
-            log_id = await self._log_repo.append(
-                db,
-                who=who,
-                action=action,
-                clip_keys=[key],
-                result="skipped",
-                detail=detail,
-            )
-            return EvictOutcome("skipped", detail, 0, log_id)
-
-        total_bytes = sum(int(r[1] or 0) for r in rows)
-        detail: str | None = None
-        # delegate bucket-side cleanup to the active store
-        if self._ai_store is not None:
-            try:
-                await self._ai_store.evict(key)
-            except Exception as exc:  # noqa: BLE001
-                detail = f"ai_store_evict_failed: {exc}"
-                log_id = await self._log_repo.append(
-                    db,
-                    who=who,
-                    action=action,
-                    clip_keys=[key],
-                    result="error",
-                    detail=detail,
-                )
-                return EvictOutcome("error", detail, 0, log_id)
-
-        # also prune our own index (the adapter's evict typically does
-        # this via its files_repo, but PR 6 doesn't assume — clear here
-        # regardless so the inspector sees consistent state).
-        await db.execute(
-            "DELETE FROM ai_store_files WHERE provider_id = ? AND provider_clip_id = ?",
-            (key[0], key[1]),
-        )
-        await db.commit()
-        log_id = await self._log_repo.append(
-            db,
-            who=who,
-            action=action,
-            clip_keys=[key],
-            result="ok",
-            detail=detail,
-            bytes_freed=total_bytes,
-        )
-        return EvictOutcome("ok", detail, total_bytes, log_id)
-
-    async def _evict_metadata_impl(
-        self,
-        key: ClipKey,
-        *,
-        force: bool,
-        who: str,
-        action: str,
-    ) -> EvictOutcome:
-        db = self._db_provider()
-        cur = await db.execute(
-            "SELECT length(canonical_json) FROM clip_cache "
-            "WHERE provider_id = ? AND provider_clip_id = ?",
-            (key[0], key[1]),
-        )
-        row = await cur.fetchone()
-        if row is None:
-            log_id = await self._log_repo.append(
-                db,
-                who=who,
-                action=action,
-                clip_keys=[key],
-                result="skipped",
-                detail="absent",
-            )
-            return EvictOutcome("skipped", "absent", 0, log_id)
-        bytes_freed = int(row[0] or 0)
-
-        cur = await db.execute(
-            "SELECT workspace_id FROM workspace_clips "
-            "WHERE provider_id = ? AND provider_clip_id = ?",
-            (key[0], key[1]),
-        )
-        pins = [int(r[0]) for r in await cur.fetchall()]
-        if pins and not force:
-            detail = f"pinned_by_workspaces={pins}"
-            log_id = await self._log_repo.append(
-                db,
-                who=who,
-                action=action,
-                clip_keys=[key],
-                result="skipped",
-                detail=detail,
-            )
-            return EvictOutcome("skipped", detail, 0, log_id)
-
-        cur = await db.execute(
-            """
-            SELECT COUNT(*) FROM pending_operations
-             WHERE provider_id = ? AND provider_clip_id = ?
-               AND status IN ('pending', 'in_flight', 'conflict')
-            """,
-            (key[0], key[1]),
-        )
-        n_pending = int((await cur.fetchone())[0])
-        if n_pending and not force:
-            detail = f"pending_ops={n_pending}"
-            log_id = await self._log_repo.append(
-                db,
-                who=who,
-                action=action,
-                clip_keys=[key],
-                result="skipped",
-                detail=detail,
-            )
-            return EvictOutcome("skipped", detail, 0, log_id)
-
-        await db.execute(
-            "DELETE FROM clip_cache WHERE provider_id = ? AND provider_clip_id = ?",
-            (key[0], key[1]),
-        )
-        await db.commit()
-        log_id = await self._log_repo.append(
-            db,
-            who=who,
-            action=action,
-            clip_keys=[key],
-            result="ok",
+            detail=ok_detail,
             bytes_freed=bytes_freed,
         )
-        return EvictOutcome("ok", None, bytes_freed, log_id)
+        return EvictOutcome("ok", ok_detail, bytes_freed, log_id)
 
 
 def _summarise(outcomes: Sequence[EvictOutcome]) -> BulkEvictResult:

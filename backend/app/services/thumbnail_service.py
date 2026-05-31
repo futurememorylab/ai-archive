@@ -58,7 +58,7 @@ class ThumbnailService:
 
     async def get_or_fetch(self, clip_id: int) -> Path | None:
         dest = self.path_for(clip_id)
-        if dest.exists() and dest.stat().st_size > 0:
+        if dest.exists() and dest.stat().st_size > 0:  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
             return dest
         if self._catdv is None:
             return None
@@ -83,11 +83,11 @@ class ThumbnailService:
             await self._catdv.download_thumbnail(int(thumb_id), dest)
         except Exception as exc:  # noqa: BLE001 — transport / auth / 404
             _log.debug("thumb: download(%s) failed: %s", clip_id, exc)
-            if dest.exists() and dest.stat().st_size == 0:
-                dest.unlink(missing_ok=True)
+            if dest.exists() and dest.stat().st_size == 0:  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
+                dest.unlink(missing_ok=True)  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
             return None
 
-        if dest.exists() and dest.stat().st_size > 0:
+        if dest.exists() and dest.stat().st_size > 0:  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
             return dest
         return None
 
@@ -110,10 +110,10 @@ class ThumbnailService:
             await asyncio.to_thread(_downscale_to_jpeg, tmp, dest, 480)
         except Exception as exc:  # noqa: BLE001 — transport / decode / unsupported
             _log.debug("thumb: image poster build failed for %s: %s", dest.stem, exc)
-            dest.unlink(missing_ok=True)
+            dest.unlink(missing_ok=True)  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
             return None
         finally:
-            tmp.unlink(missing_ok=True)
-        if dest.exists() and dest.stat().st_size > 0:
+            tmp.unlink(missing_ok=True)  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
+        if dest.exists() and dest.stat().st_size > 0:  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
             return dest
         return None

@@ -1,6 +1,6 @@
 import pytest
 
-from backend.app.context import AppContext
+from backend.app.context import build_context
 from backend.app.settings import Settings
 
 
@@ -17,8 +17,9 @@ async def test_build_context_from_settings(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
 
     settings = Settings()
-    ctx = await AppContext.build(settings, init_external=False)
+    ctx, live = await build_context(settings, init_external=False)
     try:
+        assert live is None  # offline boot exposes no LiveCtx
         assert ctx.settings is settings
         assert ctx.prompts_repo is not None
         assert ctx.jobs_repo is not None
@@ -35,7 +36,7 @@ async def test_context_exposes_archive_provider_when_external_initialized(tmp_pa
     # archive-wiring branch without ADC.
     import backend.app.services.gcs as gcs_mod
     import backend.app.services.gemini as gemini_mod
-    from backend.app.context import AppContext
+    from backend.app.context import build_context
     from backend.app.settings import Settings
     from tests.fakes.fake_catdv import running_fake_catdv
 
@@ -61,7 +62,7 @@ async def test_context_exposes_archive_provider_when_external_initialized(tmp_pa
         monkeypatch.setenv("GCP_LOCATION", "europe-west3")
         monkeypatch.setenv("DATA_DIR", str(tmp_path))
         s = Settings()
-        ctx = await AppContext.build(s, init_external=True)
+        _, ctx = await build_context(s, init_external=True)
         try:
             from backend.app.archive.providers.catdv.adapter import CatdvArchiveAdapter
 
@@ -84,7 +85,7 @@ async def test_context_wires_thumbnail_service_when_external_initialized(tmp_pat
     # Gemini and use the fake CatDV server, mirroring the archive-wiring test.
     import backend.app.services.gcs as gcs_mod
     import backend.app.services.gemini as gemini_mod
-    from backend.app.context import AppContext
+    from backend.app.context import build_context
     from backend.app.settings import Settings
     from tests.fakes.fake_catdv import running_fake_catdv
 
@@ -110,7 +111,7 @@ async def test_context_wires_thumbnail_service_when_external_initialized(tmp_pat
         monkeypatch.setenv("GCP_LOCATION", "europe-west3")
         monkeypatch.setenv("DATA_DIR", str(tmp_path))
         s = Settings()
-        ctx = await AppContext.build(s, init_external=True)
+        _, ctx = await build_context(s, init_external=True)
         try:
             assert ctx.thumbnail_service is not None
             assert ctx.thumbnail_service.path_for(42).name == "42.jpg"

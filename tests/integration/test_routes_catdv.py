@@ -43,7 +43,7 @@ def test_list_clips_proxies_to_catdv(monkeypatch, tmp_path):
     app = main_mod.app
 
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        from tests._helpers.live_ctx import install_live_ctx
 
         class FakeArchive:
             async def list_clips(self, catalog, query):
@@ -57,7 +57,7 @@ def test_list_clips_proxies_to_catdv(monkeypatch, tmp_path):
             async def get_clip(self, clip_id_str):
                 return _canonical(int(clip_id_str), "x")
 
-        ctx.archive = FakeArchive()
+        install_live_ctx(client.app, archive=FakeArchive())
 
         r = client.get("/api/catdv/clips?limit=10")
         assert r.status_code == 200

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import ValidationError
 
-from backend.app.deps import get_ctx
+from backend.app.deps import get_core_ctx
 from backend.app.models.prompt import TargetMap
 from backend.app.repositories.prompts import VersionImmutableError
 from backend.app.routes.pages.templates import templates
@@ -17,7 +17,7 @@ router = APIRouter(tags=["pages"])
 
 @router.get("/prompts", response_class=HTMLResponse)
 async def prompts_page(request: Request, archived: int = 0):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     repo = ctx.prompts_repo
     prompts = await (repo.list_archived(ctx.db) if archived else repo.list_active(ctx.db))
     selected = None
@@ -48,7 +48,7 @@ async def prompts_archived_page(request: Request):
 
 @router.get("/prompts/new", response_class=HTMLResponse)
 async def prompt_new_page(request: Request):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     prompts = await ctx.prompts_repo.list_active(ctx.db)
     return templates.TemplateResponse(
         request,
@@ -72,7 +72,7 @@ async def prompt_new_page(request: Request):
 
 @router.post("/prompts/_create")
 async def action_create_prompt(request: Request):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     form = await request.form()
     name = (form.get("name") or "").strip()
     description = (form.get("description") or "").strip() or None
@@ -154,7 +154,7 @@ async def action_create_prompt(request: Request):
 
 @router.get("/prompts/{prompt_id}", response_class=HTMLResponse)
 async def prompt_detail_page(request: Request, prompt_id: int, version_id: int | None = None):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     repo = ctx.prompts_repo
     try:
         selected, versions = await repo.get_with_versions(ctx.db, prompt_id)
@@ -187,7 +187,7 @@ async def prompt_detail_page(request: Request, prompt_id: int, version_id: int |
 
 @router.post("/prompts/{prompt_id}/_new_version")
 async def action_new_version(request: Request, prompt_id: int):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     try:
         new_vid = await ctx.prompts_repo.create_version(ctx.db, prompt_id)
     except LookupError as exc:
@@ -197,7 +197,7 @@ async def action_new_version(request: Request, prompt_id: int):
 
 @router.post("/prompts/{prompt_id}/versions/{version_id}/_promote")
 async def action_promote_version(request: Request, prompt_id: int, version_id: int):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     try:
         v = await ctx.prompts_repo.get_version(ctx.db, version_id)
     except LookupError as exc:
@@ -218,7 +218,7 @@ async def action_duplicate_prompt(
     name: str | None = Form(default=None),
     description: str | None = Form(default=None),
 ):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     cleaned_name = name.strip() if name is not None else None
     cleaned_desc = description if description is not None else None
     try:
@@ -243,7 +243,7 @@ async def action_duplicate_prompt(
 
 @router.post("/prompts/{prompt_id}/_archive")
 async def action_archive_prompt(request: Request, prompt_id: int):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     try:
         await ctx.prompts_repo.archive(ctx.db, prompt_id)
     except LookupError as exc:
@@ -253,7 +253,7 @@ async def action_archive_prompt(request: Request, prompt_id: int):
 
 @router.post("/prompts/{prompt_id}/_restore")
 async def action_restore_prompt(request: Request, prompt_id: int):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     try:
         await ctx.prompts_repo.restore(ctx.db, prompt_id)
     except LookupError as exc:

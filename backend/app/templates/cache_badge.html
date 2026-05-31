@@ -1,7 +1,8 @@
 {# Per-clip cache badge: three glyphs [● ▣ ▲] for metadata / media-local / media-ai.
 
-   `status` is a ClipCacheStatus.to_dict() shape. Each layer is a dict
-   with `present`, `size_bytes`, `evictable`, `pinned_by_workspaces`.
+   `status` is a ClipCacheStatus dataclass (frozen). Each layer is a
+   LayerStatus dataclass with `present`, `size_bytes`, `evictable`,
+   `pinned_by_workspaces`.
 
    Colour classes: `present-fresh` (present + evictable), `present-pinned`
    (present but not evictable), `absent`. The whole badge is an HTMX

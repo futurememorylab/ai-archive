@@ -21,8 +21,8 @@
           <td>{{ layer.layer }}</td>
           <td>{{ layer.size_bytes if layer.present else "—" }}</td>
           <td class="loc">{{ layer.location or "—" }}</td>
-          <td>{{ layer.fetched_at or "—" }}</td>
-          <td>{{ layer.last_used_at or "—" }}</td>
+          <td>{{ layer.fetched_at.isoformat() if layer.fetched_at else "—" }}</td>
+          <td>{{ layer.last_used_at.isoformat() if layer.last_used_at else "—" }}</td>
           <td>{{ layer.pinned_by_workspaces|join(", ") or "—" }}</td>
           <td>
             {% if not (host_local_proxies and layer.layer == "media-local") %}

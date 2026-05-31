@@ -33,9 +33,19 @@ def _make_app(monkeypatch, tmp_path):
     return main_mod.app
 
 
+def test_cache_route_helpers_removed(monkeypatch, tmp_path: Path):
+    """T3-A2: the per-request _inspector/_actions helpers are gone — cache
+    handlers reach ctx.cache_inspector / ctx.cache_actions directly off the
+    CoreCtx."""
+    import backend.app.routes.cache as c
+
+    assert not hasattr(c, "_inspector")
+    assert not hasattr(c, "_actions")
+
+
 def _seed_clip(client, *, key, proxy_path=None, proxy_size=0, ai_size=0):
     """Seed test data via the running app's DB connection."""
-    ctx = client.app.state.ctx
+    ctx = client.app.state.core_ctx
     db = ctx.db
     import asyncio
 
@@ -149,23 +159,62 @@ def test_cache_badge_partial(monkeypatch, tmp_path: Path):
     assert "cache-badge" in r.text
     # all three glyphs rendered
     assert "metadata" in r.text and "media-local" in r.text and "media-ai" in r.text
+    # T3-A4 pin: clip_key subscript access renders the provider + clip id
+    assert 'data-provider-id="catdv"' in r.text
+    assert 'data-clip-id="2"' in r.text
+    # T3-A4 pin: size_bytes and pinned_by_workspaces|length appear via attribute access
+    assert "5 bytes" in r.text  # proxy size in media-local title
 
 
 def test_cache_popover_partial(monkeypatch, tmp_path: Path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        _seed_clip(client, key=("catdv", "3"))
+        _seed_clip(client, key=("catdv", "3"), proxy_path=str(tmp_path / "3.mov"), proxy_size=999)
         r = client.get("/ui/cache-popover/catdv/3")
     assert r.status_code == 200
     assert "cache-popover" in r.text
     assert "Evict" in r.text
+    # T3-A4 pin: layer names render (direct iteration over tuple[LayerStatus,...])
+    assert "metadata" in r.text
+    assert "media-local" in r.text
+    assert "media-ai" in r.text
+    # T3-A4 pin: size_bytes for media-local row renders correctly
+    assert "999" in r.text
+    # T3-A4 pin: totals line uses total_local_bytes and total_ai_bytes attributes
+    assert "Local:" in r.text
+    assert "AI:" in r.text
+    # T3-A4 pin: clip_key subscript access works (header renders provider/id)
+    assert "catdv/3" in r.text
+
+
+def test_cache_popover_datetime_isoformat(monkeypatch, tmp_path: Path):
+    """T3-A4 pin: fetched_at / last_used_at render in isoformat (with 'T'),
+    not as the space-separated datetime str Python gives by default."""
+    app = _make_app(monkeypatch, tmp_path)
+    proxy = tmp_path / "dt.mov"
+    proxy.write_bytes(b"d")
+    with TestClient(app) as client:
+        _seed_clip(client, key=("catdv", "99"), proxy_path=str(proxy), proxy_size=1)
+        r = client.get("/ui/cache-popover/catdv/99")
+    assert r.status_code == 200
+    body = r.text
+    # The DB stores timestamps as ISO strings with 'T' separator; once rendered
+    # via the template the output must contain at least one 'T' separator inside
+    # a date-looking substring (i.e. not "—" placeholder, and not a space-separated
+    # datetime like "2026-05-30 12:00:00").  We look for the isoformat pattern.
+    import re
+    # Any ISO-8601 datetime with a T in the rendered HTML
+    assert re.search(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", body), (
+        "Expected isoformat datetime with 'T' separator in popover — "
+        "got: " + body[:400]
+    )
 
 
 def test_cache_orphans_endpoint(monkeypatch, tmp_path: Path):
     """proxy_cache with no clip_cache → orphan list."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
         import asyncio
 
         proxy = tmp_path / "33.mov"
@@ -219,7 +268,7 @@ def test_cache_page_orphans_tile(monkeypatch, tmp_path: Path):
     proxy = tmp_path / "orph.mov"
     proxy.write_bytes(b"o" * 42)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
         import asyncio
 
         now = datetime.now(UTC).isoformat()

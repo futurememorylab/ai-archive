@@ -108,12 +108,34 @@ function reviewQueue(clipId) {
     async applyStay() {
       const checked = Array.from(document.querySelectorAll('.ri-accept:checked'));
       await Promise.all(checked.map(cb => this._decide(cb.dataset.itemId, 'accepted')));
-      const r = await fetch(`/api/review/clips/${clipId}/apply`, { method: 'POST' });
-      if (r.ok) location.reload();
-      else Alpine.store('toast').push(
-        `Apply failed (${r.status}). Nothing was applied.`,
-        { level: 'error' },
-      );
+      // HX-Request: true makes the apply route return the re-rendered draft
+      // aside partial instead of JSON, so we swap it in place (no full
+      // reload) and toast success. `applyAndNext` deliberately omits the
+      // header — it navigates away on success and still wants the JSON path.
+      const r = await fetch(`/api/review/clips/${clipId}/apply`, {
+        method: 'POST',
+        headers: { 'HX-Request': 'true' },
+      });
+      if (r.ok) {
+        const html = await r.text();
+        const aside = document.getElementById('draft-aside');
+        if (aside) {
+          aside.innerHTML = html;
+          // Re-scan the injected subtree through the single lifecycle helper
+          // (Alpine.initTree + htmx.process) so the draft panels' x-text /
+          // x-for / @click="seek(...)" directives come alive. The partial
+          // has no hx-* attributes, so the htmx.process pass is a harmless
+          // no-op. (Direct Alpine.initTree calls are reserved to
+          // htmxAlpine.js — see test_htmx_alpine_single_lifecycle.)
+          window.htmxAlpine.reinit(aside);
+        }
+        Alpine.store('toast').push('Changes applied.', { level: 'success' });
+      } else {
+        Alpine.store('toast').push(
+          `Apply failed (${r.status}). Nothing was applied.`,
+          { level: 'error' },
+        );
+      }
     },
   };
 }

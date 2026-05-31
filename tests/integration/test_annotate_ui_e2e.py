@@ -117,9 +117,11 @@ async def _seed_and_run(ctx, archive, proxy_path):
 def test_end_to_end_renders_draft_with_gemini_output(monkeypatch, tmp_path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        from tests._helpers.live_ctx import install_live_ctx
+
+        ctx = client.app.state.core_ctx
         archive = FakeArchive({101: {"ID": 101, "name": "Clip_101", "markers": []}})
-        ctx.archive = archive
+        install_live_ctx(client.app, archive=archive)
 
         proxy = tmp_path / "101.mov"
         proxy.write_bytes(b"X" * 100)

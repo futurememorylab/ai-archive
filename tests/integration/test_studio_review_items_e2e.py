@@ -36,7 +36,7 @@ def app_and_client(monkeypatch, tmp_path):
 
 def test_studio_render_after_run_shows_markers_and_fields(app_and_client):
     app, client = app_and_client
-    ctx = app.state.ctx
+    ctx = app.state.core_ctx
     db_path = ctx.settings.data_dir / "app.db"
 
     # Seed: prompt with a markers + field + note target_map; a draft version

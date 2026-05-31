@@ -19,6 +19,7 @@ from backend.app.archive.model import (
     ClipPage,
     MediaRef,
 )
+from tests._helpers.live_ctx import install_live_ctx
 
 
 def _canonical(clip_id: int = 101, name: str = "Clip_101") -> CanonicalClip:
@@ -131,7 +132,7 @@ async def _seed_annotation_with_marker(ctx, clip_id: int = 101) -> int:
 def test_clip_detail_renders_empty_draft_when_no_annotation(monkeypatch, tmp_path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        client.app.state.ctx.archive = FakeArchive((_canonical(101),))
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(101),)))
         r = client.get("/clips/101")
         assert r.status_code == 200
         assert 'data-draft-empty="true"' in r.text
@@ -140,8 +141,8 @@ def test_clip_detail_renders_empty_draft_when_no_annotation(monkeypatch, tmp_pat
 def test_clip_detail_renders_draft_when_annotation_exists(monkeypatch, tmp_path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
-        ctx.archive = FakeArchive((_canonical(101),))
+        ctx = client.app.state.core_ctx
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(101),)))
         _run(_seed_annotation_with_marker(ctx, clip_id=101))
         r = client.get("/clips/101")
         assert r.status_code == 200
@@ -152,7 +153,7 @@ def test_clip_detail_renders_draft_when_annotation_exists(monkeypatch, tmp_path)
 def test_clips_draft_partial_returns_empty_state(monkeypatch, tmp_path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        client.app.state.ctx.archive = FakeArchive((_canonical(101),))
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(101),)))
         r = client.get("/clips/101/draft")
         assert r.status_code == 200
         assert 'data-draft-empty="true"' in r.text
@@ -166,8 +167,8 @@ def test_clips_draft_partial_returns_populated_when_annotation_exists(
 ):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
-        ctx.archive = FakeArchive((_canonical(101),))
+        ctx = client.app.state.core_ctx
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(101),)))
         _run(_seed_annotation_with_marker(ctx, clip_id=101))
         r = client.get("/clips/101/draft")
         assert r.status_code == 200
@@ -178,6 +179,6 @@ def test_clips_draft_partial_returns_populated_when_annotation_exists(
 def test_clips_draft_partial_returns_404_when_clip_missing(monkeypatch, tmp_path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        client.app.state.ctx.archive = FakeArchive(())
+        install_live_ctx(client.app, archive=FakeArchive(()))
         r = client.get("/clips/999999/draft")
         assert r.status_code == 404

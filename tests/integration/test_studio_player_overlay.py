@@ -35,7 +35,7 @@ def _seed_run(client, *, version_id, clip_id, scenes):
 
     from backend.app import main as main_mod
 
-    db_path = main_mod.app.state.ctx.settings.data_dir / "app.db"
+    db_path = main_mod.app.state.core_ctx.settings.data_dir / "app.db"
 
     def _to_nested(s: dict) -> dict:
         if "in" in s and isinstance(s["in"], dict):

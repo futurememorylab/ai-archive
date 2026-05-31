@@ -42,7 +42,9 @@ async def client_and_db(tmp_path):
             },
         )()
 
-    app.state.ctx = _Ctx()
+    _ctx = _Ctx()
+    app.state.core_ctx = _ctx
+    app.state.live_ctx = _ctx
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac, conn
@@ -105,7 +107,7 @@ async def test_session_config_works_offline_when_clip_cached(client_and_db, monk
     clip view-model is served from clip_cache by the offline-fallback path.
     """
     ac, conn = client_and_db
-    app.state.ctx.mode = "offline"
+    app.state.core_ctx.mode = "offline"
 
     import backend.app.routes.live as live_routes
 

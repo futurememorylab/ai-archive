@@ -1,5 +1,5 @@
 """AIInputStore registry — picks the active store implementation from settings.
-Called by `AppContext.build` to wire up Gemini's media source.
+Called by `build_context` to wire up Gemini's media source.
 """
 
 from __future__ import annotations

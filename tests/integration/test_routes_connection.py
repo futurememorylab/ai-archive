@@ -36,20 +36,24 @@ def test_post_offline_then_online_toggles_via_manager(monkeypatch, tmp_path):
     # static default. To exercise the toggle we install a real monitor
     # manually after app boot.
     from backend.app.services.connection_monitor import ConnectionMonitor
+    from tests._helpers.live_ctx import install_live_ctx
 
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
 
         class FakeProvider:
             async def health(self):
                 return None
 
-        ctx.connection_monitor = ConnectionMonitor(
-            provider=FakeProvider(),
-            db_provider=lambda: ctx.db,
-            interval_s=99999.0,
-            event_bus=ctx.event_bus,
+        install_live_ctx(
+            client.app,
+            connection_monitor=ConnectionMonitor(
+                provider=FakeProvider(),
+                db_provider=lambda: ctx.db,
+                interval_s=99999.0,
+                event_bus=ctx.event_bus,
+            ),
         )
 
         r = client.post("/api/connection/offline")

@@ -1,6 +1,6 @@
 import pytest
 
-from backend.app.context import AppContext
+from backend.app.context import CoreCtx, LiveCtx
 
 
 @pytest.mark.asyncio
@@ -22,12 +22,21 @@ async def test_aclose_stops_monitor_before_logout():
         async def __aexit__(self, *exc_info) -> None:
             calls.append("db.close")
 
-    ctx = AppContext(settings=object(), db=object(), db_cm=FakeDbCm())  # type: ignore[arg-type]
-    ctx.connection_monitor = RecStop("monitor")  # type: ignore[assignment]
-    ctx.sync_engine = RecStop("sync")  # type: ignore[assignment]
-    ctx.catdv = FakeCatdv()  # type: ignore[assignment]
+    core = CoreCtx(settings=object(), db=object(), db_cm=FakeDbCm())  # type: ignore[arg-type]
+    live = LiveCtx(
+        core=core,
+        archive=object(),  # type: ignore[arg-type]
+        ai_store=object(),  # type: ignore[arg-type]
+        gemini=object(),  # type: ignore[arg-type]
+        sync_engine=RecStop("sync"),  # type: ignore[arg-type]
+        connection_monitor=RecStop("monitor"),  # type: ignore[arg-type]
+        workspace_manager=object(),  # type: ignore[arg-type]
+        lru_eviction=RecStop("lru"),  # type: ignore[arg-type]
+        _gcs_service=object(),  # type: ignore[arg-type]
+        catdv=FakeCatdv(),  # type: ignore[arg-type]
+    )
 
-    await ctx.aclose()
+    await live.aclose()
 
     assert "monitor.stop" in calls and "catdv.logout" in calls
     assert calls.index("monitor.stop") < calls.index("catdv.logout")

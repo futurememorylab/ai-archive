@@ -1,8 +1,8 @@
-{# Topbar connection chip. Reads mode from request.app.state.ctx so it
+{# Topbar connection chip. Reads mode from request.app.state.live_ctx so it
    works as both an embedded include and a standalone HTMX swap target. #}
 {%- if mode is not defined -%}
-  {%- set _ctx = request.app.state.ctx if request is defined else None -%}
-  {%- set _monitor = _ctx.connection_monitor if _ctx else None -%}
+  {%- set _live = request.app.state.live_ctx if request is defined else None -%}
+  {%- set _monitor = _live.connection_monitor if _live else None -%}
   {%- if _monitor is none -%}
     {%- set mode = "online" -%}
   {%- elif _monitor.is_forced -%}

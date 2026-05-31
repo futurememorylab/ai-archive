@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.main import app
+from tests._helpers.live_ctx import install_live_ctx
 
 
 @pytest.fixture
@@ -43,7 +44,7 @@ def test_list_page_includes_cache_badge_column(client, monkeypatch):
             return ClipPage(items=(clip,), total=1, offset=0, limit=50)
 
     with TestClient(app) as c:
-        c.app.state.ctx.archive = _Archive()
+        install_live_ctx(c.app, archive=_Archive())
         r = c.get("/")
     assert r.status_code == 200
     html = r.text
@@ -71,7 +72,7 @@ def test_list_page_filter_form_renders_with_dropdowns(client):
             return ClipPage(items=(), total=0, offset=0, limit=50)
 
     with TestClient(app) as c:
-        c.app.state.ctx.archive = _Archive()
+        install_live_ctx(c.app, archive=_Archive())
         r = c.get("/")
     assert r.status_code == 200
     html = r.text
@@ -116,10 +117,10 @@ def test_list_page_filter_path_uses_local_first(client, tmp_path):
 
     archive = _Archive()
     with TestClient(app) as c:
-        c.app.state.ctx.archive = archive
+        install_live_ctx(c.app, archive=archive)
 
         async def _seed():
-            db = c.app.state.ctx.db
+            db = c.app.state.core_ctx.db
             await db.execute(
                 """
                 INSERT INTO proxy_cache

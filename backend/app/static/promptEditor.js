@@ -84,7 +84,12 @@ document.addEventListener("alpine:init", () => {
           { method: "POST", body: fd, redirect: "follow" }
         );
         if (resp.redirected) { window.location.href = resp.url; return; }
-        if (resp.ok) { window.location.reload(); return; }
+        // Duplicate creates a NEW prompt — this is navigation to a
+        // newly-created entity, not an in-place CRUD refresh. Navigate to
+        // the new prompt's URL if the server provided one, else fall back
+        // to the prompts index. (Never location.reload(): the current
+        // prompt is not the thing that changed.)
+        if (resp.ok) { window.location.href = resp.url || "/prompts"; return; }
         const data = await resp.json().catch(() => ({ message: resp.statusText }));
         this.dupError = data.message || `duplicate failed (${resp.status})`;
       } catch (e) {
@@ -139,10 +144,17 @@ document.addEventListener("alpine:init", () => {
           this.error = data.message || `save failed (${resp.status})`;
           return;
         }
-        // Success — re-baseline and reload the page so version metadata
-        // (updated_at, list rail) stays in sync.
+        // Success — re-baseline so `dirty` flips false (which hides the
+        // Save button via x-show) and the editor reflects the saved state.
+        // No reload/partial-swap is needed: a draft-version PUT changes only
+        // body/target_map/output_schema/model, none of which are rendered by
+        // a server-side region on this page — `updated_at` is displayed
+        // nowhere, the list rail shows name/description/media_kind (unchanged
+        // by this PUT), and the version picker shows version_num/state
+        // (also unchanged for an in-place draft save). The model picker reads
+        // the reactive `draft.model`, so it is already in sync.
         this.initial = { ...this.draft };
-        window.location.reload();
+        Alpine.store("toast").push("Changes saved.", { level: "success" });
       } finally {
         this.saving = false;
       }

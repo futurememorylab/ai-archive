@@ -176,7 +176,7 @@ class CatdvClient:
         if not self._logged_in:
             await self.login()
         url = f"{self._base}/catdv/api/9/clips/{clip_id}/media"
-        existing_size = dest.stat().st_size if dest.exists() else 0
+        existing_size = dest.stat().st_size if dest.exists() else 0  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
         headers: dict[str, str] = {}
         if existing_size > 0:
             headers["Range"] = f"bytes={existing_size}-"

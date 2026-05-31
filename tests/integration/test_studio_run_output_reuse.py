@@ -36,7 +36,7 @@ def _seed_run_with_items(
     `fields` is a dict identifier→value (passed through as proposed_value).
     `notes` is a dict identifier→str.
     """
-    db_path = app.state.ctx.settings.data_dir / "app.db"
+    db_path = app.state.core_ctx.settings.data_dir / "app.db"
 
     async def _go():
         async with aiosqlite.connect(db_path) as db:

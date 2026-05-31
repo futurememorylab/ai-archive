@@ -36,7 +36,7 @@ def _make_app(monkeypatch, tmp_path):
 
 def _enqueue_one(client, *, clip_id="1"):
     """Insert a single pending op directly via the repo."""
-    ctx = client.app.state.ctx
+    ctx = client.app.state.core_ctx
     repo = ctx.pending_ops_repo
     op = SetField(identifier="x", value=1)
     rows = [
@@ -85,7 +85,7 @@ def test_post_retry_resets_row(monkeypatch, tmp_path: Path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         [op_id] = _enqueue_one(client)
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
         # mark a couple of retries first
         import asyncio
 
@@ -109,7 +109,9 @@ def test_run_drain_invokes_engine(monkeypatch, tmp_path: Path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         _enqueue_one(client)
-        ctx = client.app.state.ctx
+        from tests._helpers.live_ctx import install_live_ctx
+
+        ctx = client.app.state.core_ctx
 
         class FakeArchive:
             id = "catdv"
@@ -124,13 +126,17 @@ def test_run_drain_invokes_engine(monkeypatch, tmp_path: Path):
             def current_state(self):
                 return ConnectionState.online
 
-        ctx.archive = FakeArchive()
-        ctx.sync_engine = SyncEngine(
-            provider=ctx.archive,
-            pending_ops_repo=PendingOperationsRepo(),
-            write_log_repo=WriteLogRepo(),
-            connection_monitor=AlwaysOnline(),
-            db_provider=lambda: ctx.db,
+        archive = FakeArchive()
+        install_live_ctx(
+            client.app,
+            archive=archive,
+            sync_engine=SyncEngine(
+                provider=archive,
+                pending_ops_repo=PendingOperationsRepo(),
+                write_log_repo=WriteLogRepo(),
+                connection_monitor=AlwaysOnline(),
+                db_provider=lambda: ctx.db,
+            ),
         )
         r = client.post("/api/sync/run")
         assert r.status_code == 200

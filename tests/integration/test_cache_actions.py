@@ -310,6 +310,56 @@ async def test_log_row_written_for_skips(db, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_evict_ai_offline_prunes_index_no_store(db):
+    """ai_store=None (GCS offline): index still pruned, ok with summed bytes."""
+    key = ("catdv", "77")
+    await _seed_ai(db, key, size_bytes=42)
+    actions = _actions(db, ai_store=None)
+    out = await actions.evict_ai_media(key)
+    assert out.result == "ok"
+    assert out.bytes_freed == 42
+    cur = await db.execute(
+        "SELECT COUNT(*) FROM ai_store_files WHERE provider_clip_id='77'"
+    )
+    assert (await cur.fetchone())[0] == 0
+
+
+@pytest.mark.asyncio
+async def test_evict_metadata_bytes_freed_is_canonical_json_length(db):
+    key = ("catdv", "88")
+    payload = '{"k":"value"}'
+    await _seed_clip_cache(db, key, canonical_json=payload)
+    actions = _actions(db)
+    out = await actions.evict_metadata(key)
+    assert out.result == "ok"
+    assert out.bytes_freed == len(payload)
+    cur = await db.execute(
+        "SELECT COUNT(*) FROM clip_cache WHERE provider_clip_id='88'"
+    )
+    assert (await cur.fetchone())[0] == 0
+
+
+@pytest.mark.asyncio
+async def test_evict_one_layer_leaves_other_indexes_intact(db, tmp_path):
+    """Evicting media-local touches only proxy_cache, not clip_cache/ai_store."""
+    key = ("catdv", "99")
+    proxy = tmp_path / "99.mov"
+    proxy.write_bytes(b"x" * 7)
+    await _seed_clip_cache(db, key)
+    await _seed_proxy_cache(db, key, file_path=str(proxy), size_bytes=7)
+    await _seed_ai(db, key, size_bytes=3)
+    actions = _actions(db, ai_store=FakeAIStore())
+    out = await actions.evict_local_media(key)
+    assert out.result == "ok"
+    cur = await db.execute("SELECT COUNT(*) FROM proxy_cache WHERE provider_clip_id='99'")
+    assert (await cur.fetchone())[0] == 0
+    cur = await db.execute("SELECT COUNT(*) FROM clip_cache WHERE provider_clip_id='99'")
+    assert (await cur.fetchone())[0] == 1
+    cur = await db.execute("SELECT COUNT(*) FROM ai_store_files WHERE provider_clip_id='99'")
+    assert (await cur.fetchone())[0] == 1
+
+
+@pytest.mark.asyncio
 async def test_who_provider_used(db, tmp_path):
     key = ("catdv", "1")
     proxy = tmp_path / "1.mov"

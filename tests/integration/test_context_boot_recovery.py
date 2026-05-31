@@ -12,7 +12,7 @@ import pytest
 
 import backend.app.services.gcs as gcs_mod
 import backend.app.services.gemini as gemini_mod
-from backend.app.context import AppContext
+from backend.app.context import build_context
 from backend.app.services.catdv_client import (
     CatdvAuthError,
     CatdvBusyError,
@@ -77,7 +77,7 @@ async def test_busy_at_boot_keeps_client_and_recovers(tmp_path, monkeypatch):
 
     with running_fake_catdv() as (base_url, _fake):
         _set_env(monkeypatch, tmp_path, base_url)
-        ctx = await AppContext.build(Settings(), init_external=True)
+        _, ctx = await build_context(Settings(), init_external=True)
         try:
             # The client must NOT be torn down on a transient seat-busy
             # error; otherwise the monitor has nothing to probe.
@@ -104,7 +104,7 @@ async def test_transport_error_at_boot_keeps_client_and_recovers(tmp_path, monke
 
     with running_fake_catdv() as (base_url, _fake):
         _set_env(monkeypatch, tmp_path, base_url)
-        ctx = await AppContext.build(Settings(), init_external=True)
+        _, ctx = await build_context(Settings(), init_external=True)
         try:
             assert ctx.catdv is not None
             assert ctx.connection_monitor is not None
@@ -151,8 +151,8 @@ async def test_hanging_login_at_boot_is_bounded_and_recovers(tmp_path, monkeypat
         # If the boot login were unbounded it would hang ~30s; guard the
         # whole build with a 5s wall-clock budget so the failure mode is a
         # clear timeout rather than a 30s stall.
-        ctx = await asyncio.wait_for(
-            AppContext.build(Settings(), init_external=True), timeout=5.0
+        _, ctx = await asyncio.wait_for(
+            build_context(Settings(), init_external=True), timeout=5.0
         )
         try:
             # Timeout is transport-like: keep the client alive for retry.
@@ -180,7 +180,7 @@ async def test_auth_error_at_boot_drops_client(tmp_path, monkeypatch):
 
     with running_fake_catdv() as (base_url, _fake):
         _set_env(monkeypatch, tmp_path, base_url)
-        ctx = await AppContext.build(Settings(), init_external=True)
+        _, ctx = await build_context(Settings(), init_external=True)
         try:
             assert ctx.catdv is None, "auth error must tear down the client"
             assert ctx.connection_monitor is not None

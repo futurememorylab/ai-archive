@@ -3,6 +3,8 @@ import importlib
 
 from fastapi.testclient import TestClient
 
+from tests._helpers.live_ctx import install_live_ctx
+
 
 def _setenv(monkeypatch, tmp_path):
     monkeypatch.setenv("APP_ENV", "dev")
@@ -88,7 +90,7 @@ def _run(coro):
 def test_list_pending_items(monkeypatch, tmp_path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
         _run(_seed(ctx))
         r = client.get("/api/review/clips/1/items")
         assert r.status_code == 200
@@ -98,7 +100,7 @@ def test_list_pending_items(monkeypatch, tmp_path):
 def test_set_decision_accept(monkeypatch, tmp_path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
         _, _, items = _run(_seed(ctx))
         item_id = items[0].id
 
@@ -118,7 +120,7 @@ def test_apply_clip_enqueues_and_drains_via_sync_engine(monkeypatch, tmp_path):
 
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
         _, _, items = _run(_seed(ctx))
 
         class FakeArchive:
@@ -176,6 +178,51 @@ def test_apply_clip_enqueues_and_drains_via_sync_engine(monkeypatch, tmp_path):
         )
 
 
+def test_apply_clip_returns_json_for_non_hx_caller(monkeypatch, tmp_path):
+    """The non-HX path (e.g. applyAndNext, which navigates away on success)
+    must keep getting the JSON {"queued","applied"} body."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.core_ctx
+        _, _, items = _run(_seed(ctx))
+        for it in items:
+            client.post(
+                f"/api/review/items/{it.id}/decision",
+                json={"decision": "accepted"},
+            )
+        r = client.post("/api/review/clips/1/apply")
+        assert r.status_code == 200
+        assert "application/json" in r.headers["content-type"]
+        body = r.json()
+        assert body["queued"] >= 1
+        assert body["applied"] == body["queued"]
+
+
+def test_apply_clip_returns_partial_for_hx_caller(monkeypatch, tmp_path):
+    """The HTMX path (the clip-detail "Accept & apply" button, which stays
+    on the page) sends HX-Request: true and gets the re-rendered draft aside
+    partial back so the JS can swap it in place instead of full-reloading."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.core_ctx
+        _, _, items = _run(_seed(ctx))
+        for it in items:
+            client.post(
+                f"/api/review/items/{it.id}/decision",
+                json={"decision": "accepted"},
+            )
+        r = client.post(
+            "/api/review/clips/1/apply",
+            headers={"HX-Request": "true"},
+        )
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+        # The draft aside renders the proposed/applied marker + field values.
+        assert "scene-a" in r.text
+        # Sanity: it is the draft-aside partial, not a JSON dump.
+        assert "{" + '"queued"' not in r.text
+
+
 def test_apply_batch_marks_and_enqueues_filtered_by_kind(monkeypatch, tmp_path):
     from backend.app.archive.model import ChangeSet, WriteResult
     from backend.app.repositories.pending_operations import PendingOperationsRepo
@@ -185,7 +232,7 @@ def test_apply_batch_marks_and_enqueues_filtered_by_kind(monkeypatch, tmp_path):
 
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
         _run(_seed(ctx))
 
         class FakeArchive:
@@ -221,7 +268,7 @@ def test_apply_batch_marks_and_enqueues_filtered_by_kind(monkeypatch, tmp_path):
 def test_apply_batch_defaults_all_kinds(monkeypatch, tmp_path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
         _run(_seed(ctx))
         r = client.post("/api/review/apply-batch", json={"clip_ids": [1]})
         assert r.status_code == 200
@@ -239,7 +286,7 @@ def test_apply_batch_does_not_flush_preaccepted_other_kinds(monkeypatch, tmp_pat
 
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
         _run(_seed(ctx))
 
         class FakeArchive:
@@ -299,7 +346,7 @@ def test_apply_batch_503_when_no_write_queue(monkeypatch, tmp_path):
     """apply-batch must return 503 when write_queue is not initialised."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
         _run(_seed(ctx))
         ctx.write_queue = None
         r = client.post("/api/review/apply-batch", json={"clip_ids": [1]})
@@ -310,7 +357,7 @@ def test_apply_batch_400_on_bad_kind(monkeypatch, tmp_path):
     """apply-batch must return 400 when an unrecognised kind is supplied."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
         _run(_seed(ctx))
         r = client.post("/api/review/apply-batch", json={"clip_ids": [1], "kinds": ["bogus"]})
         assert r.status_code == 400
@@ -364,9 +411,9 @@ def _make_canonical_clip(clip_id: int = 1):
 def test_clip_detail_review_mode_renders_item_controls(monkeypatch, tmp_path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
         _run(_seed(ctx))
-        ctx.archive = _FakeArchive([_make_canonical_clip(1)])
+        install_live_ctx(client.app, archive=_FakeArchive([_make_canonical_clip(1)]))
         r = client.get("/clips/1?review=1")
         assert r.status_code == 200
         assert "review-item-toggle" in r.text
@@ -381,9 +428,9 @@ def test_clip_detail_draft_controls_show_without_review_flag(monkeypatch, tmp_pa
     the item controls (review-item-toggle) should render for draft items."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
         _run(_seed(ctx))
-        ctx.archive = _FakeArchive([_make_canonical_clip(1)])
+        install_live_ctx(client.app, archive=_FakeArchive([_make_canonical_clip(1)]))
         r = client.get("/clips/1")  # no review flag
         assert r.status_code == 200
         assert "review-item-toggle" in r.text
@@ -426,10 +473,9 @@ def test_clip_detail_review_mode_published_items_have_no_controls(monkeypatch, t
     so even in review mode no controls should appear."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
         # Use clip_id=99 — _seed only seeds clip_id=1, so there are no
         # review_items for clip 99 in the DB.
-        ctx.archive = _FakeArchive([_make_canonical_clip_with_markers(99)])
+        install_live_ctx(client.app, archive=_FakeArchive([_make_canonical_clip_with_markers(99)]))
         r = client.get("/clips/99?review=1")
         assert r.status_code == 200
         assert "ri-accept" not in r.text
@@ -509,9 +555,9 @@ def test_clip_detail_image_hides_markers_tab(monkeypatch, tmp_path):
     must default the tab to 'fields' in the Alpine x-data."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
         _run(_seed_image_clip(ctx, clip_id=50))
-        ctx.archive = _FakeArchive([_make_canonical_clip_image(50)])
+        install_live_ctx(client.app, archive=_FakeArchive([_make_canonical_clip_image(50)]))
         r = client.get("/clips/50?review=1")
         assert r.status_code == 200
         # Markers tab button must be absent
@@ -528,9 +574,9 @@ def test_clip_detail_review_action_bar_has_prev(monkeypatch, tmp_path):
     The no-queue primary 'Accept & apply' must also be present in the markup."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
         _run(_seed(ctx))
-        ctx.archive = _FakeArchive([_make_canonical_clip(1)])
+        install_live_ctx(client.app, archive=_FakeArchive([_make_canonical_clip(1)]))
         r = client.get("/clips/1?review=1")
         assert r.status_code == 200
         assert "Prev" in r.text
@@ -543,9 +589,8 @@ def test_clip_detail_no_draft_no_action_bar(monkeypatch, tmp_path):
     """A clip with NO review items must not render the review action bar at all."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
         # clip 99 has no review items seeded — _seed only seeds clip_id=1
-        ctx.archive = _FakeArchive([_make_canonical_clip_with_markers(99)])
+        install_live_ctx(client.app, archive=_FakeArchive([_make_canonical_clip_with_markers(99)]))
         r = client.get("/clips/99")
         assert r.status_code == 200
         assert "review-actionbar" not in r.text
@@ -556,11 +601,11 @@ def test_clips_list_shows_draft_columns(monkeypatch, tmp_path):
     with pending review items the Drafts cell must contain the counts label."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
+        ctx = client.app.state.core_ctx
         # Seed draft items for clip 1 (1 marker, 1 field).
         _run(_seed(ctx))
         # Provide a FakeArchive so the clips list has clip 1 to display.
-        ctx.archive = _FakeArchive([_make_canonical_clip(1)])
+        install_live_ctx(client.app, archive=_FakeArchive([_make_canonical_clip(1)]))
         r = client.get("/")
         assert r.status_code == 200
         # Column headers must be present.
@@ -581,8 +626,7 @@ def test_clips_list_has_review_bulk_actions(monkeypatch, tmp_path):
     draft kinds (kinds default to all in bulkSel)."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
-        ctx = client.app.state.ctx
-        ctx.archive = _FakeArchive([_make_canonical_clip(1)])
+        install_live_ctx(client.app, archive=_FakeArchive([_make_canonical_clip(1)]))
         r = client.get("/")
         assert r.status_code == 200
         # Primary review actions must be present in the markup.

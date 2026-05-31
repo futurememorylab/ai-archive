@@ -123,7 +123,21 @@ document.addEventListener("alpine:init", () => {
       fetch(`/api/review/items/${id}/decision`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ decision: "accepted", edited_value: edited }),
-      }).catch(() => {});
+      }).then(r => {
+        if (!r.ok) {
+          console.error(`marker persist failed for item ${id}: ${r.status}`);
+          Alpine.store("toast").push(
+            `Marker edit not saved (HTTP ${r.status}).`,
+            { level: "error" },
+          );
+        }
+      }).catch(err => {
+        console.error(`marker persist error for item ${id}`, err);
+        Alpine.store("toast").push(
+          `Marker edit not saved: ${err.message || String(err)}`,
+          { level: "error" },
+        );
+      });
     },
 
     // ─── transport ────────────────────────────────────────────────

@@ -35,7 +35,9 @@ document.addEventListener("alpine:init", () => {
     rows: [],
 
     refresh() {
-      const page = document.querySelector(".studio-page")?._x_dataStack?.[0];
+      // Shared page state lives in Alpine.store('studio'); guard in case
+      // the store isn't registered yet (script-load ordering).
+      const page = window.Alpine?.store("studio");
       if (!page) { this.rows = []; return; }
       const mode = page.mode || "prompt";
       const curCard = document.querySelector('.studio-prompt-card[data-side="cur"]');

@@ -90,7 +90,7 @@ def test_output_tab_includes_data_run_json_when_run_exists(client):
     from backend.app import main as main_mod
 
     _, v1, _ = _make_prompt_two_versions(client)
-    db_path = main_mod.app.state.ctx.settings.data_dir / "app.db"
+    db_path = main_mod.app.state.core_ctx.settings.data_dir / "app.db"
 
     async def _seed():
         async with aiosqlite.connect(db_path) as db:

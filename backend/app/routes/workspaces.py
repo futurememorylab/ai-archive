@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from backend.app.deps import get_ctx
+from backend.app.deps import get_live_ctx
 
 router = APIRouter(prefix="/api/workspaces", tags=["workspaces"])
 
@@ -32,22 +32,15 @@ class ClipKeysBody(BaseModel):
     clip_keys: list[tuple[str, str]]
 
 
-def _require_manager(request: Request):
-    ctx = get_ctx(request)
-    if getattr(ctx, "workspace_manager", None) is None:
-        raise HTTPException(503, "workspace manager not initialized")
-    return ctx
-
-
 @router.get("")
 async def list_workspaces(request: Request) -> list[dict[str, Any]]:
-    ctx = _require_manager(request)
+    ctx = get_live_ctx(request)
     return await ctx.workspace_manager.list_workspaces()
 
 
 @router.post("", status_code=201)
 async def create_workspace(request: Request, body: WorkspaceCreate) -> dict:
-    ctx = _require_manager(request)
+    ctx = get_live_ctx(request)
     ws_id = await ctx.workspace_manager.create_workspace(
         name=body.name,
         provider_id=body.provider_id,
@@ -60,7 +53,7 @@ async def create_workspace(request: Request, body: WorkspaceCreate) -> dict:
 
 @router.get("/{ws_id}")
 async def get_workspace(request: Request, ws_id: int) -> dict:
-    ctx = _require_manager(request)
+    ctx = get_live_ctx(request)
     ws = await ctx.workspace_manager.get(ws_id)
     if ws is None:
         raise HTTPException(404, "workspace not found")
@@ -69,14 +62,14 @@ async def get_workspace(request: Request, ws_id: int) -> dict:
 
 @router.post("/{ws_id}/clips")
 async def add_clips(request: Request, ws_id: int, body: ClipKeysBody) -> dict:
-    ctx = _require_manager(request)
+    ctx = get_live_ctx(request)
     await ctx.workspace_manager.add_clips(ws_id, [(p, c) for p, c in body.clip_keys])
     return {"id": ws_id, "added": len(body.clip_keys)}
 
 
 @router.delete("/{ws_id}/clips/{provider_id}/{clip_id}")
 async def remove_clip(request: Request, ws_id: int, provider_id: str, clip_id: str) -> dict:
-    ctx = _require_manager(request)
+    ctx = get_live_ctx(request)
     await ctx.workspace_manager.remove_clips(ws_id, [(provider_id, clip_id)])
     return {"id": ws_id, "removed": 1}
 
@@ -84,7 +77,7 @@ async def remove_clip(request: Request, ws_id: int, provider_id: str, clip_id: s
 @router.post("/{ws_id}/prepare")
 async def prepare_workspace(request: Request, ws_id: int) -> StreamingResponse:
     """Stream prep progress as SSE."""
-    ctx = _require_manager(request)
+    ctx = get_live_ctx(request)
 
     async def gen():
         try:
@@ -103,7 +96,7 @@ async def prepare_workspace(request: Request, ws_id: int) -> StreamingResponse:
 
 @router.post("/{ws_id}/release")
 async def release_workspace(request: Request, ws_id: int, delete: bool = False) -> dict:
-    ctx = _require_manager(request)
+    ctx = get_live_ctx(request)
     await ctx.workspace_manager.release(ws_id, delete_workspace=delete)
     return {"id": ws_id, "released": True, "deleted": delete}
 

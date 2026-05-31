@@ -9,10 +9,21 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from backend.app.deps import get_ctx
+from backend.app.deps import get_core_ctx
 from backend.app.routes.pages.templates import templates
 
 router = APIRouter(tags=["pages"])
+
+
+def _archive(request: Request):
+    """The archive provider when live, else None.
+
+    Studio renders offline (studio outputs are local per ADR 0036), so
+    archive metadata is best-effort: absent simply means no clip names /
+    durations from upstream.
+    """
+    live = request.app.state.live_ctx
+    return live.archive if live is not None else None
 
 
 @router.get("/studio", response_class=HTMLResponse)
@@ -23,7 +34,7 @@ async def studio_page(
     compare_version_id: int | None = None,
     clip_id: int | None = None,
 ):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     prompts = await ctx.prompts_repo.list_active(ctx.db)
     folders = await ctx.studio_folders_repo.list_folders_with_counts(ctx.db)
 
@@ -92,7 +103,7 @@ async def studio_page(
 
 @router.get("/studio/_folders", response_class=HTMLResponse)
 async def _studio_folders(request: Request):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
     folders = await ctx.studio_folders_repo.list_folders_with_counts(ctx.db)
     return templates.TemplateResponse(
         request,
@@ -114,7 +125,8 @@ async def _studio_folder(
     matching card renders with the `.selected` class from the start,
     instead of relying on a JS post-swap pass.
     """
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
+    archive = _archive(request)
     clips_rows = await ctx.studio_folders_repo.list_clips(ctx.db, folder_id)
 
     # Build per-clip "has any run with active version" / "any other version" flags.
@@ -127,9 +139,9 @@ async def _studio_folder(
         has_other = any(v != active_version_id for v in versions)
         # Pull minimal clip metadata via the archive if available; fall back to id.
         meta: dict = {"name": f"clip-{c['clip_id']}", "duration_secs": None, "year": None}
-        if ctx.archive:
+        if archive is not None:
             try:
-                clip = await ctx.archive.get_clip(str(c["clip_id"]))
+                clip = await archive.get_clip(str(c["clip_id"]))
                 meta = {
                     "name": clip.name,
                     "duration_secs": clip.duration_secs,
@@ -157,11 +169,12 @@ async def _studio_archive_picker(
     still opens (user can search again later)."""
     from backend.app.archive.model import ClipQuery
 
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
+    archive = _archive(request)
     results = []
-    if ctx.archive:
+    if archive is not None:
         try:
-            page = await ctx.archive.list_clips(
+            page = await archive.list_clips(
                 str(ctx.settings.catdv_catalog_id),
                 ClipQuery(text=q or None, offset=0, limit=50),
             )
@@ -234,15 +247,16 @@ async def _studio_player(
     that version's latest run scenes. Empty rows are still passed so the
     overlay can short-circuit on no-scenes consistently.
     """
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
+    archive = _archive(request)
 
     # Resolve clip metadata via the archive when available.
     fps: float = 25.0
     duration_secs: float | None = None
     duration_smpte: str = ""
-    if ctx.archive:
+    if archive is not None:
         try:
-            clip = await ctx.archive.get_clip(str(clip_id))
+            clip = await archive.get_clip(str(clip_id))
             fps = float(clip.fps or 25.0)
             duration_secs = clip.duration_secs
         except Exception:  # noqa: BLE001
@@ -263,7 +277,7 @@ async def _studio_player(
     # still renders proportionally. Skipped in production (archive
     # present) — there, a None duration_secs leaves the overlay empty,
     # which is preferable to a misleading timeline.
-    if not duration_secs and ctx.archive is None:
+    if not duration_secs and archive is None:
         max_out = 0.0
         for row in rows:
             for m in row["ranges"]:
@@ -286,22 +300,25 @@ async def _studio_player(
     )
 
 
-async def _load_studio_panels(ctx, *, version, clip_id: int) -> tuple[Any, dict, float]:
+async def _load_studio_panels(
+    ctx, *, version, clip_id: int, archive=None
+) -> tuple[Any, dict, float]:
     """Resolve (latest run, panels dict, fps) for a (version, clip) pair.
 
     Shared by `_studio_run` and `_studio_prompt_card` — both routes need
     the same triple, and the load was duplicated nearly verbatim before.
     Returns (run, panels, fps); `run` may be None when no run exists,
-    in which case `panels` is an empty-shaped draft view."""
+    in which case `panels` is an empty-shaped draft view. `archive` is
+    optional — fps falls back to 25.0 when absent (offline)."""
     from backend.app.services.draft_view import build_draft_view
 
     run = await ctx.studio_runs_repo.latest_for_pair(
         ctx.db, prompt_version_id=version.id, clip_id=clip_id
     )
     fps = 25.0
-    if ctx.archive:
+    if archive is not None:
         try:
-            clip = await ctx.archive.get_clip(str(clip_id))
+            clip = await archive.get_clip(str(clip_id))
             fps = float(clip.fps or 25.0)
         except Exception:  # noqa: BLE001
             pass
@@ -334,7 +351,8 @@ async def _studio_prompt_card(
     run partial; without, the Output tab shows the focus-a-clip
     empty-state.
     """
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
+    archive = _archive(request)
     try:
         version = await ctx.prompts_repo.get_version(ctx.db, prompt_version_id)
     except LookupError as exc:
@@ -347,7 +365,9 @@ async def _studio_prompt_card(
     panels: dict | None = None
     fps = 25.0
     if clip_id is not None:
-        run, panels, fps = await _load_studio_panels(ctx, version=version, clip_id=clip_id)
+        run, panels, fps = await _load_studio_panels(
+            ctx, version=version, clip_id=clip_id, archive=archive
+        )
 
     version_dict = version.model_dump()
     return templates.TemplateResponse(
@@ -372,7 +392,8 @@ async def _studio_run(
     prompt_version_id: int,
     clip_id: int,
 ):
-    ctx = get_ctx(request)
+    ctx = get_core_ctx(request)
+    archive = _archive(request)
     try:
         version = await ctx.prompts_repo.get_version(ctx.db, prompt_version_id)
     except LookupError:
@@ -387,7 +408,9 @@ async def _studio_run(
             {"run": None, "version": None, "panels": None, "clip": {"fps": 25.0}},
         )
 
-    run, panels, fps = await _load_studio_panels(ctx, version=version, clip_id=clip_id)
+    run, panels, fps = await _load_studio_panels(
+        ctx, version=version, clip_id=clip_id, archive=archive
+    )
 
     return templates.TemplateResponse(
         request,

@@ -47,7 +47,7 @@ class ProxyCacheReconciler:
             "rows_size_updated": 0,
             "rows_deleted": 0,
         }
-        if not self._cache_dir.exists():
+        if not self._cache_dir.exists():  # sync-io-ok: startup reconcile, not a request path
             log.debug(
                 "reconciler: cache_dir does not exist yet (%s) — skipping",
                 self._cache_dir,
@@ -84,7 +84,7 @@ class ProxyCacheReconciler:
             clip_id = int(stem)
             counters["files_seen"] += 1
             try:
-                actual_size = file_path.stat().st_size
+                actual_size = file_path.stat().st_size  # sync-io-ok: startup reconcile, not a request path
             except OSError as exc:
                 log.warning("reconciler: cannot stat %s: %s", file_path, exc)
                 continue
@@ -137,7 +137,7 @@ class ProxyCacheReconciler:
         rows = await cur.fetchall()
         for clip_id, file_path in rows:
             p = Path(file_path)
-            if p.exists() and p.stat().st_size > 0:
+            if p.exists() and p.stat().st_size > 0:  # sync-io-ok: startup reconcile, not a request path
                 continue
             await self._repo.delete(conn, int(clip_id))
             counters["rows_deleted"] += 1

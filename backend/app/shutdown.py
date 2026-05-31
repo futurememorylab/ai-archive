@@ -5,7 +5,7 @@ replace it without signalling the pytest process. The real implementation
 sends SIGTERM to our own process — uvicorn's documented graceful-shutdown
 trigger, the same path as `kill -TERM` / Ctrl-C. uvicorn then runs the
 FastAPI lifespan shutdown, which releases the CatDV seat in
-`AppContext.aclose()`.
+`LiveCtx.aclose()`.
 """
 
 from __future__ import annotations
