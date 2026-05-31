@@ -45,3 +45,30 @@ forbidden_modules =
     backend.app.repositories
     backend.app.routes
 allow_indirect_imports = True
+
+# Routes must go through the archive/client layer for HTTP calls; importing
+# httpx directly would couple route code to transport details and bypass the
+# provider-error-narrowing discipline in archive.errors (see ADR 0042).
+[importlinter:contract:no-routes-importing-httpx]
+name = Routes must not import httpx directly
+type = forbidden
+source_modules =
+    backend.app.routes
+forbidden_modules =
+    httpx
+allow_indirect_imports = True
+
+# Repositories are leaf nodes in the dependency graph (data access only);
+# importing services would invert the layer direction and create cycles.
+[importlinter:contract:no-repositories-importing-services]
+name = Repositories must not import services
+type = forbidden
+source_modules =
+    backend.app.repositories
+forbidden_modules =
+    backend.app.services
+allow_indirect_imports = True
+
+# NOTE: the _x_dataStack Alpine.js ban is a JavaScript convention, not a
+# Python import rule. It is enforced by tests/unit/test_no_x_data_stack.py
+# (a source-grep test) and does NOT appear here.
