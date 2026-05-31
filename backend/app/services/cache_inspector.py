@@ -17,7 +17,6 @@ layers the underlying table has its own `last_used_at`.
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -567,7 +566,3 @@ class CacheInspector:
                 if n:
                     out[(row[0], row[1])] = n
         return out
-
-
-# Unused import guard: `json` is reserved for future deep-orphan payloads.
-_ = json
