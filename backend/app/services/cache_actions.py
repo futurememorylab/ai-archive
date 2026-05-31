@@ -433,7 +433,7 @@ class CacheActions:
         db = self._db_provider()
         cur = await db.execute(policy.select_sql, (key[0], key[1]))
         if policy.fetch_all:
-            rows: Sequence[Any] = await cur.fetchall()
+            rows: Sequence[Any] = list(await cur.fetchall())
             absent = not rows
         else:
             single = await cur.fetchone()
