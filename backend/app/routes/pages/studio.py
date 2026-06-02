@@ -386,6 +386,45 @@ async def _studio_prompt_card(
     )
 
 
+@router.get("/studio/_compare", response_class=HTMLResponse)
+async def _studio_compare(
+    request: Request,
+    version_id: int,
+    compare_id: int,
+    clip_id: int | None = None,
+):
+    """Aligned scene compare table for (cur=version_id, cmp=compare_id) on a clip."""
+    ctx = get_core_ctx(request)
+    if clip_id is None:
+        return templates.TemplateResponse(
+            request, "pages/_studio_compare_table.html", {"model": None}
+        )
+    try:
+        cur_v = await ctx.prompts_repo.get_version(ctx.db, version_id)
+        cmp_v = await ctx.prompts_repo.get_version(ctx.db, compare_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="version not found") from exc
+    archive = _archive(request)
+    _, cur_panels, _ = await _load_studio_panels(
+        ctx, version=cur_v, clip_id=clip_id, archive=archive
+    )
+    _, cmp_panels, _ = await _load_studio_panels(
+        ctx, version=cmp_v, clip_id=clip_id, archive=archive
+    )
+    from backend.app.services.output_compare import build_output_compare
+
+    model = build_output_compare(cur_panels, cmp_panels)
+    return templates.TemplateResponse(
+        request,
+        "pages/_studio_compare_table.html",
+        {
+            "model": model,
+            "cur_version_num": cur_v.version_num,
+            "cmp_version_num": cmp_v.version_num,
+        },
+    )
+
+
 @router.get("/studio/_run", response_class=HTMLResponse)
 async def _studio_run(
     request: Request,
