@@ -2242,8 +2242,10 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .bt-fail-err { font-size: 11px; color: var(--bad); font-family: var(--f-mono); margin-top: 2px; }
 
 /* ─── New-batch picker modal (two-pane: list + selection basket) ─────── */
-.modal-card.nb-card { width: 960px; max-width: 94vw; }
-.nb-body { padding: 0; display: flex; min-height: 0; max-height: calc(86vh - 112px); }
+.modal-card.nb-card { width: 1080px; max-width: 94vw; }
+/* Fixed (not max-) height so the list stays at its full length regardless of
+   how many clips are selected — the modal doesn't grow/shrink as you pick. */
+.nb-body { padding: 0; display: flex; min-height: 0; height: min(640px, calc(86vh - 112px)); }
 .nb-main { flex: 1; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
 .nb-side { width: 304px; flex: none; display: flex; flex-direction: column; background: var(--panel); min-height: 0; }
 .nb-filters { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }

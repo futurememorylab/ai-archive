@@ -1,2 +1,3 @@
 <td class="mono num col-year">{{ row.year or "—" }}</td>
+<td class="mono num col-dur">{{ "%d:%02d"|format((row.duration_secs|int)//60, (row.duration_secs|int)%60) }}</td>
 <td class="col-type mono">{{ row.kind }}</td>
