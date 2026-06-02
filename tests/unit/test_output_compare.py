@@ -123,3 +123,22 @@ def test_scene_dur_falls_back_when_out_missing():
     assert side["out_secs"] is None
     assert side["dur_s"] == 1   # in+1 fallback
     assert side["tc"] == "0:05"
+
+
+def test_time_changed_flag_set_when_times_differ_same_text():
+    cur = _panels(markers=[_marker(7, 17, "Same name")])
+    cmp = _panels(markers=[_marker(7, 28, "Same name")])
+    row = build_output_compare(cur, cmp)["scenes"][0]
+    assert row["status"] == "unchanged"   # text identical
+    assert row["time_changed"] is True    # but the out-point moved
+
+
+def test_time_changed_false_when_times_identical():
+    cur = _panels(markers=[_marker(7, 17, "A")])
+    cmp = _panels(markers=[_marker(7, 17, "A")])
+    assert build_output_compare(cur, cmp)["scenes"][0]["time_changed"] is False
+
+
+def test_time_changed_false_for_added_or_removed():
+    model = build_output_compare(_panels(markers=[_marker(0, 5, "X")]), _panels())
+    assert model["scenes"][0]["time_changed"] is False

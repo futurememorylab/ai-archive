@@ -2201,6 +2201,15 @@ body.studio-resizing {
 .timeline .range.range-st-added     { border-color: var(--good); }
 .timeline .range.range-st-removed   { border-color: var(--bad); }
 .timeline-legend { display: flex; gap: 12px; padding: 4px 8px; font-size: 11px; }
+/* Studio compare timeline (two tracks present): give both rows an identical,
+   taller band so the scene-name labels fit without overflowing. Scoped via
+   :has(.range-cmp) so the single-version studio timeline and clip_detail's
+   timeline keep their compact default height. */
+.studio-player .timeline:has(.ranges.range-cmp) { height: 76px; }
+.studio-player .timeline:has(.ranges.range-cmp) .ranges.range-cur {
+  top: 6px; bottom: auto; height: 26px; }
+.studio-player .timeline:has(.ranges.range-cmp) .ranges.range-cmp {
+  top: 36px; bottom: auto; height: 26px; }
 
 /* === Scene-key linkage highlight ==================================== */
 [data-scene-key].is-linked { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -2208,12 +2217,22 @@ body.studio-resizing {
 
 /* === Studio compare table layout ==================================== */
 .studio-compare-table { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
-.sct-head, .sct-subhead { display: flex; align-items: center; padding: 2px 4px; }
+.sct-head, .sct-subhead { display: flex; align-items: center; gap: 8px; padding: 2px 4px; }
+/* Keep the Markers header (+ Close button) pinned while the table scrolls
+   inside .studio-compare-output. */
+.sct-head { position: sticky; top: 0; z-index: 2; padding: 6px 4px;
+  background: var(--panel); border-bottom: 1px solid var(--surface-2); }
 .sct-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
   border: 1px solid var(--surface-2); border-radius: 8px; padding: 10px; }
+/* Whole-row status accent: added green, removed red, changed purple. */
+.sct-row.sct-st-added   { border-left: 3px solid var(--good); }
+.sct-row.sct-st-removed { border-left: 3px solid var(--bad); }
+.sct-row.sct-st-changed { border-left: 3px solid var(--changed); }
 .sct-cell { min-width: 0; }
 .sct-rowhead { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .sct-tc { color: var(--text-3); font-size: 12px; }
+/* A scene whose in/out time moved shows its timecodes in purple. */
+.sct-tc-changed { color: var(--changed); }
 .sct-text { white-space: pre-wrap; }
 .sct-empty { font-style: italic;
   background: repeating-linear-gradient(45deg, transparent, transparent 6px,

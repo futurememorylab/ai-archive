@@ -92,6 +92,11 @@ def test_renders_aligned_scene_rows_with_status_and_diff(client):
     assert "diff-ins" in r.text and "diff-del" in r.text
     assert "CHANGED" in r.text
     assert "aligned scene" in r.text
+    # Header renamed to "Markers" + a Close button to exit the compare view.
+    assert ">Markers<" in r.text
+    assert "btn-close-cmp" in r.text
+    # The two markers differ in out-point (28 vs 17) -> timecodes flagged purple.
+    assert "sct-tc-changed" in r.text
 
 
 def test_added_scene_renders_no_scene_placeholder(client):

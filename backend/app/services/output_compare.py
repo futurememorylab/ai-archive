@@ -54,6 +54,18 @@ def _side(m: dict) -> dict[str, Any]:
     }
 
 
+def _time_changed(cmp_m: dict | None, cur_m: dict | None) -> bool:
+    """True only for a paired scene whose start OR end time moved between
+    versions. Drives the purple timecode highlight in the compare table —
+    independent of whether the marker *text* changed."""
+    if not cmp_m or not cur_m:
+        return False
+    return (
+        float(cmp_m.get("in_secs") or 0.0) != float(cur_m.get("in_secs") or 0.0)
+        or _out_or_default(cmp_m) != _out_or_default(cur_m)
+    )
+
+
 def _scene_row(
     idx: int, status: SceneStatus, cmp_m: dict | None, cur_m: dict | None, segs: list
 ) -> dict[str, Any]:
@@ -63,6 +75,7 @@ def _scene_row(
         "cmp": _side(cmp_m) if cmp_m else None,
         "cur": _side(cur_m) if cur_m else None,
         "segs": segs,
+        "time_changed": _time_changed(cmp_m, cur_m),
     }
 
 
