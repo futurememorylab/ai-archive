@@ -96,3 +96,73 @@ def test_retry_failed_starts_only_jobs_with_failures(monkeypatch, tmp_path):
         assert r.status_code == 200
         assert started == [jid]
         assert r.json()["started"] == [jid]
+
+
+import dataclasses
+from datetime import UTC, datetime
+
+from backend.app.archive.model import (
+    CanonicalClip, ClipPage, ClipQuery, MediaRef,
+)
+from backend.app.archive.errors import ProviderError
+
+
+def _picker_clip(clip_id=12041, name="Abramcukova_Anna_09"):
+    return CanonicalClip(
+        key=("catdv", str(clip_id)), name=name, duration_secs=60.0, fps=25.0,
+        markers=(), fields={}, notes={},
+        media=MediaRef(mime_type="video/quicktime", size_bytes=None,
+                       cached_path=None, upstream_handle=str(clip_id)),
+        provider_data={"ID": clip_id, "name": name}, fetched_at=datetime.now(UTC),
+    )
+
+
+class _PickerArchive:
+    def __init__(self, clips, total=None):
+        self._clips = clips
+        self._total = total if total is not None else len(clips)
+        self.last_query = None
+
+    async def list_clips(self, catalog, query: ClipQuery):
+        self.last_query = query
+        s = query.offset
+        return ClipPage(items=self._clips[s:s + query.limit], total=self._total,
+                        offset=query.offset, limit=query.limit)
+
+    async def get_clip(self, clip_id_str):
+        for c in self._clips:
+            if c.key[1] == clip_id_str:
+                return c
+        raise ProviderError("not found")
+
+
+def test_batches_picker_renders_rows(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        install_live_ctx(client.app, archive=_PickerArchive([_picker_clip()]))
+        r = client.get("/batches/picker")
+        assert r.status_code == 200
+        assert "<!doctype html>" not in r.text.lower()
+        assert 'class="vlist"' in r.text
+        assert 'value="catdv/12041"' in r.text          # selection checkbox
+        assert "Abramcukova_Anna_09" in r.text
+        assert 'id="nb-list-meta"' in r.text             # pager meta for the client
+        assert 'data-total="1"' in r.text
+
+
+def test_batches_picker_503_when_offline(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        # No live_ctx installed → get_live_ctx raises 503.
+        r = client.get("/batches/picker")
+        assert r.status_code == 503
+
+
+def test_batches_picker_passes_query_and_paging(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        arch = _PickerArchive([_picker_clip(i, f"Clip_{i}") for i in range(1, 30)], total=29)
+        install_live_ctx(client.app, archive=arch)
+        r = client.get("/batches/picker?q=Clip&offset=12&limit=12")
+        assert r.status_code == 200
+        assert arch.last_query.text == "Clip"
+        assert arch.last_query.offset == 12
+        assert arch.last_query.limit == 12
+        assert 'data-total="29"' in r.text

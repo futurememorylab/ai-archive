@@ -6,9 +6,12 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
+from backend.app.archive.errors import ProviderError
 from backend.app.deps import get_core_ctx, get_live_ctx
 from backend.app.routes.jobs import start_job_in_background
+from backend.app.routes.pages.clips import query_clip_page
 from backend.app.routes.pages.templates import templates
+from backend.app.services.clip_list_filters import normalize_anno, normalize_cache
 from backend.app.ui.view_models import batch_view
 
 router = APIRouter(tags=["batches"])
@@ -59,6 +62,52 @@ async def batches_table(request: Request, limit: int = 50):
     ctx = get_core_ctx(request)
     ctx_dict = await _load_batches_ctx(ctx, limit)
     return templates.TemplateResponse(request, "pages/_batches_table.html", ctx_dict)
+
+
+@router.get("/batches/picker", response_class=HTMLResponse)
+async def batches_picker(
+    request: Request,
+    q: str | None = None,
+    cache: str | None = None,
+    anno: str | None = None,
+    offset: int = 0,
+    limit: int = 12,
+):
+    """Server-paginated clip rows for the New-batch picker modal. Lists the
+    CatDV catalog, so it needs live services (typed 503 offline). Selection
+    is tracked client-side; this only renders one page of candidate rows."""
+    ctx = get_live_ctx(request)
+    catalog_id = str(ctx.settings.catdv_catalog_id)
+    host_local = getattr(getattr(ctx, "proxy_resolver", None), "is_host_local", False)
+    try:
+        rows, total, _ = await query_clip_page(
+            ctx,
+            catalog_id=catalog_id,
+            q=q,
+            offset=offset,
+            limit=limit,
+            cache_f=normalize_cache(cache),
+            anno_f=normalize_anno(anno),
+            batch_ids=[],
+            host_local_proxies=host_local,
+        )
+    except ProviderError as exc:
+        raise HTTPException(502, f"archive error: {exc}") from exc
+    return templates.TemplateResponse(
+        request,
+        "pages/_batch_picker.html",
+        {
+            "rows": rows,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "head_cells": "pages/_batch_picker_head.html",
+            "row_cells": "pages/_batch_picker_cells.html",
+            "cache_label": "Cache",
+            "colspan": 5,
+            "empty_msg": "No clips match.",
+        },
+    )
 
 
 class RetryFailed(BaseModel):
