@@ -57,3 +57,4 @@ available number. See any existing ADR for the template.
 | 0047 | 2026-05-30 | [Split AppContext into CoreCtx + LiveCtx; unify route deps](./adr/0047-corectx-livectx-split.md) |
 | 0048 | 2026-05-31 | [Alpine.store (not _x_dataStack) for shared studio state; one HTMX↔Alpine lifecycle helper](./adr/0048-alpine-store-not-x-data-stack-for-shared-state.md) |
 | 0049 | 2026-06-02 | [Batches hub — design calls](./adr/0049-batches-hub.md) |
+| 0050 | 2026-06-02 | [New-batch picker (supersedes ADR 0049 redirect)](./adr/0050-batches-new-batch-picker.md) |
