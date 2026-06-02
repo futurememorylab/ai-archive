@@ -27,18 +27,24 @@ function reviewMixin(clipId) {
       location.href = `/clips/${this.reviewQueue[t]}?review=1&scope=draft`;
     },
     // ── accept / delete / edit ───────────────────────────────────
-    async _persist(item, decision, editedValue) {
+    // In-flight decision POSTs. `applyDraft` awaits these before enqueuing the
+    // upstream apply, so a freshly-accepted item can't be missed by a race
+    // between the (fire-and-forget) decision write and the apply read.
+    _inflight: new Set(),
+    _persist(item, decision, editedValue) {
       const body = { decision };
       if (editedValue !== undefined) body.edited_value = editedValue;
-      try {
-        const r = await fetch(`/api/review/items/${item.item_id}/decision`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
+      const p = fetch(`/api/review/items/${item.item_id}/decision`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+        .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); })
+        .catch(e => {
+          Alpine.store("toast").push(`Decision not saved: ${e.message || e}`, { level: "error" });
         });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      } catch (e) {
-        Alpine.store("toast").push(`Decision not saved: ${e.message || e}`, { level: "error" });
-      }
+      this._inflight.add(p);
+      p.finally(() => this._inflight.delete(p));
+      return p;
     },
     toggleAccept(item) {
       item.status = item.status === "accepted" ? "proposed" : "accepted";
@@ -67,12 +73,22 @@ function reviewMixin(clipId) {
     // Persist a field/note edit (markers persist via player._persistMarker).
     persistField(item) { item.status = "accepted"; this._persist(item, "accepted", item.value); },
     persistNote(item) { item.status = "accepted"; this._persist(item, "accepted", item.text); },
+    // ── accept everything + apply, in one click ─────────────────
+    // Accepts every still-visible proposal (rejected/deleted ones are already
+    // gone from the arrays), waits for those decisions to persist, then applies.
+    async acceptApplyAll() {
+      this.acceptAll();
+      await this.applyDraft();
+    },
     // ── apply (stay) + refresh ───────────────────────────────────
     async applyDraft() {
       try {
+        // Wait for any in-flight accept/edit decisions to land first, so the
+        // upstream apply enqueues exactly what the UI shows as accepted.
+        await Promise.allSettled([...this._inflight]);
         const r = await fetch(`/api/review/clips/${clipId}/apply`, { method: "POST" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        Alpine.store("toast").push("Changes applied.", { level: "success" });
+        Alpine.store("toast").push("Accepted proposals applied.", { level: "success" });
         await this.refreshDraft();
       } catch (e) {
         Alpine.store("toast").push(`Apply failed: ${e.message || e}. Nothing was applied.`, { level: "error" });

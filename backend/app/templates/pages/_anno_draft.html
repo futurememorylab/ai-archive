@@ -6,13 +6,13 @@
 </template>
 
 <div class="review-bar">
-  <button type="button" class="btn sm" @click="acceptAll()">✓ Accept all</button>
-  <span class="review-kept" x-text="'✓ ' + acceptedCount() + '/' + totalCount()"></span>
+  <span class="review-kept" x-text="'✓ ' + acceptedCount() + '/' + totalCount() + ' accepted'"></span>
   <span class="grow"></span>
   <button type="button" class="btn sm nav" :disabled="reviewPos() <= 1" @click="navClip(-1)" title="Previous clip">‹</button>
   <span class="review-pos" x-text="'Clip ' + reviewPos() + ' / ' + reviewLen()"></span>
   <button type="button" class="btn sm nav" :disabled="reviewPos() >= reviewLen()" @click="navClip(1)" title="Next clip">›</button>
-  <button type="button" class="btn good sm" @click="applyDraft()" x-text="'Apply (' + acceptedCount() + ')'"></button>
+  <button type="button" class="btn good sm" :disabled="totalCount() === 0" @click="acceptApplyAll()"
+          x-text="'✓ Accept &amp; apply all (' + totalCount() + ')'"></button>
 </div>
 
 <template x-if="totalCount() === 0">

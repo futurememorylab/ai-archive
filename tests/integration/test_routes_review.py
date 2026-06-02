@@ -220,7 +220,7 @@ def test_apply_clip_returns_partial_for_hx_caller(monkeypatch, tmp_path):
         assert "text/html" in r.headers["content-type"]
         # The draft aside is the Alpine card panel — check structural markers.
         assert "review-bar" in r.text
-        assert "applyDraft" in r.text
+        assert "acceptApplyAll" in r.text
         # Sanity: it is the draft-aside partial, not a JSON dump.
         assert "{" + '"queued"' not in r.text
 
@@ -423,8 +423,8 @@ def test_clip_detail_review_mode_renders_item_controls(monkeypatch, tmp_path):
         # Card panel structural markers (new Alpine-driven design).
         assert "ri-card" in r.text
         assert "toggleAccept" in r.text
-        assert "applyDraft" in r.text
-        # Review bar with accept-all and clip navigation.
+        assert "acceptApplyAll" in r.text
+        # Review bar with the consolidated accept+apply action and clip navigation.
         assert "review-bar" in r.text
         assert "navClip" in r.text
 
@@ -596,8 +596,8 @@ def test_clip_detail_review_action_bar_has_prev(monkeypatch, tmp_path):
         assert "review-bar" in r.text
         assert "navClip(-1)" in r.text      # ‹ Previous clip
         assert "navClip(1)" in r.text       # › Next clip
-        assert "acceptAll()" in r.text
-        assert "applyDraft()" in r.text
+        # Single consolidated bulk action: accept all visible proposals + apply.
+        assert "acceptApplyAll()" in r.text
 
 
 def test_clip_detail_no_draft_no_action_bar(monkeypatch, tmp_path):
