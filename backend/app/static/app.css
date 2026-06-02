@@ -2123,10 +2123,9 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   flex: 0 0 6px;          /* width when the cmp divider is a flex item */
   z-index: 1;
 }
-.studio-resizer.is-player { background: transparent; }
 /* Axis: the player divider is row-resize in `under`, col-resize in `right`
    (the layout-right modifier lives on the ancestor .studio-right). */
-.studio-resizer.is-player { cursor: row-resize; }
+.studio-resizer.is-player { background: transparent; cursor: row-resize; }
 .studio-right.layout-right .studio-resizer.is-player { cursor: col-resize; }
 .studio-resizer.is-cmp { cursor: col-resize; }
 

@@ -48,35 +48,22 @@ function clampSize(start, delta, lo, hi) {
     if (kind === "player") {
       const container = el.closest(".studio-right");
       if (!container) return;
-      const layout = store()?.layout || "under";
+      // `right` resizes the player column (width); `under` the player row
+      // (height). Same descriptor, parameterized by axis/dimension.
+      const horizontal = (store()?.layout || "under") === "right";
+      const dim = horizontal ? "width" : "height";
       const slot = container.querySelector(".studio-player-slot");
-      if (layout === "right") {
-        const startPx = slot ? slot.getBoundingClientRect().width : 320;
-        drag = {
-          kind,
-          el,
-          container,
-          axis: "x",
-          startPx,
-          containerSize: container.getBoundingClientRect().width,
-          startClient: evt.clientX,
-          cssVar: "--studio-player-w",
-          storeField: "playerW",
-        };
-      } else {
-        const startPx = slot ? slot.getBoundingClientRect().height : 320;
-        drag = {
-          kind,
-          el,
-          container,
-          axis: "y",
-          startPx,
-          containerSize: container.getBoundingClientRect().height,
-          startClient: evt.clientY,
-          cssVar: "--studio-player-h",
-          storeField: "playerH",
-        };
-      }
+      drag = {
+        kind,
+        el,
+        container,
+        axis: horizontal ? "x" : "y",
+        startPx: slot ? slot.getBoundingClientRect()[dim] : 320,
+        containerSize: container.getBoundingClientRect()[dim],
+        startClient: horizontal ? evt.clientX : evt.clientY,
+        cssVar: horizontal ? "--studio-player-w" : "--studio-player-h",
+        storeField: horizontal ? "playerW" : "playerH",
+      };
     } else if (kind === "cmp") {
       const container = el.closest(".studio-compare-row");
       if (!container) return;

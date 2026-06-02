@@ -314,8 +314,9 @@ document.addEventListener('alpine:init', () => {
       const versionId = page?.activeVersionId;
       const promptId = page?.promptId;
       if (!versionId || !promptId) return;
-      const body = this.$refs.editor ? this.$refs.editor.value : null;
-      if (body == null) return;
+      // `editorBody` is the single live body source (seeded on x-init, kept in
+      // sync by the textarea's @input), so we don't re-read the DOM ref here.
+      const body = this.editorBody;
       this.saving = true;
       try {
         // The Studio prompt pane edits the body + model; round-trip the rest
@@ -336,10 +337,10 @@ document.addEventListener('alpine:init', () => {
           );
           return;
         }
-        // Success — re-baseline both fields so `hasChanges` flips false
-        // (hiding the Save button) and the footer returns to "saved".
+        // Success — re-baseline so `hasChanges` flips false (hiding the Save
+        // button) and the footer returns to "saved". editorBody is already the
+        // saved value (it IS `body`), so only the baselines move.
         this.baseline = body;
-        this.editorBody = body;
         this.modelBaseline = this.model;
         // Nudge the compare diff to recompute against the just-saved body.
         page.savedTick = (page.savedTick || 0) + 1;
