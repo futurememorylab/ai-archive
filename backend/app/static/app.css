@@ -2288,9 +2288,6 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .ri-card { border: 1px solid var(--line); border-radius: var(--r-2); background: var(--panel); padding: 10px 12px; margin-bottom: 8px;
   display: flex; flex-direction: column; gap: 6px; transition: border-color 120ms, box-shadow 120ms, opacity 120ms; }
 .ri-card.editing { border-color: #9a6cff; box-shadow: 0 0 0 2px color-mix(in oklab, #9a6cff 30%, transparent); }
-.ri-state { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.05em; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--text-3); white-space: nowrap; }
-.ri-state.proposed { color: var(--info); border-color: color-mix(in oklab, var(--info) 35%, transparent); }
-.ri-state.accepted { color: var(--accent-true); border-color: color-mix(in oklab, var(--accent-true) 40%, transparent); }
 .ri-card-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ri-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; margin-top: 2px; }
 .ri-actions .btn { flex: none; }
@@ -2310,6 +2307,5 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .ri-readout b { color: var(--text); }
 .ri-hint { font-size: 11px; color: var(--text-3); }
 .timeline .range.draft-range { cursor: grab; background: color-mix(in oklab, var(--info) 50%, transparent); }
-.timeline .range.draft-range.is-accepted { background: color-mix(in oklab, var(--accent) 60%, transparent); }
 .timeline .range.draft-range.editing { background: color-mix(in oklab, #9a6cff 68%, transparent); outline: 1px solid #9a6cff; outline-offset: 1px; }
 .timeline .range.draft-range:hover { filter: brightness(1.2); }

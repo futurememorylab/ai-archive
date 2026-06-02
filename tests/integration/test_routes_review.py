@@ -422,7 +422,8 @@ def test_clip_detail_review_mode_renders_item_controls(monkeypatch, tmp_path):
         assert r.status_code == 200
         # Card panel structural markers (new Alpine-driven design).
         assert "ri-card" in r.text
-        assert "toggleAccept" in r.text
+        assert "toggleEdit" in r.text       # ✎ Edit
+        assert "del(" in r.text             # Delete
         assert "acceptApplyAll" in r.text
         # Review bar with the consolidated accept+apply action and clip navigation.
         assert "review-bar" in r.text
@@ -431,7 +432,7 @@ def test_clip_detail_review_mode_renders_item_controls(monkeypatch, tmp_path):
 
 def test_clip_detail_draft_controls_show_without_review_flag(monkeypatch, tmp_path):
     """Draft controls must appear even without ?review=1 — whenever a draft exists
-    the card panel (review-bar, ri-card, toggleAccept) should be in the page."""
+    the card panel (review-bar, ri-card, Edit/Delete) should be in the page."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         ctx = client.app.state.core_ctx
@@ -442,7 +443,7 @@ def test_clip_detail_draft_controls_show_without_review_flag(monkeypatch, tmp_pa
         # The Alpine card panel is always rendered when a draft exists.
         assert "review-bar" in r.text
         assert "ri-card" in r.text
-        assert "toggleAccept" in r.text
+        assert "toggleEdit" in r.text
 
 
 def _make_canonical_clip_with_markers(clip_id: int = 99):

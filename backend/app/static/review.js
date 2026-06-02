@@ -14,7 +14,6 @@ function reviewMixin(clipId) {
     // ── counts ────────────────────────────────────────────────────
     _allDraft() { return [...this.draftMarkers, ...this.draftFields, ...this.draftNotes]; },
     totalCount() { return this._allDraft().length; },
-    acceptedCount() { return this._allDraft().filter(it => it.status === "accepted").length; },
     // ── queue / walk ─────────────────────────────────────────────
     _qIdx() { return this.reviewQueue.indexOf(clipId); },
     reviewPos() { const i = this._qIdx(); return i >= 0 ? (i + 1) : 1; },
@@ -45,10 +44,6 @@ function reviewMixin(clipId) {
       this._inflight.add(p);
       p.finally(() => this._inflight.delete(p));
       return p;
-    },
-    toggleAccept(item) {
-      item.status = item.status === "accepted" ? "proposed" : "accepted";
-      this._persist(item, item.status === "accepted" ? "accepted" : "pending");
     },
     acceptAll() {
       for (const it of this._allDraft()) {
