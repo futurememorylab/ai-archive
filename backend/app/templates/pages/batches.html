@@ -217,7 +217,10 @@
           const r = await fetch("/api/prompts?archived=0");
           if (!r.ok) return;
           this._allPrompts = (await r.json()).filter((p) => p.current_production_version_id != null);
-        } catch (e) { this._allPrompts = []; }
+        } catch (e) {
+          // Leave _allPrompts null so the next open retries; surface the failure.
+          Alpine.store("toast").push("Couldn't load prompts: " + e.message, { level: "error" });
+        }
       },
       promptsForKind(kind) {
         return (this._allPrompts || []).filter((p) => p.media_kind === kind || p.media_kind === "any");
