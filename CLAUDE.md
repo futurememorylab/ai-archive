@@ -60,6 +60,12 @@ Otherwise the seat stays held for the JSESSIONID's idle-timeout window.
 
 The CatDV REST API binds the session to `JSESSIONID` and the seat is held *server-side*, not by our process. So even when our process dies, the seat can linger. The combination of (a) checking before starting and (b) graceful shutdown after running is what keeps the single available seat usable for the next dev session.
 
+## Server & Network Operations
+
+Never wait/retry on hung network ops (`git fetch`, `pip`, `ping`). If
+zero network activity is detected within a few seconds, treat it as a
+network failure and pivot to inspecting code logic instead of waiting.
+
 ## Frontend: explore before implementing
 
 Before designing or writing any frontend code (Jinja partial, Alpine
@@ -270,6 +276,13 @@ cannot act on.
 back CRUD actions should return HTMX partials on `HX-Request: true`;
 JS swaps the partial in place and pushes a success toast.
 
+## Frontend / Alpine.js
+
+For UI bugs in Alpine.js/HTMX, verify reactivity scoping (`$root` vs
+component scope, getters vs methods) and account for browser caching
+before declaring a fix complete. Prefer methods over getters when they
+gate button enabling.
+
 ## Shell Environment
 
 - This machine uses nvm; non-interactive shells don't have node/npm/npx on PATH. Source ~/.nvm/nvm.sh first, or use absolute paths.
@@ -345,6 +358,23 @@ forbid **routes importing `httpx`** (go through the archive/client layer —
 see "Narrowing provider errors") and **repositories importing services**
 (repos are leaves). The N+1 guards from "Performance discipline" now also
 pin the clips-list render (`tests/integration/test_clips_page_perf.py`).
+
+## Git Workflow
+
+Before any `git push`, check for diverged branches and rebase if
+needed; never assume the current branch or source branch — confirm with
+the user when creating new branches.
+
+## AI Integration
+
+When adding AI model names (Gemini/Vertex) to dropdowns or configs,
+verify model availability in the target region (e.g. `europe-west3`)
+before committing.
+
+## Testing
+
+Use TDD for all bug fixes and features: write a failing test,
+implement, then confirm green before committing.
 
 ## Recording decisions at end of session
 
