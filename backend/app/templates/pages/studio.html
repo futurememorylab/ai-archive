@@ -34,7 +34,12 @@
          picked by studioResize.js. Hidden via CSS when the player is off. #}
       <div class="studio-resizer is-player" data-studio-resizer="player"
            role="separator" tabindex="-1"></div>
-      <div class="studio-compare">
+      {# In output+compare the full-width table needs the grid to give the
+         card-header row its natural height and the table the remaining space
+         (otherwise the tall table starves the header row to 0px). The class
+         flips grid-template-rows; prompt mode keeps the single clamped row. #}
+      <div class="studio-compare"
+           :class="{ 'has-output-compare': mode === 'output' && compareVersionId !== null }">
         {% include "pages/_studio_compare.html" %}
       </div>
     </section>

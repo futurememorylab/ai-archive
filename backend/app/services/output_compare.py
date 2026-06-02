@@ -55,14 +55,16 @@ def _side(m: dict) -> dict[str, Any]:
 
 
 def _time_changed(cmp_m: dict | None, cur_m: dict | None) -> bool:
-    """True only for a paired scene whose start OR end time moved between
-    versions. Drives the purple timecode highlight in the compare table —
-    independent of whether the marker *text* changed."""
+    """True only for a paired scene whose DISPLAYED start time or duration
+    differs. The table shows the in-point timecode + a rounded duration, so we
+    compare at that display precision — a sub-second wobble that renders
+    identically (e.g. 6.2s vs 6.4s, both "6s") must NOT flag as changed.
+    Independent of whether the marker *text* changed."""
     if not cmp_m or not cur_m:
         return False
     return (
-        float(cmp_m.get("in_secs") or 0.0) != float(cur_m.get("in_secs") or 0.0)
-        or _out_or_default(cmp_m) != _out_or_default(cur_m)
+        _tc(cmp_m.get("in_secs")) != _tc(cur_m.get("in_secs"))
+        or _dur_s(cmp_m) != _dur_s(cur_m)
     )
 
 

@@ -142,3 +142,11 @@ def test_time_changed_false_when_times_identical():
 def test_time_changed_false_for_added_or_removed():
     model = build_output_compare(_panels(markers=[_marker(0, 5, "X")]), _panels())
     assert model["scenes"][0]["time_changed"] is False
+
+
+def test_time_changed_ignores_subsecond_wobble_that_renders_identically():
+    # Both render as "0:00 · 6s" (in rounds to 0:00, dur rounds to 6), so even
+    # though the raw out-points differ (6.2 vs 6.4) the time is NOT flagged.
+    cur = _panels(markers=[_marker(0.0, 6.4, "A")])
+    cmp = _panels(markers=[_marker(0.0, 6.2, "A")])
+    assert build_output_compare(cur, cmp)["scenes"][0]["time_changed"] is False
