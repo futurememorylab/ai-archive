@@ -20,6 +20,7 @@
   --good:      #3ddc84;
   --bad:       #ff5d5d;
   --info:      #5ac8fa;
+  --changed:   #b794f6;
 
   --range-cur: color-mix(in oklab, var(--info)   45%, transparent);
   --range-cmp: color-mix(in oklab, var(--accent) 45%, transparent);
@@ -2188,6 +2189,14 @@ body.studio-resizing {
 .ranges.range-cur .range { background: var(--range-cur); }
 .ranges.range-cmp { top: 60%; }  /* stack below the cur row */
 .ranges.range-cmp .range { background: var(--range-cmp); }
+.range-label {
+  display: block; padding: 0 5px; font-size: 11px; line-height: 18px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text);
+}
+.timeline .range.range-st-unchanged { border-color: var(--info); }
+.timeline .range.range-st-changed   { border-color: var(--changed); }
+.timeline .range.range-st-added     { border-color: var(--good); }
+.timeline .range.range-st-removed   { border-color: var(--bad); }
 .timeline-legend { display: flex; gap: 12px; padding: 4px 8px; font-size: 11px; }
 .legend-range-cur { color: var(--info); }
 .legend-range-cmp { color: var(--accent); }

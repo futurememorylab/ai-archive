@@ -42,10 +42,13 @@
           <span class="range-handle out" x-show="editingItemId === {{ m.item_id }}" @pointerdown.stop="startMarkerDrag($event, {{ m.item_id }}, 'out')" @click.stop></span>
         </div>
         {% else %}
-        <div class="range{% if 'range-draft' in row.cls %} draft-range{% endif %}"
+        <div class="range{% if 'range-draft' in row.cls %} draft-range{% endif %}{% if m.status is defined and m.status %} range-st-{{ m.status }}{% endif %}"
+             {% if m.scene_key is defined and m.scene_key %}data-scene-key="{{ m.scene_key }}"{% endif %}
              {% if row.alpine_list %}:class="{ active: isMarkerActive({{ row.alpine_list }}[{{ loop.index0 }}]) }"{% endif %}
              style="left: {{ (m.in_secs / duration_secs) * 100 }}%; width: {{ (((m.out_secs or m.in_secs + 1) - m.in_secs) / duration_secs) * 100 }}%"
-             title="{{ m.name }}"></div>
+             title="{{ m.name }}">
+          {% if show_range_labels is defined and show_range_labels and m.name %}<span class="range-label">{{ m.name }}</span>{% endif %}
+        </div>
         {% endif %}
       {% endfor %}
     </div>
