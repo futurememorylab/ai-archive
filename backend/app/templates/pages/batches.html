@@ -181,6 +181,20 @@
         } catch (e) { /* offline — keep current view */ }
       },
       toggle(key) { this.expanded[key] = !this.expanded[key]; },
+      async reviewBatch(jobIds, fallbackHref) {
+        try {
+          const r = await fetch("/batches/review-queue?job_ids=" + jobIds.join(","));
+          if (r.ok) {
+            const ids = (await r.json()).clip_ids || [];
+            if (ids.length) {
+              sessionStorage.setItem("catdv:reviewQueue", JSON.stringify(ids));
+              location.href = "/clips/" + ids[0] + "?review=1&scope=draft";
+              return;
+            }
+          }
+        } catch (e) { /* fall through to the server-computed first-clip href */ }
+        location.href = fallbackHref;
+      },
       async retryFailed(jobIds, clipId = null) {
         const body = clipId == null ? { job_ids: jobIds } : { job_ids: jobIds, clip_ids: [clipId] };
         try {

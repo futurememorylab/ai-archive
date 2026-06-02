@@ -62,7 +62,8 @@
         </button>
         {% endif %}
         {% if not b.running and b.reviewed < b.completed %}
-        <a class="btn sm primary" href="{{ b.review_href }}">Review →</a>
+        <button type="button" class="btn sm primary"
+                @click="reviewBatch({{ b.job_ids|tojson }}, '{{ b.review_href }}')">Review →</button>
         {% endif %}
         {% if b.running or (b.reviewed >= b.completed and not b.failed) %}
         <a class="btn sm ghost" href="{{ b.review_href if b.completed else '/' }}">Open</a>
