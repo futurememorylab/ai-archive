@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from backend.app.services.word_diff import word_diff
+from backend.app.services.word_diff import lcs_ops, word_diff
 
 
 def _split_paragraphs(body: str | None) -> list[str]:
@@ -27,56 +27,28 @@ def _split_paragraphs(body: str | None) -> list[str]:
 def _para_row(
     idx: int, status: str, cmp_text: str | None, cur_text: str | None
 ) -> dict[str, Any]:
+    # Skip the O(n·m) word diff for unchanged paragraphs — the result is just a
+    # single "eq" segment, which the template renders identically to the text.
+    if status == "unchanged":
+        segs: list[dict[str, Any]] = [{"type": "eq", "text": cmp_text or ""}]
+    else:
+        segs = word_diff(cmp_text or "", cur_text or "")
     return {
         "key": f"para-{idx}",
         "status": status,
         # Presence dicts only — no tc/in_secs, so the shared table renders the
-        # diff text without a timecode line or seek affordance.
+        # diff text without a timecode line or seek affordance. The `text` keeps
+        # the dict truthy for the template's `{% if row.cmp %}` check.
         "cmp": {"text": cmp_text} if cmp_text is not None else None,
         "cur": {"text": cur_text} if cur_text is not None else None,
-        "segs": word_diff(cmp_text or "", cur_text or ""),
+        "segs": segs,
         "time_changed": False,
     }
 
 
-def _diff_paragraphs(
-    cmp: list[str], cur: list[str]
-) -> list[tuple[str, str | None, str | None]]:
-    """LCS over paragraph lists -> ops [(eq|del|ins, cmp_para, cur_para)]."""
-    n, m = len(cmp), len(cur)
-    lcs = [[0] * (m + 1) for _ in range(n + 1)]
-    for i in range(n - 1, -1, -1):
-        for j in range(m - 1, -1, -1):
-            lcs[i][j] = (
-                lcs[i + 1][j + 1] + 1
-                if cmp[i] == cur[j]
-                else max(lcs[i + 1][j], lcs[i][j + 1])
-            )
-    ops: list[tuple[str, str | None, str | None]] = []
-    i = j = 0
-    while i < n and j < m:
-        if cmp[i] == cur[j]:
-            ops.append(("eq", cmp[i], cur[j]))
-            i += 1
-            j += 1
-        elif lcs[i + 1][j] >= lcs[i][j + 1]:
-            ops.append(("del", cmp[i], None))
-            i += 1
-        else:
-            ops.append(("ins", None, cur[j]))
-            j += 1
-    while i < n:
-        ops.append(("del", cmp[i], None))
-        i += 1
-    while j < m:
-        ops.append(("ins", None, cur[j]))
-        j += 1
-    return ops
-
-
 def build_prompt_compare(cur_body: str | None, cmp_body: str | None) -> dict[str, Any]:
     """Paragraph-aligned compare model for two prompt bodies (cur = newer)."""
-    ops = _diff_paragraphs(_split_paragraphs(cmp_body), _split_paragraphs(cur_body))
+    ops = lcs_ops(_split_paragraphs(cmp_body), _split_paragraphs(cur_body))
     rows: list[dict] = []
     pend_del: list[str] = []
     pend_ins: list[str] = []

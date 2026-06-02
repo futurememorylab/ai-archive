@@ -366,6 +366,10 @@ document.addEventListener('alpine:init', () => {
 
     async loadOutput() {
       const page = this._page();
+      // When the Diff toggle is on, the full-width compare table owns the
+      // output and the per-card panes are hidden — skip the wasted /studio/_run
+      // fetch for those hidden panes.
+      if (page?.compareDiff) return;
       const versionId = this.side === 'cur'
         ? page?.activeVersionId
         : page?.compareVersionId;

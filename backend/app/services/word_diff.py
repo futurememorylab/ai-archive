@@ -3,8 +3,8 @@
 Tokenizes into word + whitespace runs, LCS-aligns, and coalesces adjacent
 same-type ops into segments {"type": "eq"|"ins"|"del", "text": ...}. This is
 the authoritative implementation; tests/unit/test_studio_word_diff.py pins its
-shape, and backend/app/static/studio-diff.js mirrors it for the live
-client-side Prompt diff (keep the two in sync).
+shape. The `lcs_ops` primitive is also reused by services/prompt_compare.py to
+align prompt bodies at the paragraph level.
 """
 
 from __future__ import annotations
@@ -24,45 +24,52 @@ def tokenize(s: str | None) -> list[str]:
     return [t for t in re.split(r"(\s+)", s) if t != ""]
 
 
+def lcs_ops(a: list[Any], b: list[Any]) -> list[tuple[str, Any, Any]]:
+    """LCS-align two sequences -> ordered ops [(kind, a_item, b_item)] where
+    kind is "eq" (a_item == b_item), "del" (only in a; b_item None), or "ins"
+    (only in b; a_item None). The shared diff core for word_diff (over tokens)
+    and prompt_compare (over paragraphs)."""
+    n, m = len(a), len(b)
+    lcs = [[0] * (m + 1) for _ in range(n + 1)]
+    for i in range(n - 1, -1, -1):
+        for j in range(m - 1, -1, -1):
+            if a[i] == b[j]:
+                lcs[i][j] = lcs[i + 1][j + 1] + 1
+            else:
+                lcs[i][j] = max(lcs[i + 1][j], lcs[i][j + 1])
+    ops: list[tuple[str, Any, Any]] = []
+    i = j = 0
+    while i < n and j < m:
+        if a[i] == b[j]:
+            ops.append(("eq", a[i], b[j]))
+            i += 1
+            j += 1
+        elif lcs[i + 1][j] >= lcs[i][j + 1]:
+            ops.append(("del", a[i], None))
+            i += 1
+        else:
+            ops.append(("ins", None, b[j]))
+            j += 1
+    while i < n:
+        ops.append(("del", a[i], None))
+        i += 1
+    while j < m:
+        ops.append(("ins", None, b[j]))
+        j += 1
+    return ops
+
+
 def word_diff(a_text: str | None, b_text: str | None) -> list[dict[str, Any]]:
     """LCS word diff from a_text (old) to b_text (new). Coalesced segments:
     {"type": "eq", ...} unchanged, {"type": "del", ...} only in old,
     {"type": "ins", ...} only in new."""
-    A = tokenize(a_text)
-    B = tokenize(b_text)
-    n, m = len(A), len(B)
-    lcs = [[0] * (m + 1) for _ in range(n + 1)]
-    for i in range(n - 1, -1, -1):
-        for j in range(m - 1, -1, -1):
-            if A[i] == B[j]:
-                lcs[i][j] = lcs[i + 1][j + 1] + 1
-            else:
-                lcs[i][j] = max(lcs[i + 1][j], lcs[i][j + 1])
-    ops: list[tuple[str, str]] = []
-    i = j = 0
-    while i < n and j < m:
-        if A[i] == B[j]:
-            ops.append(("eq", A[i]))
-            i += 1
-            j += 1
-        elif lcs[i + 1][j] >= lcs[i][j + 1]:
-            ops.append(("del", A[i]))
-            i += 1
-        else:
-            ops.append(("ins", B[j]))
-            j += 1
-    while i < n:
-        ops.append(("del", A[i]))
-        i += 1
-    while j < m:
-        ops.append(("ins", B[j]))
-        j += 1
     segs: list[dict[str, Any]] = []
-    for typ, text in ops:
-        if segs and segs[-1]["type"] == typ:
+    for kind, a_tok, b_tok in lcs_ops(tokenize(a_text), tokenize(b_text)):
+        text = b_tok if kind == "ins" else a_tok
+        if segs and segs[-1]["type"] == kind:
             segs[-1]["text"] += text
         else:
-            segs.append({"type": typ, "text": text})
+            segs.append({"type": kind, "text": text})
     return segs
 
 

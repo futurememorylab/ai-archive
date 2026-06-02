@@ -18,6 +18,8 @@ SceneStatus = Literal["unchanged", "changed", "added", "removed"]
 
 def _tc(secs: float | None) -> str:
     s = int(round(secs or 0))
+    if s >= 3600:  # H:MM:SS past an hour, matching format.js::fmtTimecode
+        return f"{s // 3600}:{(s % 3600) // 60:02d}:{s % 60:02d}"
     return f"{s // 60}:{s % 60:02d}"
 
 
@@ -89,8 +91,13 @@ def _align_scenes(cmp_markers: list[dict], cur_markers: list[dict]) -> list[dict
         a, b = cmp_markers[i], cur_markers[j]
         if _overlaps(a, b):
             at, bt = _marker_text(a), _marker_text(b)
-            status = "unchanged" if at == bt else "changed"
-            rows.append(_scene_row(len(rows), status, a, b, word_diff(at, bt)))
+            # Unchanged text needs no diff — a single "eq" segment renders the
+            # same, skipping the O(n·m) LCS for the common stable-scene case.
+            if at == bt:
+                rows.append(_scene_row(len(rows), "unchanged", a, b,
+                                       [{"type": "eq", "text": at}]))
+            else:
+                rows.append(_scene_row(len(rows), "changed", a, b, word_diff(at, bt)))
             i += 1
             j += 1
         elif _out_or_default(a) <= float(b.get("in_secs") or 0.0):
@@ -128,13 +135,18 @@ def _align_fields(cmp_fields: list[dict], cur_fields: list[dict]) -> list[dict]:
             status = "removed"
         else:
             status = "unchanged" if cv == uv else "changed"
+        segs = (
+            [{"type": "eq", "text": cv}]
+            if status == "unchanged"
+            else word_diff(cv, uv)
+        )
         rows.append({
             "key": f"field-{k}",
             "identifier": k,
             "status": status,
             "has_cmp": c is not None,
             "has_cur": u is not None,
-            "segs": word_diff(cv, uv),
+            "segs": segs,
         })
     return rows
 

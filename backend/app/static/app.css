@@ -2083,20 +2083,10 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 
 .run-stats { padding: 6px 0; }
 
-/* === Studio: prompt-card diff view (word-level inline, Word track-changes) */
-.pc-diff { padding: 8px; }
-.pc-diff-hdr { display: flex; align-items: center; padding: 4px 6px 8px; }
-/* One flowing block; preserve the source's line breaks + spacing. */
-.pc-diff-body {
-  font-size: 12px; line-height: 1.6;
-  white-space: pre-wrap; word-break: break-word;
-  padding: 4px 6px; color: var(--text-1);
-}
 /* Insertions: green + underline (Word "new"). Deletions: red + strikethrough.
-   Class-scoped (not under .pc-diff-body) so the same coloring applies to the
-   prompt-tab diff AND the compare table's .sct-text cells. These classes are
-   only ever emitted by the diff renderer (services/word_diff.diff_html and
-   the studio-diff.js mirror). */
+   Class-only (global) so the coloring applies wherever the diff renderer emits
+   them — the compare table's .sct-text cells. These classes are only ever
+   produced by services/word_diff.diff_html. */
 .diff-ins {
   text-decoration: underline;
   color: var(--good);

@@ -1,14 +1,14 @@
 {# Aligned scene compare table. Inputs:
-     model            — build_output_compare() result | None (None => empty state)
+     model            — build_output_compare() / build_prompt_compare() | None
      cur_version_num  — int | None  (for headings)
      cmp_version_num  — int | None
    diff_html(segs, side) is a Jinja global (services/word_diff.py).
 #}
-{% macro _pill(status) %}
-  {% set _cls = {'unchanged': '', 'changed': 'changed', 'added': 'ok', 'removed': 'bad'} %}
-  {% set _lbl = {'unchanged': 'UNCHANGED', 'changed': 'CHANGED', 'added': 'ADDED', 'removed': 'REMOVED'} %}
-  <span class="pill {{ _cls[status] }}"><span class="led"></span>{{ _lbl[status] }}</span>
-{% endmacro %}
+{% import "components/_ui.html" as ui %}
+{# Status -> (pill css state, label). Renders via the shared ui.status_pill. #}
+{% set SCT_PILL = {
+     'unchanged': ('', 'UNCHANGED'), 'changed': ('changed', 'CHANGED'),
+     'added': ('ok', 'ADDED'), 'removed': ('bad', 'REMOVED')} %}
 {% if model is none %}
   <div class="muted">Click a clip in a folder to focus it.</div>
 {% else %}
@@ -41,7 +41,7 @@
           <div class="sct-rowhead">
             {% if row.cur.tc is defined %}<span class="sct-tc mono{{ ' sct-tc-changed' if row.time_changed }}">{{ row.cur.tc }} &middot; {{ row.cur.dur_s }}s</span>{% endif %}
             <span class="grow"></span>
-            {{ _pill(row.status) }}
+            {{ ui.status_pill(SCT_PILL[row.status][1], SCT_PILL[row.status][0]) }}
           </div>
           <div class="sct-text">{{ diff_html(row.segs, 'right') }}</div>
         {% else %}
@@ -65,7 +65,7 @@
         {% if f.has_cur %}
           <div class="sct-rowhead">
             <span class="ident mono">{{ f.identifier }}</span>
-            <span class="grow"></span>{{ _pill(f.status) }}
+            <span class="grow"></span>{{ ui.status_pill(SCT_PILL[f.status][1], SCT_PILL[f.status][0]) }}
           </div>
           <div class="sct-text">{{ diff_html(f.segs, 'right') }}</div>
         {% else %}<div class="sct-empty muted">&mdash; absent &mdash;</div>{% endif %}
