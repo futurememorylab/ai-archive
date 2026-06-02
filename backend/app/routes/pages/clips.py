@@ -111,6 +111,66 @@ def _batch_options(jobs: list) -> list[dict[str, str]]:
 router = APIRouter(tags=["pages"])
 
 
+async def query_clip_page(
+    ctx,
+    *,
+    catalog_id: str,
+    q: str | None,
+    offset: int,
+    limit: int,
+    cache_f,
+    anno_f,
+    batch_ids: list[int],
+    host_local_proxies: bool,
+) -> tuple[list[dict], int, str | None]:
+    """Shared clip-page query for the clips list and the batch picker.
+
+    Returns (clip_summary rows, total, cache_fetched_at). Encapsulates the
+    host-local cache collapse, the filtered-vs-plain page fetch, the bulk
+    cache-status lookup, and per-clip clip_summary. Raises ProviderError on
+    archive failure (callers map to 502)."""
+    # In host-local mode `cache=local` matches every clip — collapse to "any".
+    effective_cache_f = "any" if (host_local_proxies and cache_f == "local") else cache_f
+    cache_fetched_at: str | None = None
+
+    if filters_active(effective_cache_f, anno_f, batch_ids):
+        clips, total = await _filtered_page(
+            ctx,
+            catalog_id=catalog_id,
+            q=q,
+            offset=offset,
+            limit=limit,
+            cache_filter=effective_cache_f,
+            anno_filter=anno_f,
+            host_local_proxies=host_local_proxies,
+            batch=batch_ids,
+        )
+    else:
+        page = await ctx.archive.list_clips(
+            catalog_id, ClipQuery(text=q, offset=offset, limit=limit)
+        )
+        clips = list(page.items)
+        total = page.total
+        entry = await ctx.clip_list_cache_repo.get(
+            ctx.db,
+            provider_id="catdv",
+            catalog_id=catalog_id,
+            query_text=q,
+            offset=offset,
+            limit=limit,
+        )
+        cache_fetched_at = entry["fetched_at"] if entry is not None else None
+
+    statuses: dict[tuple[str, str], object] = {}
+    if clips:
+        keys = [c.key for c in clips]
+        rows = await ctx.cache_inspector.status_for_clips(keys)
+        statuses = {r.clip_key: r for r in rows}
+
+    summaries = [clip_summary(c, cache_status=statuses.get(c.key)) for c in clips]
+    return summaries, total, cache_fetched_at
+
+
 @router.get("/", response_class=HTMLResponse)
 async def clips_list(
     request: Request,
@@ -145,51 +205,25 @@ async def clips_list(
             ctx.db, provider_id="catdv", catalog_id=catalog_id
         )
 
-    cache_fetched_at: str | None = None
-
     # In host-local mode `cache=local` matches every clip — collapse to "any"
     # so the standard CatDV-paginated path is used. `cache=none` keeps its
     # filter status (resolve_filters short-circuits to empty downstream).
     effective_cache_f = "any" if (host_local_proxies and cache_f == "local") else cache_f
 
     try:
-        if filters_active(effective_cache_f, anno_f, batch_ids):
-            clips, total = await _filtered_page(
-                ctx,
-                catalog_id=catalog_id,
-                q=q,
-                offset=offset,
-                limit=limit,
-                cache_filter=effective_cache_f,
-                anno_filter=anno_f,
-                host_local_proxies=host_local_proxies,
-                batch=batch_ids,
-            )
-        else:
-            page = await ctx.archive.list_clips(
-                catalog_id,
-                ClipQuery(text=q, offset=offset, limit=limit),
-            )
-            clips = list(page.items)
-            total = page.total
-            entry = await ctx.clip_list_cache_repo.get(
-                ctx.db,
-                provider_id="catdv",
-                catalog_id=catalog_id,
-                query_text=q,
-                offset=offset,
-                limit=limit,
-            )
-            cache_fetched_at = entry["fetched_at"] if entry is not None else None
+        clip_rows, total, cache_fetched_at = await query_clip_page(
+            ctx,
+            catalog_id=catalog_id,
+            q=q,
+            offset=offset,
+            limit=limit,
+            cache_f=cache_f,
+            anno_f=anno_f,
+            batch_ids=batch_ids,
+            host_local_proxies=host_local_proxies,
+        )
     except ProviderError as exc:
         raise HTTPException(502, f"archive error: {exc}") from exc
-
-    # Bulk cache lookup so each row gets a badge with no per-row HTMX hop.
-    statuses: dict[tuple[str, str], object] = {}
-    if clips:
-        keys = [c.key for c in clips]
-        rows = await ctx.cache_inspector.status_for_clips(keys)
-        statuses = {r.clip_key: r for r in rows}
 
     jobs = await ctx.jobs_repo.list_jobs(ctx.db, limit=50)
     prev_offset, next_offset = page_offsets(offset, limit, total)
@@ -210,7 +244,7 @@ async def clips_list(
             "id": ctx.settings.catdv_catalog_id,
             "name": "AI katalog",
         },
-        "clips": [clip_summary(c, cache_status=statuses.get(c.key)) for c in clips],
+        "clips": clip_rows,
         "prev_offset": prev_offset,
         "next_offset": next_offset,
         "cache_fetched_at": cache_fetched_at,
