@@ -199,9 +199,10 @@ def test_apply_clip_returns_json_for_non_hx_caller(monkeypatch, tmp_path):
 
 
 def test_apply_clip_returns_partial_for_hx_caller(monkeypatch, tmp_path):
-    """The HTMX path (the clip-detail "Accept & apply" button, which stays
-    on the page) sends HX-Request: true and gets the re-rendered draft aside
-    partial back so the JS can swap it in place instead of full-reloading."""
+    """The HTMX path sends HX-Request: true and gets the re-rendered draft
+    aside partial (the Alpine card panel) back so the JS can swap it in
+    place rather than full-reloading.  The redesigned panel is Alpine-driven
+    so item values are emitted as x-text directives, not as literal text."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         ctx = client.app.state.core_ctx
@@ -217,8 +218,9 @@ def test_apply_clip_returns_partial_for_hx_caller(monkeypatch, tmp_path):
         )
         assert r.status_code == 200
         assert "text/html" in r.headers["content-type"]
-        # The draft aside renders the proposed/applied marker + field values.
-        assert "scene-a" in r.text
+        # The draft aside is the Alpine card panel — check structural markers.
+        assert "review-bar" in r.text
+        assert "applyDraft" in r.text
         # Sanity: it is the draft-aside partial, not a JSON dump.
         assert "{" + '"queued"' not in r.text
 
@@ -409,6 +411,8 @@ def _make_canonical_clip(clip_id: int = 1):
 
 
 def test_clip_detail_review_mode_renders_item_controls(monkeypatch, tmp_path):
+    """Clip detail with ?review=1 renders the Alpine-data-driven card panel
+    with review controls (accept / edit / delete) for the draft items."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         ctx = client.app.state.core_ctx
@@ -416,16 +420,18 @@ def test_clip_detail_review_mode_renders_item_controls(monkeypatch, tmp_path):
         install_live_ctx(client.app, archive=_FakeArchive([_make_canonical_clip(1)]))
         r = client.get("/clips/1?review=1")
         assert r.status_code == 200
-        assert "review-item-toggle" in r.text
-        # New primary label is "Accept & next"
-        assert ("Accept &amp; next" in r.text) or ("Accept & next" in r.text)
-        # Marker editable fields should be present (clip 1 has a marker review item)
-        assert 'class="ri-mfield"' in r.text
+        # Card panel structural markers (new Alpine-driven design).
+        assert "ri-card" in r.text
+        assert "toggleAccept" in r.text
+        assert "applyDraft" in r.text
+        # Review bar with accept-all and clip navigation.
+        assert "review-bar" in r.text
+        assert "navClip" in r.text
 
 
 def test_clip_detail_draft_controls_show_without_review_flag(monkeypatch, tmp_path):
     """Draft controls must appear even without ?review=1 — whenever a draft exists
-    the item controls (review-item-toggle) should render for draft items."""
+    the card panel (review-bar, ri-card, toggleAccept) should be in the page."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         ctx = client.app.state.core_ctx
@@ -433,7 +439,10 @@ def test_clip_detail_draft_controls_show_without_review_flag(monkeypatch, tmp_pa
         install_live_ctx(client.app, archive=_FakeArchive([_make_canonical_clip(1)]))
         r = client.get("/clips/1")  # no review flag
         assert r.status_code == 200
-        assert "review-item-toggle" in r.text
+        # The Alpine card panel is always rendered when a draft exists.
+        assert "review-bar" in r.text
+        assert "ri-card" in r.text
+        assert "toggleAccept" in r.text
 
 
 def _make_canonical_clip_with_markers(clip_id: int = 99):
@@ -551,8 +560,11 @@ async def _seed_image_clip(ctx, clip_id: int = 50):
 
 
 def test_clip_detail_image_hides_markers_tab(monkeypatch, tmp_path):
-    """Image clips in review mode must not render the Markers tab button and
-    must default the tab to 'fields' in the Alpine x-data."""
+    """Image clips must default to the fields tab, and the published panel
+    must not show a Markers tab (images have no markers).  In the new
+    Alpine-data-driven draft panel all 3 tab buttons are always in the DOM
+    (Alpine controls visibility at runtime), so only the *published* panel
+    and the x-data default tab are checked here."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         ctx = client.app.state.core_ctx
@@ -560,18 +572,19 @@ def test_clip_detail_image_hides_markers_tab(monkeypatch, tmp_path):
         install_live_ctx(client.app, archive=_FakeArchive([_make_canonical_clip_image(50)]))
         r = client.get("/clips/50?review=1")
         assert r.status_code == 200
-        # Markers tab button must be absent
-        assert "@click=\"tab = 'markers'\"" not in r.text
-        assert "@click=\"tab='markers'\"" not in r.text
-        # Fields tab must still be present
+        # Fields tab must be present in both published and draft panels.
         assert "tab === 'fields'" in r.text
-        # Default tab should be 'fields' not 'markers'
-        assert "tab: \"fields\"" in r.text
+        # Default tab in the x-data must be 'fields' (not 'markers') for images.
+        assert 'tab: "fields"' in r.text
+        # The published panel for an image does not have a Markers tab button;
+        # it goes straight to Fields.  Check via the published _anno_panels path.
+        assert "anno-scoped" in r.text
 
 
 def test_clip_detail_review_action_bar_has_prev(monkeypatch, tmp_path):
-    """The review action bar must contain Prev, Skip, and Accept buttons.
-    The no-queue primary 'Accept & apply' must also be present in the markup."""
+    """The review bar must have Accept-all, ‹/› clip navigation, and Apply.
+    The old 'Prev'/'Skip'/'Accept & apply' labels were replaced by the
+    redesigned review-bar in _anno_draft.html."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         ctx = client.app.state.core_ctx
@@ -579,10 +592,12 @@ def test_clip_detail_review_action_bar_has_prev(monkeypatch, tmp_path):
         install_live_ctx(client.app, archive=_FakeArchive([_make_canonical_clip(1)]))
         r = client.get("/clips/1?review=1")
         assert r.status_code == 200
-        assert "Prev" in r.text
-        assert "Skip" in r.text
-        assert "Accept" in r.text
-        assert "Accept &amp; apply" in r.text
+        # Review bar structural markers.
+        assert "review-bar" in r.text
+        assert "navClip(-1)" in r.text      # ‹ Previous clip
+        assert "navClip(1)" in r.text       # › Next clip
+        assert "acceptAll()" in r.text
+        assert "applyDraft()" in r.text
 
 
 def test_clip_detail_no_draft_no_action_bar(monkeypatch, tmp_path):

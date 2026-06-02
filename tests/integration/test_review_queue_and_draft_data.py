@@ -31,7 +31,9 @@ async def _seed(ctx):
         target_map={"x": {"kind": "markers"}}, output_schema={}, model="m",
     )
     jobs = JobsRepo()
-    jid = await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[101, 102], run_group="rg-1")
+    jid = await jobs.create_job(
+        ctx.db, prompt_version_id=vid, clip_ids=[101, 102], run_group="rg-1"
+    )
     # annotation + pending review item for clip 101 (102 has none -> not pending)
     cur = await ctx.db.execute(
         "INSERT INTO annotations (catdv_clip_id, catdv_clip_name, prompt_version_id, job_id, "

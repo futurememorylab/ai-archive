@@ -7,17 +7,28 @@ def _draft():
         "markers": [
             {"item_id": 1, "decision": "pending", "name": "A", "category": "est",
              "description": "d", "in_secs": 2.0, "out_secs": 5.0, "color": None, "kind": "marker"},
-            {"item_id": 2, "decision": "accepted", "name": "B", "category": None,
-             "description": None, "in_secs": 8.0, "out_secs": None, "color": None, "kind": "marker"},
-            {"item_id": 3, "decision": "rejected", "name": "C", "category": None,
-             "description": None, "in_secs": 9.0, "out_secs": None, "color": None, "kind": "marker"},
+            {
+                "item_id": 2, "decision": "accepted", "name": "B", "category": None,
+                "description": None, "in_secs": 8.0, "out_secs": None, "color": None,
+                "kind": "marker",
+            },
+            {
+                "item_id": 3, "decision": "rejected", "name": "C", "category": None,
+                "description": None, "in_secs": 9.0, "out_secs": None, "color": None,
+                "kind": "marker",
+            },
         ],
         "fields": [
-            {"item_id": 11, "decision": "pending", "identifier": "x.y", "value": "v", "multi": False, "kind": "field"},
+            {
+                "item_id": 11, "decision": "pending", "identifier": "x.y",
+                "value": "v", "multi": False, "kind": "field",
+            },
         ],
         "note_items": [
-            {"item_id": 21, "decision": "accepted", "identifier": None, "text": "note", "kind": "note"},
-            {"item_id": 22, "decision": "rejected", "identifier": None, "text": "gone", "kind": "note"},
+            {"item_id": 21, "decision": "accepted", "identifier": None, "text": "note",
+             "kind": "note"},
+            {"item_id": 22, "decision": "rejected", "identifier": None, "text": "gone",
+             "kind": "note"},
         ],
     }
 
