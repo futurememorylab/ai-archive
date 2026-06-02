@@ -1,40 +1,59 @@
-"""Align two prompt-version bodies into a paragraph-level compare model — the
+"""Align two prompt-version bodies into a line-level compare model — the
 Prompt-tab analogue of output_compare. Produces the SAME row shape (status +
 word_diff segments), so the shared `_studio_compare_table.html` renders it;
-paragraph rows simply carry no timecodes. Pure, no I/O.
+the rows simply carry no timecodes. Pure, no I/O.
 
-Paragraphs are blank-line-separated blocks; they are LCS-aligned, and runs of
-deletions/insertions between matched paragraphs are paired into `changed` rows
-(leftovers become `removed` / `added`). The word diff inside a `changed` row
-highlights the intra-paragraph edits.
+Hierarchical diff (the git / GitHub / track-changes approach): the bodies are
+split into non-blank lines and aligned with `difflib.SequenceMatcher` to find
+unchanged anchors (`equal`) plus the deleted / inserted / replaced regions
+between them. Within a replaced region, lines are paired by *similarity* (not
+by position) so a lightly-edited line lines up with its real counterpart and
+shows a tight word-level diff, instead of a misleading wholesale red/green
+block. The per-`changed`-row word diff (`word_diff`) highlights the in-line
+edits.
+
+We deliberately align on LINES rather than blank-line paragraphs: prompt
+bodies don't use blank-line separators consistently (one version may collapse
+several sections into a single block), which makes paragraph granularity align
+badly. Line granularity is stable as long as the hard line breaks are
+preserved across edits — reflowing/rewrapping a whole body would still
+mis-align, which is the standard limitation of line diffs.
 """
 
 from __future__ import annotations
 
-import re
+from difflib import SequenceMatcher
 from typing import Any
 
-from backend.app.services.word_diff import lcs_ops, word_diff
+from backend.app.services.word_diff import word_diff
+
+# Two lines in a replaced region are treated as one `changed` pair when their
+# character-similarity ratio clears this bar; below it they read better as a
+# separate removed + added pair than as a "changed" of unrelated text.
+_PAIR_THRESHOLD = 0.5
 
 
-def _split_paragraphs(body: str | None) -> list[str]:
+def _split_lines(body: str | None) -> list[str]:
     if not body:
         return []
-    parts = re.split(r"\n[ \t]*\n", body.strip())
-    return [p.strip() for p in parts if p.strip()]
+    return [ln.strip() for ln in body.splitlines() if ln.strip()]
 
 
-def _para_row(
+def _ratio(a: str, b: str) -> float:
+    return SequenceMatcher(None, a, b, autojunk=False).ratio()
+
+
+def _line_row(
     idx: int, status: str, cmp_text: str | None, cur_text: str | None
 ) -> dict[str, Any]:
-    # Skip the O(n·m) word diff for unchanged paragraphs — the result is just a
+    # Skip the O(n·m) word diff for unchanged lines — the result is just a
     # single "eq" segment, which the template renders identically to the text.
     if status == "unchanged":
         segs: list[dict[str, Any]] = [{"type": "eq", "text": cmp_text or ""}]
     else:
         segs = word_diff(cmp_text or "", cur_text or "")
     return {
-        "key": f"para-{idx}",
+        "key": f"line-{idx}",
         "status": status,
         # Presence dicts only — no tc/in_secs, so the shared table renders the
         # diff text without a timecode line or seek affordance. The `text` keeps
@@ -46,34 +65,63 @@ def _para_row(
     }
 
 
-def build_prompt_compare(cur_body: str | None, cmp_body: str | None) -> dict[str, Any]:
-    """Paragraph-aligned compare model for two prompt bodies (cur = newer)."""
-    ops = lcs_ops(_split_paragraphs(cmp_body), _split_paragraphs(cur_body))
-    rows: list[dict] = []
-    pend_del: list[str] = []
-    pend_ins: list[str] = []
-
-    def flush() -> None:
-        # Pair deletions with insertions positionally -> changed rows; any
-        # leftover on one side becomes a removed / added row.
-        k = 0
-        while k < len(pend_del) and k < len(pend_ins):
-            rows.append(_para_row(len(rows), "changed", pend_del[k], pend_ins[k]))
-            k += 1
-        for d in pend_del[k:]:
-            rows.append(_para_row(len(rows), "removed", d, None))
-        for a in pend_ins[k:]:
-            rows.append(_para_row(len(rows), "added", None, a))
-        pend_del.clear()
-        pend_ins.clear()
-
-    for typ, a, b in ops:
-        if typ == "eq":
-            flush()
-            rows.append(_para_row(len(rows), "unchanged", a, b))
-        elif typ == "del":
-            pend_del.append(a)  # type: ignore[arg-type]
+def _pair_replaced(
+    cmp_block: list[str], cur_block: list[str]
+) -> list[tuple[str, str | None, str | None]]:
+    """Align the lines of one replaced region by similarity, preserving order.
+    Returns (status, cmp_text|None, cur_text|None) tuples: `changed` pairs the
+    corresponding old/new line, while an old/new line whose real match sits
+    further along is emitted as `removed`/`added` so the rest realigns (handles
+    a line inserted or dropped mid-edit)."""
+    out: list[tuple[str, str | None, str | None]] = []
+    i = j = 0
+    n, m = len(cmp_block), len(cur_block)
+    while i < n and j < m:
+        a, b = cmp_block[i], cur_block[j]
+        if _ratio(a, b) >= _PAIR_THRESHOLD:
+            out.append(("changed", a, b))
+            i += 1
+            j += 1
+            continue
+        # a and b aren't a good pair here. If a matches a later new paragraph
+        # better than b matches a later old one, b is an insertion (emit added);
+        # the mirror case is a deletion (emit removed). Otherwise treat it as a
+        # straight in-place replacement.
+        a_future = max((_ratio(a, cur_block[jj]) for jj in range(j + 1, m)), default=0.0)
+        b_future = max((_ratio(cmp_block[ii], b) for ii in range(i + 1, n)), default=0.0)
+        if a_future >= _PAIR_THRESHOLD and a_future >= b_future:
+            out.append(("added", None, b))
+            j += 1
+        elif b_future >= _PAIR_THRESHOLD:
+            out.append(("removed", a, None))
+            i += 1
         else:
-            pend_ins.append(b)  # type: ignore[arg-type]
-    flush()
+            out.append(("changed", a, b))
+            i += 1
+            j += 1
+    out.extend(("removed", cmp_block[k], None) for k in range(i, n))
+    out.extend(("added", None, cur_block[k]) for k in range(j, m))
+    return out
+
+
+def build_prompt_compare(cur_body: str | None, cmp_body: str | None) -> dict[str, Any]:
+    """Line-aligned compare model for two prompt bodies (cur = newer)."""
+    cmp_lines = _split_lines(cmp_body)
+    cur_lines = _split_lines(cur_body)
+    rows: list[dict] = []
+    sm = SequenceMatcher(None, cmp_lines, cur_lines, autojunk=False)
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "equal":
+            for k in range(i2 - i1):
+                rows.append(_line_row(len(rows), "unchanged", cmp_lines[i1 + k],
+                                      cur_lines[j1 + k]))
+        elif tag == "delete":
+            for ln in cmp_lines[i1:i2]:
+                rows.append(_line_row(len(rows), "removed", ln, None))
+        elif tag == "insert":
+            for ln in cur_lines[j1:j2]:
+                rows.append(_line_row(len(rows), "added", None, ln))
+        else:  # replace — pair the region's lines by similarity
+            for status, ct, ut in _pair_replaced(cmp_lines[i1:i2], cur_lines[j1:j2]):
+                rows.append(_line_row(len(rows), status, ct, ut))
     return {"scene_count": len(rows), "scenes": rows, "fields": [], "notes": None}

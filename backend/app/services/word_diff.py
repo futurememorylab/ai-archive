@@ -3,8 +3,7 @@
 Tokenizes into word + whitespace runs, LCS-aligns, and coalesces adjacent
 same-type ops into segments {"type": "eq"|"ins"|"del", "text": ...}. This is
 the authoritative implementation; tests/unit/test_studio_word_diff.py pins its
-shape. The `lcs_ops` primitive is also reused by services/prompt_compare.py to
-align prompt bodies at the paragraph level.
+shape. `lcs_ops` is the reusable LCS-alignment primitive underneath it.
 """
 
 from __future__ import annotations
