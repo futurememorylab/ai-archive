@@ -116,3 +116,33 @@ def test_404_on_missing_version(client):
     _, v1, v2 = _two_versions(client)
     r = client.get(f"/studio/_compare?version_id=99999&compare_id={v1}&clip_id=12041")
     assert r.status_code == 404
+
+
+def _set_body(client, pid, vid, body):
+    v = client.get(f"/api/prompts/{pid}/versions/{vid}").json()
+    r = client.put(f"/api/prompts/{pid}/versions/{vid}", json={
+        "body": body, "target_map": v["target_map"],
+        "output_schema": v["output_schema"], "model": v["model"],
+    })
+    assert r.status_code in (200, 204), r.text
+
+
+def test_prompt_compare_renders_paragraph_table_without_timecodes(client):
+    pid, v1, v2 = _two_versions(client)
+    _set_body(client, pid, v2, "Shared intro.\n\nThe quick red fox.")
+    r = client.get(f"/studio/_prompt_compare?version_id={v2}&compare_id={v1}")
+    assert r.status_code == 200
+    assert "studio-compare-table" in r.text
+    assert "sct-row" in r.text
+    # Paragraph diff is colored like the output table (added green / removed red).
+    assert "diff-ins" in r.text
+    # Prompt paragraph rows carry NO timecodes and NO seek-to-play affordance.
+    assert "sct-tc" not in r.text
+    assert "sct-seek" not in r.text
+    assert "seekFocusedClip" not in r.text
+
+
+def test_prompt_compare_404_on_missing_version(client):
+    _, v1, _ = _two_versions(client)
+    r = client.get(f"/studio/_prompt_compare?version_id=99999&compare_id={v1}")
+    assert r.status_code == 404

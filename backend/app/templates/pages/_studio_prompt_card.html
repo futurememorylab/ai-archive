@@ -76,12 +76,12 @@
             @click="mode = 'output'">Output</button>
   </div>
 
-  {# Output + comparing + Diff-on is the only state where the per-card body is
-     replaced by the full-width aligned table below — hide the body then so it
-     isn't an empty column. Every other state (prompt, single-version output,
-     side-by-side output) keeps the body. #}
+  {# Comparing + Diff-on (either tab) replaces the per-card bodies with the
+     full-width aligned table below — hide the body then so it isn't an empty
+     column. Every other state (side-by-side prompt bodies or output panels,
+     and the single-version views) keeps the body. #}
   <div class="pc-body"
-       x-show="!(mode === 'output' && compareVersionId !== null && $store.studio.compareDiff)"
+       x-show="!(compareVersionId !== null && $store.studio.compareDiff)"
        x-cloak>
     {% if side == 'cmp' %}
       {# Prompt-tab word diff lives in the cmp card body. The Output diff is the
@@ -123,7 +123,7 @@
 
   {% if side == 'cur' %}
   <div class="pc-foot"
-       x-show="!(mode === 'output' && compareVersionId !== null && $store.studio.compareDiff)"
+       x-show="!(compareVersionId !== null && $store.studio.compareDiff)"
        x-cloak>
     <span x-show="saving" class="mono-cell muted">saving…</span>
     <span x-show="!saving && hasChanges" class="mono-cell muted">draft · unsaved changes</span>

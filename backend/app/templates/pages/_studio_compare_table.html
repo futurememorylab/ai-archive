@@ -18,27 +18,28 @@
    reused on scene AND field rows; studioSceneLink.js matches it against
    timeline ranges. #}
 <div class="studio-compare-table">
+  {# Rows are scenes (Output: markers, with timecodes) OR paragraphs (Prompt:
+     no timecodes). The tc line + seek-to-play affordance render only when the
+     side carries `tc` / `in_secs`, so the same table serves both. Clicking a
+     scene cell seeks+plays the clip from that marker's start. #}
   {% for row in model.scenes %}
-    {# Clicking a scene cell seeks the player to that version's marker start
-       and plays (player.seek() sets currentTime + play()). Injected partial,
-       so a plain onclick into the store (the established pattern). #}
     <div class="sct-row sct-st-{{ row.status }}" data-scene-key="{{ row.key }}">
-      <div class="sct-cell sct-left{% if row.cmp %} sct-seek{% endif %}"
-           {% if row.cmp %}title="Play from {{ row.cmp.tc }}"
+      <div class="sct-cell sct-left{% if row.cmp and row.cmp.in_secs is defined %} sct-seek{% endif %}"
+           {% if row.cmp and row.cmp.in_secs is defined %}title="Play from {{ row.cmp.tc }}"
            onclick="window.Alpine && Alpine.store('studio').seekFocusedClip({{ row.cmp.in_secs }})"{% endif %}>
         {% if row.cmp %}
-          <div class="sct-tc mono">{{ row.cmp.tc }} &middot; {{ row.cmp.dur_s }}s</div>
+          {% if row.cmp.tc is defined %}<div class="sct-tc mono">{{ row.cmp.tc }} &middot; {{ row.cmp.dur_s }}s</div>{% endif %}
           <div class="sct-text">{{ diff_html(row.segs, 'left') }}</div>
         {% else %}
           <div class="sct-empty muted">&mdash; no scene &mdash;</div>
         {% endif %}
       </div>
-      <div class="sct-cell sct-right{% if row.cur %} sct-seek{% endif %}"
-           {% if row.cur %}title="Play from {{ row.cur.tc }}"
+      <div class="sct-cell sct-right{% if row.cur and row.cur.in_secs is defined %} sct-seek{% endif %}"
+           {% if row.cur and row.cur.in_secs is defined %}title="Play from {{ row.cur.tc }}"
            onclick="window.Alpine && Alpine.store('studio').seekFocusedClip({{ row.cur.in_secs }})"{% endif %}>
         {% if row.cur %}
           <div class="sct-rowhead">
-            <span class="sct-tc mono{{ ' sct-tc-changed' if row.time_changed }}">{{ row.cur.tc }} &middot; {{ row.cur.dur_s }}s</span>
+            {% if row.cur.tc is defined %}<span class="sct-tc mono{{ ' sct-tc-changed' if row.time_changed }}">{{ row.cur.tc }} &middot; {{ row.cur.dur_s }}s</span>{% endif %}
             <span class="grow"></span>
             {{ _pill(row.status) }}
           </div>

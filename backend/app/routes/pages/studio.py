@@ -473,6 +473,35 @@ async def _studio_compare(
     )
 
 
+@router.get("/studio/_prompt_compare", response_class=HTMLResponse)
+async def _studio_prompt_compare(
+    request: Request,
+    version_id: int,
+    compare_id: int,
+):
+    """Paragraph-aligned prompt-body compare table (cur=version_id,
+    cmp=compare_id). The Prompt-tab analogue of `/studio/_compare`; renders the
+    same `_studio_compare_table.html` with paragraph rows (no clip needed)."""
+    ctx = get_core_ctx(request)
+    try:
+        cur_v = await ctx.prompts_repo.get_version(ctx.db, version_id)
+        cmp_v = await ctx.prompts_repo.get_version(ctx.db, compare_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="version not found") from exc
+    from backend.app.services.prompt_compare import build_prompt_compare
+
+    model = build_prompt_compare(cur_v.body, cmp_v.body)
+    return templates.TemplateResponse(
+        request,
+        "pages/_studio_compare_table.html",
+        {
+            "model": model,
+            "cur_version_num": cur_v.version_num,
+            "cmp_version_num": cmp_v.version_num,
+        },
+    )
+
+
 @router.get("/studio/_run", response_class=HTMLResponse)
 async def _studio_run(
     request: Request,

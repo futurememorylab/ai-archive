@@ -1620,11 +1620,11 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   padding: 12px;
   gap: 12px;
 }
-/* Output+compare: row 1 = card headers (natural height, bodies hidden),
-   row 2 = the full-width aligned table (fills the rest + scrolls). Without
-   this the table's tall content lands in an implicit `auto` row and starves
-   the header row to 0px. */
-.studio-compare.has-output-compare {
+/* Compare table shown (Prompt or Output): row 1 = card headers (natural
+   height, bodies hidden), row 2 = the full-width aligned table (fills the
+   rest + scrolls). Without this the table's tall content lands in an implicit
+   `auto` row and starves the header row to 0px. */
+.studio-compare.has-compare-table {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
