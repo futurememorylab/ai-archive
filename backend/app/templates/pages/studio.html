@@ -39,7 +39,7 @@
          (otherwise the tall table starves the header row to 0px). The class
          flips grid-template-rows; prompt mode keeps the single clamped row. #}
       <div class="studio-compare"
-           :class="{ 'has-output-compare': mode === 'output' && compareVersionId !== null }">
+           :class="{ 'has-output-compare': mode === 'output' && compareVersionId !== null && compareDiff }">
         {% include "pages/_studio_compare.html" %}
       </div>
     </section>

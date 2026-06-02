@@ -90,6 +90,8 @@ document.addEventListener('alpine:init', () => {
       set compareVersionId(v)    { store().compareVersionId = v; },
       get compareVersionNum()    { return store().compareVersionNum; },
       set compareVersionNum(v)   { store().compareVersionNum = v; },
+      get compareDiff()          { return store().compareDiff; },
+      set compareDiff(v)         { store().compareDiff = v; },
       get mode()                 { return store().mode; },
       set mode(v)                { store().mode = v; },
       get focusedClipId()        { return store().focusedClipId; },

@@ -57,10 +57,13 @@
               @click="openCompare()">+ Compare</button>
     {% else %}
       <span class="grow"></span>
+      {# Shared Diff toggle (store.compareDiff) — drives the Prompt word-diff
+         and the Output aligned table alike, so both tabs read side-by-side by
+         default with Diff as an opt-in, consistent with each other. #}
       <button type="button" class="btn sm"
-              @click="diff = !diff"
-              :class="diff && 'active'"
-              x-text="diff ? `Hide diff` : `Diff vs v${activeVersionNum}`"></button>
+              @click="$store.studio.compareDiff = !$store.studio.compareDiff"
+              :class="$store.studio.compareDiff && 'active'"
+              x-text="$store.studio.compareDiff ? `Hide diff` : `Diff vs v${activeVersionNum}`"></button>
       <button type="button" class="btn sm icon btn-close-cmp" title="Close compare"
               @click="closeCompare()">×</button>
     {% endif %}
@@ -73,19 +76,23 @@
             @click="mode = 'output'">Output</button>
   </div>
 
-  {# When comparing on the Output tab, the aligned table below the cards owns
-     the output — so the per-card body would just be an empty column (the
-     prompt pane is hidden by mode, the output pane by compareVersionId).
-     Hide the body in that state so only the header + tabs remain above the
-     table; the Prompt tab still shows it (mode flips back). #}
-  <div class="pc-body" x-show="!(mode === 'output' && compareVersionId !== null)" x-cloak>
+  {# Output + comparing + Diff-on is the only state where the per-card body is
+     replaced by the full-width aligned table below — hide the body then so it
+     isn't an empty column. Every other state (prompt, single-version output,
+     side-by-side output) keeps the body. #}
+  <div class="pc-body"
+       x-show="!(mode === 'output' && compareVersionId !== null && $store.studio.compareDiff)"
+       x-cloak>
     {% if side == 'cmp' %}
-      <div x-show="diff" x-cloak>
+      {# Prompt-tab word diff lives in the cmp card body. The Output diff is the
+         full-width aligned table (not here), so gate this to prompt mode. #}
+      <div x-show="$store.studio.compareDiff && mode === 'prompt'" x-cloak>
         {% include "pages/_studio_diff.html" %}
       </div>
     {% endif %}
 
-    <div class="pc-panes" {% if side == 'cmp' %}x-show="!diff"{% endif %}>
+    <div class="pc-panes"
+         {% if side == 'cmp' %}x-show="!($store.studio.compareDiff && mode === 'prompt')"{% endif %}>
       <div class="pc-pane-prompt" x-show="mode === 'prompt'">
         {% if active_version.state == 'draft' and side == 'cur' %}
           <textarea class="pc-editor"
@@ -96,9 +103,13 @@
           <pre class="pc-readonly mono">{{ active_version.body }}</pre>
         {% endif %}
       </div>
-      <div x-show="mode === 'output' && compareVersionId === null"
+      {# Per-card output panels. Shown in output mode UNLESS we're in the
+         full-width aligned-table state (comparing + Diff on). When comparing
+         with Diff off, both cards show their version's panels side by side —
+         the cmp card's loadOutput() loads the compare version. #}
+      <div x-show="mode === 'output' && !(compareVersionId !== null && $store.studio.compareDiff)"
            x-init="$nextTick(() => loadOutput())"
-           x-effect="pendingRunSwap && loadOutput()">
+           x-effect="$store.studio.pendingRunSwap; $store.studio.focusedClipId; ($store.studio.mode === 'output') && loadOutput()">
         <div class="run-slot" x-ref="runSlot">
           {% if panels is not none %}
             {% include "pages/_studio_run_output.html" %}
@@ -111,7 +122,9 @@
   </div>
 
   {% if side == 'cur' %}
-  <div class="pc-foot" x-show="!(mode === 'output' && compareVersionId !== null)" x-cloak>
+  <div class="pc-foot"
+       x-show="!(mode === 'output' && compareVersionId !== null && $store.studio.compareDiff)"
+       x-cloak>
     <span x-show="saving" class="mono-cell muted">saving…</span>
     <span x-show="!saving && hasChanges" class="mono-cell muted">draft · unsaved changes</span>
     <span x-show="!saving && !hasChanges" class="mono-cell muted">saved</span>

@@ -37,13 +37,13 @@
    off via compareVersionId === null). Loads /studio/_compare and re-inits
    Alpine on the injected subtree (same pattern as studioPromptCard.loadOutput). #}
 <div class="studio-compare-output"
-     x-show="$store.studio.mode === 'output' && $store.studio.compareVersionId !== null"
+     x-show="$store.studio.mode === 'output' && $store.studio.compareVersionId !== null && $store.studio.compareDiff"
      x-cloak
      x-data="{
        load() {
          const s = $store.studio;
          const slot = $refs.cmpSlot;
-         if (!slot || s.mode !== 'output' || s.compareVersionId === null) return;
+         if (!slot || s.mode !== 'output' || s.compareVersionId === null || !s.compareDiff) return;
          if (!s.focusedClipId) {
            slot.innerHTML = '<div class=\'muted\'>Click a clip in a folder to focus it.</div>';
            return;
@@ -59,7 +59,7 @@
            });
        }
      }"
-     x-effect="$store.studio.mode;
+     x-effect="$store.studio.mode; $store.studio.compareDiff;
                ($store.studio.mode === 'output') && $store.studio.pendingRunSwap;
                $store.studio.focusedClipId; $store.studio.activeVersionId;
                $store.studio.compareVersionId; load()">

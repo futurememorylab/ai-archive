@@ -59,6 +59,13 @@ document.addEventListener('alpine:init', () => {
     // compare table or on the timeline. The vanilla bridge (studioSceneLink.js)
     // keeps this in sync and toggles `.is-linked` on matching DOM nodes.
     selectedSceneKey: null,
+    // Shared "Diff vs vN" toggle for the compare cards (both Prompt and
+    // Output tabs). Default off = the two versions shown side by side
+    // (prompt bodies / output panels); on = the word diff (Prompt) or the
+    // aligned scene table (Output). Lives in the store because the full-width
+    // output table sits outside the cmp card's Alpine scope. Reset when a
+    // compare is opened/closed so a fresh compare starts side-by-side.
+    compareDiff: false,
     _hydrated: false,
 
     // Seed initial.* fields from the page component's init(). Idempotent:
@@ -286,6 +293,7 @@ document.addEventListener('alpine:init', () => {
       if (!pick) return;
       this.compareVersionId = pick.id;
       this.compareVersionNum = pick.version_num;
+      this.compareDiff = false;  // open in side-by-side; Diff is opt-in
       this._writeUrl();
       const slot = document.querySelector('[data-cmp-slot]');
       if (!slot) return;
@@ -306,6 +314,7 @@ document.addEventListener('alpine:init', () => {
     closeCompare() {
       this.compareVersionId = null;
       this.compareVersionNum = null;
+      this.compareDiff = false;
       this._writeUrl();
       const slot = document.querySelector('[data-cmp-slot]');
       if (slot) { slot.innerHTML = ''; slot.style.display = 'none'; }
