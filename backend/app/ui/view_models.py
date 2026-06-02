@@ -244,3 +244,52 @@ def batch_view(row: dict) -> dict:
         "review_href": review_href,
         "files_href": files_href,
     }
+
+
+def draft_review_arrays(draft: dict) -> dict:
+    """Shape a `build_draft_view` result into the Alpine arrays the redesigned
+    Draft panel + 3-color timeline render from. Each item carries `item_id` and
+    a `status` ("accepted" if its review_item decision is accepted, else
+    "proposed"). Rejected items are excluded entirely (Delete = reject hides
+    them). Pure function — unit-tested in isolation."""
+    if not draft.get("has_draft"):
+        return {"markers": [], "fields": [], "notes": []}
+
+    def _status(decision) -> str:
+        return "accepted" if decision == "accepted" else "proposed"
+
+    markers = [
+        {
+            "item_id": m["item_id"],
+            "status": _status(m.get("decision")),
+            "name": m.get("name") or "",
+            "category": m.get("category"),
+            "description": m.get("description"),
+            "in_secs": m["in_secs"],
+            "out_secs": m.get("out_secs"),
+            "color": m.get("color"),
+        }
+        for m in draft.get("markers", [])
+        if m.get("decision") != "rejected"
+    ]
+    fields = [
+        {
+            "item_id": f["item_id"],
+            "status": _status(f.get("decision")),
+            "identifier": f.get("identifier") or "",
+            "value": f.get("value", ""),
+            "multi": bool(f.get("multi")),
+        }
+        for f in draft.get("fields", [])
+        if f.get("decision") != "rejected"
+    ]
+    notes = [
+        {
+            "item_id": n["item_id"],
+            "status": _status(n.get("decision")),
+            "text": n.get("text") or "",
+        }
+        for n in draft.get("note_items", [])
+        if n.get("decision") != "rejected"
+    ]
+    return {"markers": markers, "fields": fields, "notes": notes}
