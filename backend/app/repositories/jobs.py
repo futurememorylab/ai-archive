@@ -134,7 +134,8 @@ class JobsRepo:
     async def list_running(self, conn: aiosqlite.Connection) -> list[Job]:
         cur = await conn.execute(
             "SELECT id, prompt_version_id, status, total_clips, notes, kind, run_group "
-            "FROM jobs WHERE status = 'running' AND COALESCE(kind, '') != 'studio' ORDER BY id DESC",
+            "FROM jobs WHERE status = 'running' AND COALESCE(kind, '') != 'studio' "
+            "ORDER BY id DESC",
         )
         return [
             Job(

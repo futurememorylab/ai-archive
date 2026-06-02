@@ -32,7 +32,9 @@ async def _seed_batch(ctx):
         target_map={"x": {"kind": "markers"}}, output_schema={}, model="gemini-2.5-pro",
     )
     jobs = JobsRepo()
-    jid = await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[101, 102], run_group="rg-1")
+    jid = await jobs.create_job(
+        ctx.db, prompt_version_id=vid, clip_ids=[101, 102], run_group="rg-1"
+    )
     its = await jobs.list_items(ctx.db, jid)
     await jobs.update_item_status(ctx.db, its[0].id, "review_ready")
     await jobs.update_item_status(ctx.db, its[1].id, "error", error="ProxyNotFound")

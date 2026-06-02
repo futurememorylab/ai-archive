@@ -10,13 +10,13 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.app.context import build_context
 from backend.app.logging_setup import configure_logging
+from backend.app.routes.batches import router as batches_router
 from backend.app.routes.cache import api_router as cache_api_router
 from backend.app.routes.cache import page_router as cache_page_router
 from backend.app.routes.cache import ui_router as cache_ui_router
 from backend.app.routes.catdv import router as catdv_router
 from backend.app.routes.connection import router as connection_router
 from backend.app.routes.events import router as events_router
-from backend.app.routes.batches import router as batches_router
 from backend.app.routes.jobs import router as jobs_router
 from backend.app.routes.live import router as live_router
 from backend.app.routes.media import router as media_router

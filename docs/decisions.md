@@ -56,3 +56,4 @@ available number. See any existing ADR for the template.
 | 0046 | 2026-05-30 | [No N+1 — batch repository reads with WHERE IN](./adr/0046-no-n-plus-one-batch-with-where-in.md) |
 | 0047 | 2026-05-30 | [Split AppContext into CoreCtx + LiveCtx; unify route deps](./adr/0047-corectx-livectx-split.md) |
 | 0048 | 2026-05-31 | [Alpine.store (not _x_dataStack) for shared studio state; one HTMX↔Alpine lifecycle helper](./adr/0048-alpine-store-not-x-data-stack-for-shared-state.md) |
+| 0049 | 2026-06-02 | [Batches hub — design calls](./adr/0049-batches-hub.md) |

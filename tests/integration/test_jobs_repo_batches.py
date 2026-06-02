@@ -4,7 +4,9 @@ from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.prompts import PromptsRepo
 
 
-async def _seed_version(db, *, name="Scénické značky CZ", model="gemini-2.5-pro") -> tuple[int, int]:
+async def _seed_version(
+    db, *, name="Scénické značky CZ", model="gemini-2.5-pro"
+) -> tuple[int, int]:
     prompts = PromptsRepo()
     pid, vid = await prompts.create_with_initial_version(
         db, name=name, description=None, body="p",
@@ -82,8 +84,12 @@ async def test_list_batches_awaiting_clips_counts_unapplied_reviews(db):
     its = await jobs.list_items(db, jid)
     await jobs.update_item_status(db, its[0].id, "review_ready")
     await jobs.update_item_status(db, its[1].id, "review_ready")
-    await _annotation_with_review(db, job_id=jid, clip_id=101, applied=False, prompt_version_id=vid)  # awaiting
-    await _annotation_with_review(db, job_id=jid, clip_id=102, applied=True, prompt_version_id=vid)   # reviewed
+    await _annotation_with_review(  # awaiting
+        db, job_id=jid, clip_id=101, applied=False, prompt_version_id=vid
+    )
+    await _annotation_with_review(  # reviewed
+        db, job_id=jid, clip_id=102, applied=True, prompt_version_id=vid
+    )
 
     rows = await jobs.list_batches(db, limit=50)
     assert rows[0]["awaiting_clips"] == 1
