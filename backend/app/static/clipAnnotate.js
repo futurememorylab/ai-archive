@@ -108,15 +108,13 @@ function clipAnnotate(clipId, clipKind) {
     },
 
     async swapDraft() {
-      const r = await fetch(`/clips/${clipId}/draft`);
-      if (!r.ok) {
-        this.runError = `Failed to load draft: HTTP ${r.status}`;
-        this.running = false;
-        return;
+      // The draft panel is Alpine-data-driven now — repopulate its arrays via
+      // the JSON draft-data endpoint (reviewMixin.refreshDraft) rather than
+      // swapping the server-rendered partial into #draft-aside.
+      if (typeof this.refreshDraft === "function") {
+        await this.refreshDraft();
       }
-      const html = await r.text();
-      const target = document.getElementById("draft-aside");
-      if (target) target.innerHTML = html;
+      this.scope = "draft";
       this.runStatus = null;
       this.running = false;
     },
