@@ -28,6 +28,12 @@
     </aside>
     <section class="studio-right" :class="{ 'layout-right': layout === 'right' }">
       <div class="studio-player-slot" data-studio-player-slot></div>
+      {# player ↔ prompt divider — a real grid track between the player slot
+         and the compare block. Axis follows `layout` (row-resize in `under`
+         → --studio-player-h; col-resize in `right` → --studio-player-w),
+         picked by studioResize.js. Hidden via CSS when the player is off. #}
+      <div class="studio-resizer is-player" data-studio-resizer="player"
+           role="separator" tabindex="-1"></div>
       <div class="studio-compare">
         {% include "pages/_studio_compare.html" %}
       </div>
@@ -39,12 +45,18 @@
      stamps the modifier classes synchronously. #}
   <script>
     (function () {
-      var prefs = { showList: true, showPlayer: true, layout: 'under' };
+      var prefs = {
+        showList: true, showPlayer: true, layout: 'under',
+        playerH: null, playerW: null, cmpCur: null,
+      };
       try {
         var p = JSON.parse(localStorage.getItem('studio.layoutPrefs') || '{}');
         if (p.showList === false) prefs.showList = false;
         if (p.showPlayer === false) prefs.showPlayer = false;
         if (p.layout === 'right') prefs.layout = 'right';
+        if (typeof p.playerH === 'string') prefs.playerH = p.playerH;
+        if (typeof p.playerW === 'string') prefs.playerW = p.playerW;
+        if (typeof p.cmpCur === 'string') prefs.cmpCur = p.cmpCur;
       } catch (e) {}
       window.__studioPrefs = prefs;
       var body = document.querySelector('.studio-body');
@@ -52,6 +64,15 @@
       if (body && !prefs.showList) body.classList.add('no-list');
       if (body && !prefs.showPlayer) body.classList.add('no-player');
       if (right && prefs.layout === 'right') right.classList.add('layout-right');
+      // Stamp saved pane sizes as CSS vars before Alpine boots (no flash).
+      if (right) {
+        if (prefs.playerH) right.style.setProperty('--studio-player-h', prefs.playerH);
+        if (prefs.playerW) right.style.setProperty('--studio-player-w', prefs.playerW);
+      }
+      if (prefs.cmpCur) {
+        var row = document.querySelector('.studio-compare-row');
+        if (row) row.style.setProperty('--studio-cmp-cur', prefs.cmpCur);
+      }
     })();
   </script>
 
