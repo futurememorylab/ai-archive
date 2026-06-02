@@ -6,7 +6,7 @@
    `x-data="studioPage(...)"` on .studio-page so existing template
    bindings keep resolving — but studioPage is now a THIN delegator that
    forwards every field/method to `$store.studio`. Cross-component
-   readers (the window.studio shim, htmx:afterSwap, modelPicker,
+   readers (the window.studio shim, htmx:afterSwap,
    studioPromptCard, cmpDiff) read `Alpine.store('studio')` directly,
    replacing the old reach-ins into Alpine's private data-stack internal.
 
@@ -136,23 +136,6 @@ document.addEventListener('alpine:init', () => {
     };
   });
 
-  // Cross-component proxy to the studio store's activeModel — necessary
-  // because Alpine `$root` only walks to the nearest enclosing `x-data`,
-  // and nesting `x-data="{ open: false }"` on the picker hides the page
-  // scope. The shared state lives in Alpine.store('studio').
-  Alpine.data('modelPicker', () => ({
-    open: false,
-    _page() {
-      return Alpine.store('studio');
-    },
-    get model() {
-      return this._page().activeModel;
-    },
-    set model(v) {
-      this._page().activeModel = v;
-    },
-  }));
-
   Alpine.data('archivePicker', (folderId) => ({
     folderId,
     picked: new Set(),
@@ -254,10 +237,48 @@ document.addEventListener('alpine:init', () => {
     },
   }));
 
-  Alpine.data('studioPromptCard', (side = 'cur') => ({
+  Alpine.data('studioPromptCard', (side = 'cur', model = '', state = '') => ({
     side,
+    state,
     diff: false,
-    dirty: false,
+    // Editing is explicit (matches the prompt screen). The editable fields are
+    // the body and the model; `baseline`/`modelBaseline` hold their last-saved
+    // values, `editorBody`/`model` hold the live values, and `hasChanges`
+    // (a getter) flips true once either diverges — driving the Save button +
+    // footer. `saving` guards the PUT. Only a draft on the `cur` side is
+    // editable (`canEdit`).
+    baseline: '',
+    editorBody: '',
+    model,
+    modelBaseline: model,
+    modelOpen: false,
+    saving: false,
+
+    get canEdit() { return this.side === 'cur' && this.state === 'draft'; },
+    get hasChanges() {
+      if (!this.canEdit) return false;
+      return this.editorBody !== this.baseline || this.model !== this.modelBaseline;
+    },
+
+    // Seed the store's run model from this version on mount (page load AND
+    // every HTMX version swap, since the swapped card re-inits) so "Run" uses
+    // the version actually shown. cmp cards never own the run model.
+    init() {
+      if (this.side === 'cur') {
+        const p = this._page();
+        if (p) p.activeModel = this.model;
+      }
+    },
+
+    // Pick a model in the editor. Flips hasChanges (Save appears) via the
+    // getter and keeps the store's run model in sync with the selection.
+    pickModel(m) {
+      this.modelOpen = false;
+      if (!this.canEdit) return;
+      this.model = m;
+      const p = this._page();
+      if (p) p.activeModel = m;
+    },
     // _anno_panels.html (the shared output renderer) reads `tab`, `seek`,
     // `historyLoaded`, `historyHtml`, `loadHistory` from its enclosing
     // Alpine scope. Clip-detail provides these via `player()` + a tab
@@ -273,7 +294,7 @@ document.addEventListener('alpine:init', () => {
     // the topmost ancestor. Since this card is its own x-data, `$root.X`
     // resolves to the card itself (where X is undefined), not to the
     // shared page state. So we proxy page state through the studio store
-    // via getters/methods. Same pattern as `modelPicker`.
+    // via getters/methods.
     _page() {
       return Alpine.store('studio');
     },
@@ -288,31 +309,50 @@ document.addEventListener('alpine:init', () => {
 
     async save() {
       if (this.side !== 'cur') return;  // never save from the cmp card.
-      this.dirty = true;
+      if (this.saving || !this.hasChanges) return;
       const page = this._page();
       const versionId = page?.activeVersionId;
       const promptId = page?.promptId;
-      if (!versionId || !promptId) { this.dirty = false; return; }
-      const body = this.$refs.editor ? this.$refs.editor.value : null;
-      if (body == null) { this.dirty = false; return; }
+      if (!versionId || !promptId) return;
+      // `editorBody` is the single live body source (seeded on x-init, kept in
+      // sync by the textarea's @input), so we don't re-read the DOM ref here.
+      const body = this.editorBody;
+      this.saving = true;
       try {
+        // The Studio prompt pane edits the body + model; round-trip the rest
+        // of the version (target_map / output_schema) unchanged.
         const v = await fetch(`/api/prompts/${promptId}/versions/${versionId}`).then(r => r.json());
         const res = await fetch(`/api/prompts/${promptId}/versions/${versionId}`, {
           method: 'PUT',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
             body, target_map: v.target_map,
-            output_schema: v.output_schema, model: v.model,
+            output_schema: v.output_schema, model: this.model,
           }),
         });
-        this.dirty = !res.ok;
+        if (!res.ok) {
+          Alpine.store('toast').push(
+            `Save failed (HTTP ${res.status}).`,
+            { level: 'error' },
+          );
+          return;
+        }
+        // Success — re-baseline so `hasChanges` flips false (hiding the Save
+        // button) and the footer returns to "saved". editorBody is already the
+        // saved value (it IS `body`), so only the baselines move.
+        this.baseline = body;
+        this.modelBaseline = this.model;
+        // Nudge the compare diff to recompute against the just-saved body.
+        page.savedTick = (page.savedTick || 0) + 1;
+        Alpine.store('toast').push('Changes saved.', { level: 'success' });
       } catch (err) {
         console.error('studio save failed', err);
         Alpine.store('toast').push(
           `Save failed: ${err.message || String(err)}`,
           { level: 'error' },
         );
-        this.dirty = false;
+      } finally {
+        this.saving = false;
       }
     },
 

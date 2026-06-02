@@ -68,6 +68,65 @@ def test_non_draft_renders_readonly_pre(client):
     assert "<textarea" not in r.text
 
 
+def test_draft_cur_has_explicit_save_button_not_autosave(client):
+    """Draft editing is explicit (matches the prompt screen): a Save button,
+    no debounced auto-save on input."""
+    _, _, v2 = _make_prompt_two_versions(client)
+    r = client.get(f"/studio/_prompt_card?side=cur&prompt_version_id={v2}")
+    assert r.status_code == 200
+    # Explicit save button, shown when there are unsaved edits.
+    assert "Save changes" in r.text
+    assert 'x-show="hasChanges"' in r.text
+    # The old debounced auto-save is gone.
+    assert "debounce" not in r.text
+    # Editor seeds its baseline so dirtiness can be tracked.
+    assert "baseline" in r.text
+
+
+def test_non_draft_cur_has_no_save_button(client):
+    """Production (non-draft) versions are read-only — no Save button."""
+    _, v1, _ = _make_prompt_two_versions(client)
+    r = client.get(f"/studio/_prompt_card?side=cur&prompt_version_id={v1}")
+    assert r.status_code == 200
+    assert "Save changes" not in r.text
+
+
+def test_cmp_side_has_no_save_button(client):
+    """The compare card never saves — no Save button even for a draft."""
+    _, _, v2 = _make_prompt_two_versions(client)
+    r = client.get(f"/studio/_prompt_card?side=cmp&prompt_version_id={v2}")
+    assert r.status_code == 200
+    assert "Save changes" not in r.text
+
+
+def test_draft_model_picker_is_editable_and_card_scoped(client):
+    """The model picker edits the version's model through the card scope
+    (matches the prompt screen): gated by canEdit, picking flips the Save
+    button, the decoupled nested modelPicker component is gone."""
+    _, _, v2 = _make_prompt_two_versions(client)
+    r = client.get(f"/studio/_prompt_card?side=cur&prompt_version_id={v2}")
+    assert r.status_code == 200
+    assert ':disabled="!canEdit"' in r.text
+    assert "pickModel(" in r.text
+    assert 'x-data="modelPicker"' not in r.text
+
+
+def test_card_xdata_seeds_model_and_state(client):
+    """The card factory receives the version's model + state so it can gate
+    the picker and dirty-track a model change."""
+    _, _, v2 = _make_prompt_two_versions(client)
+    r = client.get(f"/studio/_prompt_card?side=cur&prompt_version_id={v2}")
+    assert "studioPromptCard('cur', 'gemini-2.5-pro', 'draft')" in r.text
+
+
+def test_production_card_xdata_marks_non_draft_state(client):
+    """A production version seeds state='production' → canEdit is false at
+    runtime, so the picker is disabled."""
+    _, v1, _ = _make_prompt_two_versions(client)
+    r = client.get(f"/studio/_prompt_card?side=cur&prompt_version_id={v1}")
+    assert "studioPromptCard('cur', 'gemini-2.5-pro', 'production')" in r.text
+
+
 def test_includes_data_attrs_for_alpine_sync(client):
     _, v1, _ = _make_prompt_two_versions(client)
     r = client.get(f"/studio/_prompt_card?side=cur&prompt_version_id={v1}")

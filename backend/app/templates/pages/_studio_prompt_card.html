@@ -16,33 +16,41 @@
      data-side="{{ side }}"
      data-version-id="{{ active_version.id }}"
      data-version-num="{{ active_version.version_num }}"
-     x-data="studioPromptCard('{{ side }}')">
+     x-data="studioPromptCard('{{ side }}', '{{ active_version.model }}', '{{ active_version.state }}')">
 
   <div class="pc-hdr">
     {% include "pages/_studio_version_picker.html" %}
     {% if side == 'cur' %}
-      {# Model picker — preserved from PR1. Uses the `modelPicker` Alpine
-         component which proxies its `model` accessor to studioPage.activeModel.
-         Cannot use `$root` directly: nested x-data on this picker makes it
-         its own root, hiding the page scope. #}
-      <div class="model-picker" x-data="modelPicker" @click.outside="open = false">
-        <button class="btn sm ghost" :class="open && 'open'"
-                @click="open = !open" title="switch model">
+      {# Model picker — lives in the card's own scope (no nested x-data), so
+         a change flows into the card's `hasChanges`/`save()` exactly like the
+         prompt screen. Editable only for a draft (`canEdit`); picking a model
+         goes through `pickModel()`, which also syncs the store's run model. #}
+      <div class="model-picker" @click.outside="modelOpen = false">
+        <button class="btn sm ghost" :class="modelOpen && 'open'"
+                @click="modelOpen = !modelOpen" :disabled="!canEdit"
+                title="switch model">
           <span class="dot"></span>
           <span x-text="model"></span>
           <span class="caret">▾</span>
         </button>
-        <div class="model-menu" x-show="open" x-cloak>
+        <div class="model-menu" x-show="modelOpen" x-cloak>
           {% set models = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-pro'] %}
           {% for m in models %}
             <button class="model-menu-item" :class="model === '{{ m }}' && 'is-current'"
-                    @click="model = '{{ m }}'; open = false">
+                    @click="pickModel('{{ m }}')">
               <span class="model-menu-dot"></span>
               <span class="model-menu-lbl">{{ m }}</span>
             </button>
           {% endfor %}
         </div>
       </div>
+      {% if active_version.state == 'draft' %}
+        {# Explicit save — mirrors the prompt screen. Shown only once the
+           editor has unsaved edits; clicking save() re-baselines (hiding it
+           again) and pushes a success toast. #}
+        <button type="button" class="btn sm primary" x-show="hasChanges" x-cloak
+                :disabled="saving" @click="save()">&#10003; Save changes</button>
+      {% endif %}
       <span class="grow"></span>
       <button type="button" class="btn sm"
               x-show="compareVersionId === null && layout === 'under'"
@@ -75,8 +83,9 @@
     <div class="pc-panes" {% if side == 'cmp' %}x-show="!diff"{% endif %}>
       <div class="pc-pane-prompt" x-show="mode === 'prompt'">
         {% if active_version.state == 'draft' and side == 'cur' %}
-          <textarea class="pc-editor" x-ref="editor"
-                    @input.debounce.700ms="save()"
+          <textarea class="pc-editor"
+                    x-init="baseline = $el.value; editorBody = $el.value"
+                    @input="editorBody = $el.value"
                     spellcheck="false">{{ active_version.body }}</textarea>
         {% else %}
           <pre class="pc-readonly mono">{{ active_version.body }}</pre>
@@ -98,8 +107,9 @@
 
   {% if side == 'cur' %}
   <div class="pc-foot">
-    <span x-show="dirty" class="mono-cell muted">draft · saving…</span>
-    <span x-show="!dirty" class="mono-cell muted">saved</span>
+    <span x-show="saving" class="mono-cell muted">saving…</span>
+    <span x-show="!saving && hasChanges" class="mono-cell muted">draft · unsaved changes</span>
+    <span x-show="!saving && !hasChanges" class="mono-cell muted">saved</span>
   </div>
   {% endif %}
 </div>

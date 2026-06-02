@@ -1,29 +1,32 @@
 {# Cmp-card diff body. Reads cur + cmp text from sibling DOM and renders
-   a two-column line-diff. Refreshes when:
+   a word-level inline diff. Refreshes when:
      * the cmp `diff` toggle flips on (x-init runs)
      * the page-level mode flips (prompt ↔ output)
-     * either side's content swaps (pendingRunSwap bumps)
+     * a run's output swaps (pendingRunSwap) — but ONLY in output mode; in
+       prompt mode the text is the two saved bodies, which a clip click /
+       run (pendingRunSwap) never changes, so re-running the O(n·m) word
+       diff then would be wasted work. The `mode === 'output' && …` gate
+       makes pendingRunSwap a dependency only while output is shown.
+     * the cur draft is saved (savedTick bumps) — without this, saving a
+       changed prompt left the diff showing the pre-save text.
 
-   Required scope: $root.mode, $root.pendingRunSwap, $root.activeVersionId,
-   $root.compareVersionId.
+   Deps are read off `$store.studio` (reactive). They were previously read as
+   `$root.*`, but inside this cmpDiff x-data `$root` is the diff div itself,
+   so `$root.activeVersionId` etc. were undefined element-property reads that
+   created no reactive dependency — the x-effect never re-fired on save.
 #}
 <div class="pc-diff" data-cmp-diff x-data="cmpDiff"
      x-init="refresh()"
-     x-effect="$root.mode; $root.pendingRunSwap; $root.activeVersionId; $root.compareVersionId; refresh()">
+     x-effect="$store.studio.mode; ($store.studio.mode === 'output') && $store.studio.pendingRunSwap; $store.studio.activeVersionId; $store.studio.compareVersionId; $store.studio.savedTick; refresh()">
   <div class="pc-diff-hdr mono-cell muted">
-    <span x-text="`diff · ${$root.mode}`"></span>
+    <span x-text="`diff · ${$store.studio.mode}`"></span>
     <span class="grow"></span>
-    <span x-show="rows.length" x-text="`${rows.filter(r => r.type !== 'eq').length} differences`"></span>
+    <span x-show="changes" x-text="`${changes} ${changes === 1 ? 'change' : 'changes'}`"></span>
   </div>
-  <table class="pc-diff-table">
-    <tbody>
-      <template x-for="(row, i) in rows" :key="i">
-        <tr :class="`diff-row diff-${row.type}`">
-          <td class="diff-cell-a mono"><span x-text="row.a ?? ''"></span></td>
-          <td class="diff-cell-b mono"><span x-text="row.b ?? ''"></span></td>
-        </tr>
-      </template>
-    </tbody>
-  </table>
-  <div class="muted" x-show="!rows.length">No content to diff yet.</div>
+  {# Word-level inline diff (Word track-changes): one flowing block where
+     insertions are green <ins> and deletions are red struck-through <del>.
+     `html` is built in cmpDiff from escaped text + our own wrappers, so
+     x-html injects no untrusted markup. #}
+  <div class="pc-diff-body mono" x-show="hasContent" x-html="html"></div>
+  <div class="muted" x-show="!hasContent">No content to diff yet.</div>
 </div>

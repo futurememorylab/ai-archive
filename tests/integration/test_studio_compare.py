@@ -77,3 +77,18 @@ def test_cmp_card_emits_cmp_diff_alpine_root(client):
     # Cmp card has a diff slot wired to the cmpDiff Alpine component.
     assert 'data-cmp-diff' in html
     assert 'x-data="cmpDiff"' in html
+
+
+def test_cmp_diff_reacts_to_store_signals_including_save(client):
+    """The diff must recompute when the store's reactive signals change —
+    including a save (savedTick) — so saving a draft updates an open diff.
+    The old `$root.*` reads were non-reactive (inside cmpDiff's own x-data,
+    $root is the diff div), so a save left the diff showing stale text."""
+    pid, v1, v2 = _two_versions(client)
+    r = client.get(f"/studio?prompt_id={pid}&version_id={v2}&compare_version_id={v1}")
+    html = r.text
+    assert "$store.studio.savedTick" in html
+    assert "$store.studio.activeVersionId" in html
+    # The dead non-reactive deps are gone.
+    assert "$root.activeVersionId" not in html
+    assert "$root.compareVersionId" not in html

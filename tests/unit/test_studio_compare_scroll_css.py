@@ -33,3 +33,21 @@ def test_studio_compare_has_bounded_row_track():
         ".studio-compare row track must be minmax(0, 1fr) to bound the card "
         "height without imposing a content min-height"
     )
+
+
+def test_cmp_slot_does_not_break_the_height_chain():
+    """The compare card is wrapped in .cmp-slot. A plain block wrapper is not
+    a flex item of .studio-compare-row, so the cmp card was never
+    height-clamped to the row and its .pc-body never scrolled (the cur card,
+    a direct flex child, did). `display: contents` removes the slot's box so
+    the cmp card becomes a direct flex child — matching
+    `.studio-compare-row .studio-prompt-card { flex: 1 1 0 }` — stretches to
+    the row height, and scrolls. An empty slot still contributes no box, so
+    the cur card stays full-width when not comparing."""
+    css = CSS.read_text()
+    body = _rule_body(css, ".cmp-slot")
+    assert body is not None, ".cmp-slot rule missing"
+    assert "display: contents" in body, (
+        ".cmp-slot must be display:contents so the compare card is a direct "
+        "flex child of the row and gets height-clamped (scrollable)"
+    )
