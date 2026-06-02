@@ -2270,4 +2270,3 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .nb-prow .tag { flex: none; }
 .nb-prow select { flex: 1; min-width: 0; height: 30px; padding: 0 8px; background: var(--bg-2); color: var(--text); border: 1px solid var(--line-2); border-radius: var(--r-2); font: inherit; font-size: 12px; }
 .nb-empty { padding: 26px; text-align: center; color: var(--text-3); }
-.modal-actions { display: flex; gap: 8px; padding: 11px 14px; border-top: 1px solid var(--line); align-items: center; }
