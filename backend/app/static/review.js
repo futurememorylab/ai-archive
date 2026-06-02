@@ -1,141 +1,95 @@
-function reviewQueue(clipId) {
+// reviewMixin — data-driven Draft review, composed into the clip-detail
+// x-data alongside player() + clipAnnotate(). Operates on the Alpine arrays
+// draftMarkers / draftFields / draftNotes (each item: { item_id, status, … }).
+// Persists via /api/review/items/{id}/decision and /clips/{id}/apply; marker
+// in/out edits go through player.js::_persistMarker. Walks a clip queue held
+// in sessionStorage['catdv:reviewQueue'] (seeded by the clips list / batches).
+function reviewMixin(clipId) {
   return {
-    queue: [],
-    init() {
-      try { this.queue = JSON.parse(sessionStorage.getItem('catdv:reviewQueue') || '[]'); }
-      catch (e) { this.queue = []; }
-      document.addEventListener('change', e => {
-        const t = e.target;
-        if (t.classList.contains('ri-accept')) {
-          this._decide(t.dataset.itemId, t.checked ? 'accepted' : 'rejected');
-        } else if (t.classList.contains('ri-mfield')) {
-          this._decideMarker(t.closest('.ri-marker'));
-        } else if (t.classList.contains('ri-edit')) {
-          const val = t.dataset.multi === '1'
-            ? t.value.split(',').map(s => s.trim()).filter(s => s.length)
-            : t.value;
-          this._decide(t.dataset.itemId, 'accepted', val);
-        } else if (t.classList.contains('ri-note')) {
-          this._decide(t.dataset.itemId, 'accepted', t.value);
-        }
-      });
+    reviewQueue: [],
+    _reviewInit() {
+      try { this.reviewQueue = JSON.parse(sessionStorage.getItem("catdv:reviewQueue") || "[]"); }
+      catch (e) { this.reviewQueue = []; }
     },
-    _idx() { return this.queue.indexOf(clipId); },
-    progressLabel() {
-      const i = this._idx();
-      return i >= 0 ? `${i + 1} / ${this.queue.length}` : '';
+    // ── counts ────────────────────────────────────────────────────
+    _allDraft() { return [...this.draftMarkers, ...this.draftFields, ...this.draftNotes]; },
+    totalCount() { return this._allDraft().length; },
+    acceptedCount() { return this._allDraft().filter(it => it.status === "accepted").length; },
+    // ── queue / walk ─────────────────────────────────────────────
+    _qIdx() { return this.reviewQueue.indexOf(clipId); },
+    reviewPos() { const i = this._qIdx(); return i >= 0 ? (i + 1) : 1; },
+    reviewLen() { const i = this._qIdx(); return i >= 0 ? this.reviewQueue.length : 1; },
+    navClip(d) {
+      const i = this._qIdx();
+      if (i < 0) return;
+      const t = i + d;
+      if (t < 0 || t >= this.reviewQueue.length) return;
+      location.href = `/clips/${this.reviewQueue[t]}?review=1&scope=draft`;
     },
-    async _decide(itemId, decision, editedValue) {
+    // ── accept / delete / edit ───────────────────────────────────
+    async _persist(item, decision, editedValue) {
       const body = { decision };
       if (editedValue !== undefined) body.edited_value = editedValue;
       try {
-        const r = await fetch(`/api/review/items/${itemId}/decision`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+        const r = await fetch(`/api/review/items/${item.item_id}/decision`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-        if (!r.ok) {
-          console.error(`decision persist failed for item ${itemId}: ${r.status}`);
-          Alpine.store('toast').push(
-            `Decision not saved (HTTP ${r.status}).`,
-            { level: 'error' },
-          );
-        }
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
       } catch (e) {
-        console.error(`decision persist error for item ${itemId}`, e);
-        Alpine.store('toast').push(
-          `Decision not saved: ${e.message || String(e)}`,
-          { level: 'error' },
-        );
+        Alpine.store("toast").push(`Decision not saved: ${e.message || e}`, { level: "error" });
       }
     },
-    _next() {
-      const i = this._idx();
-      if (i >= 0 && i + 1 < this.queue.length) {
-        location.href = `/clips/${this.queue[i + 1]}?review=1`;
-      } else {
-        this._exitReview();
+    toggleAccept(item) {
+      item.status = item.status === "accepted" ? "proposed" : "accepted";
+      this._persist(item, item.status === "accepted" ? "accepted" : "pending");
+    },
+    acceptAll() {
+      for (const it of this._allDraft()) {
+        if (it.status !== "accepted") { it.status = "accepted"; this._persist(it, "accepted"); }
       }
     },
-    _exitReview() {
-      // End of the review queue — return to the clips list we came from.
-      // (There is no standalone /review page on this build, so navigating
-      // there 404'd at the end of the queue / on a single-clip review.)
-      location.href = '/' + (sessionStorage.getItem('catdv:clipsListQuery') || '');
-    },
-    _decideMarker(container) {
-      if (!container) return;
-      const itemId = container.dataset.itemId;
-      const get = k => {
-        const el = container.querySelector(`.ri-mfield[data-k="${k}"]`);
-        return el ? el.value : '';
-      };
-      const edited = {
-        name: get('name'),
-        category: get('category') || null,
-        description: get('description') || null,
-        in: { secs: parseFloat(get('in')) || 0 },
-      };
-      const outRaw = get('out');
-      if (outRaw !== '' && !isNaN(parseFloat(outRaw))) {
-        edited.out = { secs: parseFloat(outRaw) };
+    del(item, ev) {
+      if (ev) ev.stopPropagation();
+      for (const key of ["draftMarkers", "draftFields", "draftNotes"]) {
+        const i = this[key].findIndex(x => x.item_id === item.item_id);
+        if (i >= 0) { this[key].splice(i, 1); break; }
       }
-      // editing implies keep
-      const keep = container.querySelector('.ri-accept');
-      if (keep) keep.checked = true;
-      this._decide(itemId, 'accepted', edited);
+      if (this.editingItemId === item.item_id) this.editingItemId = null;
+      this._persist(item, "rejected");
+      Alpine.store("toast").push("Proposal deleted.", { level: "info" });
     },
-    prev() {
-      const i = this._idx();
-      if (i > 0) location.href = `/clips/${this.queue[i - 1]}?review=1`;
-      else this._exitReview();
+    toggleEdit(itemId) {
+      this.editingItemId = (this.editingItemId === itemId ? null : itemId);
+      const m = this.draftMarkers.find(x => x.item_id === itemId);
+      if (this.editingItemId && m) this.seek(m.in_secs);
     },
-    skip() { this._next(); },
-    async applyAndNext() {
-      // Pre-accepted opt-out: make the current checkbox state authoritative,
-      // then apply. Accept all currently-checked items first.
-      const checked = Array.from(document.querySelectorAll('.ri-accept:checked'));
-      await Promise.all(checked.map(cb => this._decide(cb.dataset.itemId, 'accepted')));
-      const r = await fetch(`/api/review/clips/${clipId}/apply`, { method: 'POST' });
-      if (r.ok) {
-        this._next();
-      } else {
-        Alpine.store('toast').push(
-          `Apply failed (${r.status}). Nothing was applied; staying on this clip.`,
-          { level: 'error' },
-        );
+    // Persist a field/note edit (markers persist via player._persistMarker).
+    persistField(item) { item.status = "accepted"; this._persist(item, "accepted", item.value); },
+    persistNote(item) { item.status = "accepted"; this._persist(item, "accepted", item.text); },
+    // ── apply (stay) + refresh ───────────────────────────────────
+    async applyDraft() {
+      try {
+        const r = await fetch(`/api/review/clips/${clipId}/apply`, { method: "POST" });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        Alpine.store("toast").push("Changes applied.", { level: "success" });
+        await this.refreshDraft();
+      } catch (e) {
+        Alpine.store("toast").push(`Apply failed: ${e.message || e}. Nothing was applied.`, { level: "error" });
       }
     },
-    async applyStay() {
-      const checked = Array.from(document.querySelectorAll('.ri-accept:checked'));
-      await Promise.all(checked.map(cb => this._decide(cb.dataset.itemId, 'accepted')));
-      // HX-Request: true makes the apply route return the re-rendered draft
-      // aside partial instead of JSON, so we swap it in place (no full
-      // reload) and toast success. `applyAndNext` deliberately omits the
-      // header — it navigates away on success and still wants the JSON path.
-      const r = await fetch(`/api/review/clips/${clipId}/apply`, {
-        method: 'POST',
-        headers: { 'HX-Request': 'true' },
-      });
-      if (r.ok) {
-        const html = await r.text();
-        const aside = document.getElementById('draft-aside');
-        if (aside) {
-          aside.innerHTML = html;
-          // Re-scan the injected subtree through the single lifecycle helper
-          // (Alpine.initTree + htmx.process) so the draft panels' x-text /
-          // x-for / @click="seek(...)" directives come alive. The partial
-          // has no hx-* attributes, so the htmx.process pass is a harmless
-          // no-op. (Direct Alpine.initTree calls are reserved to
-          // htmxAlpine.js — see test_htmx_alpine_single_lifecycle.)
-          window.htmxAlpine.reinit(aside);
-        }
-        Alpine.store('toast').push('Changes applied.', { level: 'success' });
-      } else {
-        Alpine.store('toast').push(
-          `Apply failed (${r.status}). Nothing was applied.`,
-          { level: 'error' },
-        );
-      }
+    async refreshDraft() {
+      try {
+        const r = await fetch(`/api/review/clips/${clipId}/draft-data`);
+        if (!r.ok) return;
+        const d = await r.json();
+        // Replace arrays in place so player()'s draftMarkers ref stays bound.
+        this.draftMarkers.splice(0, this.draftMarkers.length, ...d.markers);
+        this.draftFields.splice(0, this.draftFields.length, ...d.fields);
+        this.draftNotes.splice(0, this.draftNotes.length, ...d.notes);
+        this.editingItemId = null;
+      } catch (e) { /* keep current view */ }
     },
   };
 }
+window.reviewMixin = reviewMixin;
