@@ -95,6 +95,7 @@ async def run_job(
     jobs_repo: JobsRepo,
     prompts_repo: PromptsRepo,
     studio_runs_repo: StudioRunsRepo,
+    only_clip_ids: set[int] | None = None,
 ) -> None:
     """Run a job to completion (or cancellation). Serial per job."""
     job = await jobs_repo.get_job(db, job_id)
@@ -114,6 +115,9 @@ async def run_job(
             break
 
         if item.status not in ("pending", "error"):
+            continue
+
+        if only_clip_ids is not None and item.catdv_clip_id not in only_clip_ids:
             continue
 
         try:
