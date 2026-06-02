@@ -13,15 +13,15 @@ async def _seed_version(db, *, name="Scénické značky CZ", model="gemini-2.5-p
     return pid, vid
 
 
-async def _annotation_with_review(db, *, job_id, clip_id, applied):
+async def _annotation_with_review(db, *, job_id, clip_id, applied, prompt_version_id):
     """Insert an annotation for (job, clip) and one review_item; applied=True
     sets applied_at so the clip counts as reviewed, else it's awaiting."""
     cur = await db.execute(
         "INSERT INTO annotations "
         "(catdv_clip_id, catdv_clip_name, prompt_version_id, job_id, model, "
         " prompt_used, raw_response, structured_output, clip_snapshot, created_at) "
-        "VALUES (?, ?, 1, ?, 'm', 'p', '{}', '{}', '{}', '2026-06-02T00:00:00')",
-        (clip_id, f"Clip_{clip_id}", job_id),
+        "VALUES (?, ?, ?, ?, 'm', 'p', '{}', '{}', '{}', '2026-06-02T00:00:00')",
+        (clip_id, f"Clip_{clip_id}", prompt_version_id, job_id),
     )
     ann_id = cur.lastrowid
     await db.execute(
@@ -82,8 +82,8 @@ async def test_list_batches_awaiting_clips_counts_unapplied_reviews(db):
     its = await jobs.list_items(db, jid)
     await jobs.update_item_status(db, its[0].id, "review_ready")
     await jobs.update_item_status(db, its[1].id, "review_ready")
-    await _annotation_with_review(db, job_id=jid, clip_id=101, applied=False)  # awaiting
-    await _annotation_with_review(db, job_id=jid, clip_id=102, applied=True)   # reviewed
+    await _annotation_with_review(db, job_id=jid, clip_id=101, applied=False, prompt_version_id=vid)  # awaiting
+    await _annotation_with_review(db, job_id=jid, clip_id=102, applied=True, prompt_version_id=vid)   # reviewed
 
     rows = await jobs.list_batches(db, limit=50)
     assert rows[0]["awaiting_clips"] == 1
@@ -105,3 +105,30 @@ async def test_count_total_batches(db):
     await jobs.create_job(db, prompt_version_id=vid, clip_ids=[2], run_group="rg-1")
     await jobs.create_job(db, prompt_version_id=vid, clip_ids=[3])  # singleton
     assert await jobs.count_total_batches(db) == 2
+
+
+@pytest.mark.asyncio
+async def test_count_total_batches_excludes_studio_jobs(db):
+    _, vid = await _seed_version(db)
+    jobs = JobsRepo()
+    await jobs.create_job(db, prompt_version_id=vid, clip_ids=[1])                    # normal
+    await jobs.create_job(db, prompt_version_id=vid, clip_ids=[2], kind="studio")     # excluded
+    assert await jobs.count_total_batches(db) == 1
+
+
+@pytest.mark.asyncio
+async def test_list_batches_running_jobs_and_in_flight(db):
+    _, vid = await _seed_version(db)
+    jobs = JobsRepo()
+    # Two items: one will be in-flight (prompting), the other finished (review_ready).
+    jid = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[1, 2])
+    await jobs.update_status(db, jid, "running")
+    its = await jobs.list_items(db, jid)
+    await jobs.update_item_status(db, its[0].id, "prompting")      # in-flight
+    await jobs.update_item_status(db, its[1].id, "review_ready")   # finished
+
+    rows = await jobs.list_batches(db, limit=50)
+    assert len(rows) == 1
+    r = rows[0]
+    assert r["running_jobs"] == 1
+    assert r["in_flight"] == 1

@@ -173,8 +173,8 @@ class JobsRepo:
         return cur.rowcount or 0
 
     # --- Batches hub aggregation (read-only, offline-safe) -------------
-    # A "batch" = the jobs sharing a non-null run_group, keyed by
-    # COALESCE(run_group, 'job:'||id). Studio jobs are excluded. Each method
+    # A "batch" = a group of jobs sharing a run_group, OR a singleton job with
+    # no run_group (keyed 'job:<id>'). Studio jobs are excluded. Each method
     # below issues a single grouped query — never a per-batch loop — so the
     # /batches read path stays O(1) in batch count (ADR 0046).
 
@@ -194,7 +194,7 @@ class JobsRepo:
         items AS (
           SELECT
             COALESCE(j.run_group, 'job:' || j.id) AS batch_key,
-            COUNT(*) AS ran,
+            COUNT(*) AS ran,  -- total items dispatched across all statuses
             SUM(CASE WHEN ji.status = 'error' THEN 1 ELSE 0 END) AS failed,
             SUM(CASE WHEN ji.status NOT IN
                 ('pending','resolving','uploading','prompting','error')
