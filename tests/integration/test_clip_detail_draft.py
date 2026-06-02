@@ -194,6 +194,28 @@ def test_clips_draft_partial_returns_populated_when_annotation_exists(
         assert "<html" not in r.text.lower()
 
 
+def test_draft_marker_card_is_click_to_seek(monkeypatch, tmp_path):
+    # Clicking anywhere on a draft marker card should jump the player to the
+    # marker in-point and play (seek() already does both). The whole .ri-marker
+    # card carries @click="seek(m.in_secs)" — mirroring the published marker
+    # <article> — while the editor and action buttons stop propagation so
+    # editing/deleting doesn't also seek+play.
+    import re
+
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(101),)))
+        r = client.get("/clips/101/draft")
+        assert r.status_code == 200
+        # The marker card element itself is the click target.
+        assert re.search(
+            r'class="ri-card ri-marker"[^>]*@click="seek\(m\.in_secs\)"',
+            r.text,
+        ), "draft marker card must be click-to-seek"
+        # Editor + actions stop the click so they don't trigger a seek.
+        assert "@click.stop" in r.text
+
+
 def test_clips_draft_partial_returns_404_when_clip_missing(monkeypatch, tmp_path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:

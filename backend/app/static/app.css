@@ -2458,6 +2458,12 @@ body.studio-resizing {
 .ri-card { border: 1px solid var(--line); border-radius: var(--r-2); background: var(--panel); padding: 10px 12px; margin-bottom: 8px;
   display: flex; flex-direction: column; gap: 6px; transition: border-color 120ms, box-shadow 120ms, opacity 120ms; }
 .ri-card.editing { border-color: #9a6cff; box-shadow: 0 0 0 2px color-mix(in oklab, #9a6cff 30%, transparent); }
+/* A draft marker card is click-to-seek (jump to in-point + play); mirror the
+   published .marker affordance. The editor/action controls reset the cursor
+   and stop propagation so they don't trigger a seek. */
+.ri-card.ri-marker { cursor: pointer; }
+.ri-card.ri-marker:hover { border-color: var(--accent); }
+.ri-card.ri-marker .ri-editor, .ri-card.ri-marker .ri-actions { cursor: default; }
 .ri-card-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ri-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; margin-top: 2px; }
 .ri-actions .btn { flex: none; }

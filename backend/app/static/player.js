@@ -169,12 +169,15 @@ document.addEventListener("alpine:init", () => {
       v.currentTime = next;
     },
 
-    seek(secs) {
+    // Move the playhead to `secs` and (by default) start playing. Pass
+    // { play: false } to position without playing — e.g. entering marker
+    // edit mode jumps to the in-point so you can scrub, but must not play.
+    seek(secs, { play = true } = {}) {
       const v = this.$refs.video;
       if (!v) return;
       const clamped = Math.max(0, Math.min(secs, v.duration || this.duration || secs));
       v.currentTime = clamped;
-      v.play().catch(() => {});
+      if (play) v.play().catch(() => {});
     },
 
     seekFromEvent(e) {

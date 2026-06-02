@@ -63,7 +63,7 @@ function reviewMixin(clipId) {
     toggleEdit(itemId) {
       this.editingItemId = (this.editingItemId === itemId ? null : itemId);
       const m = this.draftMarkers.find(x => x.item_id === itemId);
-      if (this.editingItemId && m) this.seek(m.in_secs);
+      if (this.editingItemId && m) this.seek(m.in_secs, { play: false });
     },
     // Persist a field/note edit (markers persist via player._persistMarker).
     persistField(item) { item.status = "accepted"; this._persist(item, "accepted", item.value); },
