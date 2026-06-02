@@ -31,3 +31,37 @@
     {% endif %}
   </div>
 </div>
+
+{# Full-width aligned scene table — shown only when comparing AND on the
+   Output tab. Replaces the two per-card output panes (which gate themselves
+   off via compareVersionId === null). Loads /studio/_compare and re-inits
+   Alpine on the injected subtree (same pattern as studioPromptCard.loadOutput). #}
+<div class="studio-compare-output"
+     x-show="$store.studio.mode === 'output' && $store.studio.compareVersionId !== null"
+     x-cloak
+     x-data="{
+       load() {
+         const s = $store.studio;
+         const slot = $refs.cmpSlot;
+         if (!slot || s.mode !== 'output' || s.compareVersionId === null) return;
+         if (!s.focusedClipId) {
+           slot.innerHTML = '<div class=\'muted\'>Click a clip in a folder to focus it.</div>';
+           return;
+         }
+         fetch(`/studio/_compare?version_id=${s.activeVersionId}` +
+               `&compare_id=${s.compareVersionId}&clip_id=${s.focusedClipId}`)
+           .then(r => r.text())
+           .then(h => { slot.innerHTML = h; window.htmxAlpine.reinit(slot); })
+           .catch(err => {
+             console.error('compare load failed', err);
+             Alpine.store('toast').push(`Compare load failed: ${err.message || err}`,
+                                        { level: 'error' });
+           });
+       }
+     }"
+     x-effect="$store.studio.mode;
+               ($store.studio.mode === 'output') && $store.studio.pendingRunSwap;
+               $store.studio.focusedClipId; $store.studio.activeVersionId;
+               $store.studio.compareVersionId; load()">
+  <div class="run-slot" x-ref="cmpSlot"></div>
+</div>

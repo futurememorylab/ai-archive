@@ -2112,6 +2112,17 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   display: none;
 }
 
+/* Full-width aligned scene table shown instead of per-card output panes
+   when comparing. .studio-compare is a 1-col grid, so grid-column: 1/-1
+   spans the full grid track; width:100% ensures it fills if ever reparented
+   to a block/flex context. overflow:auto lets the table scroll independently. */
+.studio-compare-output {
+  grid-column: 1 / -1;
+  width: 100%;
+  overflow: auto;
+  min-height: 0;
+}
+
 /* === Studio: split-pane resizers ===================================== */
 /* A thin draggable divider between two panes. Dragging writes a CSS var on
    the container (studioResize.js). The grip + accent on hover make it

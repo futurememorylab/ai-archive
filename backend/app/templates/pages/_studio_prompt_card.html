@@ -91,7 +91,7 @@
           <pre class="pc-readonly mono">{{ active_version.body }}</pre>
         {% endif %}
       </div>
-      <div x-show="mode === 'output'"
+      <div x-show="mode === 'output' && compareVersionId === null"
            x-init="$nextTick(() => loadOutput())"
            x-effect="pendingRunSwap && loadOutput()">
         <div class="run-slot" x-ref="runSlot">
