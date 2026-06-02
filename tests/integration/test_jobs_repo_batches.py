@@ -93,6 +93,8 @@ async def test_list_batches_awaiting_clips_counts_unapplied_reviews(db):
 
     rows = await jobs.list_batches(db, limit=50)
     assert rows[0]["awaiting_clips"] == 1
+    # "Review →" lands on the first un-reviewed clip of the batch.
+    assert rows[0]["first_pending_clip_id"] == 101
 
 
 @pytest.mark.asyncio

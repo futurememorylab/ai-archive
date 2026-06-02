@@ -210,6 +210,15 @@ def batch_view(row: dict) -> dict:
     except (ValueError, TypeError):
         pass
 
+    # "Review →" jumps straight into the review of the first un-reviewed clip
+    # of this batch; fall back to the batch-filtered clips list if none.
+    first_pending = row.get("first_pending_clip_id")
+    review_href = (
+        f"/clips/{int(first_pending)}?review=1"
+        if first_pending is not None
+        else f"/?batch={','.join(str(i) for i in job_ids)}&anno=for_review"
+    )
+
     return {
         "batch_key": row["batch_key"],
         "id": int(row["primary_job_id"]),
@@ -228,5 +237,5 @@ def batch_view(row: dict) -> dict:
         "pct_reviewed": round(reviewed / completed * 100) if completed else 0,
         "status_state": status_state,
         "status_label": status_label,
-        "review_href": f"/?batch={','.join(str(i) for i in job_ids)}&anno=for_review",
+        "review_href": review_href,
     }

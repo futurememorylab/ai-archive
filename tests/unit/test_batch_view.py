@@ -58,9 +58,14 @@ def test_missing_prompt_label():
     assert v["prompt"] == "(prompt unavailable)"
 
 
-def test_review_href_targets_batch_jobs():
+def test_review_href_falls_back_to_batch_filter_when_no_pending_clip():
     v = batch_view(_row(job_ids=[42, 43]))
     assert v["review_href"] == "/?batch=42,43&anno=for_review"
+
+
+def test_review_href_targets_first_unreviewed_clip():
+    v = batch_view(_row(first_pending_clip_id=882290))
+    assert v["review_href"] == "/clips/882290?review=1"
 
 
 def test_zero_ran_no_divide_by_zero():

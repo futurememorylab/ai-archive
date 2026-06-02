@@ -211,7 +211,8 @@ class JobsRepo:
         reviewed AS (
           SELECT
             COALESCE(j.run_group, 'job:' || j.id) AS batch_key,
-            COUNT(DISTINCT ri.catdv_clip_id) AS awaiting_clips
+            COUNT(DISTINCT ri.catdv_clip_id) AS awaiting_clips,
+            MIN(ri.catdv_clip_id) AS first_pending_clip_id
           FROM jobs j
           JOIN annotations a ON a.job_id = j.id
           JOIN review_items ri ON ri.annotation_id = a.id AND ri.applied_at IS NULL
@@ -232,7 +233,8 @@ class JobsRepo:
           COALESCE(i.failed, 0)         AS failed,
           COALESCE(i.completed, 0)      AS completed,
           COALESCE(i.in_flight, 0)      AS in_flight,
-          COALESCE(r.awaiting_clips, 0) AS awaiting_clips
+          COALESCE(r.awaiting_clips, 0) AS awaiting_clips,
+          r.first_pending_clip_id       AS first_pending_clip_id
         FROM batch b
         JOIN jobs pj ON pj.id = b.primary_job_id
         LEFT JOIN prompt_versions pv ON pv.id = pj.prompt_version_id
