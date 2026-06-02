@@ -16,6 +16,7 @@ from backend.app.routes.cache import ui_router as cache_ui_router
 from backend.app.routes.catdv import router as catdv_router
 from backend.app.routes.connection import router as connection_router
 from backend.app.routes.events import router as events_router
+from backend.app.routes.batches import router as batches_router
 from backend.app.routes.jobs import router as jobs_router
 from backend.app.routes.live import router as live_router
 from backend.app.routes.media import router as media_router
@@ -84,6 +85,7 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(prompts_router)
     app.include_router(catdv_router)
     app.include_router(jobs_router)
+    app.include_router(batches_router)
     app.include_router(review_router)
     app.include_router(media_router)
     app.include_router(events_router)
