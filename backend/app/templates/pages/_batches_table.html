@@ -1,0 +1,100 @@
+{% if not batches %}
+  <div class="batches-empty">
+    No batches yet.
+    <a href="/">Select clips and run Annotate</a> to create your first batch.
+  </div>
+{% else %}
+<table class="batch-tbl">
+  <thead>
+    <tr>
+      <th>Batch</th><th>Started</th><th>Ran</th>
+      <th>Completed</th><th>Reviewed</th><th>Status</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for b in batches %}
+    <tr>
+      <td>
+        <div class="bt-id">
+          <span class="bt-num">#{{ b.id }}</span>
+          <span class="bt-prompt">{{ b.prompt }}</span>
+          <span class="bt-meta">v{{ b.version }} · {{ b.model }}</span>
+        </div>
+      </td>
+      <td><span class="bt-when">{{ b.started }}</span></td>
+      <td><span class="bt-ran">{{ b.ran }}</span></td>
+      <td class="bcell-prog">
+        <div class="miniprog">
+          <div class="mp-label">
+            <span>{{ b.completed }}/{{ b.ran }}</span>
+            {% if b.failed %}
+            <button type="button" class="mp-fail-btn" @click="toggle('{{ b.batch_key }}')">·
+              {{ b.failed }} failed
+              <span x-text="expanded['{{ b.batch_key }}'] ? '▴' : '▾'">▾</span>
+            </button>
+            {% endif %}
+          </div>
+          <div class="mp-bar">
+            <span class="{{ 'fill-run' if b.running else 'fill-done' }}"
+                  style="width: {{ b.pct_done }}%"></span>
+          </div>
+        </div>
+      </td>
+      <td class="bcell-prog">
+        <div class="miniprog">
+          <div class="mp-label"><span>{{ b.reviewed }}/{{ b.completed }}</span></div>
+          <div class="mp-bar">
+            <span class="fill-rev" style="width: {{ b.pct_reviewed }}%"></span>
+          </div>
+        </div>
+      </td>
+      <td>
+        <span class="pill {{ b.status_state }}">
+          {% if b.running %}<span class="ca-spinner" aria-hidden="true"></span>{% endif %}
+          <span class="led"></span>{{ b.status_label }}
+        </span>
+      </td>
+      <td class="bt-actions">
+        {% if not b.running and b.failed %}
+        <button type="button" class="btn sm" @click="retryFailed({{ b.job_ids|tojson }})">
+          ↻ Retry failed ({{ b.failed }})
+        </button>
+        {% endif %}
+        {% if not b.running and b.reviewed < b.completed %}
+        <a class="btn sm primary" href="{{ b.review_href }}">Review →</a>
+        {% endif %}
+        {% if b.running or (b.reviewed >= b.completed and not b.failed) %}
+        <a class="btn sm ghost" href="{{ b.review_href if b.completed else '/' }}">Open</a>
+        {% endif %}
+      </td>
+    </tr>
+    {% if b.fails %}
+    <tr class="bt-detail" x-show="expanded['{{ b.batch_key }}']" x-cloak>
+      <td colspan="7">
+        <div class="bt-fails">
+          <div class="bt-fails-h">
+            <span>Failed clips ({{ b.fails|length }})</span>
+            <span class="grow"></span>
+            <button type="button" class="btn sm" @click="retryFailed({{ b.job_ids|tojson }})">
+              ↻ Retry all failed
+            </button>
+          </div>
+          {% for f in b.fails %}
+          <div class="bt-fail-row">
+            <div>
+              <div class="bt-fail-name">{{ f.name }}</div>
+              <div class="bt-fail-err">{{ f.error }}</div>
+            </div>
+            <span class="grow"></span>
+            <button type="button" class="btn sm ghost"
+                    @click="retryFailed({{ b.job_ids|tojson }}, {{ f.id }})">↻ Retry</button>
+          </div>
+          {% endfor %}
+        </div>
+      </td>
+    </tr>
+    {% endif %}
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}

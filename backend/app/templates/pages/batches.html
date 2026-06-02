@@ -1,0 +1,104 @@
+{% extends "pages/layout.html" %}
+{% import "components/_ui.html" as ui %}
+{% block rail_active %}batches{% endblock %}
+{% block title %}Batches · CatDV Annotator{% endblock %}
+{% block crumb %}{{ ui.breadcrumb([('Batches', None)]) }}{% endblock %}
+
+{% block body %}
+<div class="page batches-page" x-data="batchesPage()" data-screen-label="Batches">
+  <div class="page-hdr">
+    <h1>Batches</h1>
+    <span class="meta">annotation runs</span>
+    <div class="grow"></div>
+    {{ ui.button('+ New batch', href='/', variant='primary') }}
+  </div>
+
+  <div class="batches-scroll">
+    <div class="metric-strip">
+      <div class="metric">
+        <div class="m-label">Batches</div>
+        <div class="m-value">{{ metrics.total_batches }}</div>
+        <div class="m-sub">{{ metrics.shown }} shown</div>
+      </div>
+      <div class="metric">
+        <div class="m-label">Drafts produced</div>
+        <div class="m-value">{{ metrics.drafts_produced }}</div>
+        <div class="m-sub">across recent batches</div>
+      </div>
+      <div class="metric">
+        <div class="m-label">Awaiting review</div>
+        <div class="m-value">{{ metrics.awaiting_review }}</div>
+        <div class="m-sub">{{ metrics.awaiting_batches }} batch{{ '' if metrics.awaiting_batches == 1 else 'es' }}</div>
+      </div>
+      <div class="metric danger">
+        <div class="m-label">Failed clips</div>
+        <div class="m-value">{{ metrics.failed_clips }}</div>
+        <div class="m-sub">across recent batches</div>
+      </div>
+    </div>
+
+    <div id="batches-table-region">
+      {% include "pages/_batches_table.html" %}
+    </div>
+  </div>
+</div>
+
+<script>
+  // Page-specific controller. Read-only table + live refresh on the existing
+  // global `jobs` SSE topic, and retry via fetch + toast. Reuses the single
+  // lifecycle helper (window.htmxAlpine.reinit) for the fetch-injected table.
+  function batchesPage() {
+    return {
+      expanded: {},
+      _es: null,
+      _t: null,
+
+      init() {
+        window.addEventListener("jobs-changed", () => this._schedule());
+        try {
+          this._es = new EventSource("/api/jobs/events");
+          this._es.onmessage = () => this._schedule();
+        } catch (e) { /* SSE unavailable; table is still usable */ }
+      },
+
+      _schedule() { clearTimeout(this._t); this._t = setTimeout(() => this.refresh(), 500); },
+
+      async refresh() {
+        try {
+          const r = await fetch("/batches/table");
+          if (!r.ok) return;
+          const html = await r.text();
+          const region = document.getElementById("batches-table-region");
+          if (!region) return;
+          region.innerHTML = html;
+          window.htmxAlpine.reinit(region);
+        } catch (e) { /* offline — keep current view */ }
+      },
+
+      toggle(key) { this.expanded[key] = !this.expanded[key]; },
+
+      async retryFailed(jobIds, clipId = null) {
+        const body = clipId == null
+          ? { job_ids: jobIds }
+          : { job_ids: jobIds, clip_ids: [clipId] };
+        try {
+          const r = await fetch("/batches/retry-failed", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          if (!r.ok) {
+            const d = await r.json().catch(() => ({}));
+            throw new Error(d.detail || ("HTTP " + r.status));
+          }
+          Alpine.store("toast").push("Re-running failed clip(s)…", { level: "success" });
+          this._schedule();
+        } catch (e) {
+          Alpine.store("toast").push("Retry failed: " + e.message, { level: "error" });
+        }
+      },
+    };
+  }
+  window.batchesPage = batchesPage;
+</script>
+{% endblock %}
