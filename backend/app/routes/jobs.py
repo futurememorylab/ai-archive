@@ -38,12 +38,11 @@ async def create_job(request: Request, body: JobCreate, background: BackgroundTa
     live = request.app.state.live_ctx
     started = bool(body.auto_start and live is not None and live.proxy_resolver is not None)
     if started:
-        task = asyncio.create_task(_run_in_bg(live, job_id))
-        ctx._running_jobs[job_id] = task
+        start_job_in_background(ctx, live, job_id)
     return {"id": job_id, "started": started}
 
 
-async def _run_in_bg(ctx, job_id: int) -> None:
+async def _run_in_bg(ctx, job_id: int, *, only_clip_ids: set[int] | None = None) -> None:
     try:
         await run_job(
             db=ctx.db,
@@ -58,9 +57,19 @@ async def _run_in_bg(ctx, job_id: int) -> None:
             jobs_repo=ctx.jobs_repo,
             prompts_repo=ctx.prompts_repo,
             studio_runs_repo=ctx.studio_runs_repo,
+            only_clip_ids=only_clip_ids,
         )
     finally:
         ctx._running_jobs.pop(job_id, None)
+
+
+def start_job_in_background(
+    core, live, job_id: int, *, only_clip_ids: set[int] | None = None
+) -> None:
+    """Spawn run_job for `job_id` as a tracked background task. Shared by
+    POST /api/jobs (auto-start) and the Batches retry-failed route."""
+    task = asyncio.create_task(_run_in_bg(live, job_id, only_clip_ids=only_clip_ids))
+    core._running_jobs[job_id] = task
 
 
 @router.get("")

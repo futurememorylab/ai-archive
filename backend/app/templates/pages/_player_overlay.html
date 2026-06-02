@@ -33,6 +33,7 @@
            live, plus drag handles shown only while this item is being edited. #}
         <div class="range draft-range"
              data-item-id="{{ m.item_id }}"
+             x-show="!!_draftItem({{ m.item_id }})"
              :class="{ editing: editingItemId === {{ m.item_id }} }"
              :style="(() => { const _m = _draftItem({{ m.item_id }}); if (!_m || !duration) return ''; const _l = (_m.in_secs / duration) * 100; const _w = (((_m.out_secs != null ? _m.out_secs : _m.in_secs + 1) - _m.in_secs) / duration) * 100; return `left:${_l}%; width:${_w}%`; })()"
              @pointerdown="startMarkerDrag($event, {{ m.item_id }}, 'move')"

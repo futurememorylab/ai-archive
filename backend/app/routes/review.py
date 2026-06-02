@@ -12,6 +12,7 @@ from backend.app.deps import get_core_ctx
 from backend.app.routes.pages.clips import _build_draft_for_clip
 from backend.app.routes.pages.templates import templates
 from backend.app.services.write_queue import etag_from_snapshot, fps_from_snapshot
+from backend.app.ui.view_models import draft_review_arrays
 
 
 def _notify_sync(request: Request) -> None:
@@ -34,6 +35,17 @@ class ApplyBatch(BaseModel):
     clip_ids: list[int]
     kinds: list[str] | None = None
 
+
+
+@router.get("/clips/{clip_id}/draft-data")
+async def draft_data(request: Request, clip_id: int):
+    """JSON draft arrays (markers/fields/notes with item_id + status, rejected
+    excluded) for the redesigned Draft panel to (re)hydrate its Alpine state —
+    e.g. after Apply or Annotate — without swapping server HTML into the
+    reactive subtree."""
+    ctx = get_core_ctx(request)
+    draft = await _build_draft_for_clip(ctx, clip_id)
+    return draft_review_arrays(draft)
 
 
 @router.get("/clips/{clip_id}/items")

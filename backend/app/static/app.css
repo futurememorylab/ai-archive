@@ -14,7 +14,8 @@
   --text-2:    #b6bcc6;
   --text-3:    #7e8693;
   --text-4:    #545b66;
-  --accent:    #f5a623;
+  --accent:      #f5a623;
+  --accent-true: var(--accent);          /* snapshot before any scope override */
   --accent-2:  color-mix(in oklab, var(--accent) 30%, transparent);
   --accent-fg: #14181d;
   --good:      #3ddc84;
@@ -2307,3 +2308,111 @@ body.studio-resizing {
   from { transform: translateY(0.5rem); opacity: 0; }
   to   { transform: translateY(0); opacity: 1; }
 }
+
+/* ─── Batches hub (/batches) ─────────────────────────────────────────── */
+.batches-page { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.batches-scroll { overflow: auto; flex: 1; min-height: 0; padding: 0 20px 28px; }
+.batches-empty { padding: 48px; text-align: center; color: var(--text-3); }
+
+.batch-tbl { width: 100%; border-collapse: collapse; }
+.batch-tbl thead th {
+  position: sticky; top: 0; z-index: 1; text-align: left;
+  background: var(--panel); border-bottom: 1px solid var(--line);
+  padding: 9px 12px; font-size: 10.5px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-3); font-weight: 600;
+}
+.batch-tbl tbody td { padding: 12px; border-bottom: 1px solid var(--line); vertical-align: middle; font-size: 13px; }
+.batch-tbl tbody tr:hover { background: var(--hover); }
+.batch-tbl tbody tr.batch-row { cursor: pointer; }
+.bt-id { display: flex; flex-direction: column; gap: 2px; }
+.bt-id .bt-num { font-family: var(--f-mono); color: var(--text-3); font-size: 11px; }
+.bt-id .bt-prompt { font-weight: 500; }
+.bt-meta { color: var(--text-3); font-size: 11px; }
+.bt-when { color: var(--text-2); font-family: var(--f-mono); font-size: 12px; white-space: nowrap; }
+.bt-ran { font-family: var(--f-mono); }
+
+.bcell-prog { min-width: 130px; }
+.miniprog { display: flex; flex-direction: column; gap: 4px; }
+.miniprog .mp-label { font-family: var(--f-mono); font-size: 11.5px; color: var(--text-2); display: flex; gap: 6px; align-items: baseline; }
+.miniprog .mp-bar { height: 5px; border-radius: 3px; background: var(--surface); overflow: hidden; }
+.miniprog .mp-bar > span { display: block; height: 100%; border-radius: 3px; transition: width 0.4s; }
+.miniprog .mp-bar > span.fill-done { background: var(--good); }
+.miniprog .mp-bar > span.fill-rev { background: var(--accent); }
+.miniprog .mp-bar > span.fill-run { background: var(--info); }
+
+.bt-actions { text-align: right; white-space: nowrap; display: flex; gap: 6px; justify-content: flex-end; }
+.mp-fail-btn { background: none; border: 0; padding: 0; color: var(--bad); cursor: pointer; font-family: var(--f-mono); font-size: 11.5px; }
+.mp-fail-btn:hover { text-decoration: underline; }
+.bt-detail > td { padding: 0 12px 14px; background: var(--bg-2); border-bottom: 1px solid var(--line); }
+.bt-fails { border: 1px solid color-mix(in oklab, var(--bad) 30%, var(--line)); border-radius: var(--r-2); background: var(--panel); padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.bt-fails-h { display: flex; align-items: center; gap: 8px; padding-bottom: 6px; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
+.bt-fail-row { display: flex; align-items: center; gap: 11px; padding: 8px 0; border-top: 1px solid var(--line); }
+.bt-fail-name { font-size: 12.5px; }
+.bt-fail-err { font-size: 11px; color: var(--bad); font-family: var(--f-mono); margin-top: 2px; }
+
+/* ─── New-batch picker modal (two-pane: list + selection basket) ─────── */
+.modal-card.nb-card { width: 1080px; max-width: 94vw; }
+/* Fixed (not max-) height so the list stays at its full length regardless of
+   how many clips are selected — the modal doesn't grow/shrink as you pick. */
+.nb-body { padding: 0; display: flex; min-height: 0; height: min(640px, calc(86vh - 112px)); }
+.nb-main { flex: 1; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
+.nb-side { width: 304px; flex: none; display: flex; flex-direction: column; background: var(--panel); min-height: 0; }
+.nb-filters { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.nb-filters .search { flex: 1; min-width: 150px; height: 30px; }
+.nb-filters select { height: 30px; padding: 0 8px; background: var(--bg-2); color: var(--text); border: 1px solid var(--line-2); border-radius: var(--r-2); font: inherit; font-size: 12px; }
+.nb-selonly { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--text-3); white-space: nowrap; cursor: pointer; }
+.nb-list { overflow: auto; flex: 1; min-height: 220px; }
+.nb-pager { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-top: 1px solid var(--line); }
+.nb-pager .pg-meta { color: var(--text-3); font-size: 11.5px; font-family: var(--f-mono); }
+.nb-side-h { display: flex; align-items: center; gap: 8px; padding: 11px 12px; border-bottom: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-3); }
+.nb-side-h b { color: var(--accent); font-size: 14px; font-family: var(--f-mono); }
+.nb-basket { overflow: auto; flex: 1; min-height: 80px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.nb-basket-empty { color: var(--text-4); font-size: 12px; padding: 16px 6px; text-align: center; line-height: 1.5; }
+.nb-bchip { display: flex; align-items: center; gap: 8px; padding: 5px 7px 5px 5px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--surface); }
+.nb-bchip .thumb { width: 42px; height: 24px; border-radius: 3px; flex: none; object-fit: cover; background: var(--bg-2); }
+.nb-bchip .nb-bname { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nb-bchip .nb-bk { color: var(--text-4); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; flex: none; }
+.nb-bchip .nb-bx { border: 0; background: transparent; color: var(--text-4); cursor: pointer; font-size: 13px; line-height: 1; padding: 0; flex: none; }
+.nb-bchip .nb-bx:hover { color: var(--bad); }
+.nb-selbox { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; }
+.nb-prompts { border-top: 1px solid var(--line); padding: 11px 12px; display: flex; flex-direction: column; gap: 9px; }
+.nb-prompts-h { font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
+.nb-prow { display: flex; align-items: center; gap: 8px; }
+.nb-prow .tag { flex: none; }
+.nb-prow select { flex: 1; min-width: 0; height: 30px; padding: 0 8px; background: var(--bg-2); color: var(--text); border: 1px solid var(--line-2); border-radius: var(--r-2); font: inherit; font-size: 12px; }
+.nb-empty { padding: 26px; text-align: center; color: var(--text-3); }
+
+/* ─── Draft review (redesigned cards + bar) ──────────────────────────── */
+.review-bar { display: flex; align-items: center; gap: 7px; padding: 8px 0 10px; border-bottom: 1px solid var(--line); margin-bottom: 10px; flex-wrap: wrap; row-gap: 8px; }
+.review-bar .review-kept { color: var(--accent); font-size: 11.5px; font-family: var(--f-mono); }
+.review-bar .review-pos { color: var(--text-2); font-size: 12px; font-family: var(--f-mono); min-width: 64px; text-align: center; }
+.review-bar .btn.nav { width: 28px; padding: 0; font-size: 15px; }
+.edit-hint { display: flex; gap: 7px; align-items: flex-start; font-size: 11.5px; color: var(--text-2); line-height: 1.5;
+  background: color-mix(in oklab, var(--info) 10%, transparent);
+  border: 1px solid color-mix(in oklab, var(--info) 26%, var(--line)); border-radius: var(--r-2); padding: 8px 10px; margin-bottom: 12px; }
+.edit-hint b { color: var(--text); font-weight: 600; }
+.edit-hint .eh-ico { color: var(--info); flex: none; }
+.ri-card { border: 1px solid var(--line); border-radius: var(--r-2); background: var(--panel); padding: 10px 12px; margin-bottom: 8px;
+  display: flex; flex-direction: column; gap: 6px; transition: border-color 120ms, box-shadow 120ms, opacity 120ms; }
+.ri-card.editing { border-color: #9a6cff; box-shadow: 0 0 0 2px color-mix(in oklab, #9a6cff 30%, transparent); }
+.ri-card-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ri-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; margin-top: 2px; }
+.ri-actions .btn { flex: none; }
+.ri-editor .txt, .ri-editor .txt-area { width: 100%; }
+.ri-card-top .cat { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent-true);
+  border: 1px solid color-mix(in oklab, var(--accent-true) 32%, var(--line)); border-radius: 4px; padding: 1px 6px; }
+.ri-card-top .ri-tc { color: var(--text-3); font-size: 11.5px; font-family: var(--f-mono); }
+.ri-card-top .ident { color: var(--text-2); font-size: 11.5px; font-family: var(--f-mono); }
+.ri-name { font-size: 13.5px; font-weight: 500; color: var(--text); line-height: 1.4; text-wrap: pretty; cursor: pointer; }
+.ri-desc { font-size: 12px; color: var(--text-2); line-height: 1.5; text-wrap: pretty; }
+.ri-value { font-size: 13px; color: var(--text); line-height: 1.45; word-break: break-word; }
+.ri-note-text { font-size: 12.5px; color: var(--text); line-height: 1.55; text-wrap: pretty; }
+.ri-editor { margin-top: 4px; padding-top: 9px; border-top: 1px dashed var(--line); display: flex; flex-direction: column; gap: 9px; }
+.ri-editor .txt-area { min-height: 60px; }
+.ri-time { display: flex; flex-direction: column; gap: 3px; }
+.ri-readout { font-size: 12px; color: var(--text-2); font-family: var(--f-mono); }
+.ri-readout b { color: var(--text); }
+.ri-hint { font-size: 11px; color: var(--text-3); }
+.timeline .range.draft-range { cursor: grab; background: color-mix(in oklab, var(--info) 50%, transparent); }
+.timeline .range.draft-range.editing { background: color-mix(in oklab, #9a6cff 68%, transparent); outline: 1px solid #9a6cff; outline-offset: 1px; }
+.timeline .range.draft-range:hover { filter: brightness(1.2); }

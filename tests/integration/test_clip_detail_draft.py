@@ -130,15 +130,24 @@ async def _seed_annotation_with_marker(ctx, clip_id: int = 101) -> int:
 
 
 def test_clip_detail_renders_empty_draft_when_no_annotation(monkeypatch, tmp_path):
+    # Redesigned: the draft panel is Alpine-driven; no server-rendered
+    # data-draft-empty hook. When there is no annotation the draft_arrays are
+    # empty, so the serialised draftMarkers/draftFields/draftNotes arrays in the
+    # page x-data are all []. Assert the page renders and the card panel markup
+    # (review-bar) + empty arrays are present.
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         install_live_ctx(client.app, archive=FakeArchive((_canonical(101),)))
         r = client.get("/clips/101")
         assert r.status_code == 200
-        assert 'data-draft-empty="true"' in r.text
+        assert "review-bar" in r.text
+        assert "draftFields: []" in r.text
 
 
 def test_clip_detail_renders_draft_when_annotation_exists(monkeypatch, tmp_path):
+    # Redesigned: draft items are serialised into the page x-data (draftMarkers
+    # JSON), not rendered as raw HTML. The marker name "Scene 1" appears as a
+    # JSON value inside the Alpine data on the page; the review bar is present.
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         ctx = client.app.state.core_ctx
@@ -146,17 +155,21 @@ def test_clip_detail_renders_draft_when_annotation_exists(monkeypatch, tmp_path)
         _run(_seed_annotation_with_marker(ctx, clip_id=101))
         r = client.get("/clips/101")
         assert r.status_code == 200
-        assert 'data-draft-empty="true"' not in r.text
-        assert "Scene 1" in r.text
+        assert "review-bar" in r.text
+        assert "Scene 1" in r.text  # present as a JSON value in draftMarkers
 
 
 def test_clips_draft_partial_returns_empty_state(monkeypatch, tmp_path):
+    # Redesigned: _anno_draft.html is a pure Alpine template; there is no
+    # server-rendered empty-state hook. The partial renders the review-bar
+    # and card-panel scaffolding regardless; Alpine shows "No proposals to
+    # review." client-side when draftMarkers/draftFields/draftNotes are empty.
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         install_live_ctx(client.app, archive=FakeArchive((_canonical(101),)))
         r = client.get("/clips/101/draft")
         assert r.status_code == 200
-        assert 'data-draft-empty="true"' in r.text
+        assert "review-bar" in r.text
         # Body is a partial — must not include the full page layout.
         assert "<html" not in r.text.lower()
 
@@ -165,6 +178,10 @@ def test_clips_draft_partial_returns_populated_when_annotation_exists(
     monkeypatch,
     tmp_path,
 ):
+    # Redesigned: _anno_draft.html is a pure Alpine template — draft item names
+    # are NOT rendered server-side in this partial (they live in the page-level
+    # x-data JSON in the full clip-detail render). The partial renders the
+    # card scaffolding (review-bar, ri-card loop templates) and remains a partial.
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         ctx = client.app.state.core_ctx
@@ -172,7 +189,8 @@ def test_clips_draft_partial_returns_populated_when_annotation_exists(
         _run(_seed_annotation_with_marker(ctx, clip_id=101))
         r = client.get("/clips/101/draft")
         assert r.status_code == 200
-        assert "Scene 1" in r.text
+        assert "review-bar" in r.text
+        assert "ri-card" in r.text
         assert "<html" not in r.text.lower()
 
 

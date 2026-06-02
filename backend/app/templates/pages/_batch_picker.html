@@ -1,0 +1,6 @@
+{# Batch-picker list partial. The hidden meta div carries the page total so
+   the modal's client controller can render the pager; the actual rows come
+   from the shared _video_list.html scaffold with picker trailing cells. #}
+<div id="nb-list-meta" data-total="{{ total }}" data-offset="{{ offset }}"
+     data-limit="{{ limit }}" hidden></div>
+{% include "pages/_video_list.html" %}
