@@ -172,3 +172,61 @@ def cache_status_view(status) -> dict[str, Any]:
         "media_local": _shape(ml),
         "media_ai": _shape(ai),
     }
+
+
+def batch_view(row: dict) -> dict:
+    """Shape a `JobsRepo.list_batches` row into the dict the Batches table
+    renders. Pure function (no I/O) so it is unit-tested in isolation.
+
+    Status mirrors the design: running → 'Running X/Y'; not running with
+    drafts still awaiting → 'Awaiting review' / 'N to review'; otherwise
+    'Applied'.
+    """
+    ran = int(row["ran"])
+    completed = int(row["completed"])
+    failed = int(row["failed"])
+    awaiting = int(row["awaiting_clips"])
+    running = int(row["running_jobs"]) > 0 or int(row["in_flight"]) > 0
+    reviewed = max(0, completed - awaiting)
+
+    if running:
+        status_state, status_label = "accent", f"Running {completed + failed}/{ran}"
+    elif awaiting > 0:
+        status_state = ""
+        status_label = "Awaiting review" if reviewed == 0 else f"{awaiting} to review"
+    else:
+        status_state, status_label = "ok", "Applied"
+
+    name = row.get("prompt_name") or "(prompt unavailable)"
+    if row.get("prompt_name") and int(row.get("prompt_count", 1)) > 1:
+        name = f"{name} + {int(row['prompt_count']) - 1} more"
+
+    job_ids = list(row["job_ids"])
+    started = row.get("started_at") or ""
+    try:
+        from datetime import datetime as _dt
+
+        started = _dt.fromisoformat(started).strftime("%d %b %H:%M")
+    except (ValueError, TypeError):
+        pass
+
+    return {
+        "batch_key": row["batch_key"],
+        "id": int(row["primary_job_id"]),
+        "job_ids": job_ids,
+        "prompt": name,
+        "version": row.get("version_num"),
+        "model": row.get("model") or "",
+        "started": started,
+        "ran": ran,
+        "completed": completed,
+        "failed": failed,
+        "reviewed": reviewed,
+        "awaiting": awaiting,
+        "running": running,
+        "pct_done": round((completed + failed) / ran * 100) if ran else 0,
+        "pct_reviewed": round(reviewed / completed * 100) if completed else 0,
+        "status_state": status_state,
+        "status_label": status_label,
+        "review_href": f"/?batch={','.join(str(i) for i in job_ids)}&anno=for_review",
+    }
