@@ -172,3 +172,124 @@ def cache_status_view(status) -> dict[str, Any]:
         "media_local": _shape(ml),
         "media_ai": _shape(ai),
     }
+
+
+def batch_view(row: dict) -> dict:
+    """Shape a `JobsRepo.list_batches` row into the dict the Batches table
+    renders. Pure function (no I/O) so it is unit-tested in isolation.
+
+    Status mirrors the design: running → 'Running X/Y'; not running with
+    drafts still awaiting → 'Awaiting review' / 'N to review'; otherwise
+    'Applied'.
+    """
+    ran = int(row["ran"])
+    completed = int(row["completed"])
+    failed = int(row["failed"])
+    awaiting = int(row["awaiting_clips"])
+    running = int(row["running_jobs"]) > 0 or int(row["in_flight"]) > 0
+    reviewed = max(0, completed - awaiting)
+
+    if running:
+        status_state, status_label = "accent", f"Running {completed + failed}/{ran}"
+    elif awaiting > 0:
+        status_state = ""
+        status_label = "Awaiting review" if reviewed == 0 else f"{awaiting} to review"
+    else:
+        status_state, status_label = "ok", "Applied"
+
+    name = row.get("prompt_name") or "(prompt unavailable)"
+    if row.get("prompt_name") and int(row.get("prompt_count", 1)) > 1:
+        name = f"{name} + {int(row['prompt_count']) - 1} more"
+
+    job_ids = list(row["job_ids"])
+    started = row.get("started_at") or ""
+    try:
+        from datetime import datetime as _dt
+
+        started = _dt.fromisoformat(started).strftime("%d %b %H:%M")
+    except (ValueError, TypeError):
+        pass
+
+    # "Review →" jumps straight into the review of the first un-reviewed clip
+    # of this batch; fall back to the batch-filtered clips list if none.
+    first_pending = row.get("first_pending_clip_id")
+    review_href = (
+        f"/clips/{int(first_pending)}?review=1"
+        if first_pending is not None
+        else f"/?batch={','.join(str(i) for i in job_ids)}&anno=for_review"
+    )
+    # Clicking the batch row opens the clips list filtered to this batch — ALL
+    # its files (every job_item, any status), each showing its queued /
+    # processing / done / failed badge. No anno filter, so nothing is hidden.
+    files_href = f"/?batch={','.join(str(i) for i in job_ids)}"
+
+    return {
+        "batch_key": row["batch_key"],
+        "id": int(row["primary_job_id"]),
+        "job_ids": job_ids,
+        "prompt": name,
+        "version": row.get("version_num"),
+        "model": row.get("model") or "",
+        "started": started,
+        "ran": ran,
+        "completed": completed,
+        "failed": failed,
+        "reviewed": reviewed,
+        "awaiting": awaiting,
+        "running": running,
+        "pct_done": round((completed + failed) / ran * 100) if ran else 0,
+        "pct_reviewed": round(reviewed / completed * 100) if completed else 0,
+        "status_state": status_state,
+        "status_label": status_label,
+        "review_href": review_href,
+        "files_href": files_href,
+    }
+
+
+def draft_review_arrays(draft: dict) -> dict:
+    """Shape a `build_draft_view` result into the Alpine arrays the redesigned
+    Draft panel + 3-color timeline render from. Each item carries `item_id` and
+    a `status` ("accepted" if its review_item decision is accepted, else
+    "proposed"). Rejected items are excluded entirely (Delete = reject hides
+    them). Pure function — unit-tested in isolation."""
+    if not draft.get("has_draft"):
+        return {"markers": [], "fields": [], "notes": []}
+
+    def _status(decision) -> str:
+        return "accepted" if decision == "accepted" else "proposed"
+
+    markers = [
+        {
+            "item_id": m["item_id"],
+            "status": _status(m.get("decision")),
+            "name": m.get("name") or "",
+            "category": m.get("category"),
+            "description": m.get("description"),
+            "in_secs": m["in_secs"],
+            "out_secs": m.get("out_secs"),
+            "color": m.get("color"),
+        }
+        for m in draft.get("markers", [])
+        if m.get("decision") != "rejected"
+    ]
+    fields = [
+        {
+            "item_id": f["item_id"],
+            "status": _status(f.get("decision")),
+            "identifier": f.get("identifier") or "",
+            "value": f.get("value", ""),
+            "multi": bool(f.get("multi")),
+        }
+        for f in draft.get("fields", [])
+        if f.get("decision") != "rejected"
+    ]
+    notes = [
+        {
+            "item_id": n["item_id"],
+            "status": _status(n.get("decision")),
+            "text": n.get("text") or "",
+        }
+        for n in draft.get("note_items", [])
+        if n.get("decision") != "rejected"
+    ]
+    return {"markers": markers, "fields": fields, "notes": notes}

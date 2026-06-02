@@ -1,4 +1,4 @@
-# 0052. Studio output compare is an aligned scene table + linked timeline
+# 0055. Studio output compare is an aligned scene table + linked timeline
 
 **Date:** 2026-06-02
 **Status:** Accepted

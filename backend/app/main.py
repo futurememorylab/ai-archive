@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.app.context import build_context
 from backend.app.logging_setup import configure_logging
+from backend.app.routes.batches import router as batches_router
 from backend.app.routes.cache import api_router as cache_api_router
 from backend.app.routes.cache import page_router as cache_page_router
 from backend.app.routes.cache import ui_router as cache_ui_router
@@ -84,6 +85,7 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(prompts_router)
     app.include_router(catdv_router)
     app.include_router(jobs_router)
+    app.include_router(batches_router)
     app.include_router(review_router)
     app.include_router(media_router)
     app.include_router(events_router)

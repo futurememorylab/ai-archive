@@ -134,7 +134,8 @@ class JobsRepo:
     async def list_running(self, conn: aiosqlite.Connection) -> list[Job]:
         cur = await conn.execute(
             "SELECT id, prompt_version_id, status, total_clips, notes, kind, run_group "
-            "FROM jobs WHERE status = 'running' AND COALESCE(kind, '') != 'studio' ORDER BY id DESC",
+            "FROM jobs WHERE status = 'running' AND COALESCE(kind, '') != 'studio' "
+            "ORDER BY id DESC",
         )
         return [
             Job(
@@ -171,3 +172,129 @@ class JobsRepo:
         )
         await conn.commit()
         return cur.rowcount or 0
+
+    # --- Batches hub aggregation (read-only, offline-safe) -------------
+    # A "batch" = a group of jobs sharing a run_group, OR a singleton job with
+    # no run_group (keyed 'job:<id>'). Studio jobs are excluded. Each method
+    # below issues a single grouped query — never a per-batch loop — so the
+    # /batches read path stays O(1) in batch count (ADR 0046).
+
+    _BATCHES_SQL = """
+        WITH batch AS (
+          SELECT
+            COALESCE(j.run_group, 'job:' || j.id)               AS batch_key,
+            MIN(j.id)                                           AS primary_job_id,
+            MIN(j.created_at)                                   AS started_at,
+            COUNT(DISTINCT j.prompt_version_id)                 AS prompt_count,
+            GROUP_CONCAT(j.id)                                  AS job_ids_csv,
+            SUM(CASE WHEN j.status = 'running' THEN 1 ELSE 0 END) AS running_jobs
+          FROM jobs j
+          WHERE COALESCE(j.kind, '') != 'studio'
+          GROUP BY batch_key
+        ),
+        items AS (
+          SELECT
+            COALESCE(j.run_group, 'job:' || j.id) AS batch_key,
+            COUNT(*) AS ran,  -- total items dispatched across all statuses
+            SUM(CASE WHEN ji.status = 'error' THEN 1 ELSE 0 END) AS failed,
+            SUM(CASE WHEN ji.status NOT IN
+                ('pending','resolving','uploading','prompting','error')
+                THEN 1 ELSE 0 END) AS completed,
+            SUM(CASE WHEN ji.status IN
+                ('pending','resolving','uploading','prompting')
+                THEN 1 ELSE 0 END) AS in_flight
+          FROM job_items ji
+          JOIN jobs j ON j.id = ji.job_id
+          WHERE COALESCE(j.kind, '') != 'studio'
+          GROUP BY batch_key
+        ),
+        reviewed AS (
+          SELECT
+            COALESCE(j.run_group, 'job:' || j.id) AS batch_key,
+            COUNT(DISTINCT ri.catdv_clip_id) AS awaiting_clips,
+            MIN(ri.catdv_clip_id) AS first_pending_clip_id
+          FROM jobs j
+          JOIN annotations a ON a.job_id = j.id
+          JOIN review_items ri ON ri.annotation_id = a.id AND ri.applied_at IS NULL
+          WHERE COALESCE(j.kind, '') != 'studio'
+          GROUP BY batch_key
+        )
+        SELECT
+          b.batch_key                   AS batch_key,
+          b.primary_job_id              AS primary_job_id,
+          b.started_at                  AS started_at,
+          b.job_ids_csv                 AS job_ids_csv,
+          b.prompt_count                AS prompt_count,
+          b.running_jobs                AS running_jobs,
+          p.name                        AS prompt_name,
+          pv.version_num                AS version_num,
+          pv.model                      AS model,
+          COALESCE(i.ran, 0)            AS ran,
+          COALESCE(i.failed, 0)         AS failed,
+          COALESCE(i.completed, 0)      AS completed,
+          COALESCE(i.in_flight, 0)      AS in_flight,
+          COALESCE(r.awaiting_clips, 0) AS awaiting_clips,
+          r.first_pending_clip_id       AS first_pending_clip_id
+        FROM batch b
+        JOIN jobs pj ON pj.id = b.primary_job_id
+        LEFT JOIN prompt_versions pv ON pv.id = pj.prompt_version_id
+        LEFT JOIN prompts p ON p.id = pv.prompt_id
+        LEFT JOIN items i ON i.batch_key = b.batch_key
+        LEFT JOIN reviewed r ON r.batch_key = b.batch_key
+        ORDER BY b.started_at DESC, b.primary_job_id DESC
+        LIMIT ?
+    """
+
+    async def list_batches(
+        self, conn: aiosqlite.Connection, *, limit: int = 50
+    ) -> list[dict]:
+        """One row per batch (run_group, or 'job:<id>' singleton), newest
+        first. `job_ids` is the sorted list of member job ids."""
+        cur = await conn.execute(self._BATCHES_SQL, (limit,))
+        cols = [c[0] for c in cur.description]
+        rows = [dict(zip(cols, r, strict=True)) for r in await cur.fetchall()]
+        for r in rows:
+            csv = r.pop("job_ids_csv") or ""
+            r["job_ids"] = sorted(int(x) for x in csv.split(",") if x)
+        return rows
+
+    async def count_total_batches(self, conn: aiosqlite.Connection) -> int:
+        """Grand total of distinct batches (run_groups + singleton jobs),
+        excluding studio jobs. Powers the 'Batches' metric."""
+        cur = await conn.execute(
+            """
+            SELECT COUNT(*) FROM (
+              SELECT COALESCE(run_group, 'job:' || id) AS bk
+              FROM jobs WHERE COALESCE(kind, '') != 'studio'
+              GROUP BY bk
+            )
+            """
+        )
+        row = await cur.fetchone()
+        return int(row[0]) if row else 0
+
+    async def failed_items_for_jobs(
+        self, conn: aiosqlite.Connection, job_ids: list[int]
+    ) -> list[dict]:
+        """Failed (status='error') items across the given jobs, with the clip
+        name resolved from clip_cache when available. `job_ids` is bounded by
+        the page's batch limit, so a single IN clause is safe (one statement,
+        not a per-row loop)."""
+        if not job_ids:
+            return []
+        placeholders = ",".join("?" * len(job_ids))
+        sql = f"""
+            SELECT ji.job_id        AS job_id,
+                   ji.catdv_clip_id AS catdv_clip_id,
+                   ji.error_message AS error_message,
+                   cc.name          AS clip_name
+            FROM job_items ji
+            LEFT JOIN clip_cache cc
+              ON cc.provider_id = 'catdv'
+             AND cc.provider_clip_id = CAST(ji.catdv_clip_id AS TEXT)
+            WHERE ji.status = 'error' AND ji.job_id IN ({placeholders})
+            ORDER BY ji.job_id, ji.catdv_clip_id
+        """
+        cur = await conn.execute(sql, tuple(job_ids))
+        cols = [c[0] for c in cur.description]
+        return [dict(zip(cols, r, strict=True)) for r in await cur.fetchall()]

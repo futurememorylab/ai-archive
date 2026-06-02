@@ -213,6 +213,29 @@ class ReviewItemsRepo:
         cols = [c[0] for c in cur.description]
         return [dict(zip(cols, row, strict=True)) for row in await cur.fetchall()]
 
+    async def pending_clip_ids_for_jobs(
+        self, conn: aiosqlite.Connection, job_ids: list[int]
+    ) -> list[int]:
+        """Ordered distinct clip ids with un-applied review items across the
+        given jobs (a batch's member jobs), newest annotation first — the
+        review-walk queue for a batch. `job_ids` is bounded by the batch, so a
+        single IN clause is safe."""
+        if not job_ids:
+            return []
+        placeholders = ",".join("?" * len(job_ids))
+        cur = await conn.execute(
+            f"""
+            SELECT ri.catdv_clip_id AS clip_id, MAX(a.created_at) AS created_at
+            FROM review_items ri
+            JOIN annotations a ON a.id = ri.annotation_id
+            WHERE ri.applied_at IS NULL AND a.job_id IN ({placeholders})
+            GROUP BY ri.catdv_clip_id
+            ORDER BY created_at DESC, ri.catdv_clip_id DESC
+            """,
+            tuple(job_ids),
+        )
+        return [int(r[0]) for r in await cur.fetchall()]
+
     async def count_pending_clips(
         self, conn: aiosqlite.Connection, *, job_id: int | None = None
     ) -> int:
