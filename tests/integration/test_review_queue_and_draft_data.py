@@ -65,3 +65,14 @@ def test_review_queue_route(monkeypatch, tmp_path):
         r = client.get(f"/batches/review-queue?job_ids={jid}")
         assert r.status_code == 200
         assert r.json() == {"clip_ids": [101]}
+
+
+def test_draft_data_route(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        asyncio.run(_seed(client.app.state.core_ctx))
+        r = client.get("/api/review/clips/101/draft-data")
+        assert r.status_code == 200
+        body = r.json()
+        assert set(body.keys()) == {"markers", "fields", "notes"}
+        # the seeded pending marker item is present as a "proposed" card
+        assert any(m["status"] == "proposed" for m in body["markers"])
