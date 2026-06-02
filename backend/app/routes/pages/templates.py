@@ -9,12 +9,14 @@ from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
 
+from backend.app.services.word_diff import diff_html
 from backend.app.timecode import secs_to_smpte
 
 TEMPLATES_DIR = Path(__file__).resolve().parents[2] / "templates"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 templates.env.globals["smpte"] = secs_to_smpte
+templates.env.globals["diff_html"] = diff_html
 
 
 def _bytes_human(n: int | None) -> str:

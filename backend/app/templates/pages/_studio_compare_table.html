@@ -1,0 +1,82 @@
+{# Aligned scene compare table. Inputs:
+     model            — build_output_compare() / build_prompt_compare() | None
+     cur_version_num  — int | None  (for headings)
+     cmp_version_num  — int | None
+   diff_html(segs, side) is a Jinja global (services/word_diff.py).
+#}
+{% import "components/_ui.html" as ui %}
+{# Status -> (pill css state, label). Renders via the shared ui.status_pill. #}
+{% set SCT_PILL = {
+     'unchanged': ('', 'UNCHANGED'), 'changed': ('changed', 'CHANGED'),
+     'added': ('ok', 'ADDED'), 'removed': ('bad', 'REMOVED')} %}
+{% if model is none %}
+  <div class="muted">Click a clip in a folder to focus it.</div>
+{% else %}
+{# The header (version picker + Prompt/Output switch + Close) is the prompt
+   card's own .pc-hdr, kept visible above this table — this partial renders
+   only the aligned rows. data-scene-key is the cross-highlight linkage key,
+   reused on scene AND field rows; studioSceneLink.js matches it against
+   timeline ranges. #}
+<div class="studio-compare-table">
+  {# Rows are scenes (Output: markers, with timecodes) OR paragraphs (Prompt:
+     no timecodes). The tc line + seek-to-play affordance render only when the
+     side carries `tc` / `in_secs`, so the same table serves both. Clicking a
+     scene cell seeks+plays the clip from that marker's start. #}
+  {% for row in model.scenes %}
+    <div class="sct-row sct-st-{{ row.status }}" data-scene-key="{{ row.key }}">
+      <div class="sct-cell sct-left{% if row.cmp and row.cmp.in_secs is defined %} sct-seek{% endif %}"
+           {% if row.cmp and row.cmp.in_secs is defined %}title="Play from {{ row.cmp.tc }}"
+           onclick="window.Alpine && Alpine.store('studio').seekFocusedClip({{ row.cmp.in_secs }})"{% endif %}>
+        {% if row.cmp %}
+          {% if row.cmp.tc is defined %}<div class="sct-tc mono">{{ row.cmp.tc }} &middot; {{ row.cmp.dur_s }}s</div>{% endif %}
+          <div class="sct-text">{{ diff_html(row.segs, 'left') }}</div>
+        {% else %}
+          <div class="sct-empty muted">&mdash; no scene &mdash;</div>
+        {% endif %}
+      </div>
+      <div class="sct-cell sct-right{% if row.cur and row.cur.in_secs is defined %} sct-seek{% endif %}"
+           {% if row.cur and row.cur.in_secs is defined %}title="Play from {{ row.cur.tc }}"
+           onclick="window.Alpine && Alpine.store('studio').seekFocusedClip({{ row.cur.in_secs }})"{% endif %}>
+        {% if row.cur %}
+          <div class="sct-rowhead">
+            {% if row.cur.tc is defined %}<span class="sct-tc mono{{ ' sct-tc-changed' if row.time_changed }}">{{ row.cur.tc }} &middot; {{ row.cur.dur_s }}s</span>{% endif %}
+            <span class="grow"></span>
+            {{ ui.status_pill(SCT_PILL[row.status][1], SCT_PILL[row.status][0]) }}
+          </div>
+          <div class="sct-text">{{ diff_html(row.segs, 'right') }}</div>
+        {% else %}
+          <div class="sct-empty muted">&mdash; no scene &mdash;</div>
+        {% endif %}
+      </div>
+    </div>
+  {% endfor %}
+
+  {% if model.fields %}
+  <div class="sct-subhead mono-cell muted">FIELDS</div>
+  {% for f in model.fields %}
+    <div class="sct-row sct-st-{{ f.status }}" data-scene-key="{{ f.key }}">
+      <div class="sct-cell sct-left">
+        {% if f.has_cmp %}
+          <div class="sct-text"><span class="ident mono">{{ f.identifier }}</span>
+            {{ diff_html(f.segs, 'left') }}</div>
+        {% else %}<div class="sct-empty muted">&mdash; absent &mdash;</div>{% endif %}
+      </div>
+      <div class="sct-cell sct-right">
+        {% if f.has_cur %}
+          <div class="sct-rowhead">
+            <span class="ident mono">{{ f.identifier }}</span>
+            <span class="grow"></span>{{ ui.status_pill(SCT_PILL[f.status][1], SCT_PILL[f.status][0]) }}
+          </div>
+          <div class="sct-text">{{ diff_html(f.segs, 'right') }}</div>
+        {% else %}<div class="sct-empty muted">&mdash; absent &mdash;</div>{% endif %}
+      </div>
+    </div>
+  {% endfor %}
+  {% endif %}
+
+  {% if model.notes %}
+  <div class="sct-subhead mono-cell muted">NOTES</div>
+  <div class="sct-notes mono">{{ diff_html(model.notes.segs, 'both') }}</div>
+  {% endif %}
+</div>
+{% endif %}

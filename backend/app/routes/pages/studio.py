@@ -234,6 +234,48 @@ async def _build_overlay_row(
     }
 
 
+async def _overlay_rows_from_compare(
+    ctx, clip_id: int, *, cur_version_id: int, cmp_version_id: int, archive
+) -> list[dict]:
+    """Build both timeline rows from the shared compare model so each range
+    carries the same scene_key + status as the compare table."""
+    from backend.app.services.output_compare import build_output_compare
+
+    try:
+        cur_v = await ctx.prompts_repo.get_version(ctx.db, cur_version_id)
+        cmp_v = await ctx.prompts_repo.get_version(ctx.db, cmp_version_id)
+    except LookupError:
+        return []
+    _, cur_panels, _ = await _load_studio_panels(
+        ctx, version=cur_v, clip_id=clip_id, archive=archive
+    )
+    _, cmp_panels, _ = await _load_studio_panels(
+        ctx, version=cmp_v, clip_id=clip_id, archive=archive
+    )
+    model = build_output_compare(cur_panels, cmp_panels)
+    cur_ranges: list[dict] = []
+    cmp_ranges: list[dict] = []
+    for row in model["scenes"]:
+        if row["cur"]:
+            cur_ranges.append({
+                "in_secs": row["cur"]["in_secs"], "out_secs": row["cur"]["out_secs"],
+                "name": row["cur"]["name"], "scene_key": row["key"],
+                "status": row["status"],
+            })
+        if row["cmp"]:
+            cmp_ranges.append({
+                "in_secs": row["cmp"]["in_secs"], "out_secs": row["cmp"]["out_secs"],
+                "name": row["cmp"]["name"], "scene_key": row["key"],
+                "status": row["status"],
+            })
+    return [
+        {"key": f"v{cur_v.version_num}", "ranges": cur_ranges,
+         "cls": "range-cur", "alpine_list": None, "x_show": None},
+        {"key": f"v{cmp_v.version_num}", "ranges": cmp_ranges,
+         "cls": "range-cmp", "alpine_list": None, "x_show": None},
+    ]
+
+
 @router.get("/studio/_player", response_class=HTMLResponse)
 async def _studio_player(
     request: Request,
@@ -263,14 +305,20 @@ async def _studio_player(
             pass
 
     rows: list[dict] = []
-    if version_id is not None:
-        row = await _build_overlay_row(ctx, clip_id, version_id, cls="range-cur")
-        if row is not None:
-            rows.append(row)
-    if compare_id is not None:
-        row = await _build_overlay_row(ctx, clip_id, compare_id, cls="range-cmp")
-        if row is not None:
-            rows.append(row)
+    if version_id is not None and compare_id is not None:
+        rows = await _overlay_rows_from_compare(
+            ctx, clip_id, cur_version_id=version_id,
+            cmp_version_id=compare_id, archive=archive,
+        )
+    else:
+        if version_id is not None:
+            row = await _build_overlay_row(ctx, clip_id, version_id, cls="range-cur")
+            if row is not None:
+                rows.append(row)
+        if compare_id is not None:
+            row = await _build_overlay_row(ctx, clip_id, compare_id, cls="range-cmp")
+            if row is not None:
+                rows.append(row)
 
     # Offline / test fallback: when no archive is configured we have no
     # canonical duration. Derive one from the scenes so the overlay
@@ -382,6 +430,74 @@ async def _studio_prompt_card(
             "run": run.model_dump() if run else None,
             "panels": panels,
             "clip": {"fps": fps},
+        },
+    )
+
+
+@router.get("/studio/_compare", response_class=HTMLResponse)
+async def _studio_compare(
+    request: Request,
+    version_id: int,
+    compare_id: int,
+    clip_id: int | None = None,
+):
+    """Aligned scene compare table for (cur=version_id, cmp=compare_id) on a clip."""
+    ctx = get_core_ctx(request)
+    if clip_id is None:
+        return templates.TemplateResponse(
+            request, "pages/_studio_compare_table.html", {"model": None}
+        )
+    try:
+        cur_v = await ctx.prompts_repo.get_version(ctx.db, version_id)
+        cmp_v = await ctx.prompts_repo.get_version(ctx.db, compare_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="version not found") from exc
+    archive = _archive(request)
+    _, cur_panels, _ = await _load_studio_panels(
+        ctx, version=cur_v, clip_id=clip_id, archive=archive
+    )
+    _, cmp_panels, _ = await _load_studio_panels(
+        ctx, version=cmp_v, clip_id=clip_id, archive=archive
+    )
+    from backend.app.services.output_compare import build_output_compare
+
+    model = build_output_compare(cur_panels, cmp_panels)
+    return templates.TemplateResponse(
+        request,
+        "pages/_studio_compare_table.html",
+        {
+            "model": model,
+            "cur_version_num": cur_v.version_num,
+            "cmp_version_num": cmp_v.version_num,
+        },
+    )
+
+
+@router.get("/studio/_prompt_compare", response_class=HTMLResponse)
+async def _studio_prompt_compare(
+    request: Request,
+    version_id: int,
+    compare_id: int,
+):
+    """Paragraph-aligned prompt-body compare table (cur=version_id,
+    cmp=compare_id). The Prompt-tab analogue of `/studio/_compare`; renders the
+    same `_studio_compare_table.html` with paragraph rows (no clip needed)."""
+    ctx = get_core_ctx(request)
+    try:
+        cur_v = await ctx.prompts_repo.get_version(ctx.db, version_id)
+        cmp_v = await ctx.prompts_repo.get_version(ctx.db, compare_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="version not found") from exc
+    from backend.app.services.prompt_compare import build_prompt_compare
+
+    model = build_prompt_compare(cur_v.body, cmp_v.body)
+    return templates.TemplateResponse(
+        request,
+        "pages/_studio_compare_table.html",
+        {
+            "model": model,
+            "cur_version_num": cur_v.version_num,
+            "cmp_version_num": cmp_v.version_num,
         },
     )
 

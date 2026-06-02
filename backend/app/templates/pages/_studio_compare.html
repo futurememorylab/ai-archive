@@ -31,3 +31,45 @@
     {% endif %}
   </div>
 </div>
+
+{# Full-width aligned scene table — shown only when comparing AND on the
+   Output tab. Replaces the two per-card output panes (which gate themselves
+   off via compareVersionId === null). Loads /studio/_compare and re-inits
+   Alpine on the injected subtree (same pattern as studioPromptCard.loadOutput). #}
+<div class="studio-compare-output"
+     x-show="$store.studio.compareVersionId !== null && $store.studio.compareDiff"
+     x-cloak
+     x-data="{
+       load() {
+         const s = $store.studio;
+         const slot = $refs.cmpSlot;
+         if (!slot || s.compareVersionId === null || !s.compareDiff) return;
+         let url;
+         if (s.mode === 'prompt') {
+           // Prompt paragraph diff — no clip needed, just the two bodies.
+           url = `/studio/_prompt_compare?version_id=${s.activeVersionId}` +
+                 `&compare_id=${s.compareVersionId}`;
+         } else {
+           if (!s.focusedClipId) {
+             slot.innerHTML = '<div class=\'muted\'>Click a clip in a folder to focus it.</div>';
+             return;
+           }
+           url = `/studio/_compare?version_id=${s.activeVersionId}` +
+                 `&compare_id=${s.compareVersionId}&clip_id=${s.focusedClipId}`;
+         }
+         fetch(url)
+           .then(r => r.text())
+           .then(h => { slot.innerHTML = h; window.htmxAlpine.reinit(slot); })
+           .catch(err => {
+             console.error('compare load failed', err);
+             Alpine.store('toast').push(`Compare load failed: ${err.message || err}`,
+                                        { level: 'error' });
+           });
+       }
+     }"
+     x-effect="$store.studio.mode; $store.studio.compareDiff; $store.studio.savedTick;
+               ($store.studio.mode === 'output') && $store.studio.pendingRunSwap;
+               $store.studio.focusedClipId; $store.studio.activeVersionId;
+               $store.studio.compareVersionId; load()">
+  <div class="run-slot" x-ref="cmpSlot"></div>
+</div>

@@ -28,8 +28,15 @@ def test_header_has_three_layout_toggles():
         assert f'data-studio-toggle="{which}"' in hdr, f"missing {which} toggle"
 
 
-def test_compare_button_gated_to_under_layout():
+def test_compare_button_available_in_both_layouts():
+    # ADR 0051 made the `right` layout a three-column Player | cur | cmp
+    # arrangement, so compare is supported there too. The `+ Compare` button
+    # must therefore NOT be gated to the under-player layout — it shows
+    # whenever a compare isn't already open, in either layout.
     card = CARD.read_text()
-    assert "layout === 'under'" in card, (
-        "+ Compare must be gated to the under-player layout"
+    assert 'x-show="compareVersionId === null"' in card, (
+        "+ Compare must be shown whenever not already comparing (any layout)"
+    )
+    assert "layout === 'under'" not in card, (
+        "+ Compare must no longer be gated to the under-player layout"
     )

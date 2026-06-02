@@ -142,7 +142,9 @@ def test_cmp_side_renders_close_and_diff_toggle(client):
     # close button keeps its layout-only class; diff toggle is identified by
     # its behavior (button class migrated to canonical .btn during UI consolidation)
     assert 'btn-close-cmp' in r.text
-    assert 'diff = !diff' in r.text
+    # The Diff toggle now drives the shared store flag (compareDiff) so it
+    # controls both the Prompt word-diff and the Output aligned table.
+    assert '$store.studio.compareDiff = !$store.studio.compareDiff' in r.text
 
 
 def test_output_tab_includes_data_run_json_when_run_exists(client):

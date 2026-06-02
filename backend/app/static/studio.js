@@ -90,6 +90,8 @@ document.addEventListener('alpine:init', () => {
       set compareVersionId(v)    { store().compareVersionId = v; },
       get compareVersionNum()    { return store().compareVersionNum; },
       set compareVersionNum(v)   { store().compareVersionNum = v; },
+      get compareDiff()          { return store().compareDiff; },
+      set compareDiff(v)         { store().compareDiff = v; },
       get mode()                 { return store().mode; },
       set mode(v)                { store().mode = v; },
       get focusedClipId()        { return store().focusedClipId; },
@@ -364,6 +366,10 @@ document.addEventListener('alpine:init', () => {
 
     async loadOutput() {
       const page = this._page();
+      // When the Diff toggle is on, the full-width compare table owns the
+      // output and the per-card panes are hidden — skip the wasted /studio/_run
+      // fetch for those hidden panes.
+      if (page?.compareDiff) return;
       const versionId = this.side === 'cur'
         ? page?.activeVersionId
         : page?.compareVersionId;

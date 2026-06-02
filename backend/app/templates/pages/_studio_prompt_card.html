@@ -53,14 +53,17 @@
       {% endif %}
       <span class="grow"></span>
       <button type="button" class="btn sm"
-              x-show="compareVersionId === null && layout === 'under'"
+              x-show="compareVersionId === null"
               @click="openCompare()">+ Compare</button>
     {% else %}
       <span class="grow"></span>
+      {# Shared Diff toggle (store.compareDiff) — drives the Prompt word-diff
+         and the Output aligned table alike, so both tabs read side-by-side by
+         default with Diff as an opt-in, consistent with each other. #}
       <button type="button" class="btn sm"
-              @click="diff = !diff"
-              :class="diff && 'active'"
-              x-text="diff ? `Hide diff` : `Diff vs v${activeVersionNum}`"></button>
+              @click="$store.studio.compareDiff = !$store.studio.compareDiff"
+              :class="$store.studio.compareDiff && 'active'"
+              x-text="$store.studio.compareDiff ? `Hide diff` : `Diff vs v${activeVersionNum}`"></button>
       <button type="button" class="btn sm icon btn-close-cmp" title="Close compare"
               @click="closeCompare()">×</button>
     {% endif %}
@@ -73,14 +76,17 @@
             @click="mode = 'output'">Output</button>
   </div>
 
-  <div class="pc-body">
-    {% if side == 'cmp' %}
-      <div x-show="diff" x-cloak>
-        {% include "pages/_studio_diff.html" %}
-      </div>
-    {% endif %}
-
-    <div class="pc-panes" {% if side == 'cmp' %}x-show="!diff"{% endif %}>
+  {# Comparing + Diff-on (either tab) replaces the per-card bodies with the
+     full-width aligned table below — hide the body then so it isn't an empty
+     column. Every other state (side-by-side prompt bodies or output panels,
+     and the single-version views) keeps the body. #}
+  <div class="pc-body"
+       x-show="!(compareVersionId !== null && $store.studio.compareDiff)"
+       x-cloak>
+    {# Both compare diffs (Prompt word-paragraph + Output scene table) render in
+       the full-width table below; this body shows only the side-by-side
+       bodies/panels (pc-body is hidden whenever the table is up). #}
+    <div class="pc-panes">
       <div class="pc-pane-prompt" x-show="mode === 'prompt'">
         {% if active_version.state == 'draft' and side == 'cur' %}
           <textarea class="pc-editor"
@@ -91,9 +97,13 @@
           <pre class="pc-readonly mono">{{ active_version.body }}</pre>
         {% endif %}
       </div>
-      <div x-show="mode === 'output'"
+      {# Per-card output panels. Shown in output mode UNLESS we're in the
+         full-width aligned-table state (comparing + Diff on). When comparing
+         with Diff off, both cards show their version's panels side by side —
+         the cmp card's loadOutput() loads the compare version. #}
+      <div x-show="mode === 'output' && !(compareVersionId !== null && $store.studio.compareDiff)"
            x-init="$nextTick(() => loadOutput())"
-           x-effect="pendingRunSwap && loadOutput()">
+           x-effect="$store.studio.pendingRunSwap; $store.studio.focusedClipId; $store.studio.compareDiff; ($store.studio.mode === 'output') && loadOutput()">
         <div class="run-slot" x-ref="runSlot">
           {% if panels is not none %}
             {% include "pages/_studio_run_output.html" %}
@@ -106,7 +116,9 @@
   </div>
 
   {% if side == 'cur' %}
-  <div class="pc-foot">
+  <div class="pc-foot"
+       x-show="!(compareVersionId !== null && $store.studio.compareDiff)"
+       x-cloak>
     <span x-show="saving" class="mono-cell muted">saving…</span>
     <span x-show="!saving && hasChanges" class="mono-cell muted">draft · unsaved changes</span>
     <span x-show="!saving && !hasChanges" class="mono-cell muted">saved</span>

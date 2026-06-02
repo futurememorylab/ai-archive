@@ -70,25 +70,18 @@ def test_both_cards_bind_tabs_to_root_mode(client):
     assert 'this.mode' not in html
 
 
-def test_cmp_card_emits_cmp_diff_alpine_root(client):
+def test_compare_table_region_reacts_to_store_signals_including_save(client):
+    """The compare diff is now the full-width aligned table region (the old
+    per-card cmpDiff flowing diff is gone). Its x-effect tracks the same
+    reactive signals — including savedTick — so saving a draft re-fetches an
+    open diff."""
     pid, v1, v2 = _two_versions(client)
     r = client.get(f"/studio?prompt_id={pid}&version_id={v2}&compare_version_id={v1}")
     html = r.text
-    # Cmp card has a diff slot wired to the cmpDiff Alpine component.
-    assert 'data-cmp-diff' in html
-    assert 'x-data="cmpDiff"' in html
-
-
-def test_cmp_diff_reacts_to_store_signals_including_save(client):
-    """The diff must recompute when the store's reactive signals change —
-    including a save (savedTick) — so saving a draft updates an open diff.
-    The old `$root.*` reads were non-reactive (inside cmpDiff's own x-data,
-    $root is the diff div), so a save left the diff showing stale text."""
-    pid, v1, v2 = _two_versions(client)
-    r = client.get(f"/studio?prompt_id={pid}&version_id={v2}&compare_version_id={v1}")
-    html = r.text
+    # The compare table region drives the diff; the dead cmpDiff is removed.
+    assert "studio-compare-output" in html
+    assert "cmpDiff" not in html
+    assert "data-cmp-diff" not in html
+    # Reactive deps: a save (savedTick) and the Diff toggle (compareDiff).
     assert "$store.studio.savedTick" in html
-    assert "$store.studio.activeVersionId" in html
-    # The dead non-reactive deps are gone.
-    assert "$root.activeVersionId" not in html
-    assert "$root.compareVersionId" not in html
+    assert "$store.studio.compareDiff" in html
