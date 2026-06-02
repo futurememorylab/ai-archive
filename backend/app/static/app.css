@@ -2200,3 +2200,43 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   from { transform: translateY(0.5rem); opacity: 0; }
   to   { transform: translateY(0); opacity: 1; }
 }
+
+/* ─── Batches hub (/batches) ─────────────────────────────────────────── */
+.batches-page { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.batches-scroll { overflow: auto; flex: 1; min-height: 0; padding: 0 20px 28px; }
+.batches-empty { padding: 48px; text-align: center; color: var(--text-3); }
+
+.batch-tbl { width: 100%; border-collapse: collapse; }
+.batch-tbl thead th {
+  position: sticky; top: 0; z-index: 1; text-align: left;
+  background: var(--panel); border-bottom: 1px solid var(--line);
+  padding: 9px 12px; font-size: 10.5px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-3); font-weight: 600;
+}
+.batch-tbl tbody td { padding: 12px; border-bottom: 1px solid var(--line); vertical-align: middle; font-size: 13px; }
+.batch-tbl tbody tr:hover { background: var(--hover); }
+.bt-id { display: flex; flex-direction: column; gap: 2px; }
+.bt-id .bt-num { font-family: var(--f-mono); color: var(--text-3); font-size: 11px; }
+.bt-id .bt-prompt { font-weight: 500; }
+.bt-meta { color: var(--text-3); font-size: 11px; }
+.bt-when { color: var(--text-2); font-family: var(--f-mono); font-size: 12px; white-space: nowrap; }
+.bt-ran { font-family: var(--f-mono); }
+
+.bcell-prog { min-width: 130px; }
+.miniprog { display: flex; flex-direction: column; gap: 4px; }
+.miniprog .mp-label { font-family: var(--f-mono); font-size: 11.5px; color: var(--text-2); display: flex; gap: 6px; align-items: baseline; }
+.miniprog .mp-bar { height: 5px; border-radius: 3px; background: var(--surface); overflow: hidden; }
+.miniprog .mp-bar > span { display: block; height: 100%; border-radius: 3px; transition: width 0.4s; }
+.miniprog .mp-bar > span.fill-done { background: var(--good); }
+.miniprog .mp-bar > span.fill-rev { background: var(--accent); }
+.miniprog .mp-bar > span.fill-run { background: var(--info); }
+
+.bt-actions { text-align: right; white-space: nowrap; display: flex; gap: 6px; justify-content: flex-end; }
+.mp-fail-btn { background: none; border: 0; padding: 0; color: var(--bad); cursor: pointer; font-family: var(--f-mono); font-size: 11.5px; }
+.mp-fail-btn:hover { text-decoration: underline; }
+.bt-detail > td { padding: 0 12px 14px; background: var(--bg-2); border-bottom: 1px solid var(--line); }
+.bt-fails { border: 1px solid color-mix(in oklab, var(--bad) 30%, var(--line)); border-radius: var(--r-2); background: var(--panel); padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.bt-fails-h { display: flex; align-items: center; gap: 8px; padding-bottom: 6px; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
+.bt-fail-row { display: flex; align-items: center; gap: 11px; padding: 8px 0; border-top: 1px solid var(--line); }
+.bt-fail-name { font-size: 12.5px; }
+.bt-fail-err { font-size: 11px; color: var(--bad); font-family: var(--f-mono); margin-top: 2px; }
