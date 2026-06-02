@@ -2085,14 +2085,18 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   white-space: pre-wrap; word-break: break-word;
   padding: 4px 6px; color: var(--text-1);
 }
-/* Insertions: green + underline (Word "new"). Deletions: red + strikethrough. */
-.pc-diff-body .diff-ins {
+/* Insertions: green + underline (Word "new"). Deletions: red + strikethrough.
+   Class-scoped (not under .pc-diff-body) so the same coloring applies to the
+   prompt-tab diff AND the compare table's .sct-text cells. These classes are
+   only ever emitted by the diff renderer (services/word_diff.diff_html and
+   the studio-diff.js mirror). */
+.diff-ins {
   text-decoration: underline;
   color: var(--good);
   background: color-mix(in oklab, var(--good) 16%, transparent);
   border-radius: 2px;
 }
-.pc-diff-body .diff-del {
+.diff-del {
   text-decoration: line-through;
   color: var(--bad);
   background: color-mix(in oklab, var(--bad) 16%, transparent);

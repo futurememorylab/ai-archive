@@ -37,7 +37,7 @@
       <div class="sct-cell sct-right">
         {% if row.cur %}
           <div class="sct-rowhead">
-            <span class="sct-tc mono{{ ' sct-tc-changed' if row.time_changed }}">{{ row.cur.tc }} &middot; {{ row.cur.dur_s }}s</span>
+            <span class="sct-tc mono">{{ row.cur.tc }} &middot; {{ row.cur.dur_s }}s</span>
             <span class="grow"></span>
             {{ _pill(row.status) }}
           </div>
