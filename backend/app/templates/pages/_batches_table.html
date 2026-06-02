@@ -13,7 +13,8 @@
   </thead>
   <tbody>
     {% for b in batches %}
-    <tr>
+    <tr class="batch-row" onclick="location.href='{{ b.files_href }}'"
+        title="View this batch's clips">
       <td>
         <div class="bt-id">
           <span class="bt-num">#{{ b.id }}</span>
@@ -28,7 +29,7 @@
           <div class="mp-label">
             <span>{{ b.completed }}/{{ b.ran }}</span>
             {% if b.failed %}
-            <button type="button" class="mp-fail-btn" @click="toggle('{{ b.batch_key }}')">·
+            <button type="button" class="mp-fail-btn" @click.stop="toggle('{{ b.batch_key }}')">·
               {{ b.failed }} failed
               <span x-text="expanded['{{ b.batch_key }}'] ? '▴' : '▾'">▾</span>
             </button>
@@ -54,7 +55,7 @@
           <span class="led"></span>{{ b.status_label }}
         </span>
       </td>
-      <td class="bt-actions">
+      <td class="bt-actions" onclick="event.stopPropagation()">
         {% if not b.running and b.failed %}
         <button type="button" class="btn sm" @click="retryFailed({{ b.job_ids|tojson }})">
           ↻ Retry failed ({{ b.failed }})

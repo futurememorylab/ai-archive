@@ -68,6 +68,12 @@ def test_review_href_targets_first_unreviewed_clip():
     assert v["review_href"] == "/clips/882290?review=1"
 
 
+def test_files_href_lists_all_batch_clips_no_status_filter():
+    # Row click → all the batch's files (every job), no anno filter.
+    v = batch_view(_row(job_ids=[42, 43]))
+    assert v["files_href"] == "/?batch=42,43"
+
+
 def test_zero_ran_no_divide_by_zero():
     v = batch_view(_row(ran=0, completed=0, failed=0, awaiting_clips=0))
     assert v["pct_done"] == 0

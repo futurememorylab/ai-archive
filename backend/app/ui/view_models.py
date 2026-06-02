@@ -218,6 +218,10 @@ def batch_view(row: dict) -> dict:
         if first_pending is not None
         else f"/?batch={','.join(str(i) for i in job_ids)}&anno=for_review"
     )
+    # Clicking the batch row opens the clips list filtered to this batch — ALL
+    # its files (every job_item, any status), each showing its queued /
+    # processing / done / failed badge. No anno filter, so nothing is hidden.
+    files_href = f"/?batch={','.join(str(i) for i in job_ids)}"
 
     return {
         "batch_key": row["batch_key"],
@@ -238,4 +242,5 @@ def batch_view(row: dict) -> dict:
         "status_state": status_state,
         "status_label": status_label,
         "review_href": review_href,
+        "files_href": files_href,
     }

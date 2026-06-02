@@ -71,6 +71,9 @@ def test_batches_table_partial(monkeypatch, tmp_path):
         assert r.status_code == 200
         assert "<!doctype html>" not in r.text.lower()
         assert "Scénické značky CZ" in r.text
+        # The whole row is clickable → the batch's full file list (?batch=…).
+        assert "location.href='/?batch=" in r.text
+        assert 'class="batch-row"' in r.text
 
 
 def test_batches_page_empty_state(monkeypatch, tmp_path):

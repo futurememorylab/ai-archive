@@ -2215,6 +2215,7 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 }
 .batch-tbl tbody td { padding: 12px; border-bottom: 1px solid var(--line); vertical-align: middle; font-size: 13px; }
 .batch-tbl tbody tr:hover { background: var(--hover); }
+.batch-tbl tbody tr.batch-row { cursor: pointer; }
 .bt-id { display: flex; flex-direction: column; gap: 2px; }
 .bt-id .bt-num { font-family: var(--f-mono); color: var(--text-3); font-size: 11px; }
 .bt-id .bt-prompt { font-weight: 500; }
