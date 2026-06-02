@@ -2236,6 +2236,9 @@ body.studio-resizing {
 .sct-row.sct-st-removed { border-left: 3px solid var(--bad); }
 .sct-row.sct-st-changed { border-left: 3px solid var(--changed); }
 .sct-cell { min-width: 0; }
+/* A scene cell seeks+plays the clip from that marker's start on click. */
+.sct-cell.sct-seek { cursor: pointer; border-radius: 6px; }
+.sct-cell.sct-seek:hover { background: color-mix(in oklab, var(--accent) 8%, transparent); }
 .sct-rowhead { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .sct-tc { color: var(--text-3); font-size: 12px; }
 /* A scene whose in/out time moved shows its timecodes in purple. */

@@ -98,6 +98,9 @@ def test_renders_aligned_scene_rows_with_status_and_diff(client):
     # The two markers differ in out-point (28 vs 17) -> the RIGHT (cur) timecode
     # is flagged purple. Exactly one occurrence: right only, not the left cell.
     assert r.text.count("sct-tc-changed") == 1
+    # Clicking a scene cell seeks+plays the clip from that marker's start.
+    assert "seekFocusedClip" in r.text
+    assert "sct-seek" in r.text
 
 
 def test_added_scene_renders_no_scene_placeholder(client):

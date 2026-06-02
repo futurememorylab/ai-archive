@@ -19,8 +19,13 @@
    timeline ranges. #}
 <div class="studio-compare-table">
   {% for row in model.scenes %}
+    {# Clicking a scene cell seeks the player to that version's marker start
+       and plays (player.seek() sets currentTime + play()). Injected partial,
+       so a plain onclick into the store (the established pattern). #}
     <div class="sct-row sct-st-{{ row.status }}" data-scene-key="{{ row.key }}">
-      <div class="sct-cell sct-left">
+      <div class="sct-cell sct-left{% if row.cmp %} sct-seek{% endif %}"
+           {% if row.cmp %}title="Play from {{ row.cmp.tc }}"
+           onclick="window.Alpine && Alpine.store('studio').seekFocusedClip({{ row.cmp.in_secs }})"{% endif %}>
         {% if row.cmp %}
           <div class="sct-tc mono">{{ row.cmp.tc }} &middot; {{ row.cmp.dur_s }}s</div>
           <div class="sct-text">{{ diff_html(row.segs, 'left') }}</div>
@@ -28,7 +33,9 @@
           <div class="sct-empty muted">&mdash; no scene &mdash;</div>
         {% endif %}
       </div>
-      <div class="sct-cell sct-right">
+      <div class="sct-cell sct-right{% if row.cur %} sct-seek{% endif %}"
+           {% if row.cur %}title="Play from {{ row.cur.tc }}"
+           onclick="window.Alpine && Alpine.store('studio').seekFocusedClip({{ row.cur.in_secs }})"{% endif %}>
         {% if row.cur %}
           <div class="sct-rowhead">
             <span class="sct-tc mono{{ ' sct-tc-changed' if row.time_changed }}">{{ row.cur.tc }} &middot; {{ row.cur.dur_s }}s</span>
