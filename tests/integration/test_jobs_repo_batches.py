@@ -132,3 +132,35 @@ async def test_list_batches_running_jobs_and_in_flight(db):
     r = rows[0]
     assert r["running_jobs"] == 1
     assert r["in_flight"] == 1
+
+
+@pytest.mark.asyncio
+async def test_failed_items_for_jobs_resolves_clip_name(db):
+    _, vid = await _seed_version(db)
+    jobs = JobsRepo()
+    jid = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[882290, 999])
+    its = await jobs.list_items(db, jid)
+    await jobs.update_item_status(db, its[0].id, "error", error="ProxyNotFound: not on disk")
+    await jobs.update_item_status(db, its[1].id, "review_ready")  # not failed
+    # name only known for 882290 via clip_cache
+    await db.execute(
+        "INSERT INTO clip_cache "
+        "(provider_id, provider_clip_id, name, catalog_id, duration_secs, fps, "
+        " canonical_json, provider_etag, fetched_at) "
+        "VALUES ('catdv', '882290', 'Návštěva delegace', '7', 1.0, 25.0, '{}', NULL, "
+        " '2026-06-02T00:00:00')"
+    )
+    await db.commit()
+
+    fails = await jobs.failed_items_for_jobs(db, [jid])
+    assert len(fails) == 1
+    f = fails[0]
+    assert f["job_id"] == jid
+    assert f["catdv_clip_id"] == 882290
+    assert f["error_message"] == "ProxyNotFound: not on disk"
+    assert f["clip_name"] == "Návštěva delegace"
+
+
+@pytest.mark.asyncio
+async def test_failed_items_for_jobs_empty_input(db):
+    assert await JobsRepo().failed_items_for_jobs(db, []) == []

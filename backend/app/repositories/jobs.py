@@ -269,3 +269,29 @@ class JobsRepo:
         )
         row = await cur.fetchone()
         return int(row[0]) if row else 0
+
+    async def failed_items_for_jobs(
+        self, conn: aiosqlite.Connection, job_ids: list[int]
+    ) -> list[dict]:
+        """Failed (status='error') items across the given jobs, with the clip
+        name resolved from clip_cache when available. `job_ids` is bounded by
+        the page's batch limit, so a single IN clause is safe (one statement,
+        not a per-row loop)."""
+        if not job_ids:
+            return []
+        placeholders = ",".join("?" * len(job_ids))
+        sql = f"""
+            SELECT ji.job_id        AS job_id,
+                   ji.catdv_clip_id AS catdv_clip_id,
+                   ji.error_message AS error_message,
+                   cc.name          AS clip_name
+            FROM job_items ji
+            LEFT JOIN clip_cache cc
+              ON cc.provider_id = 'catdv'
+             AND cc.provider_clip_id = CAST(ji.catdv_clip_id AS TEXT)
+            WHERE ji.status = 'error' AND ji.job_id IN ({placeholders})
+            ORDER BY ji.job_id, ji.catdv_clip_id
+        """
+        cur = await conn.execute(sql, tuple(job_ids))
+        cols = [c[0] for c in cur.description]
+        return [dict(zip(cols, r, strict=True)) for r in await cur.fetchall()]
