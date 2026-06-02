@@ -1,4 +1,4 @@
-{# Left-rail navigation. Three icon buttons: Clips, Preview, Cache.
+{# Left-rail navigation. Six icon buttons: Clips, Preview, Prompts, Studio, Batches, Cache.
 
    The active button is determined by the `rail_active` variable set in
    layout.html from the `{% block rail_active %}` child override.
@@ -17,6 +17,8 @@
    href="/prompts" title="Prompts">{% include "icons/_prompts.svg" %}</a>
 <a class="rail-btn{% if _active == 'studio' %} active{% endif %}"
    href="/studio" title="Studio">{% include "icons/_flask.svg" %}</a>
+<a class="rail-btn{% if _active == 'batches' %} active{% endif %}"
+   href="/batches" title="Batches">{% include "icons/_batches.svg" %}</a>
 <a class="rail-btn{% if _active == 'cache' %} active{% endif %}"
    href="/cache" title="Cache">{% include "icons/_cache.svg" %}</a>
 <script>
