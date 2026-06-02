@@ -112,6 +112,7 @@ document.addEventListener("alpine:init", () => {
     // marker is silently dropped on apply. So always send the full shape.
     _persistMarker(id) {
       const m = this._draftItem(id); if (!m) return;
+      m.status = "accepted";
       const edited = {
         name: m.name || "",
         category: m.category != null ? m.category : null,

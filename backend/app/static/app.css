@@ -14,7 +14,8 @@
   --text-2:    #b6bcc6;
   --text-3:    #7e8693;
   --text-4:    #545b66;
-  --accent:    #f5a623;
+  --accent:      #f5a623;
+  --accent-true: var(--accent);          /* snapshot before any scope override */
   --accent-2:  color-mix(in oklab, var(--accent) 30%, transparent);
   --accent-fg: #14181d;
   --good:      #3ddc84;
@@ -2289,13 +2290,13 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .ri-card.editing { border-color: #9a6cff; box-shadow: 0 0 0 2px color-mix(in oklab, #9a6cff 30%, transparent); }
 .ri-state { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.05em; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--text-3); white-space: nowrap; }
 .ri-state.proposed { color: var(--info); border-color: color-mix(in oklab, var(--info) 35%, transparent); }
-.ri-state.accepted { color: var(--accent); border-color: color-mix(in oklab, var(--accent) 40%, transparent); }
+.ri-state.accepted { color: var(--accent-true); border-color: color-mix(in oklab, var(--accent-true) 40%, transparent); }
 .ri-card-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ri-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; margin-top: 2px; }
 .ri-actions .btn { flex: none; }
 .ri-editor .txt, .ri-editor .txt-area { width: 100%; }
-.ri-card-top .cat { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent);
-  border: 1px solid color-mix(in oklab, var(--accent) 32%, var(--line)); border-radius: 4px; padding: 1px 6px; }
+.ri-card-top .cat { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent-true);
+  border: 1px solid color-mix(in oklab, var(--accent-true) 32%, var(--line)); border-radius: 4px; padding: 1px 6px; }
 .ri-card-top .ri-tc { color: var(--text-3); font-size: 11.5px; font-family: var(--f-mono); }
 .ri-card-top .ident { color: var(--text-2); font-size: 11.5px; font-family: var(--f-mono); }
 .ri-name { font-size: 13.5px; font-weight: 500; color: var(--text); line-height: 1.4; text-wrap: pretty; cursor: pointer; }
