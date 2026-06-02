@@ -1,25 +1,101 @@
+{# Draft review panel (Alpine-data-driven). Reads draftMarkers / draftFields /
+   draftNotes from the enclosing clip-detail x-data (player + reviewMixin).
+   `review_mode` is passed by the route; tab state is shared with Published. #}
 <template x-if="runError">
-  <div class="anno-status error">
-    <span x-text="`Failed: ${runError}`"></span>
-  </div>
+  <div class="anno-status error"><span x-text="`Failed: ${runError}`"></span></div>
 </template>
-{% if draft.has_draft %}
-  <div class="anno-draft-chip mono">
-    {% if draft.prompt_name %}Prompt &ldquo;{{ draft.prompt_name }}&rdquo;{% endif %}
-    {% if draft.version_num %} · v{{ draft.version_num }}{% endif %}
-    {% if draft.model %} · {{ draft.model }}{% endif %}
-    {% if draft.created_at %} · {{ draft.created_at }}{% endif %}
-  </div>
-  {% with panels = {
-      "markers": draft.markers,
-      "fields":  draft.fields,
-      "notes":   draft.notes,
-      "big_notes": none,
-      "fps": (clip.fps if clip is defined and clip is not none else 25.0),
-      "note_items": draft.note_items,
-     } %}
-    {% include "pages/_anno_panels.html" %}
-  {% endwith %}
-{% else %}
-  {% include "pages/_anno_draft_empty.html" %}
-{% endif %}
+
+<div class="review-bar">
+  <button type="button" class="btn sm" @click="acceptAll()">✓ Accept all</button>
+  <span class="review-kept" x-text="'✓ ' + acceptedCount() + '/' + totalCount()"></span>
+  <span class="grow"></span>
+  <button type="button" class="btn sm nav" :disabled="reviewPos() <= 1" @click="navClip(-1)" title="Previous clip">‹</button>
+  <span class="review-pos" x-text="'Clip ' + reviewPos() + ' / ' + reviewLen()"></span>
+  <button type="button" class="btn sm nav" :disabled="reviewPos() >= reviewLen()" @click="navClip(1)" title="Next clip">›</button>
+  <button type="button" class="btn good sm" @click="applyDraft()" x-text="'Apply (' + acceptedCount() + ')'"></button>
+</div>
+
+<template x-if="totalCount() === 0">
+  <p class="muted" style="padding:14px 2px">No proposals to review.</p>
+</template>
+
+<div class="edit-hint" x-show="totalCount() > 0">
+  <span class="eh-ico">✎</span>
+  <span>Read each proposal below. <b>Accept</b> marks it (yellow on the timeline);
+    <b>Delete</b> removes it. On a marker, <b>Edit</b> then drag the highlighted
+    bar's edges on the <b>timeline</b> to set in/out. The <b>‹ ›</b> arrows move
+    between clips in the review set.</span>
+</div>
+
+<div class="anno-tabs" role="tablist" x-show="totalCount() > 0">
+  <button type="button" class="anno-tab" :class="{ active: tab === 'markers' }" @click="tab = 'markers'">Markers <span class="count" x-text="draftMarkers.length"></span></button>
+  <button type="button" class="anno-tab" :class="{ active: tab === 'fields' }" @click="tab = 'fields'">Fields <span class="count" x-text="draftFields.length"></span></button>
+  <button type="button" class="anno-tab" :class="{ active: tab === 'notes' }" @click="tab = 'notes'">Notes <span class="count" x-text="draftNotes.length"></span></button>
+</div>
+
+<div class="anno-section" x-show="tab === 'markers'" x-cloak>
+  <template x-for="m in draftMarkers" :key="m.item_id">
+    <div class="ri-card ri-marker" :class="{ editing: editingItemId === m.item_id }">
+      <div class="ri-card-top">
+        <span class="ri-state" :class="m.status" x-text="m.status === 'accepted' ? 'Accepted' : 'Proposed'"></span>
+        <span class="cat" x-show="m.category" x-text="m.category"></span>
+        <span class="ri-tc" x-text="tc(m.in_secs) + (m.out_secs != null ? ' – ' + tc(m.out_secs) : '')"></span>
+      </div>
+      <div class="ri-name" @click="seek(m.in_secs)" x-text="m.name"></div>
+      <div class="ri-desc" x-text="m.description"></div>
+      <div class="ri-editor" x-show="editingItemId === m.item_id" x-cloak>
+        <label class="field"><span class="field-label">Name</span><input class="txt" type="text" x-model="m.name" @change="_persistMarker(m.item_id)"></label>
+        <label class="field"><span class="field-label">Category</span><input class="txt" type="text" x-model="m.category" @change="_persistMarker(m.item_id)"></label>
+        <label class="field"><span class="field-label">Description</span><textarea class="txt-area" x-model="m.description" @change="_persistMarker(m.item_id)"></textarea></label>
+        <div class="ri-time">
+          <span class="ri-readout">in <b x-text="tc(m.in_secs)"></b> · out <b x-text="m.out_secs != null ? tc(m.out_secs) : '—'"></b></span>
+          <span class="ri-hint">Drag the highlighted bar on the timeline · ←/→ nudge (Shift = 1 frame)</span>
+        </div>
+      </div>
+      <div class="ri-actions">
+        <button type="button" class="btn sm" :class="m.status === 'accepted' && 'good'" @click="toggleAccept(m)" x-text="m.status === 'accepted' ? '✓ Accepted' : 'Accept'"></button>
+        <button type="button" class="btn sm ghost" @click="toggleEdit(m.item_id)" x-text="editingItemId === m.item_id ? 'Done' : '✎ Edit'"></button>
+        <button type="button" class="btn sm danger" @click="del(m, $event)">Delete</button>
+      </div>
+    </div>
+  </template>
+</div>
+
+<div class="anno-section" x-show="tab === 'fields'" x-cloak>
+  <template x-for="f in draftFields" :key="f.item_id">
+    <div class="ri-card" :class="{ editing: editingItemId === f.item_id }">
+      <div class="ri-card-top">
+        <span class="ri-state" :class="f.status" x-text="f.status === 'accepted' ? 'Accepted' : 'Proposed'"></span>
+        <span class="ident" x-text="f.identifier"></span>
+      </div>
+      <div class="ri-value" x-text="f.value"></div>
+      <div class="ri-editor" x-show="editingItemId === f.item_id" x-cloak>
+        <label class="field"><span class="field-label" x-text="f.identifier"></span><input class="txt" type="text" x-model="f.value" @change="persistField(f)"></label>
+      </div>
+      <div class="ri-actions">
+        <button type="button" class="btn sm" :class="f.status === 'accepted' && 'good'" @click="toggleAccept(f)" x-text="f.status === 'accepted' ? '✓ Accepted' : 'Accept'"></button>
+        <button type="button" class="btn sm ghost" @click="toggleEdit(f.item_id)" x-text="editingItemId === f.item_id ? 'Done' : '✎ Edit'"></button>
+        <button type="button" class="btn sm danger" @click="del(f, $event)">Delete</button>
+      </div>
+    </div>
+  </template>
+</div>
+
+<div class="anno-section" x-show="tab === 'notes'" x-cloak>
+  <template x-for="n in draftNotes" :key="n.item_id">
+    <div class="ri-card ri-note-row" :class="{ editing: editingItemId === n.item_id }">
+      <div class="ri-card-top">
+        <span class="ri-state" :class="n.status" x-text="n.status === 'accepted' ? 'Accepted' : 'Proposed'"></span>
+      </div>
+      <div class="ri-note-text" x-text="n.text"></div>
+      <div class="ri-editor" x-show="editingItemId === n.item_id" x-cloak>
+        <label class="field"><span class="field-label">Note</span><textarea class="txt-area" style="min-height:90px" x-model="n.text" @change="persistNote(n)"></textarea></label>
+      </div>
+      <div class="ri-actions">
+        <button type="button" class="btn sm" :class="n.status === 'accepted' && 'good'" @click="toggleAccept(n)" x-text="n.status === 'accepted' ? '✓ Accepted' : 'Accept'"></button>
+        <button type="button" class="btn sm ghost" @click="toggleEdit(n.item_id)" x-text="editingItemId === n.item_id ? 'Done' : '✎ Edit'"></button>
+        <button type="button" class="btn sm danger" @click="del(n, $event)">Delete</button>
+      </div>
+    </div>
+  </template>
+</div>
