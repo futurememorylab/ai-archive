@@ -2240,3 +2240,34 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .bt-fail-row { display: flex; align-items: center; gap: 11px; padding: 8px 0; border-top: 1px solid var(--line); }
 .bt-fail-name { font-size: 12.5px; }
 .bt-fail-err { font-size: 11px; color: var(--bad); font-family: var(--f-mono); margin-top: 2px; }
+
+/* ─── New-batch picker modal (two-pane: list + selection basket) ─────── */
+.modal-card.nb-card { width: 960px; max-width: 94vw; }
+.nb-body { padding: 0; display: flex; min-height: 0; max-height: calc(86vh - 112px); }
+.nb-main { flex: 1; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
+.nb-side { width: 304px; flex: none; display: flex; flex-direction: column; background: var(--panel); min-height: 0; }
+.nb-filters { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.nb-filters .search { flex: 1; min-width: 150px; height: 30px; }
+.nb-filters select { height: 30px; padding: 0 8px; background: var(--bg-2); color: var(--text); border: 1px solid var(--line-2); border-radius: var(--r-2); font: inherit; font-size: 12px; }
+.nb-selonly { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--text-3); white-space: nowrap; cursor: pointer; }
+.nb-list { overflow: auto; flex: 1; min-height: 220px; }
+.nb-pager { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-top: 1px solid var(--line); }
+.nb-pager .pg-meta { color: var(--text-3); font-size: 11.5px; font-family: var(--f-mono); }
+.nb-side-h { display: flex; align-items: center; gap: 8px; padding: 11px 12px; border-bottom: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-3); }
+.nb-side-h b { color: var(--accent); font-size: 14px; font-family: var(--f-mono); }
+.nb-basket { overflow: auto; flex: 1; min-height: 80px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.nb-basket-empty { color: var(--text-4); font-size: 12px; padding: 16px 6px; text-align: center; line-height: 1.5; }
+.nb-bchip { display: flex; align-items: center; gap: 8px; padding: 5px 7px 5px 5px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--surface); }
+.nb-bchip .thumb { width: 42px; height: 24px; border-radius: 3px; flex: none; object-fit: cover; background: var(--bg-2); }
+.nb-bchip .nb-bname { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nb-bchip .nb-bk { color: var(--text-4); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.04em; flex: none; }
+.nb-bchip .nb-bx { border: 0; background: transparent; color: var(--text-4); cursor: pointer; font-size: 13px; line-height: 1; padding: 0; flex: none; }
+.nb-bchip .nb-bx:hover { color: var(--bad); }
+.nb-selbox { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; }
+.nb-prompts { border-top: 1px solid var(--line); padding: 11px 12px; display: flex; flex-direction: column; gap: 9px; }
+.nb-prompts-h { font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
+.nb-prow { display: flex; align-items: center; gap: 8px; }
+.nb-prow .tag { flex: none; }
+.nb-prow select { flex: 1; min-width: 0; height: 30px; padding: 0 8px; background: var(--bg-2); color: var(--text); border: 1px solid var(--line-2); border-radius: var(--r-2); font: inherit; font-size: 12px; }
+.nb-empty { padding: 26px; text-align: center; color: var(--text-3); }
+.modal-actions { display: flex; gap: 8px; padding: 11px 14px; border-top: 1px solid var(--line); align-items: center; }
