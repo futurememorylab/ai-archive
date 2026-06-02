@@ -107,7 +107,7 @@ Add to `JobsRepo` (repos are leaves — no service imports):
   built, the name is resolved from `clip_cache.name` via a LEFT JOIN
   (offline-safe, the canonical metadata source — failed items usually have
   no annotation row yet), falling back to the bare id in the route. See
-  ADR 0049. (Keyed by member `job_ids` rather than `batch_key` so the route
+  ADR 0052. (Keyed by member `job_ids` rather than `batch_key` so the route
   can group results back per batch.)
 
 Multi-key reads that take id lists go through

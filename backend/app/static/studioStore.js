@@ -9,7 +9,7 @@
    `x-data` on .studio-page (so existing template bindings keep
    resolving) but is a THIN delegator (see studio.js) that forwards every
    field/method to `$store.studio`. Cross-component readers (the
-   window.studio shim, htmx:afterSwap, modelPicker, studioPromptCard,
+   window.studio shim, htmx:afterSwap, studioPromptCard,
    cmpDiff) read `Alpine.store('studio')` directly.
 
    Run lifecycle:
@@ -34,6 +34,12 @@ document.addEventListener('alpine:init', () => {
     showList: true,
     showPlayer: true,
     layout: 'under',                 // 'under' | 'right'
+    // ── Split-pane sizes (persisted; see studioResize.js) ────────────
+    // null = use the CSS default (320px / 1fr / 50%). Stored as the raw
+    // CSS value string (e.g. '360px', '42%').
+    playerH: null,                   // player height in 'under' layout
+    playerW: null,                   // player width in 'right' layout
+    cmpCur: null,                    // cur card width as % of the compare row
     // ── Run-button state machine ─────────────────────────────────────
     running: false,
     cancelling: false,
@@ -46,6 +52,9 @@ document.addEventListener('alpine:init', () => {
     _cancelRequested: false,
     _nowMs: 0,   // bumped by the 1Hz ticker so runButtonLabel re-evaluates
     pendingRunSwap: 0,
+    // Bumped by studioPromptCard.save() so the compare diff (which watches
+    // this) recomputes against the just-saved version.
+    savedTick: 0,
     _hydrated: false,
 
     // Seed initial.* fields from the page component's init(). Idempotent:
@@ -63,6 +72,9 @@ document.addEventListener('alpine:init', () => {
       this.showList = prefs.showList;
       this.showPlayer = prefs.showPlayer;
       this.layout = prefs.layout;
+      this.playerH = prefs.playerH ?? null;
+      this.playerW = prefs.playerW ?? null;
+      this.cmpCur = prefs.cmpCur ?? null;
 
       if (this._hydrated) return;
       this._hydrated = true;
@@ -145,8 +157,10 @@ document.addEventListener('alpine:init', () => {
     setLayout(v) {
       if (v !== 'under' && v !== 'right') return;
       this.layout = v;
-      // Compare needs the wide stacked layout; close it when going right.
-      if (v === 'right' && this.compareVersionId) this.closeCompare();
+      // Keep compare open across layout switches. The `right` layout now
+      // renders a three-column Player | cur | cmp arrangement (see the
+      // resizable-panes spec / ADR), so switching layout must NOT close the
+      // compare card — only an explicit close action may do that.
       this._saveLayoutPrefs();
     },
 
@@ -156,10 +170,19 @@ document.addEventListener('alpine:init', () => {
           showList: this.showList,
           showPlayer: this.showPlayer,
           layout: this.layout,
+          playerH: this.playerH,
+          playerW: this.playerW,
+          cmpCur: this.cmpCur,
         }));
       } catch (err) {
         console.error('studio layout prefs save failed', err);
       }
+    },
+
+    // Persist a divider drag (studioResize.js writes playerH/playerW/cmpCur
+    // then calls this on pointerup). Same localStorage blob as the toggles.
+    saveResize() {
+      this._saveLayoutPrefs();
     },
 
     refreshPlayer() {

@@ -1,4 +1,4 @@
-# 0049. Batches hub — design calls
+# 0052. Batches hub — design calls
 
 **Date:** 2026-06-02
 **Status:** Accepted

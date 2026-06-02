@@ -1,11 +1,11 @@
-# 0050. New-batch picker
+# 0053. New-batch picker
 
 **Date:** 2026-06-02
 **Status:** Accepted
 
 ## Context
 
-ADR 0049 decided that "+ New batch" on the Batches hub would redirect the user
+ADR 0052 decided that "+ New batch" on the Batches hub would redirect the user
 to the clips list (`href='/'`), relying on the existing clips-list multi-select
 flow to start an annotate job that feeds `/batches`. Two problems emerged in
 practice:
@@ -26,7 +26,7 @@ fetches.
 
 ## Alternatives
 
-### 1. Keep the redirect (ADR 0049) + fix cross-page selection in the clips list
+### 1. Keep the redirect (ADR 0052) + fix cross-page selection in the clips list
 
 The clips list could adopt a client-side selection map too, but that would
 require refactoring its bulk-annotate flow and coupling the batches feature
@@ -65,7 +65,7 @@ primary selection patterns.
 
 ## Decision
 
-- **Reverses ADR 0049's "New batch reuses the clips-list flow (redirect)"
+- **Reverses ADR 0052's "New batch reuses the clips-list flow (redirect)"
   decision.** The redirect teleported the user away and relied on clips-list
   DOM-checkbox selection that resets on server-side paging, so cross-page
   selection was impossible. Replaced by an in-page two-pane modal.

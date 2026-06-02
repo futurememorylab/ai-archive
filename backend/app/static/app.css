@@ -1529,18 +1529,23 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 }
 
 /* Prompt/output beside the player (vs stacked under it). The player
-   slot and the compare block are siblings in .studio-right; flipping
-   the grid from rows to columns places them side-by-side (player left,
-   prompt/output right) without moving any DOM. */
+   slot, the divider, and the compare block are siblings in .studio-right;
+   flipping the grid from rows to columns places them side-by-side (player
+   left, divider, prompt/output right) without moving any DOM. The player
+   track is var(--studio-player-w) (px, drag-set) with a 1fr fallback so it
+   fills before the user has dragged. */
 .studio-right.layout-right {
-  grid-template-columns: minmax(360px, 1fr) 1fr;
+  grid-template-columns: var(--studio-player-w, minmax(360px, 1fr)) 6px 1fr;
   grid-template-rows: 1fr;
 }
 .studio-right.layout-right .studio-player-slot {
   border-bottom: none;
   border-right: 1px solid var(--line);
 }
-/* With the player hidden in right mode, the prompt/output fills the row. */
+/* Player hidden in right mode: the slot AND the divider are display:none
+   (removed from the grid), so the lone .studio-compare item must fill a
+   SINGLE column track. A multi-track template (0 0 1fr) would strand it in
+   the first 0-width track and collapse the prompts. */
 .studio-body.no-player .studio-right.layout-right {
   grid-template-columns: 1fr;
 }
@@ -1553,13 +1558,21 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   background: var(--panel);
 }
 
+/* 3-track grid [player | 6px divider | compare]. In `under` the tracks
+   are rows (player height = var(--studio-player-h, 320px), drag-set); in
+   `right` (rule above) they become columns. The divider is a real track. */
 .studio-right {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: var(--studio-player-h, 320px) 6px minmax(0, 1fr);
+  grid-template-columns: 1fr;
   min-height: 0;
   min-width: 0;
 }
 
+/* Player hidden in `under`: the slot AND the divider are display:none
+   (removed from the grid), so the lone .studio-compare item must fill a
+   SINGLE row track. A multi-track template (0 0 1fr) would strand it in the
+   first 0-height track and collapse the prompts. */
 .studio-body.no-player .studio-right {
   grid-template-rows: 1fr;
 }
@@ -1567,19 +1580,29 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .studio-player-slot {
   border-bottom: 1px solid var(--line);
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
-/* Scope the shared _player.html chrome inside the studio slot. The
-   .viewer is flex:1 by default (intended for the full-height clip
-   page); here we cap it so the slot doesn't dominate the studio
-   layout. */
+/* The studio player fills the resizable slot track as a flex column. Its
+   children are .viewer (the video) + .transport (the controls) — there is no
+   .player-wrap wrapper here — so the player must be a column and the viewer
+   must FLEX (flex:1) to fill the space above the fixed-height transport.
+   A plain `height: 100%` on .viewer made it eat the whole track and pushed
+   the transport into overflow. Track height comes from --studio-player-h /
+   --studio-player-w on .studio-right, so dragging the player↔prompt divider
+   resizes the video too. */
+.studio-player {
+  position: relative;        /* positioning context for the minimise btn */
+  height: 100%;              /* fill the slot's grid track */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 .studio-player .viewer {
-  height: 320px;
-  flex: none;
+  flex: 1;
+  min-height: 0;
 }
-
-/* The player wrapper is the positioning context for the minimise btn. */
-.studio-player { position: relative; }
 
 .studio-compare {
   display: grid;
@@ -1851,6 +1874,10 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .studio-prompt-card .pc-editor {
   height: 100%;
   resize: none;
+  /* Yellow (accent) highlight: .pc-editor only renders for an editable draft,
+     so a persistent accent border signals "this is editable". Overrides the
+     border:0 in the shared .pc-editor/.pc-readonly rule above. */
+  border: 1px solid var(--accent);
 }
 
 .studio-prompt-card .pc-foot {
@@ -2046,23 +2073,103 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 
 .run-stats { padding: 6px 0; }
 
-/* === Studio: prompt-card diff view ==================================== */
+/* === Studio: prompt-card diff view (word-level inline, Word track-changes) */
 .pc-diff { padding: 8px; }
 .pc-diff-hdr { display: flex; align-items: center; padding: 4px 6px 8px; }
-.pc-diff-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.pc-diff-table td {
-  vertical-align: top; padding: 2px 6px; white-space: pre-wrap;
-  word-break: break-word; border-top: 1px solid var(--line);
+/* One flowing block; preserve the source's line breaks + spacing. */
+.pc-diff-body {
+  font-size: 12px; line-height: 1.6;
+  white-space: pre-wrap; word-break: break-word;
+  padding: 4px 6px; color: var(--text-1);
 }
-.diff-row.diff-eq td  { opacity: 0.55; }
-.diff-row.diff-del .diff-cell-a { background: color-mix(in oklab, var(--bad)  18%, transparent); }
-.diff-row.diff-del .diff-cell-b { background: rgba(0,0,0,0); }
-.diff-row.diff-ins .diff-cell-a { background: rgba(0,0,0,0); }
-.diff-row.diff-ins .diff-cell-b { background: color-mix(in oklab, var(--good) 18%, transparent); }
+/* Insertions: green + underline (Word "new"). Deletions: red + strikethrough. */
+.pc-diff-body .diff-ins {
+  text-decoration: underline;
+  color: var(--good);
+  background: color-mix(in oklab, var(--good) 16%, transparent);
+  border-radius: 2px;
+}
+.pc-diff-body .diff-del {
+  text-decoration: line-through;
+  color: var(--bad);
+  background: color-mix(in oklab, var(--bad) 16%, transparent);
+  border-radius: 2px;
+}
 
 /* === Studio: compare row + cmp affordances =========================== */
 .studio-compare-row { display: flex; gap: 12px; align-items: stretch; }
 .studio-compare-row .studio-prompt-card { flex: 1 1 0; min-width: 0; }
+
+/* When comparing, the cur card takes var(--studio-cmp-cur, 50%) of the row
+   and cmp fills the rest. Gated by :has(.cmp-card) so a non-comparing row
+   keeps the cur card at flex:1 1 0 (full width) — unchanged from before.
+   :has() matches through .cmp-slot's display:contents (it's a DOM query,
+   not a render-tree query). */
+.studio-compare-row:has(.cmp-card) > .studio-prompt-card[data-side="cur"] {
+  flex: 0 0 var(--studio-cmp-cur, 50%);
+}
+/* The cmp divider is only meaningful while comparing. */
+.studio-compare-row:not(:has(.cmp-card)) .studio-resizer.is-cmp {
+  display: none;
+}
+
+/* === Studio: split-pane resizers ===================================== */
+/* A thin draggable divider between two panes. Dragging writes a CSS var on
+   the container (studioResize.js). The grip + accent on hover make it
+   discoverable; the cursor signals the drag axis. */
+.studio-resizer {
+  position: relative;
+  align-self: stretch;
+  background: var(--line);
+  flex: 0 0 6px;          /* width when the cmp divider is a flex item */
+  z-index: 1;
+}
+/* Axis: the player divider is row-resize in `under`, col-resize in `right`
+   (the layout-right modifier lives on the ancestor .studio-right). */
+.studio-resizer.is-player { background: transparent; cursor: row-resize; }
+.studio-right.layout-right .studio-resizer.is-player { cursor: col-resize; }
+.studio-resizer.is-cmp { cursor: col-resize; }
+
+/* Hover/active affordance: brighten the bar + show a grip in the middle. */
+.studio-resizer:hover,
+.studio-resizer:active {
+  background: var(--accent-2);
+}
+.studio-resizer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  opacity: 0;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: opacity 0.12s ease;
+}
+/* Grip orientation: horizontal pill for row-resize, vertical for col-resize. */
+.studio-resizer.is-player::after { width: 28px; height: 3px; }
+.studio-right.layout-right .studio-resizer.is-player::after,
+.studio-resizer.is-cmp::after { width: 3px; height: 28px; }
+.studio-resizer:hover::after,
+.studio-resizer:active::after { opacity: 1; }
+
+/* Player divider only meaningful when the player is shown. */
+.studio-body.no-player .studio-resizer.is-player { display: none; }
+
+/* During an active drag: kill text selection everywhere + force the
+   resize cursor regardless of what's under the pointer. */
+body.studio-resizing {
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: col-resize;
+}
+/* The compare card is wrapped in .cmp-slot (also the JS innerHTML target).
+   A plain block wrapper isn't a flex item of the row, so the cmp card wasn't
+   height-clamped and its .pc-body never scrolled. display:contents removes
+   the slot's box → the card becomes a direct flex child (picks up the rule
+   above), stretches to the row height, and scrolls. Empty slot = no box, so
+   the cur card stays full-width when not comparing. JS toggles the slot via
+   inline style.display (''/none), which overrides this only while hidden. */
+.cmp-slot { display: contents; }
 .cmp-card { border-left: 3px solid var(--accent); }
 .pc-hdr .btn.active { background: var(--accent-2); }
 .btn-close-cmp { font-size: 14px; line-height: 1; }
