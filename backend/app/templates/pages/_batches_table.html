@@ -18,7 +18,7 @@
         <div class="bt-id">
           <span class="bt-num">#{{ b.id }}</span>
           <span class="bt-prompt">{{ b.prompt }}</span>
-          <span class="bt-meta">v{{ b.version }} · {{ b.model }}</span>
+          {% if b.version is not none %}<span class="bt-meta">v{{ b.version }} · {{ b.model }}</span>{% endif %}
         </div>
       </td>
       <td><span class="bt-when">{{ b.started }}</span></td>

@@ -102,10 +102,13 @@ Add to `JobsRepo` (repos are leaves — no service imports):
   same windowed set (`Batches` shows the grand total of distinct batch
   keys; `Drafts produced` / `Awaiting review` / `Failed clips` sum across
   the shown window, matching the prototype's "across recent batches" copy).
-- `failed_items_for_batch(conn, batch_key) -> list[dict]` — the
-  expand-row data: `catdv_clip_id`, `error_message`, and a clip name
-  resolved from `annotations.catdv_clip_name` when present, else the
-  `clip_list_cache` (offline-safe), else the bare id.
+- `failed_items_for_jobs(conn, job_ids) -> list[dict]` — the expand-row
+  data: `job_id`, `catdv_clip_id`, `error_message`, and a clip name. As
+  built, the name is resolved from `clip_cache.name` via a LEFT JOIN
+  (offline-safe, the canonical metadata source — failed items usually have
+  no annotation row yet), falling back to the bare id in the route. See
+  ADR 0049. (Keyed by member `job_ids` rather than `batch_key` so the route
+  can group results back per batch.)
 
 Multi-key reads that take id lists go through
 `repositories/_batch.py::chunked_in_clause`.
