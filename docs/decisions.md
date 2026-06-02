@@ -59,3 +59,4 @@ available number. See any existing ADR for the template.
 | 0049 | 2026-06-02 | [Studio prompt editing uses explicit save (matches the prompt screen)](./adr/0049-studio-explicit-save-matches-prompt-screen.md) |
 | 0050 | 2026-06-02 | [Studio compare uses a word-level inline diff (Word track-changes), extended in-house](./adr/0050-word-level-inline-diff-in-house.md) |
 | 0051 | 2026-06-02 | [Studio resizable panes — hand-rolled splitters, nested 3-column right layout](./adr/0051-studio-resizable-panes-hand-rolled.md) |
+| 0052 | 2026-06-02 | [Studio output compare is an aligned scene table + linked timeline](./adr/0052-studio-aligned-scene-compare.md) |
