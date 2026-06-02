@@ -55,6 +55,10 @@ document.addEventListener('alpine:init', () => {
     // Bumped by studioPromptCard.save() so the compare diff (which watches
     // this) recomputes against the just-saved version.
     savedTick: 0,
+    // Scene-compare linkage: the scene-key currently hovered/selected in the
+    // compare table or on the timeline. The vanilla bridge (studioSceneLink.js)
+    // keeps this in sync and toggles `.is-linked` on matching DOM nodes.
+    selectedSceneKey: null,
     _hydrated: false,
 
     // Seed initial.* fields from the page component's init(). Idempotent:
