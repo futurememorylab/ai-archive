@@ -12,23 +12,17 @@
 {% if model is none %}
   <div class="muted">Click a clip in a folder to focus it.</div>
 {% else %}
-{# data-scene-key is the cross-highlight linkage key, reused on scene AND field rows; studioSceneLink.js matches it against timeline ranges. #}
+{# The header (version picker + Prompt/Output switch + Close) is the prompt
+   card's own .pc-hdr, kept visible above this table — this partial renders
+   only the aligned rows. data-scene-key is the cross-highlight linkage key,
+   reused on scene AND field rows; studioSceneLink.js matches it against
+   timeline ranges. #}
 <div class="studio-compare-table">
-  <div class="sct-head mono-cell muted">
-    <span>Markers</span>
-    <span class="grow"></span>
-    <span>{{ model.scene_count }} aligned scene{{ '' if model.scene_count == 1 else 's' }}</span>
-    {# Close the compare view. This partial is HTMX-injected, so use a plain
-       onclick into the store (the established pattern for injected content —
-       see studio.js window.studio shim) rather than an Alpine directive. #}
-    <button type="button" class="btn sm icon btn-close-cmp" title="Close compare"
-            onclick="window.Alpine && Alpine.store('studio').closeCompare()">&times;</button>
-  </div>
   {% for row in model.scenes %}
     <div class="sct-row sct-st-{{ row.status }}" data-scene-key="{{ row.key }}">
       <div class="sct-cell sct-left">
         {% if row.cmp %}
-          <div class="sct-tc mono{{ ' sct-tc-changed' if row.time_changed }}">{{ row.cmp.tc }} &middot; {{ row.cmp.dur_s }}s</div>
+          <div class="sct-tc mono">{{ row.cmp.tc }} &middot; {{ row.cmp.dur_s }}s</div>
           <div class="sct-text">{{ diff_html(row.segs, 'left') }}</div>
         {% else %}
           <div class="sct-empty muted">&mdash; no scene &mdash;</div>
@@ -37,7 +31,7 @@
       <div class="sct-cell sct-right">
         {% if row.cur %}
           <div class="sct-rowhead">
-            <span class="sct-tc mono">{{ row.cur.tc }} &middot; {{ row.cur.dur_s }}s</span>
+            <span class="sct-tc mono{{ ' sct-tc-changed' if row.time_changed }}">{{ row.cur.tc }} &middot; {{ row.cur.dur_s }}s</span>
             <span class="grow"></span>
             {{ _pill(row.status) }}
           </div>

@@ -91,12 +91,12 @@ def test_renders_aligned_scene_rows_with_status_and_diff(client):
     assert "data-scene-key" in r.text
     assert "diff-ins" in r.text and "diff-del" in r.text
     assert "CHANGED" in r.text
-    assert "aligned scene" in r.text
-    # Header renamed to "Markers" + a Close button to exit the compare view.
-    assert ">Markers<" in r.text
-    assert "btn-close-cmp" in r.text
-    # The two markers differ in out-point (28 vs 17) -> the LEFT (cmp) timecode
-    # is flagged purple. Exactly one occurrence: left only, not the right cell.
+    # The table partial renders only the aligned rows; the header (version
+    # picker + Prompt/Output switch + Close) is the prompt card's own .pc-hdr,
+    # not part of this partial.
+    assert "btn-close-cmp" not in r.text
+    # The two markers differ in out-point (28 vs 17) -> the RIGHT (cur) timecode
+    # is flagged purple. Exactly one occurrence: right only, not the left cell.
     assert r.text.count("sct-tc-changed") == 1
 
 

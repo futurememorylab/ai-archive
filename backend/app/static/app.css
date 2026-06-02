@@ -2221,11 +2221,7 @@ body.studio-resizing {
 
 /* === Studio compare table layout ==================================== */
 .studio-compare-table { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
-.sct-head, .sct-subhead { display: flex; align-items: center; gap: 8px; padding: 2px 4px; }
-/* Keep the Markers header (+ Close button) pinned while the table scrolls
-   inside .studio-compare-output. */
-.sct-head { position: sticky; top: 0; z-index: 2; padding: 6px 4px;
-  background: var(--panel); border-bottom: 1px solid var(--surface-2); }
+.sct-subhead { display: flex; align-items: center; gap: 8px; padding: 2px 4px; }
 .sct-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
   border: 1px solid var(--surface-2); border-radius: 8px; padding: 10px; }
 /* Whole-row status accent: added green, removed red, changed purple. */

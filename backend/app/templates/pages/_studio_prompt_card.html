@@ -73,7 +73,12 @@
             @click="mode = 'output'">Output</button>
   </div>
 
-  <div class="pc-body">
+  {# When comparing on the Output tab, the aligned table below the cards owns
+     the output — so the per-card body would just be an empty column (the
+     prompt pane is hidden by mode, the output pane by compareVersionId).
+     Hide the body in that state so only the header + tabs remain above the
+     table; the Prompt tab still shows it (mode flips back). #}
+  <div class="pc-body" x-show="!(mode === 'output' && compareVersionId !== null)" x-cloak>
     {% if side == 'cmp' %}
       <div x-show="diff" x-cloak>
         {% include "pages/_studio_diff.html" %}
@@ -106,7 +111,7 @@
   </div>
 
   {% if side == 'cur' %}
-  <div class="pc-foot">
+  <div class="pc-foot" x-show="!(mode === 'output' && compareVersionId !== null)" x-cloak>
     <span x-show="saving" class="mono-cell muted">saving…</span>
     <span x-show="!saving && hasChanges" class="mono-cell muted">draft · unsaved changes</span>
     <span x-show="!saving && !hasChanges" class="mono-cell muted">saved</span>
