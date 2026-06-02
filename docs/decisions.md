@@ -58,3 +58,4 @@ available number. See any existing ADR for the template.
 | 0048 | 2026-05-31 | [Alpine.store (not _x_dataStack) for shared studio state; one HTMX↔Alpine lifecycle helper](./adr/0048-alpine-store-not-x-data-stack-for-shared-state.md) |
 | 0049 | 2026-06-02 | [Batches hub — design calls](./adr/0049-batches-hub.md) |
 | 0050 | 2026-06-02 | [New-batch picker (supersedes ADR 0049 redirect)](./adr/0050-batches-new-batch-picker.md) |
+| 0051 | 2026-06-02 | [Draft review redesign — Alpine-data-driven cards + batch Review→](./adr/0051-draft-review-redesign.md) |
