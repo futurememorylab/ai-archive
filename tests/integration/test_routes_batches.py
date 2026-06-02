@@ -1,9 +1,17 @@
 import asyncio
 import importlib
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
+from backend.app.archive.errors import ProviderError
+from backend.app.archive.model import (
+    CanonicalClip,
+    ClipPage,
+    ClipQuery,
+    MediaRef,
+)
 from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.prompts import PromptsRepo
 from tests._helpers.live_ctx import install_live_ctx
@@ -96,15 +104,6 @@ def test_retry_failed_starts_only_jobs_with_failures(monkeypatch, tmp_path):
         assert r.status_code == 200
         assert started == [jid]
         assert r.json()["started"] == [jid]
-
-
-import dataclasses
-from datetime import UTC, datetime
-
-from backend.app.archive.model import (
-    CanonicalClip, ClipPage, ClipQuery, MediaRef,
-)
-from backend.app.archive.errors import ProviderError
 
 
 def _picker_clip(clip_id=12041, name="Abramcukova_Anna_09"):
