@@ -82,3 +82,9 @@ up, and what changed?
   on ADR 0050 (word-level diff) — same engine, new structured consumer; the
   raw-JSON / rendered-text output diffs are removed, don't reintroduce them.
 - "evidence" cross-reference is deferred pending a real scene→CatDV-marker link.
+- **`+ Compare` is no longer gated to the under-player layout** (reverses the
+  ADR 0040 gating). ADR 0051 made the `right` layout a three-column `Player |
+  cur | cmp` arrangement and removed the auto-close-on-layout-switch, so compare
+  is fully supported there; the button gate was the last vestige of the old
+  restriction and is dropped so a comparison can be initiated from either
+  layout. (`test_studio_layout_toggles_markup.py` updated accordingly.)
