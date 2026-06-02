@@ -110,6 +110,16 @@ async def batches_picker(
     )
 
 
+@router.get("/batches/review-queue")
+async def batches_review_queue(request: Request, job_ids: str = ""):
+    """Ordered pending clip ids for a batch's jobs — seeds the clip-detail
+    review walk. Pure DB (offline-safe)."""
+    ctx = get_core_ctx(request)
+    ids = [int(x) for x in job_ids.split(",") if x.strip().isdigit()]
+    clip_ids = await ctx.review_items_repo.pending_clip_ids_for_jobs(ctx.db, ids)
+    return {"clip_ids": clip_ids}
+
+
 class RetryFailed(BaseModel):
     job_ids: list[int]
     clip_ids: list[int] | None = None
