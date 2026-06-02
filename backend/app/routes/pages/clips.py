@@ -22,7 +22,7 @@ from backend.app.services.clip_list_filters import (
 )
 from backend.app.timecode import secs_to_smpte
 from backend.app.ui.pagination import page_offsets
-from backend.app.ui.view_models import clip_detail, clip_summary
+from backend.app.ui.view_models import clip_detail, clip_summary, draft_review_arrays
 
 
 def _humanize_age(fetched_at_iso: str | None) -> str | None:
@@ -503,6 +503,7 @@ async def clip_detail_page(request: Request, clip_id: int, review: int | None = 
         ctx_dict["clip"]["duration_secs"], ctx_dict["clip"]["fps"]
     )
     ctx_dict["draft"] = await _build_draft_for_clip(ctx, clip_id)
+    ctx_dict["draft_arrays"] = draft_review_arrays(ctx_dict["draft"])
     ctx_dict["host_local_proxies"] = getattr(
         getattr(ctx, "proxy_resolver", None), "is_host_local", False
     )

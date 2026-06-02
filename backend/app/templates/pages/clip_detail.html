@@ -8,12 +8,15 @@
 <div class="detail"
      :class="{ 'is-draft': scope === 'draft', 'live-active': liveSession.state !== 'idle' }"
      x-data='Object.assign(
-       player({{ clip.fps }}, {{ clip.duration_secs }}, {{ clip.markers|tojson }}, {{ draft.markers|tojson }}),
+       player({{ clip.fps }}, {{ clip.duration_secs }}, {{ clip.markers|tojson }}, {{ draft_arrays.markers|tojson }}),
        clipAnnotate({{ clip.id }}, "{{ clip.kind }}"),
+       reviewMixin({{ clip.id }}),
        { scope: "{{ 'draft' if review_mode else 'published' }}", tab: "{{ 'fields' if clip.kind == 'image' else 'markers' }}",
+         draftFields: {{ draft_arrays.fields|tojson }}, draftNotes: {{ draft_arrays.notes|tojson }},
          liveSession: liveSession({{ clip.id }}, { inactivityS: {{ gemini_live_inactivity_s|default(60) }} })
        }
      )'
+     x-init="_reviewInit(); if (new URLSearchParams(location.search).get('scope') === 'draft') scope = 'draft'"
      @keydown.window="handleKey($event)">
   <header class="detail-hdr">
     <template x-if="liveSession.state === 'idle'">
@@ -100,7 +103,7 @@
             "ranges": clip.markers,
             "cls": "range-cur",
             "alpine_list": "markers",
-            "x_show": None,
+            "x_show": "scope === 'published'",
           },
           {
             "key": "draft",
@@ -131,17 +134,6 @@
         Draft
       </button>
     </div>
-
-    {% if draft.has_draft %}
-    <div class="review-actionbar" x-data="reviewQueue({{ clip.id }})">
-      <button type="button" class="btn" x-show="queue.length > 0" @click="prev()">‹ Prev</button>
-      <span class="review-progress mono" x-show="queue.length > 0" x-text="progressLabel()"></span>
-      <span class="grow"></span>
-      <button type="button" class="btn" x-show="queue.length > 0" @click="skip()">Skip</button>
-      <button type="button" class="btn good" x-show="queue.length > 0" @click="applyAndNext()">Accept &amp; next →</button>
-      <button type="button" class="btn good" x-show="queue.length === 0" @click="applyStay()">Accept &amp; apply</button>
-    </div>
-    {% endif %}
 
     {# Review walk: a clip with no draft can't be reviewed, so skip past it to
        the next queued clip (or back to the list at the end of the queue). #}
