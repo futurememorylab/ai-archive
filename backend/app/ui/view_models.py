@@ -247,19 +247,29 @@ def batch_view(row: dict) -> dict:
 
 
 def draft_review_arrays(draft: dict) -> dict:
-    """Shape a `build_draft_view` result into the Alpine arrays the redesigned
-    Draft panel + 3-color timeline render from. Each item carries `item_id` and
-    a `status` ("accepted" if its review_item decision is accepted, else
-    "proposed"). Rejected items are excluded entirely (Delete = reject hides
-    them). Pure function — unit-tested in isolation."""
+    """Shape a `build_draft_view` result into the Alpine arrays the Draft
+    panel + 3-color timeline render from. Each item carries `item_id` and a
+    `status` ("accepted" if its review_item decision is accepted, else
+    "proposed"). Partitioning: applied items (applied_at set) are excluded
+    from the arrays and counted in `applied_count` (they're syncing to
+    CatDV); rejected items land in the `deleted` bucket so the panel can
+    offer Restore; rejected+applied items appear nowhere. Pure function —
+    unit-tested in isolation."""
+    out = {
+        "markers": [],
+        "fields": [],
+        "notes": [],
+        "applied_count": 0,
+        "deleted": {"markers": [], "fields": [], "notes": []},
+    }
     if not draft.get("has_draft"):
-        return {"markers": [], "fields": [], "notes": []}
+        return out
 
     def _status(decision) -> str:
         return "accepted" if decision == "accepted" else "proposed"
 
-    markers = [
-        {
+    def _marker(m: dict) -> dict:
+        return {
             "item_id": m["item_id"],
             "status": _status(m.get("decision")),
             "name": m.get("name") or "",
@@ -269,27 +279,37 @@ def draft_review_arrays(draft: dict) -> dict:
             "out_secs": m.get("out_secs"),
             "color": m.get("color"),
         }
-        for m in draft.get("markers", [])
-        if m.get("decision") != "rejected"
-    ]
-    fields = [
-        {
+
+    def _field(f: dict) -> dict:
+        return {
             "item_id": f["item_id"],
             "status": _status(f.get("decision")),
             "identifier": f.get("identifier") or "",
             "value": f.get("value", ""),
             "multi": bool(f.get("multi")),
         }
-        for f in draft.get("fields", [])
-        if f.get("decision") != "rejected"
-    ]
-    notes = [
-        {
+
+    def _note(n: dict) -> dict:
+        return {
             "item_id": n["item_id"],
             "status": _status(n.get("decision")),
             "text": n.get("text") or "",
         }
-        for n in draft.get("note_items", [])
-        if n.get("decision") != "rejected"
-    ]
-    return {"markers": markers, "fields": fields, "notes": notes}
+
+    for src_key, out_key, shape in (
+        ("markers", "markers", _marker),
+        ("fields", "fields", _field),
+        ("note_items", "notes", _note),
+    ):
+        for it in draft.get(src_key, []):
+            rejected = it.get("decision") == "rejected"
+            applied = it.get("applied_at") is not None
+            if rejected and applied:
+                continue  # gone upstream and unwanted: show nowhere
+            if rejected:
+                out["deleted"][out_key].append(shape(it))
+            elif applied:
+                out["applied_count"] += 1
+            else:
+                out[out_key].append(shape(it))
+    return out
