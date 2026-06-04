@@ -139,16 +139,13 @@ document.addEventListener('alpine:init', () => {
   });
 
   Alpine.data('archivePicker', (folderId) => ({
+    ...window.clipPickerCore(),
     folderId,
-    picked: new Set(),
 
-    toggle(id) {
-      if (this.picked.has(id)) this.picked.delete(id);
-      else this.picked.add(id);
-    },
+    init() { this.fetchPage(); },
 
     async addSelected() {
-      const ids = Array.from(this.picked);
+      const ids = this.selectedClips().map((c) => c.id);
       if (!ids.length) return;
       const res = await fetch(`/api/studio/folders/${this.folderId}/clips`, {
         method: 'POST',

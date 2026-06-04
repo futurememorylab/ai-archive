@@ -159,36 +159,15 @@ async def _studio_folder(
 
 
 @router.get("/studio/_archive_picker", response_class=HTMLResponse)
-async def _studio_archive_picker(
-    request: Request,
-    folder_id: int,
-    q: str = "",
-):
-    """Renders the archive picker modal body. Uses ArchiveProvider.list_clips
-    when wired; in offline/test mode, returns an empty list and the modal
-    still opens (user can search again later)."""
-    from backend.app.archive.model import ClipQuery
-
-    ctx = get_core_ctx(request)
-    archive = _archive(request)
-    results = []
-    if archive is not None:
-        try:
-            page = await archive.list_clips(
-                str(ctx.settings.catdv_catalog_id),
-                ClipQuery(text=q or None, offset=0, limit=50),
-            )
-            # page.items is a tuple of CanonicalClip; key[1] is the string clip id
-            results = [
-                {"id": int(clip.key[1]), "name": clip.name}
-                for clip in (page.items or ())
-            ]
-        except Exception:  # noqa: BLE001
-            results = []
+async def _studio_archive_picker(request: Request, folder_id: int):
+    """Renders the archive-picker modal shell only. The result rows are
+    fetched client-side from the shared /batches/picker endpoint (the same
+    rich _video_list.html rows the New-batch picker renders), so this route
+    has no archive dependency and works offline."""
     return templates.TemplateResponse(
         request,
         "pages/_studio_archive_picker.html",
-        {"folder_id": folder_id, "q": q, "results": results},
+        {"folder_id": folder_id},
     )
 
 
