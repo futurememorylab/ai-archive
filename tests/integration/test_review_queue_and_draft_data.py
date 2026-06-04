@@ -75,6 +75,41 @@ def test_draft_data_route(monkeypatch, tmp_path):
         r = client.get("/api/review/clips/101/draft-data")
         assert r.status_code == 200
         body = r.json()
-        assert set(body.keys()) == {"markers", "fields", "notes"}
+        assert set(body.keys()) == {"markers", "fields", "notes", "applied_count", "deleted"}
         # the seeded pending marker item is present as a "proposed" card
         assert any(m["status"] == "proposed" for m in body["markers"])
+        assert body["applied_count"] == 0
+        assert body["deleted"] == {"markers": [], "fields": [], "notes": []}
+
+
+def test_reject_then_restore_round_trip(monkeypatch, tmp_path):
+    """Delete (reject) moves the item into the deleted bucket; restoring it
+    (decision=pending) moves it back into the live arrays."""
+    with _make_client(monkeypatch, tmp_path) as client:
+        asyncio.run(_seed(client.app.state.core_ctx))
+        item_id = client.get("/api/review/clips/101/draft-data").json()["markers"][0]["item_id"]
+
+        r = client.post(f"/api/review/items/{item_id}/decision", json={"decision": "rejected"})
+        assert r.status_code == 200
+        body = client.get("/api/review/clips/101/draft-data").json()
+        assert body["markers"] == []
+        assert [m["item_id"] for m in body["deleted"]["markers"]] == [item_id]
+
+        r = client.post(f"/api/review/items/{item_id}/decision", json={"decision": "pending"})
+        assert r.status_code == 200
+        body = client.get("/api/review/clips/101/draft-data").json()
+        assert [m["item_id"] for m in body["markers"]] == [item_id]
+        assert body["markers"][0]["status"] == "proposed"
+        assert body["deleted"]["markers"] == []
+
+
+def test_applied_items_leave_draft_data(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.core_ctx
+        asyncio.run(_seed(ctx))
+        item_id = client.get("/api/review/clips/101/draft-data").json()["markers"][0]["item_id"]
+        asyncio.run(ReviewItemsRepo().mark_applied(ctx.db, [item_id]))
+        body = client.get("/api/review/clips/101/draft-data").json()
+        assert body["markers"] == []
+        assert body["applied_count"] == 1
+        assert body["deleted"] == {"markers": [], "fields": [], "notes": []}
