@@ -1,0 +1,33 @@
+{# Shared clip-picker main column — filters + results + pager. Spread
+   window.clipPickerCore() into the enclosing Alpine component (see
+   static/clipPicker.js); rows are fetched from /batches/picker into
+   .nb-list. Composed by pages/batches.html (New-batch modal) and
+   pages/_studio_archive_picker.html (Add-from-archive modal). #}
+<div class="nb-main">
+  <div class="nb-filters">
+    <label class="search">
+      <input type="search" x-model="q" @input.debounce.300ms="resetAndFetch()" placeholder="Search clips to add…" autocomplete="off">
+    </label>
+    <select x-model="cacheF" @change="resetAndFetch()" title="Cache state">
+      <option value="any">Any cache</option>
+      <option value="local">Local</option>
+      <option value="ai">AI store</option>
+      <option value="none">Not cached</option>
+    </select>
+    <select x-model="annoF" @change="resetAndFetch()" title="Annotation status">
+      <option value="any">Any state</option>
+      <option value="none">No annotations</option>
+      <option value="for_review">For review</option>
+      <option value="applied">Applied</option>
+    </select>
+    <label class="nb-selonly"><input type="checkbox" x-model="selOnly" @change="resetAndFetch()"> Selected only</label>
+  </div>
+  <div class="nb-list" @change="onCheckChange($event)"></div>
+  <div class="nb-pager" x-show="!selOnly">
+    <button type="button" class="btn sm" :disabled="offset === 0" @click="goPage(-1)">‹ Prev</button>
+    <span class="pg-meta" x-text="pagerLabel()"></span>
+    <button type="button" class="btn sm" :disabled="offset + perPage >= total" @click="goPage(1)">Next ›</button>
+    <span class="grow"></span>
+    <span class="pg-meta" x-text="total + ' match'"></span>
+  </div>
+</div>

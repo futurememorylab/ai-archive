@@ -1,0 +1,21 @@
+{# Shared clip-picker basket — the "Selected" sidebar contents. Lives
+   inside each page's .nb-side wrapper; state comes from
+   window.clipPickerCore() (static/clipPicker.js). #}
+<div class="nb-side-h">
+  <span>Selected</span><b x-text="selCount()"></b>
+  <span class="grow"></span>
+  <button type="button" class="btn sm ghost" x-show="selCount() > 0" @click="clearSel()">Clear</button>
+</div>
+<div class="nb-basket">
+  <template x-for="c in selectedClips()" :key="c.id">
+    <div class="nb-bchip">
+      <img class="thumb" :src="c.thumb" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+      <span class="nb-bname" x-text="c.name" :title="c.name"></span>
+      <span class="nb-bk" x-text="c.kind"></span>
+      <button type="button" class="nb-bx" title="Remove from selection" @click="removeSel(c.id)">✕</button>
+    </div>
+  </template>
+  <template x-if="selCount() === 0">
+    <div class="nb-basket-empty">No clips selected yet.<br>Tick clips on the left — your picks stay listed here as you page and filter.</div>
+  </template>
+</div>

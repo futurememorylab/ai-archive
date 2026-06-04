@@ -52,54 +52,9 @@
         <span class="meta mono" x-text="selCount() + ' selected'"></span>
       </div>
       <div class="nb-body">
-        <div class="nb-main">
-          <div class="nb-filters">
-            <label class="search">
-              <input type="search" x-model="nbQuery" @input.debounce.300ms="resetAndFetch()" placeholder="Search clips to add…" autocomplete="off">
-            </label>
-            <select x-model="nbCache" @change="resetAndFetch()" title="Cache state">
-              <option value="any">Any cache</option>
-              <option value="local">Local</option>
-              <option value="ai">AI store</option>
-              <option value="none">Not cached</option>
-            </select>
-            <select x-model="nbAnno" @change="resetAndFetch()" title="Annotation status">
-              <option value="any">Any state</option>
-              <option value="none">No annotations</option>
-              <option value="for_review">For review</option>
-              <option value="applied">Applied</option>
-            </select>
-            <label class="nb-selonly"><input type="checkbox" x-model="selOnly" @change="resetAndFetch()"> Selected only</label>
-          </div>
-          <div class="nb-list" id="nb-table"></div>
-          <div class="nb-pager" x-show="!selOnly">
-            <button type="button" class="btn sm" :disabled="nbOffset === 0" @click="goPage(-1)">‹ Prev</button>
-            <span class="pg-meta" x-text="pagerLabel()"></span>
-            <button type="button" class="btn sm" :disabled="nbOffset + perPage >= nbTotal" @click="goPage(1)">Next ›</button>
-            <span class="grow"></span>
-            <span class="pg-meta" x-text="nbTotal + ' match'"></span>
-          </div>
-        </div>
-
+        {% include "pages/_clip_picker_main.html" %}
         <div class="nb-side">
-          <div class="nb-side-h">
-            <span>Selected</span><b x-text="selCount()"></b>
-            <span class="grow"></span>
-            <button type="button" class="btn sm ghost" x-show="selCount() > 0" @click="clearSel()">Clear</button>
-          </div>
-          <div class="nb-basket">
-            <template x-for="c in selectedClips()" :key="c.id">
-              <div class="nb-bchip">
-                <img class="thumb" :src="c.thumb" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
-                <span class="nb-bname" x-text="c.name" :title="c.name"></span>
-                <span class="nb-bk" x-text="c.kind"></span>
-                <button type="button" class="nb-bx" title="Remove from selection" @click="removeSel(c.id)">✕</button>
-              </div>
-            </template>
-            <template x-if="selCount() === 0">
-              <div class="nb-basket-empty">No clips selected yet.<br>Tick clips on the left — your picks stay listed here as you page and filter.</div>
-            </template>
-          </div>
+          {% include "pages/_clip_picker_basket.html" %}
           <div class="nb-prompts" x-show="selectedKinds().length > 0" x-cloak>
             <div class="nb-prompts-h">Prompt per media kind</div>
             <template x-for="k in selectedKinds()" :key="k">
@@ -133,6 +88,7 @@
   // on tick), so picks survive server-paginated fetches and filtering.
   function batchesPage() {
     return {
+      ...window.clipPickerCore(),
       // ── table (v1) ──────────────────────────────────────────────
       expanded: {},
       _es: null,
@@ -144,19 +100,6 @@
           this._es = new EventSource("/api/jobs/events");
           this._es.onmessage = () => this._schedule();
         } catch (e) { /* SSE unavailable; table is still usable */ }
-        // Capture row checkbox changes inside the open picker into `sel`.
-        document.addEventListener("change", (e) => {
-          if (!this.newOpen) return;
-          const t = e.target;
-          if (t.id === "row-select-all") {
-            const on = t.checked;
-            document.querySelectorAll("#nb-table .row-check").forEach((cb) => {
-              cb.checked = on; this._syncFromCheckbox(cb);
-            });
-          } else if (t.classList && t.classList.contains("row-check")) {
-            this._syncFromCheckbox(t);
-          }
-        });
         // Auto-open pre-seeded from the clips list (sessionStorage / ?new=1).
         try {
           const seed = JSON.parse(sessionStorage.getItem("catdv:batchQueue") || "null");
@@ -210,16 +153,13 @@
 
       // ── new-batch picker ────────────────────────────────────────
       newOpen: false,
-      nbQuery: "", nbCache: "any", nbAnno: "any", selOnly: false,
-      sel: {},                 // id -> { id, name, kind, thumb }
-      nbOffset: 0, perPage: 15, nbTotal: 0,
       kindPrompt: {},          // kind -> production_version_id
       _allPrompts: null,
 
       openPicker(keepSel = false) {
         if (!keepSel) this.sel = {};
-        this.nbQuery = ""; this.nbCache = "any"; this.nbAnno = "any";
-        this.selOnly = false; this.nbOffset = 0; this.kindPrompt = {};
+        this.q = ""; this.cacheF = "any"; this.annoF = "any";
+        this.selOnly = false; this.offset = 0; this.kindPrompt = {};
         this.newOpen = true;
         this._loadPrompts();
         this.$nextTick(() => this.fetchPage());
@@ -240,96 +180,6 @@
         return (this._allPrompts || []).filter((p) => p.media_kind === kind || p.media_kind === "any");
       },
 
-      async fetchPage() {
-        const root = document.getElementById("nb-table");
-        if (!root) return;
-        if (this.selOnly) { this._renderSelected(root); return; }
-        const params = new URLSearchParams({
-          q: this.nbQuery, cache: this.nbCache, anno: this.nbAnno,
-          offset: this.nbOffset, limit: this.perPage,
-        });
-        try {
-          const r = await fetch("/batches/picker?" + params.toString());
-          if (!r.ok) {
-            const d = await r.json().catch(() => ({}));
-            root.innerHTML = '<div class="nb-empty">' + (d.detail || "Catalog unavailable") + "</div>";
-            this.nbTotal = 0;
-            Alpine.store("toast").push("Catalog unavailable — connect to load clips.", { level: "error" });
-            return;
-          }
-          root.innerHTML = await r.text();
-          window.htmxAlpine.reinit(root);
-          const meta = root.querySelector("#nb-list-meta");
-          this.nbTotal = meta ? parseInt(meta.dataset.total || "0", 10) : 0;
-          this._applyChecked(root);
-        } catch (e) {
-          Alpine.store("toast").push("Failed to load clips: " + e.message, { level: "error" });
-        }
-      },
-
-      _syncFromCheckbox(cb) {
-        const id = parseInt((cb.value.split("/")[1] || ""), 10);
-        if (isNaN(id)) return;
-        if (cb.checked) {
-          const tr = cb.closest("tr");
-          this.sel[id] = {
-            id,
-            name: (tr && tr.querySelector(".name") ? tr.querySelector(".name").textContent.trim() : "Clip " + id),
-            kind: (tr && tr.querySelector(".col-type") ? tr.querySelector(".col-type").textContent.trim() : ""),
-            thumb: (tr && tr.querySelector("img.thumb") ? tr.querySelector("img.thumb").getAttribute("src") : "/api/media/" + id + "/thumb"),
-          };
-        } else {
-          delete this.sel[id];
-          if (this.selOnly) this.$nextTick(() => this.fetchPage());
-        }
-      },
-      _applyChecked(root) {
-        const boxes = [...root.querySelectorAll(".row-check")];
-        boxes.forEach((cb) => {
-          const id = parseInt((cb.value.split("/")[1] || ""), 10);
-          cb.checked = !!this.sel[id];
-        });
-        const all = root.querySelector("#row-select-all");
-        if (all) all.checked = boxes.length > 0 && boxes.every((cb) => cb.checked);
-      },
-      _renderSelected(root) {
-        const items = this.selectedClips();
-        this.nbTotal = items.length;
-        if (!items.length) { root.innerHTML = '<div class="nb-empty">No clips selected.</div>'; return; }
-        const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-        root.innerHTML = '<div class="nb-selbox">' + items.map((c) =>
-          '<label class="nb-bchip"><input type="checkbox" class="row-check" value="catdv/' + c.id + '" checked>' +
-          '<img class="thumb" src="' + esc(c.thumb) + '" alt="" onerror="this.style.visibility=\'hidden\'">' +
-          '<span class="nb-bname" title="' + esc(c.name) + '">' + esc(c.name) + '</span>' +
-          '<span class="nb-bk col-type">' + esc(c.kind) + '</span></label>'
-        ).join("") + "</div>";
-      },
-
-      resetAndFetch() { this.nbOffset = 0; this.fetchPage(); },
-      goPage(d) {
-        const maxOff = Math.max(0, (Math.ceil(this.nbTotal / this.perPage) - 1) * this.perPage);
-        this.nbOffset = Math.max(0, Math.min(maxOff, this.nbOffset + d * this.perPage));
-        this.fetchPage();
-      },
-      pagerLabel() {
-        if (!this.nbTotal) return "No matches";
-        return (this.nbOffset + 1) + "–" + Math.min(this.nbOffset + this.perPage, this.nbTotal) + " of " + this.nbTotal;
-      },
-
-      selCount() { return Object.keys(this.sel).length; },
-      selectedClips() { return Object.values(this.sel); },
-      selectedKinds() { return [...new Set(this.selectedClips().map((c) => c.kind).filter(Boolean))]; },
-      removeSel(id) {
-        delete this.sel[id];
-        const cb = document.querySelector('#nb-table .row-check[value="catdv/' + id + '"]');
-        if (cb) cb.checked = false;
-        if (this.selOnly) this.fetchPage();
-      },
-      clearSel() {
-        this.sel = {};
-        if (this.selOnly) this.fetchPage();
-        else { const root = document.getElementById("nb-table"); if (root) this._applyChecked(root); }
-      },
       runnableCount() {
         const runnable = new Set(this.selectedKinds().filter((k) => this.kindPrompt[k]));
         return this.selectedClips().filter((c) => runnable.has(c.kind)).length;
