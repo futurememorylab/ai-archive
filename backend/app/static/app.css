@@ -2008,9 +2008,6 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   border-top: 1px solid var(--line);
   border-bottom: 0;
 }
-.modal-results {
-  display: flex; flex-direction: column; gap: 4px; margin-top: 8px;
-}
 .modal-body input[type=search] {
   width: 100%; padding: 6px 10px;
   background: var(--surface-2);
