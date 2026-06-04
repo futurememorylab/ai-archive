@@ -5,36 +5,28 @@
    manages its own state via the `archivePicker(folderId)` Alpine
    component; the close action wipes #modal-root.
 
-   Search re-fetches the partial with a new ?q= parameter (htmx swap of
-   .modal-results only).
+   The result rows are NOT rendered here: the component fetches pages from
+   the shared /batches/picker endpoint (the same rich _video_list.html rows
+   the New-batch picker uses) and injects them into .modal-results.
 #}
 <div class="modal" x-data="archivePicker({{ folder_id }})" @keydown.escape.window="close()">
   <div class="modal-backdrop" @click="close()"></div>
-  <div class="modal-card">
+  <div class="modal-card nb-card">
     <div class="modal-hdr">
       <h2>Add clips to folder</h2>
       <span class="grow"></span>
       <button class="btn ghost" @click="close()">×</button>
     </div>
     <div class="modal-body">
-      <input type="search" placeholder="search clips…" value="{{ q }}"
-             hx-get="/studio/_archive_picker?folder_id={{ folder_id }}"
-             hx-target=".modal-results"
-             hx-trigger="search, keyup changed delay:300ms"
-             hx-include="this"
-             name="q">
-      <div class="modal-results">
-        {% if not results %}
-          <div class="muted">No clips returned. Try a different query.</div>
-        {% endif %}
-        {% for c in results %}
-          <label class="picker-row">
-            <input type="checkbox" :checked="picked.has({{ c.id }})"
-                   @change="toggle({{ c.id }})">
-            <span class="name">{{ c.name }}</span>
-            <span class="mono-cell muted">id:{{ c.id }}</span>
-          </label>
-        {% endfor %}
+      <input type="search" placeholder="search clips…"
+             x-model="q" @input.debounce.300ms="resetAndFetch()">
+      <div class="modal-results nb-list" @change="onCheckChange($event)"></div>
+      <div class="nb-pager">
+        <button type="button" class="btn sm" :disabled="offset === 0" @click="goPage(-1)">‹ Prev</button>
+        <span class="pg-meta" x-text="pagerLabel()"></span>
+        <button type="button" class="btn sm" :disabled="offset + limit >= total" @click="goPage(1)">Next ›</button>
+        <span class="grow"></span>
+        <span class="pg-meta" x-text="total + ' match'"></span>
       </div>
     </div>
     <div class="modal-foot">
