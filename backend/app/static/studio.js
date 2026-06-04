@@ -141,10 +141,76 @@ document.addEventListener('alpine:init', () => {
   Alpine.data('archivePicker', (folderId) => ({
     folderId,
     picked: new Set(),
+    q: '',
+    offset: 0,
+    limit: 15,
+    total: 0,
 
-    toggle(id) {
-      if (this.picked.has(id)) this.picked.delete(id);
-      else this.picked.add(id);
+    init() { this.fetchPage(); },
+
+    // ── results page (shared /batches/picker renderer) ─────────────
+    async fetchPage() {
+      const root = this.$root.querySelector('.modal-results');
+      if (!root) return;
+      const params = new URLSearchParams({
+        q: this.q, offset: this.offset, limit: this.limit,
+      });
+      try {
+        const r = await fetch('/batches/picker?' + params.toString());
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}));
+          root.innerHTML = '<div class="nb-empty">' + (d.detail || 'Catalog unavailable') + '</div>';
+          this.total = 0;
+          Alpine.store('toast').push('Catalog unavailable — connect to load clips.', { level: 'error' });
+          return;
+        }
+        root.innerHTML = await r.text();
+        window.htmxAlpine.reinit(root);
+        const meta = root.querySelector('#nb-list-meta');
+        this.total = meta ? parseInt(meta.dataset.total || '0', 10) : 0;
+        this._applyChecked(root);
+      } catch (e) {
+        Alpine.store('toast').push('Failed to load clips: ' + e.message, { level: 'error' });
+      }
+    },
+
+    resetAndFetch() { this.offset = 0; this.fetchPage(); },
+    goPage(d) {
+      const maxOff = Math.max(0, (Math.ceil(this.total / this.limit) - 1) * this.limit);
+      this.offset = Math.max(0, Math.min(maxOff, this.offset + d * this.limit));
+      this.fetchPage();
+    },
+    pagerLabel() {
+      if (!this.total) return 'No matches';
+      return (this.offset + 1) + '–' + Math.min(this.offset + this.limit, this.total) + ' of ' + this.total;
+    },
+
+    // ── selection sync (checkboxes come from the shared rows) ──────
+    onCheckChange(e) {
+      const t = e.target;
+      if (t.id === 'row-select-all') {
+        this.$root.querySelectorAll('.modal-results .row-check').forEach((cb) => {
+          cb.checked = t.checked;
+          this._syncOne(cb);
+        });
+      } else if (t.classList && t.classList.contains('row-check')) {
+        this._syncOne(t);
+      }
+    },
+    _syncOne(cb) {
+      const id = parseInt(cb.value.split('/')[1] || '', 10);
+      if (isNaN(id)) return;
+      if (cb.checked) this.picked.add(id);
+      else this.picked.delete(id);
+    },
+    _applyChecked(root) {
+      const boxes = [...root.querySelectorAll('.row-check')];
+      boxes.forEach((cb) => {
+        const id = parseInt(cb.value.split('/')[1] || '', 10);
+        cb.checked = this.picked.has(id);
+      });
+      const all = root.querySelector('#row-select-all');
+      if (all) all.checked = boxes.length > 0 && boxes.every((cb) => cb.checked);
     },
 
     async addSelected() {

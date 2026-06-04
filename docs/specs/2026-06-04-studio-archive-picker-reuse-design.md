@@ -89,7 +89,9 @@ New methods, mirroring `batchesPage` but scoped to the modal element
   and `#row-select-all` into the `picked` Set.
 - `init()` fetches page 1.
 
-Unchanged: `toggle(id)`, `addSelected()`, `close()`.
+Unchanged: `addSelected()`, `close()`. `toggle(id)` is deleted — the
+shared rows have no per-row Alpine binding; the container-level
+`@change` handler replaces it.
 
 ### `routes/pages/studio.py` — `_studio_archive_picker`
 
