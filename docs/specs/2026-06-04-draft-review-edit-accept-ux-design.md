@@ -1,7 +1,7 @@
 # Draft review edit/accept UX — Save/Cancel editing, applied items leave Draft, recoverable deletes
 
 **Date:** 2026-06-04
-**Status:** Approved (design)
+**Status:** Implemented
 
 Origin: user-reported UX problems in the clip-detail Draft review panel
 (built by `docs/specs/2026-06-02-draft-review-redesign-design.md`).
