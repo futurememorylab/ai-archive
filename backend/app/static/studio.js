@@ -159,7 +159,8 @@ document.addEventListener('alpine:init', () => {
         const r = await fetch('/batches/picker?' + params.toString());
         if (!r.ok) {
           const d = await r.json().catch(() => ({}));
-          root.innerHTML = '<div class="nb-empty">' + (d.detail || 'Catalog unavailable') + '</div>';
+          const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+          root.innerHTML = '<div class="nb-empty">' + esc(d.detail || 'Catalog unavailable') + '</div>';
           this.total = 0;
           Alpine.store('toast').push('Catalog unavailable — connect to load clips.', { level: 'error' });
           return;
