@@ -63,6 +63,11 @@ filtered), and rejected items were unrecoverable from the UI.
   upstream write is asynchronous; the Published panel reflects it only
   after the sync engine drains. The "syncing to CatDV" empty state names
   that window.
+- Found during acceptance: a successful `apply_changes` left the 7-day
+  clip cache untouched, so Published served the pre-apply clip long after
+  a successful sync ("markers applied but missing from Published"). The
+  adapter now deletes the clip's cache row after a successful PUT (the
+  PUT response is not a full clip, so write-through wasn't an option).
 - `applied_count` counts non-rejected applied items of the *latest*
   annotation only (same scope the panel always had).
 - Restore preserves any prior edits (`set_decision` COALESCEs
