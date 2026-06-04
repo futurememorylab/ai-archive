@@ -2352,6 +2352,20 @@ body.studio-resizing {
   line-height: 1;
 }
 
+#toast-root .toast-action {
+  background: none;
+  border: 1px solid var(--line-3);
+  border-radius: 5px;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 1px 9px;
+  flex: none;
+}
+#toast-root .toast-action:hover { background: var(--hover); }
+
 @keyframes toast-in {
   from { transform: translateY(0.5rem); opacity: 0; }
   to   { transform: translateY(0); opacity: 1; }
