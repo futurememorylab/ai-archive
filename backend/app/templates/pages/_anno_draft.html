@@ -15,19 +15,25 @@
           x-text="'✓ Accept &amp; apply all (' + totalCount() + ')'"></button>
 </div>
 
-<template x-if="totalCount() === 0">
+<template x-if="totalCount() === 0 && appliedCount > 0">
+  <p class="muted" style="padding:14px 2px"
+     x-text="appliedCount + ' proposal' + (appliedCount === 1 ? '' : 's') + ' applied — syncing to CatDV; visible under Published once synced.'"></p>
+</template>
+<template x-if="totalCount() === 0 && appliedCount === 0 && deletedTotal() === 0">
   <p class="muted" style="padding:14px 2px">No proposals to review.</p>
 </template>
 
 <div class="edit-hint" x-show="totalCount() > 0">
   <span class="eh-ico">✎</span>
-  <span>Review each proposal below. <b>Delete</b> the ones you don't want; on a
-    marker, <b>Edit</b> then drag the highlighted bar's edges on the
-    <b>timeline</b> to set in/out. <b>Accept &amp; apply all</b> writes everything
-    still listed to CatDV. The <b>‹ ›</b> arrows move between clips in the review set.</span>
+  <span>Review each proposal below. <b>Delete</b> the ones you don't want
+    (<b>Undo</b> or <b>Restore</b> brings them back); on a marker, <b>Edit</b>,
+    drag the highlighted bar's edges on the <b>timeline</b> to set in/out, then
+    <b>Save</b> (or <b>Cancel</b> to revert). <b>Accept &amp; apply all</b> writes
+    everything still listed to CatDV. The <b>‹ ›</b> arrows move between clips
+    in the review set.</span>
 </div>
 
-<div class="anno-tabs" role="tablist" x-show="totalCount() > 0">
+<div class="anno-tabs" role="tablist" x-show="totalCount() > 0 || deletedTotal() > 0">
   <button type="button" class="anno-tab" :class="{ active: tab === 'markers' }" @click="tab = 'markers'">Markers <span class="count" x-text="draftMarkers.length"></span></button>
   <button type="button" class="anno-tab" :class="{ active: tab === 'fields' }" @click="tab = 'fields'">Fields <span class="count" x-text="draftFields.length"></span></button>
   <button type="button" class="anno-tab" :class="{ active: tab === 'notes' }" @click="tab = 'notes'">Notes <span class="count" x-text="draftNotes.length"></span></button>
@@ -44,20 +50,31 @@
       <div class="ri-name" x-text="m.name"></div>
       <div class="ri-desc" x-text="m.description"></div>
       <div class="ri-editor" x-show="editingItemId === m.item_id" x-cloak @click.stop>
-        <label class="field"><span class="field-label">Name</span><input class="txt" type="text" x-model="m.name" @change="_persistMarker(m.item_id)"></label>
-        <label class="field"><span class="field-label">Category</span><input class="txt" type="text" x-model="m.category" @change="_persistMarker(m.item_id)"></label>
-        <label class="field"><span class="field-label">Description</span><textarea class="txt-area" x-model="m.description" @change="_persistMarker(m.item_id)"></textarea></label>
+        <label class="field"><span class="field-label">Name</span><input class="txt" type="text" x-model="m.name"></label>
+        <label class="field"><span class="field-label">Category</span><input class="txt" type="text" x-model="m.category"></label>
+        <label class="field"><span class="field-label">Description</span><textarea class="txt-area" x-model="m.description"></textarea></label>
         <div class="ri-time">
           <span class="ri-readout">in <b x-text="tc(m.in_secs)"></b> · out <b x-text="m.out_secs != null ? tc(m.out_secs) : '—'"></b></span>
           <span class="ri-hint">Drag the highlighted bar on the timeline · ←/→ nudge (Shift = 1 frame)</span>
         </div>
       </div>
       <div class="ri-actions" @click.stop>
-        <button type="button" class="btn sm ghost" @click="toggleEdit(m.item_id)" x-text="editingItemId === m.item_id ? 'Done' : '✎ Edit'"></button>
-        <button type="button" class="btn sm danger" @click="del(m, $event)">Delete</button>
+        <button type="button" class="btn good sm" x-show="editingItemId === m.item_id" @click="saveEdit()">Save</button>
+        <button type="button" class="btn sm ghost" x-show="editingItemId === m.item_id" @click="cancelEdit()">Cancel</button>
+        <button type="button" class="btn sm ghost" x-show="editingItemId !== m.item_id" @click="startEdit(m.item_id)">✎ Edit</button>
+        <button type="button" class="btn sm danger" x-show="editingItemId !== m.item_id" @click="del(m, $event)">Delete</button>
       </div>
     </div>
   </template>
+  <details class="ri-deleted" x-show="draftDeleted.markers.length > 0">
+    <summary x-text="'Deleted (' + draftDeleted.markers.length + ')'"></summary>
+    <template x-for="m in draftDeleted.markers" :key="m.item_id">
+      <div class="ri-del-row">
+        <span class="ri-del-label" x-text="(m.name || '—') + ' · ' + tc(m.in_secs)"></span>
+        <button type="button" class="btn sm ghost" @click="restore(m)">Restore</button>
+      </div>
+    </template>
+  </details>
 </div>
 
 <div class="anno-section" x-show="tab === 'fields'" x-cloak>
@@ -68,14 +85,25 @@
       </div>
       <div class="ri-value" x-text="f.value"></div>
       <div class="ri-editor" x-show="editingItemId === f.item_id" x-cloak>
-        <label class="field"><span class="field-label" x-text="f.identifier"></span><input class="txt" type="text" x-model="f.value" @change="persistField(f)"></label>
+        <label class="field"><span class="field-label" x-text="f.identifier"></span><input class="txt" type="text" x-model="f.value"></label>
       </div>
       <div class="ri-actions">
-        <button type="button" class="btn sm ghost" @click="toggleEdit(f.item_id)" x-text="editingItemId === f.item_id ? 'Done' : '✎ Edit'"></button>
-        <button type="button" class="btn sm danger" @click="del(f, $event)">Delete</button>
+        <button type="button" class="btn good sm" x-show="editingItemId === f.item_id" @click="saveEdit()">Save</button>
+        <button type="button" class="btn sm ghost" x-show="editingItemId === f.item_id" @click="cancelEdit()">Cancel</button>
+        <button type="button" class="btn sm ghost" x-show="editingItemId !== f.item_id" @click="startEdit(f.item_id)">✎ Edit</button>
+        <button type="button" class="btn sm danger" x-show="editingItemId !== f.item_id" @click="del(f, $event)">Delete</button>
       </div>
     </div>
   </template>
+  <details class="ri-deleted" x-show="draftDeleted.fields.length > 0">
+    <summary x-text="'Deleted (' + draftDeleted.fields.length + ')'"></summary>
+    <template x-for="f in draftDeleted.fields" :key="f.item_id">
+      <div class="ri-del-row">
+        <span class="ri-del-label" x-text="f.identifier + ': ' + f.value"></span>
+        <button type="button" class="btn sm ghost" @click="restore(f)">Restore</button>
+      </div>
+    </template>
+  </details>
 </div>
 
 <div class="anno-section" x-show="tab === 'notes'" x-cloak>
@@ -83,12 +111,23 @@
     <div class="ri-card ri-note-row" :class="{ editing: editingItemId === n.item_id }">
       <div class="ri-note-text" x-text="n.text"></div>
       <div class="ri-editor" x-show="editingItemId === n.item_id" x-cloak>
-        <label class="field"><span class="field-label">Note</span><textarea class="txt-area" style="min-height:90px" x-model="n.text" @change="persistNote(n)"></textarea></label>
+        <label class="field"><span class="field-label">Note</span><textarea class="txt-area" style="min-height:90px" x-model="n.text"></textarea></label>
       </div>
       <div class="ri-actions">
-        <button type="button" class="btn sm ghost" @click="toggleEdit(n.item_id)" x-text="editingItemId === n.item_id ? 'Done' : '✎ Edit'"></button>
-        <button type="button" class="btn sm danger" @click="del(n, $event)">Delete</button>
+        <button type="button" class="btn good sm" x-show="editingItemId === n.item_id" @click="saveEdit()">Save</button>
+        <button type="button" class="btn sm ghost" x-show="editingItemId === n.item_id" @click="cancelEdit()">Cancel</button>
+        <button type="button" class="btn sm ghost" x-show="editingItemId !== n.item_id" @click="startEdit(n.item_id)">✎ Edit</button>
+        <button type="button" class="btn sm danger" x-show="editingItemId !== n.item_id" @click="del(n, $event)">Delete</button>
       </div>
     </div>
   </template>
+  <details class="ri-deleted" x-show="draftDeleted.notes.length > 0">
+    <summary x-text="'Deleted (' + draftDeleted.notes.length + ')'"></summary>
+    <template x-for="n in draftDeleted.notes" :key="n.item_id">
+      <div class="ri-del-row">
+        <span class="ri-del-label" x-text="n.text"></span>
+        <button type="button" class="btn sm ghost" @click="restore(n)">Restore</button>
+      </div>
+    </template>
+  </details>
 </div>
