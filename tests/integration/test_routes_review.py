@@ -422,8 +422,11 @@ def test_clip_detail_review_mode_renders_item_controls(monkeypatch, tmp_path):
         assert r.status_code == 200
         # Card panel structural markers (new Alpine-driven design).
         assert "ri-card" in r.text
-        assert "toggleEdit" in r.text       # ✎ Edit
+        assert "startEdit" in r.text        # ✎ Edit (buffered save/cancel edit)
+        assert "saveEdit" in r.text         # Save
+        assert "cancelEdit" in r.text       # Cancel
         assert "del(" in r.text             # Delete
+        assert "restore(" in r.text         # Restore (deleted strip)
         assert "acceptApplyAll" in r.text
         # Review bar with the consolidated accept+apply action and clip navigation.
         assert "review-bar" in r.text
@@ -443,7 +446,7 @@ def test_clip_detail_draft_controls_show_without_review_flag(monkeypatch, tmp_pa
         # The Alpine card panel is always rendered when a draft exists.
         assert "review-bar" in r.text
         assert "ri-card" in r.text
-        assert "toggleEdit" in r.text
+        assert "startEdit" in r.text
 
 
 def _make_canonical_clip_with_markers(clip_id: int = 99):
