@@ -2,7 +2,13 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from backend.app.archive.model import ClipQuery
+from backend.app.archive.model import (
+    AddMarkers,
+    ChangeSet,
+    ClipQuery,
+    Marker,
+    Timecode,
+)
 from backend.app.archive.providers.catdv.adapter import CatdvArchiveAdapter
 from backend.app.repositories.clip_cache import ClipCacheRepo
 from backend.app.repositories.clip_list_cache import ClipListCacheRepo
@@ -78,6 +84,35 @@ async def test_get_clip_bypasses_cache_when_expired(db):
             fake.clips[3]["name"] = "Fresh"
             second = await adapter.get_clip("3")
             assert second.name == "Fresh"
+
+
+@pytest.mark.asyncio
+async def test_apply_changes_invalidates_clip_cache(db):
+    """A successful apply must invalidate the cached clip so the next
+    get_clip refetches live and shows the applied change. Without
+    invalidation, the Published view serves the pre-apply clip for up to
+    clip_cache_ttl_hours after a successful write (the "markers applied
+    but missing from Published" bug)."""
+    with running_fake_catdv() as (base_url, fake):
+        fake.clips[9] = {"ID": 9, "name": "c", "fps": 25.0, "markers": [], "fields": {}}
+        async with CatdvClient(base_url, "klientAI", "secret") as client:
+            adapter = _adapter(client, db, ttl_hours=168)
+            before = await adapter.get_clip("9")  # populates the cache
+            assert len(before.markers) == 0
+
+            cs = ChangeSet(
+                clip_key=("catdv", "9"),
+                ops=[
+                    AddMarkers(
+                        markers=[Marker(name="m", in_=Timecode(secs=1.0, fps=25.0), out=None)]
+                    )
+                ],
+            )
+            result = await adapter.apply_changes(cs)
+            assert result.status == "ok"
+
+            after = await adapter.get_clip("9")  # must NOT serve pre-apply cache
+            assert [m.name for m in after.markers] == ["m"]
 
 
 @pytest.mark.asyncio
