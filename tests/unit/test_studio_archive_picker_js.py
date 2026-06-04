@@ -9,6 +9,7 @@ mirrors tests/unit/test_studio_setlayout_keeps_compare.py.
 from pathlib import Path
 
 STUDIO_JS = Path("backend/app/static/studio.js")
+CLIP_PICKER_JS = Path("backend/app/static/clipPicker.js")
 
 
 def _component_body(text: str, marker: str) -> str:
@@ -27,17 +28,20 @@ def _component_body(text: str, marker: str) -> str:
     raise AssertionError(f"{marker} body not terminated — no closing brace")
 
 
-def test_archive_picker_reuses_batches_picker_endpoint():
+def test_archive_picker_spreads_shared_core():
     body = _component_body(
         STUDIO_JS.read_text(encoding="utf-8"), "Alpine.data('archivePicker'"
     )
-    assert "/batches/picker" in body, (
-        "archivePicker must fetch rows from the shared /batches/picker "
-        "endpoint, not render its own list"
+    assert "clipPickerCore" in body, (
+        "archivePicker must spread window.clipPickerCore() — the shared "
+        "picker — not define its own list logic"
     )
-    assert "htmxAlpine.reinit" in body, (
+
+
+def test_clip_picker_core_owns_the_shared_renderer_contract():
+    core = CLIP_PICKER_JS.read_text(encoding="utf-8")
+    assert "/batches/picker" in core, "core must fetch the shared picker rows"
+    assert "htmxAlpine.reinit" in core, (
         "fetch-injected rows must go through the shared lifecycle helper"
     )
-    assert "nb-list-meta" in body, (
-        "pager total must come from the shared #nb-list-meta div"
-    )
+    assert "nb-list-meta" in core, "pager total comes from the shared meta div"

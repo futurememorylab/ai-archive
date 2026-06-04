@@ -1,13 +1,11 @@
 {# Archive picker modal — search + multi-select add into a folder.
 
    The modal is HTMX-swapped into #modal-root from the "+ Add from archive"
-   button inside an expanded folder (see _studio_folder.html). The modal
-   manages its own state via the `archivePicker(folderId)` Alpine
-   component; the close action wipes #modal-root.
-
-   The result rows are NOT rendered here: the component fetches pages from
-   the shared /batches/picker endpoint (the same rich _video_list.html rows
-   the New-batch picker uses) and injects them into .modal-results.
+   button inside an expanded folder (see _studio_folder.html). State and
+   picker behavior come from window.clipPickerCore() (static/clipPicker.js),
+   spread into the `archivePicker(folderId)` Alpine component; the close
+   action wipes #modal-root. Rows are fetched from the shared
+   /batches/picker endpoint into .nb-list.
 #}
 <div class="modal" x-data="archivePicker({{ folder_id }})" @keydown.escape.window="close()">
   <div class="modal-backdrop" @click="close()"></div>
@@ -17,23 +15,17 @@
       <span class="grow"></span>
       <button class="btn ghost" @click="close()">×</button>
     </div>
-    <div class="modal-body">
-      <input type="search" placeholder="search clips…"
-             x-model="q" @input.debounce.300ms="resetAndFetch()">
-      <div class="modal-results nb-list" @change="onCheckChange($event)"></div>
-      <div class="nb-pager">
-        <button type="button" class="btn sm" :disabled="offset === 0" @click="goPage(-1)">‹ Prev</button>
-        <span class="pg-meta" x-text="pagerLabel()"></span>
-        <button type="button" class="btn sm" :disabled="offset + limit >= total" @click="goPage(1)">Next ›</button>
-        <span class="grow"></span>
-        <span class="pg-meta" x-text="total + ' match'"></span>
+    <div class="nb-body">
+      {% include "pages/_clip_picker_main.html" %}
+      <div class="nb-side">
+        {% include "pages/_clip_picker_basket.html" %}
       </div>
     </div>
     <div class="modal-foot">
-      <span class="muted" x-text="picked.size + ' selected'"></span>
+      <span class="muted" x-text="selCount() + ' selected'"></span>
       <span class="grow"></span>
       <button class="btn ghost" @click="close()">Cancel</button>
-      <button class="btn primary" @click="addSelected()" :disabled="picked.size === 0">Add</button>
+      <button class="btn primary" @click="addSelected()" :disabled="selCount() === 0">Add</button>
     </div>
   </div>
 </div>

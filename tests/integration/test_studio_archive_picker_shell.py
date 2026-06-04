@@ -29,8 +29,11 @@ def test_picker_shell_renders_offline(client):
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/html")
     assert "archivePicker(7)" in r.text  # Alpine component wired
-    assert "modal-results" in r.text     # empty results target
-    assert "nb-pager" in r.text          # pager chrome present
+    # Full shared-picker chrome (spec v2): filters, list, pager, basket.
+    assert "nb-filters" in r.text
+    assert "nb-list" in r.text
+    assert "nb-pager" in r.text
+    assert "nb-basket" in r.text
 
 
 def test_picker_shell_has_no_bare_rows_or_htmx_search(client):
