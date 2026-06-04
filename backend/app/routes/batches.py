@@ -73,9 +73,11 @@ async def batches_picker(
     offset: int = 0,
     limit: int = 12,
 ):
-    """Server-paginated clip rows for the New-batch picker modal. Lists the
-    CatDV catalog, so it needs live services (typed 503 offline). Selection
-    is tracked client-side; this only renders one page of candidate rows."""
+    """Server-paginated clip rows for the New-batch picker modal AND the
+    Studio archive-picker modal (the shared pickable-clip-list renderer —
+    see docs/specs/2026-06-04-studio-archive-picker-reuse-design.md). Lists
+    the CatDV catalog, so it needs live services (typed 503 offline).
+    Selection is tracked client-side; this renders one page of rows."""
     ctx = get_live_ctx(request)
     catalog_id = str(ctx.settings.catdv_catalog_id)
     host_local = getattr(getattr(ctx, "proxy_resolver", None), "is_host_local", False)
