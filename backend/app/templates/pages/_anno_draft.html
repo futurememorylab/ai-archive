@@ -85,7 +85,7 @@
       </div>
       <div class="ri-value" x-show="editingItemId !== f.item_id" x-text="f.value"></div>
       <div class="ri-editor" x-show="editingItemId === f.item_id" x-cloak>
-        <label class="field"><span class="field-label" x-text="f.identifier"></span><input class="txt" type="text" x-model="f.value"></label>
+        <label class="field"><span class="field-label">Value</span><input class="txt" type="text" x-model="f.value"></label>
       </div>
       <div class="ri-actions">
         <button type="button" class="btn good sm" x-show="editingItemId === f.item_id" @click="saveEdit()">Save</button>
