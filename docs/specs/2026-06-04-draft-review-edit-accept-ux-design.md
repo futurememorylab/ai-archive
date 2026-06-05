@@ -45,7 +45,7 @@ Four concrete problems in the Draft review panel (`_anno_draft.html` +
 - After a successful apply, applied items leave the Draft panel; the panel
   says they're syncing to CatDV instead of re-listing them.
 - Deleting a proposal is recoverable: an **Undo** toast immediately after,
-  and a collapsed **Deleted (n)** section per tab with **Restore** buttons
+  and an always-visible **Deleted (n)** section per tab with **Restore** buttons
   any time later.
 
 ## Non-goals
@@ -126,7 +126,7 @@ precede an Apply is awaited. No backend change needed.
 - **Undo / Restore** (`restore(item)`): persists decision `pending`
   (endpoint already supports it), moves the item back from
   `draftDeleted.<kind>` into the live array, status `proposed`.
-- Each tab renders a collapsed **Deleted (n)** section under the live cards
+- Each tab renders an always-visible **Deleted (n)** section under the live cards
   (hidden when empty): muted one-line rows (name / identifier / text
   excerpt) + a **Restore** button.
 - `toast.js` gains an optional `action: {label, fn}` option on `push`;
@@ -181,7 +181,7 @@ TDD throughout (per CLAUDE.md):
    "Proposal deleted. **Undo**" appears. Click Undo: the proposal returns
    to the list as Proposed. Reload: still present.
 6. **Delete → Restore later.** Delete a proposal, dismiss the toast. A
-   collapsed **Deleted (1)** section appears at the bottom of the tab.
+   **Deleted (1)** section appears at the bottom of the tab.
    Reload the page: the section is still there. Expand it, click
    **Restore**: the proposal returns to the live list as Proposed and the
    Deleted section empties/hides.
