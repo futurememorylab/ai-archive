@@ -16,11 +16,11 @@
 </div>
 
 <template x-if="totalCount() === 0 && appliedCount > 0">
-  <p class="muted" style="padding:14px 2px"
+  <p class="muted" style="padding:14px"
      x-text="appliedCount + ' proposal' + (appliedCount === 1 ? '' : 's') + ' applied — syncing to CatDV; visible under Published once synced.'"></p>
 </template>
 <template x-if="totalCount() === 0 && appliedCount === 0 && deletedTotal() === 0">
-  <p class="muted" style="padding:14px 2px">No proposals to review.</p>
+  <p class="muted" style="padding:14px">No proposals to review.</p>
 </template>
 
 <div class="edit-hint" x-show="totalCount() > 0">
