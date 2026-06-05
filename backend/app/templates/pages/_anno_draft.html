@@ -66,15 +66,15 @@
       </div>
     </div>
   </template>
-  <details class="ri-deleted" x-show="draftDeleted.markers.length > 0">
-    <summary x-text="'Deleted (' + draftDeleted.markers.length + ')'"></summary>
+  <div class="ri-deleted" x-show="draftDeleted.markers.length > 0">
+    <div class="ri-deleted-hdr" x-text="'Deleted (' + draftDeleted.markers.length + ')'"></div>
     <template x-for="m in draftDeleted.markers" :key="m.item_id">
       <div class="ri-del-row">
         <span class="ri-del-label" x-text="(m.name || '—') + ' · ' + tc(m.in_secs)"></span>
         <button type="button" class="btn sm ghost" @click="restore(m)">Restore</button>
       </div>
     </template>
-  </details>
+  </div>
 </div>
 
 <div class="anno-section" x-show="tab === 'fields'" x-cloak>
@@ -95,15 +95,15 @@
       </div>
     </div>
   </template>
-  <details class="ri-deleted" x-show="draftDeleted.fields.length > 0">
-    <summary x-text="'Deleted (' + draftDeleted.fields.length + ')'"></summary>
+  <div class="ri-deleted" x-show="draftDeleted.fields.length > 0">
+    <div class="ri-deleted-hdr" x-text="'Deleted (' + draftDeleted.fields.length + ')'"></div>
     <template x-for="f in draftDeleted.fields" :key="f.item_id">
       <div class="ri-del-row">
         <span class="ri-del-label" x-text="f.identifier + ': ' + f.value"></span>
         <button type="button" class="btn sm ghost" @click="restore(f)">Restore</button>
       </div>
     </template>
-  </details>
+  </div>
 </div>
 
 <div class="anno-section" x-show="tab === 'notes'" x-cloak>
@@ -121,13 +121,13 @@
       </div>
     </div>
   </template>
-  <details class="ri-deleted" x-show="draftDeleted.notes.length > 0">
-    <summary x-text="'Deleted (' + draftDeleted.notes.length + ')'"></summary>
+  <div class="ri-deleted" x-show="draftDeleted.notes.length > 0">
+    <div class="ri-deleted-hdr" x-text="'Deleted (' + draftDeleted.notes.length + ')'"></div>
     <template x-for="n in draftDeleted.notes" :key="n.item_id">
       <div class="ri-del-row">
         <span class="ri-del-label" x-text="n.text"></span>
         <button type="button" class="btn sm ghost" @click="restore(n)">Restore</button>
       </div>
     </template>
-  </details>
+  </div>
 </div>
