@@ -74,6 +74,11 @@ function reviewMixin(clipId) {
       this._editSnapshot = JSON.parse(JSON.stringify(f.it));
       this.editingItemId = itemId;
       if (f.kind === "marker" && opts.seek !== false) this.seek(f.it.in_secs, { play: false });
+      // format.js autosizes .txt-area on *input* only; an editor opening with
+      // existing long text needs one explicit pass once it's visible.
+      this.$nextTick(() => {
+        this.$root.querySelectorAll(".ri-editor textarea.txt-area").forEach(window.autosize);
+      });
     },
     cancelEdit() {
       const f = this.editingItemId != null ? this._findDraft(this.editingItemId) : null;

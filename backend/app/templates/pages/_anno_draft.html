@@ -83,7 +83,7 @@
       <div class="ri-card-top">
         <span class="ident" x-text="f.identifier"></span>
       </div>
-      <div class="ri-value" x-text="f.value"></div>
+      <div class="ri-value" x-show="editingItemId !== f.item_id" x-text="f.value"></div>
       <div class="ri-editor" x-show="editingItemId === f.item_id" x-cloak>
         <label class="field"><span class="field-label" x-text="f.identifier"></span><input class="txt" type="text" x-model="f.value"></label>
       </div>
@@ -109,9 +109,9 @@
 <div class="anno-section" x-show="tab === 'notes'" x-cloak>
   <template x-for="n in draftNotes" :key="n.item_id">
     <div class="ri-card ri-note-row" :class="{ editing: editingItemId === n.item_id }">
-      <div class="ri-note-text" x-text="n.text"></div>
+      <div class="ri-note-text" x-show="editingItemId !== n.item_id" x-text="n.text"></div>
       <div class="ri-editor" x-show="editingItemId === n.item_id" x-cloak>
-        <label class="field"><span class="field-label">Note</span><textarea class="txt-area" style="min-height:90px" x-model="n.text"></textarea></label>
+        <label class="field"><span class="field-label">Note</span><textarea class="txt-area" style="min-height:160px" x-model="n.text"></textarea></label>
       </div>
       <div class="ri-actions">
         <button type="button" class="btn good sm" x-show="editingItemId === n.item_id" @click="saveEdit()">Save</button>
