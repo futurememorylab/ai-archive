@@ -278,6 +278,12 @@ class CatdvArchiveAdapter:
             raise FatalProviderError(msg) from exc
 
         new_etag = self._etag_from_raw(response) or live_etag
+        # Invalidate the cached clip: the PUT response is not a full clip
+        # (just ID + modifyDate), so writing it through would cache a husk.
+        # Deleting the row makes the next get_clip refetch live — otherwise
+        # the Published view serves the pre-apply clip for up to
+        # clip_cache_ttl_hours after a successful apply.
+        await self._invalidate_clip_cache(clip_id_str)
         return WriteResult(status="ok", upstream_response=response, new_etag=new_etag)
 
     @staticmethod
@@ -310,6 +316,13 @@ class CatdvArchiveAdapter:
         if not self._cache_enabled():
             return None
         return await self._clip_cache.get_by_key(
+            self._db_provider(), provider_id=self.id, provider_clip_id=clip_id
+        )
+
+    async def _invalidate_clip_cache(self, clip_id: str) -> None:
+        if not self._cache_enabled():
+            return
+        await self._clip_cache.delete_by_key(
             self._db_provider(), provider_id=self.id, provider_clip_id=clip_id
         )
 

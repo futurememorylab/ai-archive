@@ -40,7 +40,7 @@ document.addEventListener("alpine:init", () => {
     // ─── timeline marker drag (review draft markers, edit-activated) ─
     // Draft markers carry item_id + in_secs/out_secs (see draft_view.py).
     // Dragging mutates the Alpine model (the .range :style binds to it so
-    // the bar moves live), then persists via the review decision endpoint.
+    // the bar moves live); persisting happens on Save via reviewMixin.saveEdit().
     _drag: null,
     _timelineEl() { return this.$root.querySelector(".timeline"); },
     _xToSecs(clientX) {
@@ -55,7 +55,11 @@ document.addEventListener("alpine:init", () => {
 
     startMarkerDrag(e, id, mode) {
       e.preventDefault(); e.stopPropagation();
-      this.editingItemId = id;
+      // Enter the buffered edit (snapshots for Cancel, auto-saves any other
+      // open edit). reviewMixin provides startEdit on the clip-detail page;
+      // fall back to the raw flag elsewhere.
+      if (typeof this.startEdit === "function") this.startEdit(id, { seek: false });
+      else this.editingItemId = id;
       const m = this._draftItem(id); if (!m) return;
       this._drag = { id, mode, t0: this._xToSecs(e.clientX), in0: m.in_secs, out0: m.out_secs };
       if (e.target.setPointerCapture) e.target.setPointerCapture(e.pointerId);
@@ -86,9 +90,7 @@ document.addEventListener("alpine:init", () => {
     },
 
     _endMarkerDrag() {
-      const d = this._drag;
       this._drag = null;
-      if (d) this._persistMarker(d.id);
     },
 
     nudgeMarker(dir, fine) {
@@ -97,7 +99,6 @@ document.addEventListener("alpine:init", () => {
       const step = fine ? (1 / (this.fps || 25)) : 1.0;   // Shift = 1 frame, else 1 second
       m.in_secs = Math.max(0, m.in_secs + dir * step);
       if (m.out_secs != null) m.out_secs = Math.max(m.in_secs, m.out_secs + dir * step);
-      this._persistMarker(this.editingItemId);
     },
 
     // SMPTE readout for the in/out edge of a draft marker (read-only panel).
@@ -105,40 +106,6 @@ document.addEventListener("alpine:init", () => {
       const m = this._draftItem(id);
       const v = m ? (edge === "in" ? m.in_secs : m.out_secs) : null;
       return v == null ? "—" : this.tc(v);
-    },
-
-    // Persist the *whole* marker value: the backend's COALESCE on edited_value
-    // replaces it wholesale, and write_queue requires {name, in:{secs}} or the
-    // marker is silently dropped on apply. So always send the full shape.
-    _persistMarker(id) {
-      const m = this._draftItem(id); if (!m) return;
-      m.status = "accepted";
-      const edited = {
-        name: m.name || "",
-        category: m.category != null ? m.category : null,
-        description: m.description != null ? m.description : null,
-        in: { secs: m.in_secs },
-      };
-      if (m.color != null) edited.color = m.color;
-      if (m.out_secs != null) edited.out = { secs: m.out_secs };
-      fetch(`/api/review/items/${id}/decision`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decision: "accepted", edited_value: edited }),
-      }).then(r => {
-        if (!r.ok) {
-          console.error(`marker persist failed for item ${id}: ${r.status}`);
-          Alpine.store("toast").push(
-            `Marker edit not saved (HTTP ${r.status}).`,
-            { level: "error" },
-          );
-        }
-      }).catch(err => {
-        console.error(`marker persist error for item ${id}`, err);
-        Alpine.store("toast").push(
-          `Marker edit not saved: ${err.message || String(err)}`,
-          { level: "error" },
-        );
-      });
     },
 
     // ─── transport ────────────────────────────────────────────────

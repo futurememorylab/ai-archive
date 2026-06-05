@@ -46,6 +46,7 @@ def _marker_from_review(item: ReviewItem) -> dict[str, Any]:
         "item_id": item.id,
         "kind": "marker",
         "decision": item.decision,
+        "applied_at": item.applied_at,
     }
 
 
@@ -66,6 +67,7 @@ def _field_from_review(item: ReviewItem) -> dict[str, Any]:
         "item_id": item.id,
         "kind": "field",
         "decision": item.decision,
+        "applied_at": item.applied_at,
     }
 
 
@@ -115,6 +117,7 @@ def build_draft_view(
             "item_id": it.id,
             "kind": "note",
             "decision": it.decision,
+            "applied_at": it.applied_at,
             "identifier": it.target_identifier,
             "text": _fix(str(_unwrap(_effective_value(it)))) or "",
         }
