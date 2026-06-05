@@ -47,8 +47,8 @@
         <span class="cat" x-show="m.category" x-text="m.category"></span>
         <span class="ri-tc" x-text="tc(m.in_secs) + (m.out_secs != null ? ' – ' + tc(m.out_secs) : '')"></span>
       </div>
-      <div class="ri-name" x-text="m.name"></div>
-      <div class="ri-desc" x-text="m.description"></div>
+      <div class="ri-name" x-show="editingItemId !== m.item_id" x-text="m.name"></div>
+      <div class="ri-desc" x-show="editingItemId !== m.item_id" x-text="m.description"></div>
       <div class="ri-editor" x-show="editingItemId === m.item_id" x-cloak @click.stop>
         <label class="field"><span class="field-label">Name</span><input class="txt" type="text" x-model="m.name"></label>
         <label class="field"><span class="field-label">Category</span><input class="txt" type="text" x-model="m.category"></label>
