@@ -134,6 +134,7 @@ async def _record_telemetry(
             prompt_version_id=version.id,
             prompt_hash=prompt_hash(version.body),
             schema_hash=schema_hash(version.output_schema),
+            prompt_chars_rendered=mm.get("prompt_chars_rendered"),
             model=version.model,
             media_kind=mm.get("media_kind"),
             media_duration_secs=mm.get("media_duration_secs"),
@@ -241,13 +242,16 @@ async def run_job(
             )
             msg = _humanise_error(exc)
             await jobs_repo.update_item_status(db, item.id, "error", error=msg)
-            await event_bus.publish(
-                topic, {"item_id": item.id, "status": "error", "error": msg}
-            )
+            await event_bus.publish(topic, {"item_id": item.id, "status": "error", "error": msg})
             await _record_telemetry(
-                db, run_telemetry_repo, telemetry_ctx,
-                kind=kind, item=item, version=version,
-                status="error", error_class=type(exc).__name__,
+                db,
+                run_telemetry_repo,
+                telemetry_ctx,
+                kind=kind,
+                item=item,
+                version=version,
+                status="error",
+                error_class=type(exc).__name__,
             )
             # Studio runs need a terminal status of their own — the frontend
             # polls /api/studio/runs/{id} and waits for status != pending|running.
@@ -276,12 +280,22 @@ async def run_job(
 
 async def _process_item(
     *,
-    db, item, version, kind,
-    archive, proxy_resolver, ai_store, gemini,
-    annotations_repo, review_items_repo,
-    jobs_repo, studio_runs_repo: StudioRunsRepo,
-    run_telemetry_repo: RunTelemetryRepo, telemetry_ctx: TelemetryCtx,
-    event_bus, topic,
+    db,
+    item,
+    version,
+    kind,
+    archive,
+    proxy_resolver,
+    ai_store,
+    gemini,
+    annotations_repo,
+    review_items_repo,
+    jobs_repo,
+    studio_runs_repo: StudioRunsRepo,
+    run_telemetry_repo: RunTelemetryRepo,
+    telemetry_ctx: TelemetryCtx,
+    event_bus,
+    topic,
 ) -> None:
     clip_key = ("catdv", str(item.catdv_clip_id))
 
@@ -303,9 +317,7 @@ async def _process_item(
                 f"AI store — cache the clip on /clips first, or reconnect to CatDV"
             )
             await jobs_repo.update_item_status(db, item.id, "error", error=msg)
-            await event_bus.publish(
-                topic, {"item_id": item.id, "status": "error", "error": msg}
-            )
+            await event_bus.publish(topic, {"item_id": item.id, "status": "error", "error": msg})
             if kind == "studio":
                 run_id = await studio_runs_repo.find_latest_id_for_job_clip(
                     db, job_id=item.job_id, clip_id=item.catdv_clip_id
@@ -325,9 +337,7 @@ async def _process_item(
     clip_snapshot: dict[str, Any] = dict(canonical.provider_data)
     duration_secs = float(canonical.duration_secs or 0.0)
 
-    media_path = str(
-        (canonical.media.cached_path or canonical.media.upstream_handle) or ""
-    )
+    media_path = str((canonical.media.cached_path or canonical.media.upstream_handle) or "")
     media_meta = {
         "media_kind": classify_media_kind(media_path or None),
         "media_duration_secs": duration_secs or None,
@@ -342,12 +352,15 @@ async def _process_item(
     est: run_estimator.RunEstimate | None = None
     try:
         est = await run_estimator.estimate_clips(
-            db, run_telemetry_repo,
-            [run_estimator.ClipEstimateInput(
-                clip_id=item.catdv_clip_id,
-                media_kind=media_meta["media_kind"],
-                duration_secs=duration_secs or None,
-            )],
+            db,
+            run_telemetry_repo,
+            [
+                run_estimator.ClipEstimateInput(
+                    clip_id=item.catdv_clip_id,
+                    media_kind=media_meta["media_kind"],
+                    duration_secs=duration_secs or None,
+                )
+            ],
             prompt_body=version.body,
             schema=version.output_schema,
             model=version.model,
@@ -358,6 +371,7 @@ async def _process_item(
     await jobs_repo.update_item_status(db, item.id, "prompting")
     await event_bus.publish(topic, {"item_id": item.id, "status": "prompting"})
     rendered_body = _render_prompt(version.body, duration_secs=duration_secs)
+    media_meta["prompt_chars_rendered"] = len(rendered_body)
     t0 = time.monotonic()
     # The Vertex AI client is synchronous and each call takes seconds; run it
     # off the event loop so concurrent jobs and ordinary page requests stay
@@ -380,30 +394,67 @@ async def _process_item(
     ai_store_kind = getattr(ai_store, "id", None)
     if kind == "studio":
         await _finalize_studio(
-            db, item, version, structured, result, elapsed_s, duration_secs,
-            studio_runs_repo, review_items_repo, jobs_repo, event_bus, topic,
-            run_telemetry_repo=run_telemetry_repo, telemetry_ctx=telemetry_ctx,
-            media_meta=media_meta, est=est, ai_store_kind=ai_store_kind,
+            db,
+            item,
+            version,
+            structured,
+            result,
+            elapsed_s,
+            duration_secs,
+            studio_runs_repo,
+            review_items_repo,
+            jobs_repo,
+            event_bus,
+            topic,
+            run_telemetry_repo=run_telemetry_repo,
+            telemetry_ctx=telemetry_ctx,
+            media_meta=media_meta,
+            est=est,
+            ai_store_kind=ai_store_kind,
         )
     else:
         await _finalize_annotation(
-            db, item, version, structured, result, rendered_body,
-            clip_snapshot, duration_secs,
-            annotations_repo, review_items_repo, jobs_repo,
-            event_bus, topic,
-            run_telemetry_repo=run_telemetry_repo, telemetry_ctx=telemetry_ctx,
-            media_meta=media_meta, est=est, ai_store_kind=ai_store_kind,
+            db,
+            item,
+            version,
+            structured,
+            result,
+            rendered_body,
+            clip_snapshot,
+            duration_secs,
+            annotations_repo,
+            review_items_repo,
+            jobs_repo,
+            event_bus,
+            topic,
+            run_telemetry_repo=run_telemetry_repo,
+            telemetry_ctx=telemetry_ctx,
+            media_meta=media_meta,
+            est=est,
+            ai_store_kind=ai_store_kind,
             elapsed_s=elapsed_s,
         )
 
 
 async def _finalize_studio(
-    db, item, version, structured, result, elapsed_s, duration_secs,
-    studio_runs_repo: StudioRunsRepo, review_items_repo, jobs_repo,
-    event_bus, topic,
+    db,
+    item,
+    version,
+    structured,
+    result,
+    elapsed_s,
+    duration_secs,
+    studio_runs_repo: StudioRunsRepo,
+    review_items_repo,
+    jobs_repo,
+    event_bus,
+    topic,
     *,
-    run_telemetry_repo: RunTelemetryRepo, telemetry_ctx: TelemetryCtx,
-    media_meta: dict, est=None, ai_store_kind: str | None = None,
+    run_telemetry_repo: RunTelemetryRepo,
+    telemetry_ctx: TelemetryCtx,
+    media_meta: dict,
+    est=None,
+    ai_store_kind: str | None = None,
 ) -> None:
     """Studio path: persist to studio_run + review_items (linked by
     studio_run_id), skip annotations. The studio UI renders from
@@ -428,10 +479,19 @@ async def _finalize_studio(
             topic, {"item_id": item.id, "status": "error", "error": "non-JSON output"}
         )
         await _record_telemetry(
-            db, run_telemetry_repo, telemetry_ctx, kind="studio",
-            item=item, version=version, status="error",
-            error_class="NonJsonOutput", result=result, duration_s=elapsed_s,
-            media_meta=media_meta, est=est, ai_store_kind=ai_store_kind,
+            db,
+            run_telemetry_repo,
+            telemetry_ctx,
+            kind="studio",
+            item=item,
+            version=version,
+            status="error",
+            error_class="NonJsonOutput",
+            result=result,
+            duration_s=elapsed_s,
+            media_meta=media_meta,
+            est=est,
+            ai_store_kind=ai_store_kind,
         )
         return
 
@@ -455,7 +515,8 @@ async def _finalize_studio(
         await review_items_repo.bulk_insert(db, review)
 
     await studio_runs_repo.complete_ok(
-        db, run_id,
+        db,
+        run_id,
         output_json=structured,
         duration_s=elapsed_s,
         tokens_in=usage.tokens_in,
@@ -468,21 +529,42 @@ async def _finalize_studio(
         topic, {"item_id": item.id, "status": "review_ready", "studio_run_id": run_id}
     )
     await _record_telemetry(
-        db, run_telemetry_repo, telemetry_ctx, kind="studio",
-        item=item, version=version, status="ok", result=result,
-        duration_s=elapsed_s, media_meta=media_meta, est=est,
-        ai_store_kind=ai_store_kind, review_item_count=len(review),
+        db,
+        run_telemetry_repo,
+        telemetry_ctx,
+        kind="studio",
+        item=item,
+        version=version,
+        status="ok",
+        result=result,
+        duration_s=elapsed_s,
+        media_meta=media_meta,
+        est=est,
+        ai_store_kind=ai_store_kind,
+        review_item_count=len(review),
     )
 
 
 async def _finalize_annotation(
-    db, item, version, structured, result, rendered_body,
-    clip_snapshot, duration_secs,
-    annotations_repo, review_items_repo, jobs_repo,
-    event_bus, topic,
+    db,
+    item,
+    version,
+    structured,
+    result,
+    rendered_body,
+    clip_snapshot,
+    duration_secs,
+    annotations_repo,
+    review_items_repo,
+    jobs_repo,
+    event_bus,
+    topic,
     *,
-    run_telemetry_repo: RunTelemetryRepo, telemetry_ctx: TelemetryCtx,
-    media_meta: dict, est=None, ai_store_kind: str | None = None,
+    run_telemetry_repo: RunTelemetryRepo,
+    telemetry_ctx: TelemetryCtx,
+    media_meta: dict,
+    est=None,
+    ai_store_kind: str | None = None,
     elapsed_s: float | None = None,
 ) -> None:
     """Original annotation path: write to annotations + review_items."""
@@ -520,8 +602,17 @@ async def _finalize_annotation(
         topic, {"item_id": item.id, "status": "review_ready", "annotation_id": annotation_id}
     )
     await _record_telemetry(
-        db, run_telemetry_repo, telemetry_ctx, kind="annotation",
-        item=item, version=version, status="ok", result=result,
-        duration_s=elapsed_s, media_meta=media_meta, est=est,
-        ai_store_kind=ai_store_kind, review_item_count=review_count,
+        db,
+        run_telemetry_repo,
+        telemetry_ctx,
+        kind="annotation",
+        item=item,
+        version=version,
+        status="ok",
+        result=result,
+        duration_s=elapsed_s,
+        media_meta=media_meta,
+        est=est,
+        ai_store_kind=ai_store_kind,
+        review_item_count=review_count,
     )

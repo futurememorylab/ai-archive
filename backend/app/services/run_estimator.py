@@ -17,6 +17,8 @@ from backend.app.media_kind import classify_media_kind
 from backend.app.services.pricing import RATE_CARDS, compute_cost
 from backend.app.services.telemetry_capture import (
     TokenUsage,
+)
+from backend.app.services.telemetry_capture import (
     prompt_hash as _prompt_hash,
 )
 
@@ -39,7 +41,7 @@ CHARS_PER_TOKEN = 4.0
 @dataclass(frozen=True)
 class ClipEstimateInput:
     clip_id: int
-    media_kind: str            # image | audio | video | video+audio
+    media_kind: str  # image | audio | video | video+audio
     duration_secs: float | None
     width: int | None = None
     height: int | None = None
@@ -52,7 +54,7 @@ class RunEstimate:
     tokens_out_p90: int
     cost_usd_p50: float | None
     cost_usd_p90: float | None
-    confidence: str            # good | fair | rough
+    confidence: str  # good | fair | rough
     n_samples: int
     n_clips: int
 
@@ -172,7 +174,9 @@ async def estimate_clips(
         usage = TokenUsage(
             tokens_in=int(tokens_in),
             tokens_in_text=int(prompt_tokens * len(clips)),
-            tokens_in_video=max(0, int(tokens_in - prompt_tokens * len(clips) - audio_media_tokens)),
+            tokens_in_video=max(
+                0, int(tokens_in - prompt_tokens * len(clips) - audio_media_tokens)
+            ),
             tokens_in_audio=int(audio_media_tokens),
             tokens_out=int(out_tokens),
         )
@@ -214,10 +218,13 @@ async def estimate_for_clip_ids(
     for cid in clip_ids:
         row = cached.get(cid)
         if row is None:
-            clips.append(ClipEstimateInput(
-                clip_id=cid, media_kind="video+audio",
-                duration_secs=_UNKNOWN_CLIP_DURATION_SECS,
-            ))
+            clips.append(
+                ClipEstimateInput(
+                    clip_id=cid,
+                    media_kind="video+audio",
+                    duration_secs=_UNKNOWN_CLIP_DURATION_SECS,
+                )
+            )
             continue
         cj = row["canonical_json"] or {}
         media = cj.get("media") or {}
@@ -225,15 +232,20 @@ async def estimate_for_clip_ids(
         # (fs provider). Misclassification falls through to "video+audio",
         # the safe default for estimation.
         path = media.get("cached_path") or media.get("upstream_handle") or cj.get("name")
-        clips.append(ClipEstimateInput(
-            clip_id=cid,
-            media_kind=classify_media_kind(str(path) if path else None),
-            duration_secs=row["duration_secs"],
-        ))
+        clips.append(
+            ClipEstimateInput(
+                clip_id=cid,
+                media_kind=classify_media_kind(str(path) if path else None),
+                duration_secs=row["duration_secs"],
+            )
+        )
     n_unknown = sum(1 for cid in clip_ids if cid not in cached)
     est = await estimate_clips(
-        conn, run_telemetry_repo, clips,
-        prompt_body=version.body, schema=version.output_schema,
+        conn,
+        run_telemetry_repo,
+        clips,
+        prompt_body=version.body,
+        schema=version.output_schema,
         model=version.model,
     )
     return {

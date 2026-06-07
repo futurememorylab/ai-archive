@@ -43,9 +43,10 @@ rejected because telemetry has its own lifecycle (send state, schema
 evolution beyond token counts) and the estimator needs a single query
 path regardless of run kind.
 
-**Decision:** A single `run_telemetry` table keyed on `(run_kind, run_id)`
-(`run_kind ∈ {'studio','annotation'}`). Both run kinds write one row;
-the estimator queries one table.
+**Decision:** A single `run_telemetry` table. Each row carries a `kind`
+column (`∈ {'studio','annotation'}`) plus `clip_id` and `job_id` to
+identify the run; there is no surrogate `run_id` column. Both run kinds
+write one row; the estimator queries one table.
 
 ### 3. Prompt identity = SHA-256 of the template body
 
@@ -58,9 +59,10 @@ injects per-clip duration and other variable text, so rendered hashes
 virtually never collide across clips. Cross-install dedup would be dead
 on arrival.
 
-**Decision:** `prompt_sha256 = sha256(version.body)`. All clips for a
-given prompt version share the same hash; cross-install comparison (Phase 2)
-is meaningful.
+**Decision:** `prompt_hash = sha256(version.body)` (stored as the 64-char
+hex digest in the `prompt_hash` column). All clips for a given prompt
+version share the same hash; cross-install comparison (Phase 2) is
+meaningful.
 
 ### 4. Billable output = `candidates + thinking` everywhere
 
@@ -102,10 +104,10 @@ guard that blocks runs when projected spend exceeds the budget.
 and adding it as a bare env-var would have no UI surface.
 
 **Decision:** Deferred. The estimator already computes per-clip and
-per-run projected cost (`LocalEstimator.estimate`). A budget guard
-is a thin wrapper around `estimator.estimate` + a local SUM of
-`run_telemetry.actual_cost_usd` for the current calendar month — cheap
-to add once the admin console exists.
+per-run projected cost via `estimate_clips` / `estimate_for_clip_ids`
+in `services/run_estimator.py`. A budget guard is a thin wrapper around
+`estimate_clips` + a local SUM of `run_telemetry.cost_usd` for the
+current calendar month — cheap to add once the admin console exists.
 
 ## Consequences
 
@@ -113,11 +115,17 @@ to add once the admin console exists.
   (Phase 2) backfills without migration.
 - `studio_run.tokens_out` has a semantic boundary at the Phase 1 migration;
   the migration comment records the change.
-- The estimator (`services/cost_estimator.py`) queries one table for both
-  run kinds, using `prompt_sha256` to find comparable historical rows.
+- The estimator (`services/run_estimator.py`) queries one table for both
+  run kinds, using `prompt_hash` to find comparable historical rows.
 - Cost estimates use the correct billable token sum from day one; historic
   undercounts in `studio_run` are not corrected (acceptable — they are not
   used for estimates, only for dashboards that do not exist yet).
 - Budget enforcement (Phase 3) is a thin addition: the estimator returns
   the estimate; the guard compares it to a configured limit. Nothing in
   Phase 1 blocks this.
+- `media_width`, `media_height`, and `media_resolution_setting` are
+  schema-reserved columns but are not yet populated: `CanonicalClip` does
+  not carry reliable pixel dimensions today, and only one Gemini media
+  resolution is in use. The estimator's image-tile arithmetic and
+  resolution-aware calibration paths activate automatically once a
+  dimension source is wired.
