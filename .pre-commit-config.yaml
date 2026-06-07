@@ -34,3 +34,17 @@ repos:
         language: system
         pass_filenames: false
         args: [-c, pyproject.toml]
+
+      - id: erosion-gate
+        name: structural erosion gate (ratchet)
+        entry: .venv/bin/python tools/erosion_gate.py --path backend --baseline .erosion-baseline.json --max-cc 30
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: duplicate-code
+        name: pylint duplicate-code
+        entry: .venv/bin/pylint backend --disable=all --enable=duplicate-code --min-similarity-lines=14
+        language: system
+        pass_filenames: false
+        always_run: true
