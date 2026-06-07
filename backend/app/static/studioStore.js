@@ -20,6 +20,10 @@
         pendingRunSwap; the prompt card watches that and re-fetches its
         output partial.
 */
+// Module-scope (non-reactive) key for refreshEstimate() — prevents the
+// x-effect from re-triggering when the store writes estimateLabel.
+let _studioEstimateKey = '';
+
 document.addEventListener('alpine:init', () => {
   Alpine.store('studio', {
     // ── Shared page state (seeded by hydrate()) ──────────────────────
@@ -67,6 +71,31 @@ document.addEventListener('alpine:init', () => {
     // compare is opened/closed so a fresh compare starts side-by-side.
     compareDiff: false,
     _hydrated: false,
+    // Pre-run cost estimate (advisory — empty string = nothing to show).
+    estimateLabel: '',
+
+    async refreshEstimate() {
+      // _studioEstimateKey is module-scope (non-reactive) — writing it here
+      // does not re-trigger the x-effect that calls this, preventing a loop.
+      const vid = this.activeVersionId, cid = this.focusedClipId;
+      const key = `${vid}:${cid}`;
+      if (key === _studioEstimateKey) return;
+      _studioEstimateKey = key;
+      if (!vid || !cid) { this.estimateLabel = ''; return; }
+      try {
+        const r = await fetch('/api/jobs/estimate', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ prompt_version_id: vid, clip_ids: [cid] }),
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const e = await r.json();
+        this.estimateLabel =
+          `~${fmtUsd(e.cost_usd_p50)}–${fmtUsd(e.cost_usd_p90)} (${e.confidence})`;
+      } catch (err) {
+        console.error('estimate failed', err);  // advisory only
+        this.estimateLabel = '';
+      }
+    },
 
     // Seed initial.* fields from the page component's init(). Idempotent:
     // the studio page mounts a single studioPage, but guard anyway so a

@@ -83,6 +83,9 @@
        :disabled would always be true. The button is a direct descendant of
        .studio-page's x-data with no nested scope between, so plain
        `focusedClipId` resolves via normal Alpine scope inheritance. #}
+    <span class="muted" style="white-space:nowrap;"
+          x-effect="$store.studio.refreshEstimate()"
+          x-text="$store.studio.estimateLabel"></span>
     <button class="btn primary studio-run-btn"
             :disabled="!focusedClipId || cancelling || doneFlashUntilMs > 0"
             @click="runOrCancel()"

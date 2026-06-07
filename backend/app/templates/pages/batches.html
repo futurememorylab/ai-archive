@@ -74,6 +74,9 @@
       <div class="modal-actions">
         <button type="button" class="btn ghost" @click="newOpen = false">Cancel</button>
         <span class="grow"></span>
+        <div class="muted" style="text-align:right;"
+             x-effect="refreshEstimate()"
+             x-text="estimateLabel()"></div>
         <button type="button" class="btn primary" :disabled="!canStart()" @click="startBatch()"
                 x-text="selCount() ? ('▶ Start batch — ' + runnableCount() + ' clip' + (runnableCount() === 1 ? '' : 's')) : 'Select clips'"></button>
       </div>
@@ -86,6 +89,12 @@
   // jobs SSE topic) + the New-batch picker. The picker holds selection in a
   // client-side `sel` map keyed by clip id (metadata captured from the row DOM
   // on tick), so picks survive server-paginated fetches and filtering.
+
+  // Module-scope (non-reactive) key used by batchesPage.refreshEstimate() to
+  // detect selection changes without creating an Alpine reactive dependency on
+  // the key itself — prevents the x-effect from re-triggering on its own write.
+  let _batchEstimateKey = "";
+
   function batchesPage() {
     return {
       ...window.clipPickerCore(),
@@ -178,6 +187,58 @@
       },
       promptsForKind(kind) {
         return (this._allPrompts || []).filter((p) => p.media_kind === kind || p.media_kind === "any");
+      },
+
+      // ── cost estimate ───────────────────────────────────────────
+      estimate: null,
+
+      async refreshEstimate() {
+        // One estimate call per kind that has a prompt picked; sum ranges.
+        // _batchEstimateKey is module-scope (non-reactive) so Alpine does not
+        // track it as a dependency — writing it here does not re-trigger this
+        // x-effect, preventing an infinite loop.
+        const groups = [];
+        const byKind = {};
+        for (const c of this.selectedClips()) (byKind[c.kind] ||= []).push(c.id);
+        for (const [kind, ids] of Object.entries(byKind)) {
+          if (this.kindPrompt[kind]) groups.push({ pv: Number(this.kindPrompt[kind]), ids });
+        }
+        const key = JSON.stringify(groups);
+        if (key === _batchEstimateKey) return;   // selection unchanged
+        _batchEstimateKey = key;
+        if (!groups.length) { this.estimate = null; return; }
+        try {
+          const parts = await Promise.all(groups.map(async (g) => {
+            const r = await fetch("/api/jobs/estimate", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ prompt_version_id: g.pv, clip_ids: g.ids }),
+            });
+            if (!r.ok) throw new Error("HTTP " + r.status);
+            return r.json();
+          }));
+          const order = { rough: 0, fair: 1, good: 2 };
+          this.estimate = parts.reduce((acc, p) => ({
+            cost_usd_p50: (acc.cost_usd_p50 ?? 0) + (p.cost_usd_p50 ?? 0),
+            cost_usd_p90: (acc.cost_usd_p90 ?? 0) + (p.cost_usd_p90 ?? 0),
+            tokens_in: (acc.tokens_in ?? 0) + p.tokens_in,
+            n_samples: Math.max(acc.n_samples ?? 0, p.n_samples),
+            n_unknown: (acc.n_unknown ?? 0) + (p.n_unknown ?? 0),
+            confidence: order[p.confidence] < order[acc.confidence ?? "good"] ? p.confidence : (acc.confidence ?? p.confidence),
+          }), {});
+        } catch (e) {
+          console.error("estimate failed", e);   // advisory — no toast, no block
+          this.estimate = null;
+        }
+      },
+      estimateLabel() {
+        if (!this.estimate) return "";
+        const e = this.estimate;
+        let s = `Estimated: ${fmtUsd(e.cost_usd_p50)} – ${fmtUsd(e.cost_usd_p90)}`
+          + ` · ~${(e.tokens_in / 1e6).toFixed(1)}M tokens in`
+          + ` · confidence: ${e.confidence}`;
+        if (e.n_samples) s += ` (${e.n_samples} prior runs)`;
+        if (e.n_unknown) s += ` · ${e.n_unknown} clip(s) not cached — guessed`;
+        return s;
       },
 
       runnableCount() {
