@@ -103,3 +103,52 @@ async def test_unknown_model_cost_is_none_but_tokens_present():
     )
     assert est.tokens_in > 0
     assert est.cost_usd_p50 is None and est.cost_usd_p90 is None
+
+
+@pytest.mark.asyncio
+async def test_empty_clips_returns_zeroed_estimate():
+    est = await estimate_clips(
+        None, FakeRepo(), [],
+        prompt_body="x", schema={}, model="gemini-2.5-flash-lite",
+    )
+    assert est.n_clips == 0 and est.tokens_in == 0
+    assert est.tokens_out_p50 == 0 and est.confidence == "rough"
+
+
+@pytest.mark.asyncio
+async def test_audio_clip_calibrated_below_seed_cost_not_negative():
+    # Calibrated audio input ratio (20/s) below the 32/s seed must not
+    # produce a negative video bucket in the cost split.
+    repo = FakeRepo(input_ratios={"audio": [20.0] * 5})
+    audio = ClipEstimateInput(clip_id=3, media_kind="audio", duration_secs=60.0)
+    est = await estimate_clips(
+        None, repo, [audio],
+        prompt_body="", schema={}, model="gemini-2.5-flash-lite",
+    )
+    assert est.tokens_in == 1200  # 60s * calibrated 20/s
+    assert est.cost_usd_p50 is not None and est.cost_usd_p50 > 0
+
+
+@pytest.mark.asyncio
+async def test_mixed_kinds_confidence_uses_weakest_kind():
+    repo = FakeRepo(output_rates={
+        ("video+audio", "*"): [10.0] * 50,   # strong history
+        # image: no history at all → level 3
+    })
+    est = await estimate_clips(
+        None, repo, [VIDEO, IMAGE],
+        prompt_body="", schema={}, model="m",
+    )
+    assert est.confidence == "rough"  # weakest kind dominates
+
+
+@pytest.mark.asyncio
+async def test_p90_exceeds_p50_on_skewed_history():
+    repo = FakeRepo(output_rates={
+        ("video+audio", "*"): [1.0, 1.0, 1.0, 10.0, 10.0, 10.0, 10.0, 100.0, 100.0, 100.0],
+    })
+    est = await estimate_clips(
+        None, repo, [VIDEO],
+        prompt_body="", schema={}, model="m",
+    )
+    assert est.tokens_out_p90 > est.tokens_out_p50

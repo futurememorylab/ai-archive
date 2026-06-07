@@ -58,7 +58,8 @@ class RunEstimate:
 
 def _pct(values: list[float], q: float) -> float:
     s = sorted(values)
-    idx = min(len(s) - 1, max(0, round(q * (len(s) - 1))))
+    # half-up rounding — avoids banker's-rounding surprises at even n
+    idx = min(len(s) - 1, max(0, int(q * (len(s) - 1) + 0.5)))
     return s[idx]
 
 
@@ -99,9 +100,10 @@ async def estimate_clips(
     out_rates: dict[str, list[float]] = {}
     out_level: dict[str, int] = {}
     for kind in kinds:
-        ratios = await repo.recent_input_ratios(conn, model=model, media_kind=kind)
-        if len(ratios) >= _MIN_SAMPLES:
-            input_ratio[kind] = _pct(ratios, 0.5)
+        if kind != "image":
+            ratios = await repo.recent_input_ratios(conn, model=model, media_kind=kind)
+            if len(ratios) >= _MIN_SAMPLES:
+                input_ratio[kind] = _pct(ratios, 0.5)
         rates = await repo.recent_output_rates(
             conn, model=model, media_kind=kind, prompt_hash=p_hash
         )
@@ -117,7 +119,7 @@ async def estimate_clips(
     tokens_in = prompt_tokens * len(clips)
     out_p50 = 0.0
     out_p90 = 0.0
-    n_samples = 0
+    audio_media_tokens = 0.0
     worst_level = 1
     for c in clips:
         if c.media_kind == "image":
@@ -136,6 +138,8 @@ async def estimate_clips(
                 SEED_INPUT_TOKENS_PER_SEC.get(c.media_kind, 300.0),
             )
             tokens_in += dur * k
+            if c.media_kind == "audio":
+                audio_media_tokens += dur * k
             rates = out_rates[c.media_kind]
             if rates:
                 out_p50 += dur * _pct(rates, 0.5)
@@ -143,8 +147,10 @@ async def estimate_clips(
             else:
                 out_p50 += dur * SEED_OUTPUT_TOKENS_PER_SEC
                 out_p90 += dur * SEED_OUTPUT_TOKENS_PER_SEC * 2
-        n_samples = max(n_samples, len(out_rates[c.media_kind]))
         worst_level = max(worst_level, out_level[c.media_kind])
+
+    # Confidence reflects the weakest kind in the batch — min over all kinds.
+    n_samples = min((len(out_rates[k]) for k in kinds), default=0)
 
     if worst_level == 1 and n_samples >= _GOOD_SAMPLES:
         confidence = "good"
@@ -159,15 +165,14 @@ async def estimate_clips(
         # Approximate the modality split: media tokens at the video rate
         # bucket (correct for video/image; audio clips are billed higher —
         # route their share through the audio bucket).
-        audio_secs = sum(
-            float(c.duration_secs or 0.0) for c in clips if c.media_kind == "audio"
-        )
-        audio_tokens = audio_secs * SEED_INPUT_TOKENS_PER_SEC["audio"]
+        # audio_media_tokens was accumulated using the calibrated rate during
+        # the clip loop — using it here avoids a negative video bucket when
+        # the calibrated rate is below the seed.
         usage = TokenUsage(
             tokens_in=int(tokens_in),
             tokens_in_text=int(prompt_tokens * len(clips)),
-            tokens_in_video=int(tokens_in - prompt_tokens * len(clips) - audio_tokens),
-            tokens_in_audio=int(audio_tokens),
+            tokens_in_video=max(0, int(tokens_in - prompt_tokens * len(clips) - audio_media_tokens)),
+            tokens_in_audio=int(audio_media_tokens),
             tokens_out=int(out_tokens),
         )
         cost, _version = compute_cost(usage, model)
