@@ -67,3 +67,4 @@ available number. See any existing ADR for the template.
 | 0057 | 2026-06-04 | [Draft review: buffered Save/Cancel edits + applied/deleted item lifecycle](./adr/0057-draft-review-buffered-edit-and-item-lifecycle.md) |
 | 0058 | 2026-06-07 | [Run telemetry — local-first with deferred cloud pipeline](./adr/0058-run-telemetry-local-first.md) |
 | 0059 | 2026-06-07 | [Actual run cost on the UI — total-spend semantics + shared usd filter](./adr/0059-actual-run-cost-ui-surfaces.md) |
+| 0060 | 2026-06-07 | [Structural erosion pre-commit gate (complexity-concentration ratchet)](./adr/0060-structural-erosion-gate.md) |
