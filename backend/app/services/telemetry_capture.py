@@ -31,7 +31,8 @@ class TokenUsage:
 
 
 def _get(d: dict, camel: str, snake: str) -> Any:
-    return d.get(camel) if d.get(camel) is not None else d.get(snake)
+    v = d.get(camel)
+    return v if v is not None else d.get(snake)
 
 
 def _int(v: Any) -> int:

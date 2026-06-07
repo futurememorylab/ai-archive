@@ -77,3 +77,15 @@ def test_prompt_hash_is_template_stable():
 
 def test_schema_hash_key_order_insensitive():
     assert schema_hash({"a": 1, "b": 2}) == schema_hash({"b": 2, "a": 1})
+
+
+def test_camel_wins_when_both_key_forms_present():
+    raw = {
+        "usageMetadata": {"promptTokenCount": 42},
+        "usage_metadata": {"prompt_token_count": 99},
+    }
+    assert extract_usage(raw).tokens_in == 42
+
+
+def test_finish_reason_malformed_candidate_is_none():
+    assert extract_finish_reason({"candidates": [None]}) is None

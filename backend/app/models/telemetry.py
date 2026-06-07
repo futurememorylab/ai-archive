@@ -6,7 +6,12 @@ context (built once at boot) threaded into the annotator so the
 record builder never imports settings.
 """
 
-from pydantic import BaseModel
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict
+
+TelemetryKind = Literal["studio", "annotation"]
+TelemetryStatus = Literal["ok", "error"]
 
 
 class TelemetryCtx(BaseModel):
@@ -16,13 +21,15 @@ class TelemetryCtx(BaseModel):
     vertex_project: str | None = None
     vertex_location: str | None = None
 
+    model_config = ConfigDict(extra="forbid")
+
 
 class RunTelemetryRecord(BaseModel):
     event_id: str
     occurred_at: str
     install_id: str
     app_version: str | None = None
-    kind: str  # 'studio' | 'annotation'
+    kind: TelemetryKind
 
     archive_id: str | None = None
     user_ref: str | None = None
@@ -50,7 +57,7 @@ class RunTelemetryRecord(BaseModel):
     vertex_location: str | None = None
     ai_store_kind: str | None = None
 
-    status: str  # 'ok' | 'error'
+    status: TelemetryStatus
     error_class: str | None = None
     finish_reason: str | None = None
     attempt_count: int | None = None
@@ -76,4 +83,6 @@ class RunTelemetryRecord(BaseModel):
     output_chars: int | None = None
     review_item_count: int | None = None
 
-    attrs: dict | None = None
+    attrs: dict[str, Any] | None = None
+
+    model_config = ConfigDict(extra="forbid")
