@@ -67,7 +67,8 @@ async def test_get_many_multi_chunk(db, monkeypatch):
     """29 keys with chunk_size=10 → 3 chunks → 3 queries, results merged."""
     import functools
 
-    from backend.app.repositories import _batch, clip_cache as clip_cache_mod
+    from backend.app.repositories import _batch
+    from backend.app.repositories import clip_cache as clip_cache_mod
 
     repo = ClipCacheRepo()
     for cid in range(1, 30):

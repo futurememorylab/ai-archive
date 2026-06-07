@@ -20,8 +20,10 @@ def _rec(**over) -> RunTelemetryRecord:
         media_kind="video+audio",
         media_duration_secs=10.0,
         prompt_hash="h" * 64,
-        tokens_in=3000, tokens_in_video=2900,
-        tokens_out=100, tokens_thinking=20,
+        tokens_in=3000,
+        tokens_in_video=2900,
+        tokens_out=100,
+        tokens_thinking=20,
         finish_reason="STOP",
         attrs={"note": "test"},
     )
@@ -46,8 +48,8 @@ async def test_insert_roundtrip(db):
 async def test_input_ratios_only_ok_rows_with_media_tokens(db):
     repo = RunTelemetryRepo()
     await repo.insert(db, _rec(tokens_in_video=2900, media_duration_secs=10.0))
-    await repo.insert(db, _rec(status="error"))          # excluded
-    await repo.insert(db, _rec(tokens_in_video=0))        # excluded (no signal)
+    await repo.insert(db, _rec(status="error"))  # excluded
+    await repo.insert(db, _rec(tokens_in_video=0))  # excluded (no signal)
     ratios = await repo.recent_input_ratios(
         db, model="gemini-2.5-flash-lite", media_kind="video+audio"
     )
@@ -57,16 +59,20 @@ async def test_input_ratios_only_ok_rows_with_media_tokens(db):
 @pytest.mark.asyncio
 async def test_output_rates_exclude_max_tokens_and_filter_by_hash(db):
     repo = RunTelemetryRepo()
-    await repo.insert(db, _rec(tokens_out=100, tokens_thinking=20))   # 12/s
-    await repo.insert(db, _rec(finish_reason="MAX_TOKENS"))           # excluded
-    await repo.insert(db, _rec(prompt_hash="x" * 64, tokens_out=500)) # other prompt
+    await repo.insert(db, _rec(tokens_out=100, tokens_thinking=20))  # 12/s
+    await repo.insert(db, _rec(finish_reason="MAX_TOKENS"))  # excluded
+    await repo.insert(db, _rec(prompt_hash="x" * 64, tokens_out=500))  # other prompt
     rates = await repo.recent_output_rates(
-        db, model="gemini-2.5-flash-lite", media_kind="video+audio",
+        db,
+        model="gemini-2.5-flash-lite",
+        media_kind="video+audio",
         prompt_hash="h" * 64,
     )
     assert rates == [12.0]
     all_rates = await repo.recent_output_rates(
-        db, model="gemini-2.5-flash-lite", media_kind="video+audio",
+        db,
+        model="gemini-2.5-flash-lite",
+        media_kind="video+audio",
     )
     assert sorted(all_rates) == [12.0, 52.0]
 
@@ -74,12 +80,19 @@ async def test_output_rates_exclude_max_tokens_and_filter_by_hash(db):
 @pytest.mark.asyncio
 async def test_output_rates_images_are_per_item(db):
     repo = RunTelemetryRepo()
-    await repo.insert(db, _rec(
-        media_kind="image", media_duration_secs=None,
-        tokens_out=800, tokens_thinking=0,
-    ))
+    await repo.insert(
+        db,
+        _rec(
+            media_kind="image",
+            media_duration_secs=None,
+            tokens_out=800,
+            tokens_thinking=0,
+        ),
+    )
     rates = await repo.recent_output_rates(
-        db, model="gemini-2.5-flash-lite", media_kind="image",
+        db,
+        model="gemini-2.5-flash-lite",
+        media_kind="image",
     )
     assert rates == [800.0]
 
@@ -99,11 +112,14 @@ async def test_output_rates_limit_and_recency_order(db):
 @pytest.mark.asyncio
 async def test_input_ratios_audio_branch(db):
     repo = RunTelemetryRepo()
-    await repo.insert(db, _rec(
-        media_kind="audio", tokens_in_video=0, tokens_in_audio=320,
-        media_duration_secs=10.0,
-    ))
-    ratios = await repo.recent_input_ratios(
-        db, model="gemini-2.5-flash-lite", media_kind="audio"
+    await repo.insert(
+        db,
+        _rec(
+            media_kind="audio",
+            tokens_in_video=0,
+            tokens_in_audio=320,
+            media_duration_secs=10.0,
+        ),
     )
+    ratios = await repo.recent_input_ratios(db, model="gemini-2.5-flash-lite", media_kind="audio")
     assert ratios == [32.0]

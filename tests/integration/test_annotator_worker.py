@@ -226,6 +226,7 @@ async def test_job_error_message_includes_status_code_for_httpx_failure(tmp_path
     humanise() wrapper the user sees only 'HTTPStatusError' with no
     status code or body — unactionable."""
     import httpx
+
     from backend.app.services import annotator as annotator_mod
 
     request = httpx.Request("POST", "http://example/x")

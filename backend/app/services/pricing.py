@@ -78,10 +78,7 @@ def compute_cost(
         return None, PRICING_VERSION
 
     audio = usage.tokens_in_audio
-    detailed = (
-        usage.tokens_in_text + usage.tokens_in_video
-        + usage.tokens_in_image + audio
-    )
+    detailed = usage.tokens_in_text + usage.tokens_in_video + usage.tokens_in_image + audio
     # Modality detail can be absent or partial (older responses, future
     # modalities). Bill against whichever is larger: the detailed sum or
     # the authoritative total — never drop tokens.

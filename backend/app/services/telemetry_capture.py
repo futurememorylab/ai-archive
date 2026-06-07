@@ -22,7 +22,7 @@ class TokenUsage:
     tokens_in_audio: int = 0
     tokens_in_image: int = 0
     tokens_cached: int = 0
-    tokens_out: int = 0       # candidatesTokenCount, raw
+    tokens_out: int = 0  # candidatesTokenCount, raw
     tokens_thinking: int = 0  # thoughtsTokenCount — billed as output
 
     @property
@@ -53,9 +53,7 @@ def extract_usage(raw: dict[str, Any]) -> TokenUsage:
         tokens_in_video=by_modality.get("VIDEO", 0),
         tokens_in_audio=by_modality.get("AUDIO", 0),
         tokens_in_image=by_modality.get("IMAGE", 0),
-        tokens_cached=_int(
-            _get(usage, "cachedContentTokenCount", "cached_content_token_count")
-        ),
+        tokens_cached=_int(_get(usage, "cachedContentTokenCount", "cached_content_token_count")),
         tokens_out=_int(_get(usage, "candidatesTokenCount", "candidates_token_count")),
         tokens_thinking=_int(_get(usage, "thoughtsTokenCount", "thoughts_token_count")),
     )

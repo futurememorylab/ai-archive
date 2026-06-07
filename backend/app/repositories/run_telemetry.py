@@ -20,27 +20,62 @@ from backend.app.models.telemetry import RunTelemetryRecord
 # Insert columns only — excludes id (autoincrement) and sent_at /
 # send_attempts (DB defaults; Phase-2 flusher owns them).
 _COLS = [
-    "event_id", "occurred_at", "install_id", "app_version", "kind",
-    "archive_id", "user_ref", "job_id", "clip_id", "clip_name",
-    "prompt_version_id", "prompt_hash", "schema_hash",
-    "prompt_chars_rendered", "model",
-    "media_kind", "media_duration_secs", "media_width", "media_height",
-    "media_fps", "media_bytes", "media_ext", "media_resolution_setting",
-    "preprocess", "vertex_project", "vertex_location", "ai_store_kind",
-    "status", "error_class", "finish_reason", "attempt_count", "duration_s",
-    "tokens_in", "tokens_in_text", "tokens_in_video", "tokens_in_audio",
-    "tokens_in_image", "tokens_cached", "tokens_out", "tokens_thinking",
-    "cost_usd", "pricing_version",
-    "est_tokens_in", "est_tokens_out_p50", "est_tokens_out_p90",
-    "est_cost_usd_p50", "est_cost_usd_p90", "est_confidence",
-    "output_chars", "review_item_count", "attrs",
+    "event_id",
+    "occurred_at",
+    "install_id",
+    "app_version",
+    "kind",
+    "archive_id",
+    "user_ref",
+    "job_id",
+    "clip_id",
+    "clip_name",
+    "prompt_version_id",
+    "prompt_hash",
+    "schema_hash",
+    "prompt_chars_rendered",
+    "model",
+    "media_kind",
+    "media_duration_secs",
+    "media_width",
+    "media_height",
+    "media_fps",
+    "media_bytes",
+    "media_ext",
+    "media_resolution_setting",
+    "preprocess",
+    "vertex_project",
+    "vertex_location",
+    "ai_store_kind",
+    "status",
+    "error_class",
+    "finish_reason",
+    "attempt_count",
+    "duration_s",
+    "tokens_in",
+    "tokens_in_text",
+    "tokens_in_video",
+    "tokens_in_audio",
+    "tokens_in_image",
+    "tokens_cached",
+    "tokens_out",
+    "tokens_thinking",
+    "cost_usd",
+    "pricing_version",
+    "est_tokens_in",
+    "est_tokens_out_p50",
+    "est_tokens_out_p90",
+    "est_cost_usd_p50",
+    "est_cost_usd_p90",
+    "est_confidence",
+    "output_chars",
+    "review_item_count",
+    "attrs",
 ]
 
 
 class RunTelemetryRepo:
-    async def insert(
-        self, conn: aiosqlite.Connection, rec: RunTelemetryRecord
-    ) -> int:
+    async def insert(self, conn: aiosqlite.Connection, rec: RunTelemetryRecord) -> int:
         data = rec.model_dump()
         # Empty dict collapses to NULL (no-signal); pydantic guarantees
         # attrs is dict | None, never a pre-serialized string.
@@ -102,7 +137,9 @@ class RunTelemetryRepo:
             else f"CAST({bill} AS REAL) / media_duration_secs"
         )
         where = [
-            "model = ?", "media_kind = ?", "status = 'ok'",
+            "model = ?",
+            "media_kind = ?",
+            "status = 'ok'",
             "COALESCE(finish_reason,'') != 'MAX_TOKENS'",
             f"{bill} > 0",
         ]

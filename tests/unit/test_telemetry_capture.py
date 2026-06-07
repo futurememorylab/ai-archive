@@ -42,9 +42,14 @@ SNAKE = {
 def test_extract_camel():
     u = extract_usage(CAMEL)
     assert u == TokenUsage(
-        tokens_in=1000, tokens_in_text=100, tokens_in_video=800,
-        tokens_in_audio=100, tokens_in_image=0,
-        tokens_cached=10, tokens_out=200, tokens_thinking=50,
+        tokens_in=1000,
+        tokens_in_text=100,
+        tokens_in_video=800,
+        tokens_in_audio=100,
+        tokens_in_image=0,
+        tokens_cached=10,
+        tokens_out=200,
+        tokens_thinking=50,
     )
     assert extract_finish_reason(CAMEL) == "STOP"
 

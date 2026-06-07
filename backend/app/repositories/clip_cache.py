@@ -11,8 +11,6 @@ from typing import Any
 
 import aiosqlite
 
-from backend.app.repositories._batch import chunked_in_clause
-
 from backend.app.archive.model import (
     CanonicalClip,
     FieldValue,
@@ -20,6 +18,7 @@ from backend.app.archive.model import (
     MediaRef,
     Timecode,
 )
+from backend.app.repositories._batch import chunked_in_clause
 
 
 def _now_iso() -> str:

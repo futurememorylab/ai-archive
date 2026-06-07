@@ -20,9 +20,13 @@ CARD = RateCard(
 
 def test_cost_math_modality_split():
     usage = TokenUsage(
-        tokens_in=1_000_000, tokens_in_text=100_000, tokens_in_video=800_000,
-        tokens_in_audio=100_000, tokens_cached=0,
-        tokens_out=100_000, tokens_thinking=100_000,
+        tokens_in=1_000_000,
+        tokens_in_text=100_000,
+        tokens_in_video=800_000,
+        tokens_in_audio=100_000,
+        tokens_cached=0,
+        tokens_out=100_000,
+        tokens_thinking=100_000,
     )
     cost, version = compute_cost(usage, "any-model", card=CARD)
     # (100k + 800k) * 0.10/1M + 100k * 0.30/1M + 200k * 0.40/1M
@@ -32,7 +36,9 @@ def test_cost_math_modality_split():
 
 def test_cached_tokens_billed_at_cached_rate():
     usage = TokenUsage(
-        tokens_in=1_000_000, tokens_in_text=1_000_000, tokens_cached=400_000,
+        tokens_in=1_000_000,
+        tokens_in_text=1_000_000,
+        tokens_cached=400_000,
     )
     cost, _ = compute_cost(usage, "any-model", card=CARD)
     # 600k fresh text at 0.10 + 400k cached at 0.025
