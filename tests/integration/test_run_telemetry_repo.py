@@ -1,8 +1,6 @@
 """RunTelemetryRepo: insert round-trip; aggregate reads exclude
 MAX_TOKENS and error rows (they would poison estimates)."""
 
-import uuid
-
 import pytest
 
 from backend.app.models.telemetry import RunTelemetryRecord
@@ -11,7 +9,6 @@ from backend.app.repositories.run_telemetry import RunTelemetryRepo
 
 def _rec(**over) -> RunTelemetryRecord:
     base = dict(
-        event_id=str(uuid.uuid4()),
         occurred_at="2026-06-07T12:00:00+00:00",
         install_id="inst-1",
         kind="studio",

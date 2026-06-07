@@ -2,6 +2,8 @@
 -- written by both annotator finalize paths. Doubles as the (dormant)
 -- Phase-2 outbox via sent_at/send_attempts. Rows are kept forever —
 -- they are the estimator's history (~1 KB/run).
+-- Idempotency key for the Phase-2 flusher is (install_id, id); no
+-- separate event_id column is needed.
 -- See docs/specs/2026-06-07-run-telemetry-cost-estimation-design.md.
 
 CREATE TABLE app_meta (
@@ -11,7 +13,6 @@ CREATE TABLE app_meta (
 
 CREATE TABLE run_telemetry (
   id                    INTEGER PRIMARY KEY,
-  event_id              TEXT NOT NULL UNIQUE,
   occurred_at           TEXT NOT NULL,
   install_id            TEXT NOT NULL,
   app_version           TEXT,

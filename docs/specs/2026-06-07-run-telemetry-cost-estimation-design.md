@@ -94,7 +94,6 @@ CREATE TABLE app_meta (
 
 CREATE TABLE run_telemetry (
   id                    INTEGER PRIMARY KEY,
-  event_id              TEXT NOT NULL UNIQUE,   -- uuid4, Phase 2 idempotency key
   occurred_at           TEXT NOT NULL,          -- UTC ISO, finalize time
   install_id            TEXT NOT NULL,
   app_version           TEXT,
@@ -318,9 +317,12 @@ No telemetry endpoint/token/mode settings until Phase 2.
 in Phase 1 blocks it; the local table-as-outbox backfills all history
 recorded since Phase 1 shipped.
 
-- **Wire format:** envelope `{event_id, event_type, schema_version,
+- **Wire format:** envelope `{event_type, schema_version,
   occurred_at, install_id, customer_id, app_version, attrs}` + typed
   payload. `run_telemetry` rows serialize to `event_type='run'`.
+  The wire idempotency key is derived at send time as
+  `"{install_id}:{id}"` — `(install_id, id)` is already a globally
+  unique, naturally ordered key with no per-insert UNIQUE-index overhead.
   `event_type='prompt_version'` is emitted once per locally-new prompt
   version (hash, chars, model always; name/body/schema only in `full`
   mode) — exact prompt text crosses the wire once per install, runs
@@ -340,8 +342,8 @@ recorded since Phase 1 shipped.
   permissively. Token→customer_id mapping is server-side; client
   claims are ignored. Inserts to BigQuery `telemetry.events`
   (envelope columns + JSON payload, partitioned by date, clustered by
-  customer/event_type) with `event_id` row ids; views dedupe on
-  `event_id` and unpack hot types (`runs`, `prompt_versions`,
+  customer/event_type); views dedupe on the derived `{install_id}:{id}`
+  key and unpack hot types (`runs`, `prompt_versions`,
   `estimate_accuracy`).
 - **Budget limits:** `monthly_budget_usd` + `budget_mode: off | warn |
   block` — month-to-date SUM over local telemetry + the new run's

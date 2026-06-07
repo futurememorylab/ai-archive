@@ -20,7 +20,6 @@ async def test_run_telemetry_required_columns(db):
     cur = await db.execute("PRAGMA table_info(run_telemetry)")
     cols = {r[1] for r in await cur.fetchall()}
     required = {
-        "event_id",
         "occurred_at",
         "install_id",
         "app_version",
@@ -76,6 +75,7 @@ async def test_run_telemetry_required_columns(db):
     }
     missing = required - cols
     assert not missing, f"missing columns: {missing}"
+    assert "event_id" not in cols, "event_id column was removed — do not re-add it"
 
 
 @pytest.mark.asyncio

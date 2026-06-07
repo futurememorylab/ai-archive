@@ -12,7 +12,6 @@ import json
 import logging
 import mimetypes
 import time
-import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -122,7 +121,6 @@ async def _record_telemetry(
         rendered_len = len((result or {}).get("text") or "") if result else None
         mm = media_meta or {}
         rec = RunTelemetryRecord(
-            event_id=str(uuid.uuid4()),
             occurred_at=datetime.now(UTC).isoformat(),
             install_id=tctx.install_id,
             app_version=tctx.app_version,

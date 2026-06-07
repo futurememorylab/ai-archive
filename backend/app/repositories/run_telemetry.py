@@ -20,7 +20,6 @@ from backend.app.models.telemetry import RunTelemetryRecord
 # Insert columns only — excludes id (autoincrement) and sent_at /
 # send_attempts (DB defaults; Phase-2 flusher owns them).
 _COLS = [
-    "event_id",
     "occurred_at",
     "install_id",
     "app_version",

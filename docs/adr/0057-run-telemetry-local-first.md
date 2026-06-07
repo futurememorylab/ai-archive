@@ -112,7 +112,10 @@ current calendar month — cheap to add once the admin console exists.
 ## Consequences
 
 - `run_telemetry` table is live from Phase 1; the cloud flush path
-  (Phase 2) backfills without migration.
+  (Phase 2) backfills without migration. The Phase-2 wire idempotency
+  key is derived at send time as `"{install_id}:{id}"` — `(install_id,
+  id)` is globally unique and naturally ordered with no per-insert
+  UNIQUE-index overhead; no separate `event_id` column is needed.
 - `studio_run.tokens_out` has a semantic boundary at the Phase 1 migration;
   the migration comment records the change.
 - The estimator (`services/run_estimator.py`) queries one table for both

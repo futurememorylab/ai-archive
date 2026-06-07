@@ -25,7 +25,6 @@ class TelemetryCtx(BaseModel):
 
 
 class RunTelemetryRecord(BaseModel):
-    event_id: str
     occurred_at: str
     install_id: str
     app_version: str | None = None
