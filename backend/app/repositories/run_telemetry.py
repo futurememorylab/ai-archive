@@ -17,6 +17,8 @@ import aiosqlite
 
 from backend.app.models.telemetry import RunTelemetryRecord
 
+# Insert columns only — excludes id (autoincrement) and sent_at /
+# send_attempts (DB defaults; Phase-2 flusher owns them).
 _COLS = [
     "event_id", "occurred_at", "install_id", "app_version", "kind",
     "archive_id", "user_ref", "job_id", "clip_id", "clip_name",
@@ -40,6 +42,8 @@ class RunTelemetryRepo:
         self, conn: aiosqlite.Connection, rec: RunTelemetryRecord
     ) -> int:
         data = rec.model_dump()
+        # Empty dict collapses to NULL (no-signal); pydantic guarantees
+        # attrs is dict | None, never a pre-serialized string.
         data["attrs"] = json.dumps(data["attrs"]) if data["attrs"] else None
         placeholders = ", ".join("?" for _ in _COLS)
         cur = await conn.execute(
@@ -68,6 +72,8 @@ class RunTelemetryRepo:
             "audio": "COALESCE(tokens_in_audio, 0)",
             "image": "COALESCE(tokens_in_image, 0)",
         }.get(media_kind, "COALESCE(tokens_in_video, 0)")
+        # id is insertion order == recency today; occurred_at may differ
+        # if Phase-2 ever back-fills older events.
         cur = await conn.execute(
             f"SELECT CAST(({col_expr}) AS REAL) / media_duration_secs "
             "FROM run_telemetry "

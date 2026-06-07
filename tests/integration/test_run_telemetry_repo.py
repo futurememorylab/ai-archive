@@ -82,3 +82,28 @@ async def test_output_rates_images_are_per_item(db):
         db, model="gemini-2.5-flash-lite", media_kind="image",
     )
     assert rates == [800.0]
+
+
+@pytest.mark.asyncio
+async def test_output_rates_limit_and_recency_order(db):
+    repo = RunTelemetryRepo()
+    # Three runs with distinct rates, inserted oldest→newest: 10/s, 20/s, 30/s.
+    for out in (100, 200, 300):
+        await repo.insert(db, _rec(tokens_out=out, tokens_thinking=0))
+    rates = await repo.recent_output_rates(
+        db, model="gemini-2.5-flash-lite", media_kind="video+audio", limit=2
+    )
+    assert rates == [30.0, 20.0]  # newest first, capped at limit
+
+
+@pytest.mark.asyncio
+async def test_input_ratios_audio_branch(db):
+    repo = RunTelemetryRepo()
+    await repo.insert(db, _rec(
+        media_kind="audio", tokens_in_video=0, tokens_in_audio=320,
+        media_duration_secs=10.0,
+    ))
+    ratios = await repo.recent_input_ratios(
+        db, model="gemini-2.5-flash-lite", media_kind="audio"
+    )
+    assert ratios == [32.0]
