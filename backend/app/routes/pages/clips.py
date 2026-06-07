@@ -260,13 +260,11 @@ async def clips_list(
             batch_status_map[it.catdv_clip_id] = it.status
 
     # Actual billable cost per clip for this batch: one batched aggregate
-    # over the batch's job ids, summed per clip (a clip may appear in more
-    # than one per-kind job, and retries add rows).
+    # over the batch's job ids, summed per clip in SQL (a clip may appear
+    # in more than one per-kind job, and retries add rows).
     batch_cost_map: dict[int, float] = {}
     if batch_ids:
-        costs = await ctx.run_telemetry_repo.costs_for_jobs(ctx.db, batch_ids)
-        for (_jid, cid), amount in costs.items():
-            batch_cost_map[cid] = batch_cost_map.get(cid, 0.0) + amount
+        batch_cost_map = await ctx.run_telemetry_repo.cost_totals_by_clip(ctx.db, batch_ids)
 
     # Annotate each row with its pending-draft counts and batch job id.
     pending_rows = await ctx.review_items_repo.list_pending_clips(ctx.db, limit=2000, offset=0)
@@ -522,8 +520,8 @@ async def clip_detail_page(request: Request, clip_id: int, review: int | None = 
     annotations = await ctx.annotations_repo.list_by_clip(ctx.db, clip_id)
     job_id = next((a.job_id for a in annotations if a.job_id is not None), None)
     if job_id is not None:
-        costs = await ctx.run_telemetry_repo.costs_for_jobs(ctx.db, [job_id])
-        ctx_dict["annotation_cost_usd"] = costs.get((job_id, clip_id))
+        costs = await ctx.run_telemetry_repo.cost_totals_by_clip(ctx.db, [job_id])
+        ctx_dict["annotation_cost_usd"] = costs.get(clip_id)
     ctx_dict["host_local_proxies"] = getattr(
         getattr(ctx, "proxy_resolver", None), "is_host_local", False
     )

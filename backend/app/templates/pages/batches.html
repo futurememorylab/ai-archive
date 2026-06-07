@@ -215,16 +215,28 @@
             if (!r.ok) throw new Error("HTTP " + r.status);
             return r.json();
           }));
-          const order = { rough: 0, fair: 1, good: 2 };
           if (key !== _batchEstimateKey) return;  // selection changed mid-flight
-          this.estimate = parts.reduce((acc, p) => ({
-            cost_usd_p50: (acc.cost_usd_p50 ?? 0) + (p.cost_usd_p50 ?? 0),
-            cost_usd_p90: (acc.cost_usd_p90 ?? 0) + (p.cost_usd_p90 ?? 0),
-            tokens_in: (acc.tokens_in ?? 0) + p.tokens_in,
-            n_samples: Math.max(acc.n_samples ?? 0, p.n_samples),
-            n_unknown: (acc.n_unknown ?? 0) + (p.n_unknown ?? 0),
-            confidence: order[p.confidence] < order[acc.confidence ?? "good"] ? p.confidence : (acc.confidence ?? p.confidence),
-          }), {});
+          // Merge per-kind parts. Costs propagate null (a kind with no rate
+          // card must surface as "—", not silently add $0). n_samples and
+          // confidence take the WEAKEST kind — mirroring the server-side
+          // convention in estimate_clips.
+          const order = { rough: 0, fair: 1, good: 2 };
+          const sumOrNull = (a, b) => (a === null || b === null ? null : a + b);
+          let p50 = 0, p90 = 0, tokensIn = 0, nUnknown = 0;
+          let nSamples = Infinity, confidence = "good";
+          for (const p of parts) {
+            p50 = sumOrNull(p50, p.cost_usd_p50 ?? null);
+            p90 = sumOrNull(p90, p.cost_usd_p90 ?? null);
+            tokensIn += p.tokens_in;
+            nUnknown += p.n_unknown ?? 0;
+            nSamples = Math.min(nSamples, p.n_samples);
+            if (order[p.confidence] < order[confidence]) confidence = p.confidence;
+          }
+          this.estimate = {
+            cost_usd_p50: p50, cost_usd_p90: p90, tokens_in: tokensIn,
+            n_samples: nSamples === Infinity ? 0 : nSamples,
+            n_unknown: nUnknown, confidence,
+          };
         } catch (e) {
           console.error("estimate failed", e);   // advisory — no toast, no block
           if (key !== _batchEstimateKey) return;  // selection changed mid-flight

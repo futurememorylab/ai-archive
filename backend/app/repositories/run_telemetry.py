@@ -16,61 +16,13 @@ import json
 import aiosqlite
 
 from backend.app.models.telemetry import RunTelemetryRecord
+from backend.app.repositories._batch import chunked_in_clause
 
-# Insert columns only — excludes id (autoincrement) and sent_at /
-# send_attempts (DB defaults; Phase-2 flusher owns them).
-_COLS = [
-    "occurred_at",
-    "install_id",
-    "app_version",
-    "kind",
-    "archive_id",
-    "user_ref",
-    "job_id",
-    "clip_id",
-    "clip_name",
-    "prompt_version_id",
-    "prompt_hash",
-    "schema_hash",
-    "prompt_chars_rendered",
-    "model",
-    "media_kind",
-    "media_duration_secs",
-    "media_width",
-    "media_height",
-    "media_fps",
-    "media_bytes",
-    "media_ext",
-    "media_resolution_setting",
-    "preprocess",
-    "vertex_project",
-    "vertex_location",
-    "ai_store_kind",
-    "status",
-    "error_class",
-    "finish_reason",
-    "attempt_count",
-    "duration_s",
-    "tokens_in",
-    "tokens_in_text",
-    "tokens_in_video",
-    "tokens_in_audio",
-    "tokens_in_image",
-    "tokens_cached",
-    "tokens_out",
-    "tokens_thinking",
-    "cost_usd",
-    "pricing_version",
-    "est_tokens_in",
-    "est_tokens_out_p50",
-    "est_tokens_out_p90",
-    "est_cost_usd_p50",
-    "est_cost_usd_p90",
-    "est_confidence",
-    "output_chars",
-    "review_item_count",
-    "attrs",
-]
+# Insert columns, derived from the model so they can't drift apart.
+# RunTelemetryRecord mirrors the table minus id (autoincrement) and
+# sent_at / send_attempts (DB defaults; Phase-2 flusher owns them);
+# model_fields preserves declaration order.
+_COLS = list(RunTelemetryRecord.model_fields)
 
 
 class RunTelemetryRepo:
@@ -93,9 +45,8 @@ class RunTelemetryRepo:
     # Both sum cost_usd (NULL → 0) over ALL rows for the job(s) — including
     # error rows, since a failed attempt still burned tokens, and per-clip
     # retries, since total spend on a clip is the sum of its attempts.
-    # `job_ids` is bounded by the page's batch/clip limit, so a single IN
-    # clause is safe — one statement, not a per-job loop (mirrors
-    # JobsRepo.failed_items_for_jobs; ADR 0046).
+    # Batched via chunked_in_clause (ADR 0046); GROUP-BY sums are merged
+    # with += across chunks so a key split over two chunks stays correct.
 
     async def cost_sums_by_job(
         self, conn: aiosqlite.Connection, job_ids: list[int]
@@ -103,34 +54,37 @@ class RunTelemetryRepo:
         """{job_id: total cost_usd} for the given jobs. Missing jobs are
         simply absent from the dict. Powers the batches-list cost column
         (sum a batch's member job_ids in Python)."""
-        if not job_ids:
-            return {}
-        placeholders = ",".join("?" * len(job_ids))
-        cur = await conn.execute(
-            f"SELECT job_id, COALESCE(SUM(cost_usd), 0) "
-            f"FROM run_telemetry WHERE job_id IN ({placeholders}) "
-            f"GROUP BY job_id",
-            tuple(job_ids),
-        )
-        return {int(r[0]): float(r[1]) for r in await cur.fetchall()}
+        out: dict[int, float] = {}
+        for fragment, params in chunked_in_clause((j,) for j in job_ids):
+            cur = await conn.execute(
+                f"SELECT job_id, COALESCE(SUM(cost_usd), 0) "
+                f"FROM run_telemetry WHERE job_id IN ({fragment}) "
+                f"GROUP BY job_id",
+                tuple(params),
+            )
+            for jid, total in await cur.fetchall():
+                out[int(jid)] = out.get(int(jid), 0.0) + float(total)
+        return out
 
-    async def costs_for_jobs(
+    async def cost_totals_by_clip(
         self, conn: aiosqlite.Connection, job_ids: list[int]
-    ) -> dict[tuple[int, int], float]:
-        """{(job_id, clip_id): total cost_usd} for the given jobs. Rows with
-        a NULL clip_id are skipped (can't key them). Powers per-clip and
-        per-annotation cost displays."""
-        if not job_ids:
-            return {}
-        placeholders = ",".join("?" * len(job_ids))
-        cur = await conn.execute(
-            f"SELECT job_id, clip_id, COALESCE(SUM(cost_usd), 0) "
-            f"FROM run_telemetry "
-            f"WHERE job_id IN ({placeholders}) AND clip_id IS NOT NULL "
-            f"GROUP BY job_id, clip_id",
-            tuple(job_ids),
-        )
-        return {(int(r[0]), int(r[1])): float(r[2]) for r in await cur.fetchall()}
+    ) -> dict[int, float]:
+        """{clip_id: total cost_usd} across the given jobs. Rows with a
+        NULL clip_id are skipped (can't key them). Powers per-clip and
+        per-annotation cost displays — both want a clip's total spend
+        within a set of jobs, not a per-(job, clip) breakdown."""
+        out: dict[int, float] = {}
+        for fragment, params in chunked_in_clause((j,) for j in job_ids):
+            cur = await conn.execute(
+                f"SELECT clip_id, COALESCE(SUM(cost_usd), 0) "
+                f"FROM run_telemetry "
+                f"WHERE job_id IN ({fragment}) AND clip_id IS NOT NULL "
+                f"GROUP BY clip_id",
+                tuple(params),
+            )
+            for cid, total in await cur.fetchall():
+                out[int(cid)] = out.get(int(cid), 0.0) + float(total)
+        return out
 
     async def recent_input_ratios(
         self,

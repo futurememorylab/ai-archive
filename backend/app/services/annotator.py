@@ -12,6 +12,7 @@ import json
 import logging
 import mimetypes
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -93,6 +94,23 @@ def _render_prompt(body: str, *, duration_secs: float) -> str:
     return anchor + body
 
 
+@dataclass(frozen=True)
+class CaptureMeta:
+    """Per-run facts gathered in _process_item for the telemetry row:
+    media descriptors plus the rendered-prompt length (not a media
+    attribute, but captured at the same point in the pipeline). All
+    fields default None so CaptureMeta() serves as the empty meta on
+    error paths that never reached media resolution."""
+
+    media_kind: str | None = None
+    media_duration_secs: float | None = None
+    media_fps: float | None = None
+    media_bytes: int | None = None
+    media_ext: str | None = None
+    clip_name: str | None = None
+    prompt_chars_rendered: int | None = None
+
+
 async def _record_telemetry(
     db,
     repo: RunTelemetryRepo,
@@ -105,7 +123,7 @@ async def _record_telemetry(
     result: dict | None = None,
     error_class: str | None = None,
     duration_s: float | None = None,
-    media_meta: dict | None = None,
+    capture: CaptureMeta | None = None,
     est=None,
     ai_store_kind: str | None = None,
     review_item_count: int | None = None,
@@ -119,7 +137,7 @@ async def _record_telemetry(
         if status == "error":
             cost_usd = None
         rendered_len = len((result or {}).get("text") or "") if result else None
-        mm = media_meta or {}
+        mm = capture or CaptureMeta()
         rec = RunTelemetryRecord(
             occurred_at=datetime.now(UTC).isoformat(),
             install_id=tctx.install_id,
@@ -128,17 +146,17 @@ async def _record_telemetry(
             archive_id=tctx.archive_id,
             job_id=item.job_id,
             clip_id=item.catdv_clip_id,
-            clip_name=mm.get("clip_name"),
+            clip_name=mm.clip_name,
             prompt_version_id=version.id,
             prompt_hash=prompt_hash(version.body),
             schema_hash=schema_hash(version.output_schema),
-            prompt_chars_rendered=mm.get("prompt_chars_rendered"),
+            prompt_chars_rendered=mm.prompt_chars_rendered,
             model=version.model,
-            media_kind=mm.get("media_kind"),
-            media_duration_secs=mm.get("media_duration_secs"),
-            media_fps=mm.get("media_fps"),
-            media_bytes=mm.get("media_bytes"),
-            media_ext=mm.get("media_ext"),
+            media_kind=mm.media_kind,
+            media_duration_secs=mm.media_duration_secs,
+            media_fps=mm.media_fps,
+            media_bytes=mm.media_bytes,
+            media_ext=mm.media_ext,
             vertex_project=tctx.vertex_project,
             vertex_location=tctx.vertex_location,
             ai_store_kind=ai_store_kind,
@@ -336,14 +354,7 @@ async def _process_item(
     duration_secs = float(canonical.duration_secs or 0.0)
 
     media_path = str((canonical.media.cached_path or canonical.media.upstream_handle) or "")
-    media_meta = {
-        "media_kind": classify_media_kind(media_path or None),
-        "media_duration_secs": duration_secs or None,
-        "media_fps": canonical.fps or None,
-        "media_bytes": canonical.media.size_bytes,
-        "media_ext": (Path(media_path).suffix.lower() or None) if media_path else None,
-        "clip_name": canonical.name or None,
-    }
+    media_kind = classify_media_kind(media_path or None)
 
     # Pre-call estimate (spec §6; stamped onto the telemetry row so
     # est-vs-actual is one query). Blind to the outcome by construction.
@@ -355,7 +366,7 @@ async def _process_item(
             [
                 run_estimator.ClipEstimateInput(
                     clip_id=item.catdv_clip_id,
-                    media_kind=media_meta["media_kind"],
+                    media_kind=media_kind,
                     duration_secs=duration_secs or None,
                 )
             ],
@@ -369,7 +380,15 @@ async def _process_item(
     await jobs_repo.update_item_status(db, item.id, "prompting")
     await event_bus.publish(topic, {"item_id": item.id, "status": "prompting"})
     rendered_body = _render_prompt(version.body, duration_secs=duration_secs)
-    media_meta["prompt_chars_rendered"] = len(rendered_body)
+    capture = CaptureMeta(
+        media_kind=media_kind,
+        media_duration_secs=duration_secs or None,
+        media_fps=canonical.fps or None,
+        media_bytes=canonical.media.size_bytes,
+        media_ext=(Path(media_path).suffix.lower() or None) if media_path else None,
+        clip_name=canonical.name or None,
+        prompt_chars_rendered=len(rendered_body),
+    )
     t0 = time.monotonic()
     # The Vertex AI client is synchronous and each call takes seconds; run it
     # off the event loop so concurrent jobs and ordinary page requests stay
@@ -406,7 +425,7 @@ async def _process_item(
             topic,
             run_telemetry_repo=run_telemetry_repo,
             telemetry_ctx=telemetry_ctx,
-            media_meta=media_meta,
+            capture=capture,
             est=est,
             ai_store_kind=ai_store_kind,
         )
@@ -427,7 +446,7 @@ async def _process_item(
             topic,
             run_telemetry_repo=run_telemetry_repo,
             telemetry_ctx=telemetry_ctx,
-            media_meta=media_meta,
+            capture=capture,
             est=est,
             ai_store_kind=ai_store_kind,
             elapsed_s=elapsed_s,
@@ -450,7 +469,7 @@ async def _finalize_studio(
     *,
     run_telemetry_repo: RunTelemetryRepo,
     telemetry_ctx: TelemetryCtx,
-    media_meta: dict,
+    capture: CaptureMeta,
     est=None,
     ai_store_kind: str | None = None,
 ) -> None:
@@ -487,7 +506,7 @@ async def _finalize_studio(
             error_class="NonJsonOutput",
             result=result,
             duration_s=elapsed_s,
-            media_meta=media_meta,
+            capture=capture,
             est=est,
             ai_store_kind=ai_store_kind,
         )
@@ -536,7 +555,7 @@ async def _finalize_studio(
         status="ok",
         result=result,
         duration_s=elapsed_s,
-        media_meta=media_meta,
+        capture=capture,
         est=est,
         ai_store_kind=ai_store_kind,
         review_item_count=len(review),
@@ -560,7 +579,7 @@ async def _finalize_annotation(
     *,
     run_telemetry_repo: RunTelemetryRepo,
     telemetry_ctx: TelemetryCtx,
-    media_meta: dict,
+    capture: CaptureMeta,
     est=None,
     ai_store_kind: str | None = None,
     elapsed_s: float | None = None,
@@ -609,7 +628,7 @@ async def _finalize_annotation(
         status="ok",
         result=result,
         duration_s=elapsed_s,
-        media_meta=media_meta,
+        capture=capture,
         est=est,
         ai_store_kind=ai_store_kind,
         review_item_count=review_count,

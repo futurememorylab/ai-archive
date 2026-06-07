@@ -11,6 +11,7 @@ cross-install dedup key would be useless.
 import hashlib
 import json
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any
 
 
@@ -67,7 +68,10 @@ def extract_finish_reason(raw: dict[str, Any]) -> str | None:
     return str(reason) if reason else None
 
 
+@lru_cache(maxsize=128)
 def prompt_hash(template_body: str) -> str:
+    # Cached: the annotator hashes the same template once per processed
+    # clip; a job's template is constant, so this is pure recomputation.
     return hashlib.sha256(template_body.encode("utf-8")).hexdigest()
 
 

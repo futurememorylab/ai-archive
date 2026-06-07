@@ -15,12 +15,8 @@ from dataclasses import dataclass
 
 from backend.app.media_kind import classify_media_kind
 from backend.app.services.pricing import RATE_CARDS, compute_cost
-from backend.app.services.telemetry_capture import (
-    TokenUsage,
-)
-from backend.app.services.telemetry_capture import (
-    prompt_hash as _prompt_hash,
-)
+from backend.app.services.telemetry_capture import TokenUsage
+from backend.app.services.telemetry_capture import prompt_hash as _prompt_hash
 
 # Seed constants — sanity-check against one real run's usageMetadata
 # during implementation (spec §6). Calibration replaces them as soon as
@@ -57,6 +53,20 @@ class RunEstimate:
     confidence: str  # good | fair | rough
     n_samples: int
     n_clips: int
+
+
+@dataclass(frozen=True)
+class _KindStats:
+    """Output statistics for one media kind, resolved once per estimate.
+
+    ``p50``/``p90`` are None when no history reached _MIN_SAMPLES at any
+    fallback level (level 3) — callers fall back to seed constants.
+    """
+
+    p50: float | None
+    p90: float | None
+    n: int  # sample count behind the chosen level
+    level: int  # 1 = prompt-level history, 2 = model-level, 3 = seeds
 
 
 def _pct(values: list[float], q: float) -> float:
@@ -97,11 +107,11 @@ async def estimate_clips(
     p_hash = prompt_hash_override or _prompt_hash(prompt_body)
     prompt_tokens = (len(prompt_body) + len(str(schema))) / CHARS_PER_TOKEN
 
-    # One repo round per distinct media kind, NOT per clip.
+    # One repo round per distinct media kind, NOT per clip. Percentiles are
+    # resolved here once per kind — the clip loop only does arithmetic.
     kinds = {c.media_kind for c in clips}
     input_ratio: dict[str, float] = {}
-    out_rates: dict[str, list[float]] = {}
-    out_level: dict[str, int] = {}
+    stats: dict[str, _KindStats] = {}
     for kind in kinds:
         if kind != "image":
             ratios = await repo.recent_input_ratios(conn, model=model, media_kind=kind)
@@ -110,30 +120,27 @@ async def estimate_clips(
         rates = await repo.recent_output_rates(
             conn, model=model, media_kind=kind, prompt_hash=p_hash
         )
+        level = 1
+        if len(rates) < _MIN_SAMPLES:
+            rates = await repo.recent_output_rates(conn, model=model, media_kind=kind)
+            level = 2
         if len(rates) >= _MIN_SAMPLES:
-            out_rates[kind], out_level[kind] = rates, 1
-            continue
-        rates = await repo.recent_output_rates(conn, model=model, media_kind=kind)
-        if len(rates) >= _MIN_SAMPLES:
-            out_rates[kind], out_level[kind] = rates, 2
+            stats[kind] = _KindStats(
+                p50=_pct(rates, 0.5), p90=_pct(rates, 0.9), n=len(rates), level=level
+            )
         else:
-            out_rates[kind], out_level[kind] = [], 3
+            stats[kind] = _KindStats(p50=None, p90=None, n=0, level=3)
 
     tokens_in = prompt_tokens * len(clips)
     out_p50 = 0.0
     out_p90 = 0.0
     audio_media_tokens = 0.0
-    worst_level = 1
     for c in clips:
+        st = stats[c.media_kind]
         if c.media_kind == "image":
             tokens_in += _image_tiles(c.width, c.height) * IMAGE_TILE_TOKENS
-            rates = out_rates[c.media_kind]
-            if rates:
-                out_p50 += _pct(rates, 0.5)
-                out_p90 += _pct(rates, 0.9)
-            else:
-                out_p50 += SEED_OUTPUT_TOKENS_PER_IMAGE
-                out_p90 += SEED_OUTPUT_TOKENS_PER_IMAGE * 2
+            out_p50 += st.p50 if st.p50 is not None else SEED_OUTPUT_TOKENS_PER_IMAGE
+            out_p90 += st.p90 if st.p90 is not None else SEED_OUTPUT_TOKENS_PER_IMAGE * 2
         else:
             dur = float(c.duration_secs or 0.0)
             k = input_ratio.get(
@@ -143,17 +150,12 @@ async def estimate_clips(
             tokens_in += dur * k
             if c.media_kind == "audio":
                 audio_media_tokens += dur * k
-            rates = out_rates[c.media_kind]
-            if rates:
-                out_p50 += dur * _pct(rates, 0.5)
-                out_p90 += dur * _pct(rates, 0.9)
-            else:
-                out_p50 += dur * SEED_OUTPUT_TOKENS_PER_SEC
-                out_p90 += dur * SEED_OUTPUT_TOKENS_PER_SEC * 2
-        worst_level = max(worst_level, out_level[c.media_kind])
+            out_p50 += dur * (st.p50 if st.p50 is not None else SEED_OUTPUT_TOKENS_PER_SEC)
+            out_p90 += dur * (st.p90 if st.p90 is not None else SEED_OUTPUT_TOKENS_PER_SEC * 2)
 
-    # Confidence reflects the weakest kind in the batch — min over all kinds.
-    n_samples = min((len(out_rates[k]) for k in kinds), default=0)
+    # Confidence reflects the weakest kind in the batch.
+    worst_level = max(st.level for st in stats.values())
+    n_samples = min(st.n for st in stats.values())
 
     if worst_level == 1 and n_samples >= _GOOD_SAMPLES:
         confidence = "good"
@@ -215,9 +217,11 @@ async def estimate_for_clip_ids(
     version = await prompts_repo.get_version(conn, prompt_version_id)
     cached = await clip_cache_repo.get_many_by_ids(conn, provider_id, clip_ids)
     clips: list[ClipEstimateInput] = []
+    n_unknown = 0
     for cid in clip_ids:
         row = cached.get(cid)
         if row is None:
+            n_unknown += 1
             clips.append(
                 ClipEstimateInput(
                     clip_id=cid,
@@ -239,7 +243,6 @@ async def estimate_for_clip_ids(
                 duration_secs=row["duration_secs"],
             )
         )
-    n_unknown = sum(1 for cid in clip_ids if cid not in cached)
     est = await estimate_clips(
         conn,
         run_telemetry_repo,

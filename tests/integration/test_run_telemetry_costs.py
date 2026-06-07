@@ -2,32 +2,19 @@
 ACTUAL-cost UI surfaces (batches list, per-clip, per-annotation).
 
 Both readers issue a single statement per chunk of job ids (no per-job
-loop) — pinned by an assert_query_count test for 10 vs 50 ids.
+loop) — pinned by an assert_query_count test for 10 vs 50 ids, plus a
+multi-chunk test that proves cross-chunk GROUP-BY merging.
 """
+
+import functools
 
 import pytest
 
-from backend.app.models.telemetry import RunTelemetryRecord
+from backend.app.repositories import _batch
+from backend.app.repositories import run_telemetry as run_telemetry_mod
 from backend.app.repositories.run_telemetry import RunTelemetryRepo
 from tests._helpers.query_count import assert_query_count
-
-
-def _rec(**over) -> RunTelemetryRecord:
-    base = dict(
-        occurred_at="2026-06-07T12:00:00+00:00",
-        install_id="inst-1",
-        kind="annotation",
-        model="gemini-2.5-flash-lite",
-        status="ok",
-        media_kind="video+audio",
-        media_duration_secs=10.0,
-        prompt_hash="h" * 64,
-        tokens_in=3000,
-        tokens_out=100,
-        cost_usd=0.05,
-    )
-    base.update(over)
-    return RunTelemetryRecord(**base)
+from tests.integration.test_run_telemetry_repo import _rec
 
 
 @pytest.mark.asyncio
@@ -61,34 +48,32 @@ async def test_cost_sums_by_job_empty_input(db):
 
 
 @pytest.mark.asyncio
-async def test_costs_for_jobs_keyed_by_job_and_clip(db):
+async def test_cost_totals_by_clip_sums_across_jobs(db):
+    """A clip can appear in several per-kind jobs of one batch; its cost
+    is the total across all of them — summed in SQL, keyed by clip."""
     repo = RunTelemetryRepo()
     await repo.insert(db, _rec(job_id=1, clip_id=10, cost_usd=0.05))
     await repo.insert(db, _rec(job_id=1, clip_id=11, cost_usd=0.07))
     await repo.insert(db, _rec(job_id=2, clip_id=10, cost_usd=0.30))
-    costs = await repo.costs_for_jobs(db, [1, 2])
-    assert costs == {
-        (1, 10): pytest.approx(0.05),
-        (1, 11): pytest.approx(0.07),
-        (2, 10): pytest.approx(0.30),
-    }
+    costs = await repo.cost_totals_by_clip(db, [1, 2])
+    assert costs == {10: pytest.approx(0.35), 11: pytest.approx(0.07)}
 
 
 @pytest.mark.asyncio
-async def test_costs_for_jobs_sums_retries_per_clip(db):
+async def test_cost_totals_by_clip_sums_retries(db):
     """A clip re-run inside the same job produces multiple rows; the
     per-clip cost is their sum (total spend on that clip)."""
     repo = RunTelemetryRepo()
     await repo.insert(db, _rec(job_id=1, clip_id=10, status="error", cost_usd=0.02))
     await repo.insert(db, _rec(job_id=1, clip_id=10, cost_usd=0.05))
-    costs = await repo.costs_for_jobs(db, [1])
-    assert costs == {(1, 10): pytest.approx(0.07)}
+    costs = await repo.cost_totals_by_clip(db, [1])
+    assert costs == {10: pytest.approx(0.07)}
 
 
 @pytest.mark.asyncio
-async def test_costs_for_jobs_empty_input(db):
+async def test_cost_totals_by_clip_empty_input(db):
     repo = RunTelemetryRepo()
-    assert await repo.costs_for_jobs(db, []) == {}
+    assert await repo.cost_totals_by_clip(db, []) == {}
 
 
 @pytest.mark.asyncio
@@ -100,5 +85,22 @@ async def test_cost_readers_constant_query_count(db, n):
     job_ids = list(range(1, n + 1))
     async with assert_query_count(db, 2) as counter:
         await repo.cost_sums_by_job(db, job_ids)
-        await repo.costs_for_jobs(db, job_ids)
+        await repo.cost_totals_by_clip(db, job_ids)
     assert counter.count == 2, f"[n={n}] expected 2 statements, got {counter.count}"
+
+
+@pytest.mark.asyncio
+async def test_cost_totals_by_clip_merges_across_chunks(db, monkeypatch):
+    """10 jobs with chunk_size=4 → 3 chunks → 3 statements; the same
+    clip's totals from different chunks must merge, not overwrite."""
+    repo = RunTelemetryRepo()
+    for jid in range(1, 11):
+        await repo.insert(db, _rec(job_id=jid, clip_id=10, cost_usd=0.01))
+    monkeypatch.setattr(
+        run_telemetry_mod,
+        "chunked_in_clause",
+        functools.partial(_batch.chunked_in_clause, chunk_size=4),
+    )
+    async with assert_query_count(db, 3):
+        costs = await repo.cost_totals_by_clip(db, list(range(1, 11)))
+    assert costs == {10: pytest.approx(0.10)}
