@@ -103,7 +103,7 @@ def test_clips_list_returns_full_page(monkeypatch, tmp_path):
         assert "1932" in r.text
         assert "30.léta" in r.text
         assert 'class="vlist"' in r.text
-        assert '/api/media/12041/thumb' in r.text  # thumbnail img wired (clip id from _canonical)
+        assert "/api/media/12041/thumb" in r.text  # thumbnail img wired (clip id from _canonical)
 
 
 def test_clips_list_htmx_returns_partial(monkeypatch, tmp_path):
@@ -153,23 +153,45 @@ def test_clip_detail_shows_annotation_cost(monkeypatch, tmp_path):
         async def _seed() -> None:
             prompts = PromptsRepo()
             _, vid = await prompts.create_with_initial_version(
-                ctx.db, name="p", description=None, body="b",
-                target_map={}, output_schema={}, model="m",
+                ctx.db,
+                name="p",
+                description=None,
+                body="b",
+                target_map={},
+                output_schema={},
+                model="m",
             )
             jobs = JobsRepo()
             jid = await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[12041])
             anns = AnnotationsRepo()
-            await anns.insert(ctx.db, Annotation(
-                catdv_clip_id=12041, catdv_clip_name="Abramcukova_Anna_09",
-                prompt_version_id=vid, job_id=jid, model="m", prompt_used="b",
-                raw_response={}, structured_output=None, clip_snapshot={},
-            ))
+            await anns.insert(
+                ctx.db,
+                Annotation(
+                    catdv_clip_id=12041,
+                    catdv_clip_name="Abramcukova_Anna_09",
+                    prompt_version_id=vid,
+                    job_id=jid,
+                    model="m",
+                    prompt_used="b",
+                    raw_response={},
+                    structured_output=None,
+                    clip_snapshot={},
+                ),
+            )
             tele = RunTelemetryRepo()
-            await tele.insert(ctx.db, RunTelemetryRecord(
-                occurred_at=datetime.now(UTC).isoformat(),
-                install_id="i", kind="annotation", model="m", status="ok",
-                job_id=jid, clip_id=12041, cost_usd=0.21,
-            ))
+            await tele.insert(
+                ctx.db,
+                RunTelemetryRecord(
+                    occurred_at=datetime.now(UTC).isoformat(),
+                    install_id="i",
+                    kind="annotation",
+                    model="m",
+                    status="ok",
+                    job_id=jid,
+                    clip_id=12041,
+                    cost_usd=0.21,
+                ),
+            )
 
         asyncio.run(_seed())
         install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
@@ -319,7 +341,7 @@ def test_clips_list_empty_batch_param_is_not_422(monkeypatch, tmp_path):
 
 def test_clips_list_batch_view_shows_per_clip_cost(monkeypatch, tmp_path):
     """When the list is filtered to a batch, each clip's actual billable
-    cost is rendered in the batch cell."""
+    cost appears in its own Cost column <td> and the Cost <th> is present."""
     import asyncio
 
     from backend.app.models.telemetry import RunTelemetryRecord
@@ -333,8 +355,13 @@ def test_clips_list_batch_view_shows_per_clip_cost(monkeypatch, tmp_path):
         async def _seed() -> int:
             prompts = PromptsRepo()
             _, vid = await prompts.create_with_initial_version(
-                ctx.db, name="p", description=None, body="b",
-                target_map={}, output_schema={}, model="m",
+                ctx.db,
+                name="p",
+                description=None,
+                body="b",
+                target_map={},
+                output_schema={},
+                model="m",
             )
             jobs = JobsRepo()
             jid = await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[12041])
@@ -343,8 +370,13 @@ def test_clips_list_batch_view_shows_per_clip_cost(monkeypatch, tmp_path):
                 ctx.db,
                 RunTelemetryRecord(
                     occurred_at=datetime.now(UTC).isoformat(),
-                    install_id="i", kind="annotation", model="m", status="ok",
-                    job_id=jid, clip_id=12041, cost_usd=0.034,
+                    install_id="i",
+                    kind="annotation",
+                    model="m",
+                    status="ok",
+                    job_id=jid,
+                    clip_id=12041,
+                    cost_usd=0.034,
                 ),
             )
             return jid
@@ -353,6 +385,57 @@ def test_clips_list_batch_view_shows_per_clip_cost(monkeypatch, tmp_path):
         install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
         r = client.get(f"/?batch={jid}")
         assert r.status_code == 200
-        # $0.034 (<$0.10 → 3 decimals) in the batch cost sub-line.
+        # Cost column header must be present in the batch-filtered view.
+        assert "<th" in r.text and "Cost" in r.text
+        # $0.034 (<$0.10 → 3 decimals) in the Cost <td> (class batch-cost).
         assert "$0.034" in r.text
         assert "batch-cost" in r.text
+        # The old sub-line pattern (<div class="batch-cost muted">) is gone.
+        assert '<div class="batch-cost muted">' not in r.text
+
+
+def test_clips_list_normal_view_has_no_cost_column(monkeypatch, tmp_path):
+    """The unfiltered clips list must NOT include the Cost column."""
+    with _make_client(monkeypatch, tmp_path) as client:
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
+        r = client.get("/")
+        assert r.status_code == 200
+        # No Cost <th> in the normal view.
+        assert ">Cost<" not in r.text
+        # No batch-cost cell either.
+        assert "batch-cost" not in r.text
+
+
+def test_clips_list_batch_view_no_telemetry_shows_dash(monkeypatch, tmp_path):
+    """A clip in a batch view with no telemetry row shows '—' in the Cost column."""
+    import asyncio
+
+    from backend.app.repositories.jobs import JobsRepo
+    from backend.app.repositories.prompts import PromptsRepo
+
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.core_ctx
+
+        async def _seed() -> int:
+            prompts = PromptsRepo()
+            _, vid = await prompts.create_with_initial_version(
+                ctx.db,
+                name="p",
+                description=None,
+                body="b",
+                target_map={},
+                output_schema={},
+                model="m",
+            )
+            jobs = JobsRepo()
+            return await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[12041])
+
+        jid = asyncio.run(_seed())
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
+        r = client.get(f"/?batch={jid}")
+        assert r.status_code == 200
+        # Cost column present.
+        assert ">Cost<" in r.text
+        # The em-dash rendered by the usd filter for None.
+        assert "batch-cost" in r.text
+        assert "—" in r.text

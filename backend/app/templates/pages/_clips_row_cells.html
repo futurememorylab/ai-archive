@@ -8,6 +8,6 @@
   {%- if row.batch_status -%}{{ ui.status_pill(row.batch_status.label, row.batch_status.state) }}
   {%- elif row.batch is not none -%}#{{ row.batch }}
   {%- else -%}—{%- endif -%}
-  {% if row.batch_cost_usd is not none %}<div class="batch-cost muted">{{ row.batch_cost_usd|usd }}</div>{% endif %}
 </td>
+{% if batch_query %}<td class="batch-cost num mono">{{ row.batch_cost_usd|usd }}</td>{% endif %}
 <td class="col-drafts mono">{{ row.draft_label or "—" }}</td>
