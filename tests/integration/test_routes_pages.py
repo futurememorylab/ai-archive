@@ -136,6 +136,49 @@ def test_clip_detail_renders(monkeypatch, tmp_path):
         assert "/api/media/12041" in r.text
 
 
+def test_clip_detail_shows_annotation_cost(monkeypatch, tmp_path):
+    """The published-annotation panel shows the originating run's actual cost."""
+    import asyncio
+
+    from backend.app.models.annotation import Annotation
+    from backend.app.models.telemetry import RunTelemetryRecord
+    from backend.app.repositories.annotations import AnnotationsRepo
+    from backend.app.repositories.jobs import JobsRepo
+    from backend.app.repositories.prompts import PromptsRepo
+    from backend.app.repositories.run_telemetry import RunTelemetryRepo
+
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.core_ctx
+
+        async def _seed() -> None:
+            prompts = PromptsRepo()
+            _, vid = await prompts.create_with_initial_version(
+                ctx.db, name="p", description=None, body="b",
+                target_map={}, output_schema={}, model="m",
+            )
+            jobs = JobsRepo()
+            jid = await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[12041])
+            anns = AnnotationsRepo()
+            await anns.insert(ctx.db, Annotation(
+                catdv_clip_id=12041, catdv_clip_name="Abramcukova_Anna_09",
+                prompt_version_id=vid, job_id=jid, model="m", prompt_used="b",
+                raw_response={}, structured_output=None, clip_snapshot={},
+            ))
+            tele = RunTelemetryRepo()
+            await tele.insert(ctx.db, RunTelemetryRecord(
+                occurred_at=datetime.now(UTC).isoformat(),
+                install_id="i", kind="annotation", model="m", status="ok",
+                job_id=jid, clip_id=12041, cost_usd=0.21,
+            ))
+
+        asyncio.run(_seed())
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
+        r = client.get("/clips/12041")
+        assert r.status_code == 200
+        # $0.21 (≥$0.10 → 2 decimals); the panel labels it "Run cost".
+        assert "Run cost: $0.21" in r.text
+
+
 def test_clip_detail_404_when_missing(monkeypatch, tmp_path):
     with _make_client(monkeypatch, tmp_path) as client:
         install_live_ctx(client.app, archive=FakeArchive(()))
@@ -272,3 +315,44 @@ def test_clips_list_empty_batch_param_is_not_422(monkeypatch, tmp_path):
         # A real job id still works.
         r2 = client.get("/?cache=any&anno=for_review&batch=7")
         assert r2.status_code == 200
+
+
+def test_clips_list_batch_view_shows_per_clip_cost(monkeypatch, tmp_path):
+    """When the list is filtered to a batch, each clip's actual billable
+    cost is rendered in the batch cell."""
+    import asyncio
+
+    from backend.app.models.telemetry import RunTelemetryRecord
+    from backend.app.repositories.jobs import JobsRepo
+    from backend.app.repositories.prompts import PromptsRepo
+    from backend.app.repositories.run_telemetry import RunTelemetryRepo
+
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.core_ctx
+
+        async def _seed() -> int:
+            prompts = PromptsRepo()
+            _, vid = await prompts.create_with_initial_version(
+                ctx.db, name="p", description=None, body="b",
+                target_map={}, output_schema={}, model="m",
+            )
+            jobs = JobsRepo()
+            jid = await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[12041])
+            tele = RunTelemetryRepo()
+            await tele.insert(
+                ctx.db,
+                RunTelemetryRecord(
+                    occurred_at=datetime.now(UTC).isoformat(),
+                    install_id="i", kind="annotation", model="m", status="ok",
+                    job_id=jid, clip_id=12041, cost_usd=0.034,
+                ),
+            )
+            return jid
+
+        jid = asyncio.run(_seed())
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
+        r = client.get(f"/?batch={jid}")
+        assert r.status_code == 200
+        # $0.034 (<$0.10 → 3 decimals) in the batch cost sub-line.
+        assert "$0.034" in r.text
+        assert "batch-cost" in r.text

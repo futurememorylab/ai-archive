@@ -154,6 +154,9 @@
     {% endif %}
 
     <div class="anno-scoped" x-show="scope === 'published'" x-cloak>
+      {% if annotation_cost_usd is not none %}
+      <div class="anno-cost muted mono">Run cost: {{ annotation_cost_usd|usd }}</div>
+      {% endif %}
       {% with panels = {
           "markers": clip.markers,
           "fields":  clip.fields,

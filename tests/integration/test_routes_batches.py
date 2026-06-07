@@ -12,8 +12,10 @@ from backend.app.archive.model import (
     ClipQuery,
     MediaRef,
 )
+from backend.app.models.telemetry import RunTelemetryRecord
 from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.prompts import PromptsRepo
+from backend.app.repositories.run_telemetry import RunTelemetryRepo
 from tests._helpers.live_ctx import install_live_ctx
 
 
@@ -46,6 +48,20 @@ async def _seed_batch(ctx):
     its = await jobs.list_items(ctx.db, jid)
     await jobs.update_item_status(ctx.db, its[0].id, "review_ready")
     await jobs.update_item_status(ctx.db, its[1].id, "error", error="ProxyNotFound")
+    tele = RunTelemetryRepo()
+    await tele.insert(
+        ctx.db,
+        RunTelemetryRecord(
+            occurred_at=datetime.now(UTC).isoformat(),
+            install_id="inst-1",
+            kind="annotation",
+            model="gemini-2.5-pro",
+            status="ok",
+            job_id=jid,
+            clip_id=101,
+            cost_usd=0.12,
+        ),
+    )
     return jid
 
 
@@ -62,6 +78,8 @@ def test_batches_page_renders(monkeypatch, tmp_path):
         assert "rail-btn active" in r.text
         # failed count surfaced
         assert "1 failed" in r.text
+        # actual batch cost surfaced ($0.12 → 2 decimals via the usd filter)
+        assert "$0.12" in r.text
 
 
 def test_batches_table_partial(monkeypatch, tmp_path):

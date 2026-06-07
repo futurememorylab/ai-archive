@@ -20,6 +20,21 @@ def test_bytes_human_comma_and_smpte_on_shared_env():
     assert result == "1.5 KB 1,234 00:00:01:00"
 
 
+def test_usd_filter_mirrors_fmtUsd_semantics():
+    """`usd` filter: None → em dash; <$0.10 → 3 decimals; else 2 decimals;
+    always a '$' prefix (mirrors static/format.js fmtUsd for server render)."""
+    from backend.app.routes.pages.templates import templates
+
+    render = lambda v: templates.env.from_string("{{ v|usd }}").render(v=v)  # noqa: E731
+    assert render(None) == "—"
+    assert render(0) == "$0.000"
+    assert render(0.05) == "$0.050"
+    assert render(0.099) == "$0.099"
+    assert render(0.1) == "$0.10"
+    assert render(0.125) == "$0.12"
+    assert render(12.5) == "$12.50"
+
+
 def test_exactly_one_jinja2templates_construction():
     """Guardrail: only one Jinja2Templates(...) instantiation under backend/app/."""
     root = Path(__file__).resolve().parents[2] / "backend" / "app"

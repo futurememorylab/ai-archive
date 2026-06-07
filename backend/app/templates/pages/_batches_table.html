@@ -54,6 +54,7 @@
           {% if b.running %}<span class="ca-spinner" aria-hidden="true"></span>{% endif %}
           <span class="led"></span>{{ b.status_label }}
         </span>
+        {% if b.cost_usd is not none %}<div class="bt-cost muted mono">{{ b.cost_usd|usd }}</div>{% endif %}
       </td>
       <td class="bt-actions" onclick="event.stopPropagation()">
         {% if not b.running and b.failed %}

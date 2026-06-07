@@ -73,8 +73,7 @@
       </div>
       <div class="modal-actions">
         <button type="button" class="btn ghost" @click="newOpen = false">Cancel</button>
-        <span class="grow"></span>
-        <div class="muted" style="text-align:right;"
+        <div class="nb-estimate muted mono"
              x-effect="refreshEstimate()"
              x-text="estimateLabel()"></div>
         <button type="button" class="btn primary" :disabled="!canStart()" @click="startBatch()"
