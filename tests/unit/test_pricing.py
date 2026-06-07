@@ -50,3 +50,22 @@ def test_unknown_model_returns_none():
     cost, version = compute_cost(usage, "model-that-does-not-exist")
     assert cost is None
     assert version == PRICING_VERSION
+
+
+def test_all_zero_usage_costs_zero():
+    cost, _ = compute_cost(TokenUsage(), "any-model", card=CARD)
+    assert cost == 0.0
+
+
+def test_default_model_has_real_rate_card():
+    # The app's default annotate model must always be priceable.
+    cost, _ = compute_cost(TokenUsage(tokens_in=1_000_000), "gemini-2.5-flash-lite")
+    assert cost is not None and cost > 0
+
+
+def test_partial_modality_detail_never_drops_tokens():
+    # Detail covers only 400k of a 1M total — the remaining 600k must
+    # still be billed (at the text rate), not silently dropped.
+    usage = TokenUsage(tokens_in=1_000_000, tokens_in_video=400_000)
+    cost, _ = compute_cost(usage, "any-model", card=CARD)
+    assert cost == pytest.approx(1_000_000 * 0.10 / 1_000_000)

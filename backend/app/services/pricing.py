@@ -35,7 +35,7 @@ class RateCard:
     input_audio_per_1m: float
     input_cached_per_1m: float
     output_per_1m: float
-    source_url: str
+    source_url: str  # provenance: where this rate was read (spec §5 audit trail)
 
 
 # Rates verified 2026-06-07 from:
@@ -82,9 +82,13 @@ def compute_cost(
         usage.tokens_in_text + usage.tokens_in_video
         + usage.tokens_in_image + audio
     )
-    # Modality detail can be absent (older responses) — fall back to the
-    # total at the text/video rate.
-    non_audio = (detailed - audio) if detailed else usage.tokens_in
+    # Modality detail can be absent or partial (older responses, future
+    # modalities). Bill against whichever is larger: the detailed sum or
+    # the authoritative total — never drop tokens.
+    non_audio = max(detailed, usage.tokens_in) - audio
+    # Known limitation: usageMetadata doesn't break cached tokens down by
+    # modality, so cached audio is conservatively billed at the full audio
+    # rate (slight overestimate — the safe direction for cost quotes).
     cached = min(usage.tokens_cached, non_audio)
     fresh_non_audio = non_audio - cached
 
