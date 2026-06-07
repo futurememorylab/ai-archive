@@ -120,7 +120,8 @@ def analyze(files: list[Path]) -> tuple[float, int, list[CallableInfo]]:
     for f in files:
         try:
             callables.extend(callables_in_source(f.read_text(encoding="utf-8"), str(f)))
-        except (OSError, UnicodeDecodeError, SyntaxError):
+        except (OSError, UnicodeDecodeError, SyntaxError) as exc:
+            print(f"WARN: skipped {f}: {exc}", file=sys.stderr)
             continue
     erosion, max_cc = erosion_stats(callables)
     offenders = sorted(
@@ -184,7 +185,11 @@ def main(argv: list[str] | None = None) -> int:
 
     baseline_val: float | None = None
     if args.baseline and Path(args.baseline).exists():
-        baseline_val = json.loads(Path(args.baseline).read_text())["erosion"]
+        try:
+            baseline_val = json.loads(Path(args.baseline).read_text())["erosion"]
+        except (json.JSONDecodeError, KeyError, OSError) as exc:
+            print(f"ERROR: bad baseline file {args.baseline}: {exc}", file=sys.stderr)
+            return 2
 
     failures = evaluate(
         erosion,

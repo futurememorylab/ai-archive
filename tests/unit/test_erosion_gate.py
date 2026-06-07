@@ -18,6 +18,9 @@ from tools.erosion_gate import (
     mass,
 )
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = REPO_ROOT / "tools" / "erosion_gate.py"
+
 
 def _ci(complexity: int, sloc: int, name: str = "f") -> CallableInfo:
     return CallableInfo(
@@ -88,7 +91,7 @@ def test_write_baseline_roundtrip(tmp_path: Path):
     proc = subprocess.run(
         [
             sys.executable,
-            "tools/erosion_gate.py",
+            str(SCRIPT),
             "--path",
             str(pkg),
             "--baseline",
@@ -97,7 +100,37 @@ def test_write_baseline_roundtrip(tmp_path: Path):
         ],
         capture_output=True,
         text=True,
+        cwd=str(REPO_ROOT),
     )
     assert proc.returncode == 0, proc.stderr
     data = json.loads(out.read_text())
     assert set(data) == {"erosion", "max_cc"}
+
+
+def test_exit_1_when_max_cc_exceeded(tmp_path: Path):
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    body = (
+        "def f(x):\n"
+        + "".join(f"    if x == {i}:\n        return {i}\n" for i in range(12))
+        + "    return 0\n"
+    )
+    (pkg / "m.py").write_text(body)
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "--path", str(pkg), "--max-cc", "5"],
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_ROOT),
+    )
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "cap 5" in proc.stderr
+
+
+def test_exit_2_on_missing_path(tmp_path: Path):
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "--path", str(tmp_path / "nope")],
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_ROOT),
+    )
+    assert proc.returncode == 2
