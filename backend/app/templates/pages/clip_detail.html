@@ -13,6 +13,7 @@
        reviewMixin({{ clip.id }}),
        { scope: "{{ 'draft' if review_mode else 'published' }}", tab: "{{ 'fields' if clip.kind == 'image' else 'markers' }}",
          draftFields: {{ draft_arrays.fields|tojson }}, draftNotes: {{ draft_arrays.notes|tojson }},
+         draftDeleted: {{ draft_arrays.deleted|tojson }}, appliedCount: {{ draft_arrays.applied_count }},
          liveSession: liveSession({{ clip.id }}, { inactivityS: {{ gemini_live_inactivity_s|default(60) }} })
        }
      )'

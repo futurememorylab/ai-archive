@@ -21,9 +21,16 @@ document.addEventListener('alpine:init', () => {
       const level = opts.level || 'info';  // 'info' | 'success' | 'error'
       const ttlMs = opts.ttlMs ?? (level === 'error' ? 8000 : 4000);
       const id = this._nextId++;
-      this.items.push({ id, message, level });
+      // action: { label, fn } — rendered as a button; fn runs once, then dismiss.
+      this.items.push({ id, message, level, action: opts.action || null });
       this._render();
       setTimeout(() => this.dismiss(id), ttlMs);
+    },
+
+    runAction(id) {
+      const t = this.items.find(t => t.id === id);
+      if (t && t.action && typeof t.action.fn === 'function') t.action.fn();
+      this.dismiss(id);
     },
 
     dismiss(id) {
@@ -37,6 +44,8 @@ document.addEventListener('alpine:init', () => {
       root.innerHTML = this.items.map(t => `
         <div class="toast toast-${t.level}" data-toast-id="${t.id}">
           <span class="toast-msg">${escapeHtml(t.message)}</span>
+          ${t.action ? `<button class="toast-action"
+                  onclick="Alpine.store('toast').runAction(${t.id})">${escapeHtml(t.action.label)}</button>` : ''}
           <button class="toast-close" aria-label="Dismiss"
                   onclick="Alpine.store('toast').dismiss(${t.id})">×</button>
         </div>

@@ -1,4 +1,4 @@
-# 0057. Run telemetry — local-first with deferred cloud pipeline
+# 0058. Run telemetry — local-first with deferred cloud pipeline
 
 **Date:** 2026-06-07
 **Status:** Accepted

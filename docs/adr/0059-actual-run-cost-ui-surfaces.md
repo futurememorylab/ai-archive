@@ -1,11 +1,11 @@
-# 0058. Actual run cost on the UI — "total spend" semantics + a shared `usd` filter
+# 0059. Actual run cost on the UI — "total spend" semantics + a shared `usd` filter
 
 **Date:** 2026-06-07
 **Status:** Accepted
 
 ## Context
 
-ADR 0057 landed per-run cost capture: every Gemini call writes a
+ADR 0058 landed per-run cost capture: every Gemini call writes a
 `run_telemetry` row with `cost_usd` (+ `job_id`, `clip_id`, `kind`,
 `status`), and `studio_run.cost_usd` now holds the real billable cost.
 The pre-run *estimate* already renders. This task surfaces the *actuals*
