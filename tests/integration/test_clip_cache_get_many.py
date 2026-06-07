@@ -7,10 +7,7 @@ import pytest
 
 from backend.app.archive.model import (
     CanonicalClip,
-    FieldValue,
-    Marker,
     MediaRef,
-    Timecode,
 )
 from backend.app.repositories.clip_cache import ClipCacheRepo
 from tests._helpers.query_count import assert_query_count
@@ -45,6 +42,7 @@ async def test_get_many_returns_rows(db):
     rows = await repo.get_many_by_ids(db, "catdv", [1, 3, 999])
     assert set(rows) == {1, 3}
     assert rows[1]["duration_secs"] == 12.5
+    assert rows[1]["canonical_json"]["media"]["mime_type"] == "video/quicktime"
 
 
 @pytest.mark.asyncio
@@ -62,3 +60,23 @@ async def test_get_many_constant_query_count(db):
 async def test_get_many_empty_list(db):
     rows = await ClipCacheRepo().get_many_by_ids(db, "catdv", [])
     assert rows == {}
+
+
+@pytest.mark.asyncio
+async def test_get_many_multi_chunk(db, monkeypatch):
+    """29 keys with chunk_size=10 → 3 chunks → 3 queries, results merged."""
+    import functools
+
+    from backend.app.repositories import _batch, clip_cache as clip_cache_mod
+
+    repo = ClipCacheRepo()
+    for cid in range(1, 30):
+        await _seed(db, repo, cid)
+    monkeypatch.setattr(
+        clip_cache_mod,
+        "chunked_in_clause",
+        functools.partial(_batch.chunked_in_clause, chunk_size=10),
+    )
+    async with assert_query_count(db, 3):
+        rows = await repo.get_many_by_ids(db, "catdv", list(range(1, 30)))
+    assert set(rows) == set(range(1, 30))
