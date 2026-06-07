@@ -32,6 +32,8 @@ dev = [
   "pre-commit>=3.7",
   "import-linter>=2.0",
   "interrogate>=1.7",
+  "radon>=6.0",
+  "pylint>=3.0",
 ]
 
 [tool.setuptools.packages.find]
