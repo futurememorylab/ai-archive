@@ -130,9 +130,11 @@ async def test_studio_path_billable_tokens_and_cost(db, tmp_path):
 async def test_failed_run_records_error_row(db, tmp_path):
     job_id, f = await _setup(db, tmp_path, kind=None)
     await run_job(job_id=job_id, **_run_kwargs(db, {101: f}, FakeGemini(fail=True)))
-    cur = await db.execute("SELECT status, error_class, model FROM run_telemetry")
+    cur = await db.execute(
+        "SELECT status, error_class, model, cost_usd FROM run_telemetry"
+    )
     row = await cur.fetchone()
-    assert row == ("error", "RuntimeError", "gemini-2.5-flash-lite")
+    assert row == ("error", "RuntimeError", "gemini-2.5-flash-lite", None)
 
 
 @pytest.mark.asyncio
@@ -146,3 +148,23 @@ async def test_telemetry_insert_failure_does_not_fail_run(db, tmp_path, monkeypa
     await run_job(job_id=job_id, **_run_kwargs(db, {101: f}, FakeGemini()))
     items = await JobsRepo().list_items(db, job_id)
     assert items[0].status == "review_ready"      # run still succeeded
+
+
+class FakeGeminiNonJson:
+    def annotate(self, *, file_ref, prompt, schema, model):
+        return {
+            "text": "definitely not json",
+            "raw": {"usageMetadata": USAGE, "candidates": [{"finishReason": "STOP"}]},
+        }
+
+
+@pytest.mark.asyncio
+async def test_studio_non_json_records_error_telemetry(db, tmp_path):
+    job_id, f = await _setup(db, tmp_path, kind="studio")
+    await run_job(job_id=job_id, **_run_kwargs(db, {101: f}, FakeGeminiNonJson()))
+    cur = await db.execute(
+        "SELECT kind, status, error_class, cost_usd, tokens_in FROM run_telemetry"
+    )
+    rows = await cur.fetchall()
+    assert len(rows) == 1                      # exactly one row — no double-record
+    assert rows[0] == ("studio", "error", "NonJsonOutput", None, 3000)
