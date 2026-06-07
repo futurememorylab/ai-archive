@@ -10,6 +10,7 @@ from sse_starlette.sse import EventSourceResponse
 from backend.app.deps import get_core_ctx
 from backend.app.routes.events import _event_generator
 from backend.app.services.annotator import JOBS_TOPIC, run_job
+from backend.app.services.run_estimator import estimate_for_clip_ids
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -112,6 +113,31 @@ async def jobs_events(request: Request):
             yield {"data": frame.removeprefix("data: ").rstrip("\n")}
 
     return EventSourceResponse(stream())
+
+
+class EstimateRequest(BaseModel):
+    prompt_version_id: int
+    clip_ids: list[int]
+
+
+@router.post("/estimate")
+async def estimate_job(request: Request, body: EstimateRequest):
+    """Pre-run cost estimate. CoreCtx only — fully offline-capable.
+    Advisory: failures here must never block launching a run (the UI
+    treats errors as 'no estimate shown')."""
+    ctx = get_core_ctx(request)
+    try:
+        return await estimate_for_clip_ids(
+            ctx.db,
+            clip_cache_repo=ctx.clip_cache_repo,
+            run_telemetry_repo=ctx.run_telemetry_repo,
+            prompts_repo=ctx.prompts_repo,
+            provider_id=ctx.settings.archive_provider,
+            clip_ids=body.clip_ids,
+            prompt_version_id=body.prompt_version_id,
+        )
+    except LookupError:
+        raise HTTPException(404, "prompt version not found") from None
 
 
 @router.get("/{job_id}")

@@ -13,6 +13,7 @@ clip (ADR 0046).
 
 from dataclasses import dataclass
 
+from backend.app.media_kind import classify_media_kind
 from backend.app.services.pricing import RATE_CARDS, compute_cost
 from backend.app.services.telemetry_capture import (
     TokenUsage,
@@ -188,3 +189,55 @@ async def estimate_clips(
         n_samples=n_samples,
         n_clips=len(clips),
     )
+
+
+_UNKNOWN_CLIP_DURATION_SECS = 60.0  # conservative default for uncached clips
+
+
+async def estimate_for_clip_ids(
+    conn,
+    *,
+    clip_cache_repo,
+    run_telemetry_repo,
+    prompts_repo,
+    provider_id: str,
+    clip_ids: list[int],
+    prompt_version_id: int,
+) -> dict:
+    """DB-first estimate for the UI: durations/kinds from clip_cache
+    (offline-safe), history from run_telemetry. Uncached clips get a
+    conservative default duration rather than failing the whole estimate."""
+    version = await prompts_repo.get_version(conn, prompt_version_id)
+    cached = await clip_cache_repo.get_many_by_ids(conn, provider_id, clip_ids)
+    clips: list[ClipEstimateInput] = []
+    for cid in clip_ids:
+        row = cached.get(cid)
+        if row is None:
+            clips.append(ClipEstimateInput(
+                clip_id=cid, media_kind="video+audio",
+                duration_secs=_UNKNOWN_CLIP_DURATION_SECS,
+            ))
+            continue
+        cj = row["canonical_json"] or {}
+        media = cj.get("media") or {}
+        path = media.get("cached_path") or media.get("upstream_handle") or cj.get("name")
+        clips.append(ClipEstimateInput(
+            clip_id=cid,
+            media_kind=classify_media_kind(str(path) if path else None),
+            duration_secs=row["duration_secs"],
+        ))
+    est = await estimate_clips(
+        conn, run_telemetry_repo, clips,
+        prompt_body=version.body, schema=version.output_schema,
+        model=version.model,
+    )
+    return {
+        "tokens_in": est.tokens_in,
+        "tokens_out_p50": est.tokens_out_p50,
+        "tokens_out_p90": est.tokens_out_p90,
+        "cost_usd_p50": est.cost_usd_p50,
+        "cost_usd_p90": est.cost_usd_p90,
+        "confidence": est.confidence,
+        "n_samples": est.n_samples,
+        "n_clips": est.n_clips,
+    }
