@@ -31,6 +31,6 @@
   {% endwith %}
   <script type="application/json" data-run-json>{{ run.output_json|tojson }}</script>
   <div class="run-stats mono-cell muted">
-    {{ "%.1f"|format(run.duration_s or 0) }}s · {{ run.tokens_out or 0 }} tok · ${{ "%.4f"|format(run.cost_usd or 0) }} · {{ run.model }}
+    {{ "%.1f"|format(run.duration_s or 0) }}s · {{ run.tokens_out or 0 }} tok · {{ run.cost_usd|usd }} · {{ run.model }}
   </div>
 {% endif %}

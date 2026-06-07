@@ -103,9 +103,7 @@ async def add_folder_clips(
     hx_request: str | None = Header(None, alias="HX-Request"),
 ):
     ctx = get_core_ctx(request)
-    added = await ctx.studio_folders_repo.add_clips(
-        ctx.db, folder_id, clip_ids=body.clip_ids
-    )
+    added = await ctx.studio_folders_repo.add_clips(ctx.db, folder_id, clip_ids=body.clip_ids)
     if hx_request == "true":
         clips = await ctx.studio_folders_repo.list_clips(ctx.db, folder_id)
         return templates.TemplateResponse(
@@ -116,9 +114,7 @@ async def add_folder_clips(
     return {"added": added}
 
 
-@router.delete(
-    "/folders/{folder_id}/clips/{clip_id}", status_code=status.HTTP_204_NO_CONTENT
-)
+@router.delete("/folders/{folder_id}/clips/{clip_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_folder_clip(request: Request, folder_id: int, clip_id: int):
     ctx = get_core_ctx(request)
     await ctx.studio_folders_repo.remove_clip(ctx.db, folder_id, clip_id=clip_id)
@@ -176,6 +172,8 @@ async def _run_in_bg(ctx, job_id: int) -> None:
             jobs_repo=ctx.jobs_repo,
             prompts_repo=ctx.prompts_repo,
             studio_runs_repo=ctx.studio_runs_repo,
+            run_telemetry_repo=ctx.run_telemetry_repo,
+            telemetry_ctx=ctx.telemetry_ctx,
         )
     finally:
         ctx._running_jobs.pop(job_id, None)

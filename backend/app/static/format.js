@@ -17,6 +17,11 @@
     while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
     return (i === 0 ? n.toFixed(0) : n.toFixed(1)) + " " + u[i];
   }
+  function fmtUsd(x) {
+    if (x === null || x === undefined || isNaN(Number(x))) return "—";
+    const n = Number(x);
+    return "$" + (n < 0.1 ? n.toFixed(3) : n.toFixed(2));
+  }
   function autosize(el) {
     if (!el) return;
     el.style.height = "auto";
@@ -24,6 +29,7 @@
   }
   window.fmtTimecode = fmtTimecode;
   window.fmtBytes = fmtBytes;
+  window.fmtUsd = fmtUsd;
   window.autosize = autosize;
   // Autosize .txt-area to content, unless it opts out with .no-autosize
   // (fields that are sized to the viewport instead, so they don't grow the page).

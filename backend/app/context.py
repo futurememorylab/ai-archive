@@ -42,8 +42,10 @@ from backend.app.archive.provider import ArchiveProvider
 from backend.app.archive.registry import build_archive_provider
 from backend.app.db import open_db
 from backend.app.migrations_runner import apply_migrations
+from backend.app.models.telemetry import TelemetryCtx
 from backend.app.repositories.ai_store_files import AIStoreFilesRepo
 from backend.app.repositories.annotations import AnnotationsRepo
+from backend.app.repositories.app_meta import get_or_create_install_id
 from backend.app.repositories.cache_actions_log import CacheActionsLogRepo
 from backend.app.repositories.clip_cache import ClipCacheRepo
 from backend.app.repositories.clip_list_cache import ClipListCacheRepo
@@ -54,6 +56,7 @@ from backend.app.repositories.prefetch_queue import PrefetchQueueRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.proxy_cache import ProxyCacheRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
+from backend.app.repositories.run_telemetry import RunTelemetryRepo
 from backend.app.repositories.studio_folders import StudioFoldersRepo
 from backend.app.repositories.studio_runs import StudioRunsRepo
 from backend.app.repositories.workspaces import WorkspacesRepo
@@ -97,6 +100,8 @@ class CoreCtx:
     prefetch_queue_repo: PrefetchQueueRepo = field(default_factory=PrefetchQueueRepo)
     studio_folders_repo: StudioFoldersRepo = field(default_factory=StudioFoldersRepo)
     studio_runs_repo: StudioRunsRepo = field(default_factory=StudioRunsRepo)
+    run_telemetry_repo: RunTelemetryRepo = field(default_factory=RunTelemetryRepo)
+    telemetry_ctx: TelemetryCtx = field(init=False)
     event_bus: EventBus = field(default_factory=EventBus)
 
     _running_jobs: dict[int, object] = field(default_factory=dict)
@@ -136,6 +141,24 @@ class CoreCtx:
         ctx.write_queue = WriteQueue(
             pending_ops_repo=ctx.pending_ops_repo,
             review_items_repo=ctx.review_items_repo,
+        )
+
+        import os
+        from urllib.parse import urlparse
+
+        install_id = await get_or_create_install_id(conn)
+        host = urlparse(settings.catdv_base_url).netloc or None
+        archive_id = (
+            f"{settings.archive_provider}:{host}"
+            if settings.archive_provider == "catdv" and host
+            else settings.archive_provider
+        )
+        ctx.telemetry_ctx = TelemetryCtx(
+            install_id=install_id,
+            app_version=os.environ.get("APP_VERSION"),
+            archive_id=archive_id,
+            vertex_project=settings.gcp_project_id,
+            vertex_location=settings.gcp_location,
         )
         return ctx
 
@@ -275,6 +298,14 @@ class LiveCtx:
     @property
     def studio_runs_repo(self) -> StudioRunsRepo:
         return self.core.studio_runs_repo
+
+    @property
+    def run_telemetry_repo(self) -> RunTelemetryRepo:
+        return self.core.run_telemetry_repo
+
+    @property
+    def telemetry_ctx(self) -> TelemetryCtx:
+        return self.core.telemetry_ctx
 
     @property
     def event_bus(self) -> EventBus:

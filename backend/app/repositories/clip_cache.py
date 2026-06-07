@@ -18,6 +18,7 @@ from backend.app.archive.model import (
     MediaRef,
     Timecode,
 )
+from backend.app.repositories._batch import chunked_in_clause
 
 
 def _now_iso() -> str:
@@ -269,6 +270,28 @@ class ClipCacheRepo:
             if blob:
                 items.append(_clip_from_json(blob))
         return tuple(items), total
+
+    async def get_many_by_ids(
+        self, conn: aiosqlite.Connection, provider_id: str, clip_ids: list[int]
+    ) -> dict[int, dict]:
+        """Batched: {clip_id: {'duration_secs': float, 'canonical_json': dict}}
+        for the ids present in cache. Missing ids are simply absent."""
+        out: dict[int, dict] = {}
+        if not clip_ids:
+            return out
+        keys = [(provider_id, str(c)) for c in clip_ids]
+        for fragment, params in chunked_in_clause(keys):
+            cur = await conn.execute(
+                "SELECT provider_clip_id, duration_secs, canonical_json "
+                f"FROM clip_cache WHERE (provider_id, provider_clip_id) IN ({fragment})",
+                tuple(params),
+            )
+            for pid, dur, cj in await cur.fetchall():
+                out[int(pid)] = {
+                    "duration_secs": dur,
+                    "canonical_json": json.loads(cj) if cj else {},
+                }
+        return out
 
     async def delete_by_key(
         self,

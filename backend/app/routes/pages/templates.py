@@ -36,5 +36,19 @@ def _comma(n: int | None) -> str:
     return f"{int(n):,}"
 
 
+def _usd(x: float | None) -> str:
+    """Server-side mirror of static/format.js `fmtUsd`: None → em dash;
+    under $0.10 → 3 decimals (small per-clip costs need the precision);
+    otherwise 2 decimals; always a '$' prefix."""
+    if x is None:
+        return "—"
+    try:
+        n = float(x)
+    except (TypeError, ValueError):
+        return "—"
+    return f"${n:.3f}" if n < 0.1 else f"${n:.2f}"
+
+
 templates.env.filters["bytes_human"] = _bytes_human
 templates.env.filters["comma"] = _comma
+templates.env.filters["usd"] = _usd
