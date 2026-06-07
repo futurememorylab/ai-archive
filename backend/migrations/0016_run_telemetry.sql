@@ -75,6 +75,6 @@ CREATE TABLE run_telemetry (
 );
 
 CREATE INDEX idx_run_telemetry_estimator
-  ON run_telemetry (prompt_hash, model, media_kind, status);
+  ON run_telemetry (model, media_kind, status, prompt_hash);
 CREATE INDEX idx_run_telemetry_unsent
   ON run_telemetry (sent_at) WHERE sent_at IS NULL;
