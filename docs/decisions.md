@@ -64,3 +64,4 @@ available number. See any existing ADR for the template.
 | 0054 | 2026-06-02 | [Draft review redesign — Alpine-data-driven cards + batch Review→](./adr/0054-draft-review-redesign.md) |
 | 0055 | 2026-06-02 | [Studio output compare is an aligned scene table + linked timeline](./adr/0055-studio-aligned-scene-compare.md) |
 | 0056 | 2026-06-04 | [Shared clip-picker component (studio archive picker reuses the batch picker)](./adr/0056-shared-clip-picker-component.md) |
+| 0057 | 2026-06-07 | [Run telemetry — local-first with deferred cloud pipeline](./adr/0057-run-telemetry-local-first.md) |
