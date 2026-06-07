@@ -114,5 +114,6 @@ rather than moving the estimate to its own line.
 - The batches N+1 pin moved from 3 to 4 statements
   (`cost_sums_by_job` is the 4th); the clips-list pin is unchanged
   because the per-clip cost query only fires when a batch filter is set.
-- `None` cost renders as nothing on every surface, so batches/clips
-  predating telemetry are not mislabelled `$0.00`.
+- `None` cost renders as nothing on the table/clip surfaces (batches list,
+  batch-filtered clips list), so entries predating telemetry are not
+  mislabelled `$0.00`. The studio run-stats line renders "—" for None costs.

@@ -175,8 +175,8 @@ def test_clip_detail_shows_annotation_cost(monkeypatch, tmp_path):
         install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
         r = client.get("/clips/12041")
         assert r.status_code == 200
-        # $0.21 (≥$0.10 → 2 decimals); the panel labels it "Run cost".
-        assert "Run cost: $0.21" in r.text
+        # $0.21 (≥$0.10 → 2 decimals); the panel labels it "Cost".
+        assert "Cost: $0.21" in r.text
 
 
 def test_clip_detail_404_when_missing(monkeypatch, tmp_path):
