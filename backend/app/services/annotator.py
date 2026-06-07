@@ -12,22 +12,35 @@ import json
 import logging
 import mimetypes
 import time
+import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import aiosqlite
 
 from backend.app.archive.ai_store import AIInputStore
+from backend.app.media_kind import classify_media_kind
 from backend.app.models.annotation import Annotation
+from backend.app.models.telemetry import RunTelemetryRecord, TelemetryCtx
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
+from backend.app.repositories.run_telemetry import RunTelemetryRepo
 from backend.app.repositories.studio_runs import StudioRunsRepo
+from backend.app.services import run_estimator
 from backend.app.services.errors import humanise as _humanise_error
 from backend.app.services.events import EventBus
+from backend.app.services.pricing import compute_cost
 from backend.app.services.proxy_resolver import ProxyNotFound
 from backend.app.services.target_map import expand
+from backend.app.services.telemetry_capture import (
+    extract_finish_reason,
+    extract_usage,
+    prompt_hash,
+    schema_hash,
+)
 
 log = logging.getLogger(__name__)
 
@@ -81,6 +94,84 @@ def _render_prompt(body: str, *, duration_secs: float) -> str:
     return anchor + body
 
 
+async def _record_telemetry(
+    db,
+    repo: RunTelemetryRepo,
+    tctx: TelemetryCtx,
+    *,
+    kind: str,
+    item,
+    version,
+    status: str,
+    result: dict | None = None,
+    error_class: str | None = None,
+    duration_s: float | None = None,
+    media_meta: dict | None = None,
+    est=None,
+    ai_store_kind: str | None = None,
+    review_item_count: int | None = None,
+) -> None:
+    """Write one run_telemetry row. Telemetry/bookkeeping must NEVER fail
+    a run, so every path here is wrapped in try/except + log."""
+    try:
+        raw = (result or {}).get("raw") or {}
+        usage = extract_usage(raw)
+        cost_usd, pricing_version = compute_cost(usage, version.model)
+        if status == "error":
+            cost_usd = None
+        rendered_len = len((result or {}).get("text") or "") if result else None
+        mm = media_meta or {}
+        rec = RunTelemetryRecord(
+            event_id=str(uuid.uuid4()),
+            occurred_at=datetime.now(UTC).isoformat(),
+            install_id=tctx.install_id,
+            app_version=tctx.app_version,
+            kind="studio" if kind == "studio" else "annotation",
+            archive_id=tctx.archive_id,
+            job_id=item.job_id,
+            clip_id=item.catdv_clip_id,
+            clip_name=mm.get("clip_name"),
+            prompt_version_id=version.id,
+            prompt_hash=prompt_hash(version.body),
+            schema_hash=schema_hash(version.output_schema),
+            model=version.model,
+            media_kind=mm.get("media_kind"),
+            media_duration_secs=mm.get("media_duration_secs"),
+            media_fps=mm.get("media_fps"),
+            media_bytes=mm.get("media_bytes"),
+            media_ext=mm.get("media_ext"),
+            vertex_project=tctx.vertex_project,
+            vertex_location=tctx.vertex_location,
+            ai_store_kind=ai_store_kind,
+            status=status,
+            error_class=error_class,
+            finish_reason=extract_finish_reason(raw),
+            attempt_count=1,
+            duration_s=duration_s,
+            tokens_in=usage.tokens_in,
+            tokens_in_text=usage.tokens_in_text,
+            tokens_in_video=usage.tokens_in_video,
+            tokens_in_audio=usage.tokens_in_audio,
+            tokens_in_image=usage.tokens_in_image,
+            tokens_cached=usage.tokens_cached,
+            tokens_out=usage.tokens_out,
+            tokens_thinking=usage.tokens_thinking,
+            cost_usd=cost_usd,
+            pricing_version=pricing_version,
+            est_tokens_in=getattr(est, "tokens_in", None),
+            est_tokens_out_p50=getattr(est, "tokens_out_p50", None),
+            est_tokens_out_p90=getattr(est, "tokens_out_p90", None),
+            est_cost_usd_p50=getattr(est, "cost_usd_p50", None),
+            est_cost_usd_p90=getattr(est, "cost_usd_p90", None),
+            est_confidence=getattr(est, "confidence", None),
+            output_chars=rendered_len,
+            review_item_count=review_item_count,
+        )
+        await repo.insert(db, rec)
+    except Exception:  # noqa: BLE001 — telemetry must never fail the run
+        log.exception("run_telemetry insert failed (run unaffected)")
+
+
 async def run_job(
     *,
     db: aiosqlite.Connection,
@@ -95,6 +186,8 @@ async def run_job(
     jobs_repo: JobsRepo,
     prompts_repo: PromptsRepo,
     studio_runs_repo: StudioRunsRepo,
+    run_telemetry_repo: RunTelemetryRepo,
+    telemetry_ctx: TelemetryCtx,
     only_clip_ids: set[int] | None = None,
 ) -> None:
     """Run a job to completion (or cancellation). Serial per job."""
@@ -134,6 +227,8 @@ async def run_job(
                 review_items_repo=review_items_repo,
                 jobs_repo=jobs_repo,
                 studio_runs_repo=studio_runs_repo,
+                run_telemetry_repo=run_telemetry_repo,
+                telemetry_ctx=telemetry_ctx,
                 event_bus=event_bus,
                 topic=topic,
             )
@@ -148,6 +243,11 @@ async def run_job(
             await jobs_repo.update_item_status(db, item.id, "error", error=msg)
             await event_bus.publish(
                 topic, {"item_id": item.id, "status": "error", "error": msg}
+            )
+            await _record_telemetry(
+                db, run_telemetry_repo, telemetry_ctx,
+                kind=kind, item=item, version=version,
+                status="error", error_class=type(exc).__name__,
             )
             # Studio runs need a terminal status of their own — the frontend
             # polls /api/studio/runs/{id} and waits for status != pending|running.
@@ -180,6 +280,7 @@ async def _process_item(
     archive, proxy_resolver, ai_store, gemini,
     annotations_repo, review_items_repo,
     jobs_repo, studio_runs_repo: StudioRunsRepo,
+    run_telemetry_repo: RunTelemetryRepo, telemetry_ctx: TelemetryCtx,
     event_bus, topic,
 ) -> None:
     clip_key = ("catdv", str(item.catdv_clip_id))
@@ -224,6 +325,36 @@ async def _process_item(
     clip_snapshot: dict[str, Any] = dict(canonical.provider_data)
     duration_secs = float(canonical.duration_secs or 0.0)
 
+    media_path = str(
+        (canonical.media.cached_path or canonical.media.upstream_handle) or ""
+    )
+    media_meta = {
+        "media_kind": classify_media_kind(media_path or None),
+        "media_duration_secs": duration_secs or None,
+        "media_fps": canonical.fps or None,
+        "media_bytes": canonical.media.size_bytes,
+        "media_ext": (Path(media_path).suffix.lower() or None) if media_path else None,
+        "clip_name": canonical.name or None,
+    }
+
+    # Pre-call estimate (spec §6; stamped onto the telemetry row so
+    # est-vs-actual is one query). Blind to the outcome by construction.
+    est: run_estimator.RunEstimate | None = None
+    try:
+        est = await run_estimator.estimate_clips(
+            db, run_telemetry_repo,
+            [run_estimator.ClipEstimateInput(
+                clip_id=item.catdv_clip_id,
+                media_kind=media_meta["media_kind"],
+                duration_secs=duration_secs or None,
+            )],
+            prompt_body=version.body,
+            schema=version.output_schema,
+            model=version.model,
+        )
+    except Exception:  # noqa: BLE001 — estimation must never block a run
+        log.exception("pre-run estimate failed for clip %s", item.catdv_clip_id)
+
     await jobs_repo.update_item_status(db, item.id, "prompting")
     await event_bus.publish(topic, {"item_id": item.id, "status": "prompting"})
     rendered_body = _render_prompt(version.body, duration_secs=duration_secs)
@@ -246,10 +377,13 @@ async def _process_item(
     except json.JSONDecodeError:
         structured = None
 
+    ai_store_kind = getattr(ai_store, "id", None)
     if kind == "studio":
         await _finalize_studio(
             db, item, version, structured, result, elapsed_s, duration_secs,
             studio_runs_repo, review_items_repo, jobs_repo, event_bus, topic,
+            run_telemetry_repo=run_telemetry_repo, telemetry_ctx=telemetry_ctx,
+            media_meta=media_meta, est=est, ai_store_kind=ai_store_kind,
         )
     else:
         await _finalize_annotation(
@@ -257,6 +391,9 @@ async def _process_item(
             clip_snapshot, duration_secs,
             annotations_repo, review_items_repo, jobs_repo,
             event_bus, topic,
+            run_telemetry_repo=run_telemetry_repo, telemetry_ctx=telemetry_ctx,
+            media_meta=media_meta, est=est, ai_store_kind=ai_store_kind,
+            elapsed_s=elapsed_s,
         )
 
 
@@ -264,6 +401,9 @@ async def _finalize_studio(
     db, item, version, structured, result, elapsed_s, duration_secs,
     studio_runs_repo: StudioRunsRepo, review_items_repo, jobs_repo,
     event_bus, topic,
+    *,
+    run_telemetry_repo: RunTelemetryRepo, telemetry_ctx: TelemetryCtx,
+    media_meta: dict, est=None, ai_store_kind: str | None = None,
 ) -> None:
     """Studio path: persist to studio_run + review_items (linked by
     studio_run_id), skip annotations. The studio UI renders from
@@ -278,16 +418,20 @@ async def _finalize_studio(
         )
         return
 
-    usage = (result.get("raw") or {}).get("usageMetadata") or {}
-    tokens_in = int(usage.get("promptTokenCount", 0) or 0)
-    tokens_out = int(usage.get("candidatesTokenCount", 0) or 0)
-    cost_usd = 0.0  # cost calc lives elsewhere; not implemented in v1
+    usage = extract_usage(result.get("raw") or {})
+    cost_usd, _ = compute_cost(usage, version.model)
 
     if structured is None:
         await studio_runs_repo.complete_error(db, run_id, error="model returned non-JSON or empty")
         await jobs_repo.update_item_status(db, item.id, "error", error="non-JSON output")
         await event_bus.publish(
             topic, {"item_id": item.id, "status": "error", "error": "non-JSON output"}
+        )
+        await _record_telemetry(
+            db, run_telemetry_repo, telemetry_ctx, kind="studio",
+            item=item, version=version, status="error",
+            error_class="NonJsonOutput", result=result, duration_s=elapsed_s,
+            media_meta=media_meta, est=est, ai_store_kind=ai_store_kind,
         )
         return
 
@@ -314,14 +458,20 @@ async def _finalize_studio(
         db, run_id,
         output_json=structured,
         duration_s=elapsed_s,
-        tokens_in=tokens_in,
-        tokens_out=tokens_out,
-        cost_usd=cost_usd,
+        tokens_in=usage.tokens_in,
+        tokens_out=usage.billable_out,
+        cost_usd=cost_usd or 0.0,
     )
 
     await jobs_repo.update_item_status(db, item.id, "review_ready")
     await event_bus.publish(
         topic, {"item_id": item.id, "status": "review_ready", "studio_run_id": run_id}
+    )
+    await _record_telemetry(
+        db, run_telemetry_repo, telemetry_ctx, kind="studio",
+        item=item, version=version, status="ok", result=result,
+        duration_s=elapsed_s, media_meta=media_meta, est=est,
+        ai_store_kind=ai_store_kind, review_item_count=len(review),
     )
 
 
@@ -330,6 +480,10 @@ async def _finalize_annotation(
     clip_snapshot, duration_secs,
     annotations_repo, review_items_repo, jobs_repo,
     event_bus, topic,
+    *,
+    run_telemetry_repo: RunTelemetryRepo, telemetry_ctx: TelemetryCtx,
+    media_meta: dict, est=None, ai_store_kind: str | None = None,
+    elapsed_s: float | None = None,
 ) -> None:
     """Original annotation path: write to annotations + review_items."""
     annotation_id = await annotations_repo.insert(
@@ -348,6 +502,7 @@ async def _finalize_annotation(
     )
     await jobs_repo.attach_annotation(db, item.id, annotation_id)
 
+    review_count = 0
     if structured:
         review = expand(
             structured,
@@ -356,10 +511,17 @@ async def _finalize_annotation(
             catdv_clip_id=item.catdv_clip_id,
             clip_duration_secs=duration_secs or None,
         )
+        review_count = len(review)
         if review:
             await review_items_repo.bulk_insert(db, review)
 
     await jobs_repo.update_item_status(db, item.id, "review_ready")
     await event_bus.publish(
         topic, {"item_id": item.id, "status": "review_ready", "annotation_id": annotation_id}
+    )
+    await _record_telemetry(
+        db, run_telemetry_repo, telemetry_ctx, kind="annotation",
+        item=item, version=version, status="ok", result=result,
+        duration_s=elapsed_s, media_meta=media_meta, est=est,
+        ai_store_kind=ai_store_kind, review_item_count=review_count,
     )

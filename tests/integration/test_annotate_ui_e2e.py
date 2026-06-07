@@ -111,6 +111,8 @@ async def _seed_and_run(ctx, archive, proxy_path):
         jobs_repo=ctx.jobs_repo,
         prompts_repo=ctx.prompts_repo,
         studio_runs_repo=ctx.studio_runs_repo,
+        run_telemetry_repo=ctx.run_telemetry_repo,
+        telemetry_ctx=ctx.telemetry_ctx,
     )
 
 
