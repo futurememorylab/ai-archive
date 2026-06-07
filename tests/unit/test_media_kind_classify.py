@@ -20,6 +20,7 @@ from backend.app.media_kind import classify_media_kind, is_image_path
         ("clips/a.mov", None, "video+audio"),   # unknown audio → conservative
         ("clips/a.mp4", True, "video+audio"),
         ("clips/a.mp4", False, "video"),
+        ("clips/a.wav", False, "audio"),        # extension wins over has_audio
         (None, None, "video+audio"),            # nothing known → conservative
         ("noext", None, "video+audio"),
     ],
