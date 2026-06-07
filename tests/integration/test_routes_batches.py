@@ -78,8 +78,9 @@ def test_batches_page_renders(monkeypatch, tmp_path):
         assert "rail-btn active" in r.text
         # failed count surfaced
         assert "1 failed" in r.text
-        # actual batch cost surfaced ($0.12 → 2 decimals via the usd filter)
+        # actual batch cost surfaced in its own <td> ($0.12 → 2 decimals via the usd filter)
         assert "$0.12" in r.text
+        assert 'class="bt-cost mono"' in r.text
 
 
 def test_batches_table_partial(monkeypatch, tmp_path):
@@ -99,6 +100,29 @@ def test_batches_page_empty_state(monkeypatch, tmp_path):
         r = client.get("/batches")
         assert r.status_code == 200
         assert "No batches yet" in r.text
+
+
+def test_batches_cost_column_shows_dash_without_telemetry(monkeypatch, tmp_path):
+    """A batch with no telemetry rows renders '—' in the Cost column."""
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.core_ctx
+
+        async def _seed_no_tele(ctx):
+            prompts = PromptsRepo()
+            _, vid = await prompts.create_with_initial_version(
+                ctx.db, name="No-cost batch", description=None, body="p",
+                target_map={"x": {"kind": "markers"}}, output_schema={}, model="gemini-2.5-pro",
+            )
+            jobs = JobsRepo()
+            await jobs.create_job(
+                ctx.db, prompt_version_id=vid, clip_ids=[200], run_group="rg-notele"
+            )
+
+        asyncio.run(_seed_no_tele(ctx))
+        r = client.get("/batches/table")
+        assert r.status_code == 200
+        # em-dash rendered by the usd filter for None cost_usd
+        assert "—" in r.text
 
 
 def test_retry_failed_503_when_offline(monkeypatch, tmp_path):

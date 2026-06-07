@@ -8,7 +8,7 @@
   <thead>
     <tr>
       <th>Batch</th><th>Started</th><th>Ran</th>
-      <th>Completed</th><th>Reviewed</th><th>Status</th><th></th>
+      <th>Completed</th><th>Reviewed</th><th>Cost</th><th>Status</th><th></th>
     </tr>
   </thead>
   <tbody>
@@ -49,12 +49,12 @@
           </div>
         </div>
       </td>
+      <td class="bt-cost mono">{{ b.cost_usd|usd }}</td>
       <td>
         <span class="pill {{ b.status_state }}">
           {% if b.running %}<span class="ca-spinner" aria-hidden="true"></span>{% endif %}
           <span class="led"></span>{{ b.status_label }}
         </span>
-        {% if b.cost_usd is not none %}<div class="bt-cost muted mono">{{ b.cost_usd|usd }}</div>{% endif %}
       </td>
       <td class="bt-actions" onclick="event.stopPropagation()">
         {% if not b.running and b.failed %}
@@ -73,7 +73,7 @@
     </tr>
     {% if b.fails %}
     <tr class="bt-detail" x-show="expanded['{{ b.batch_key }}']" x-cloak>
-      <td colspan="7">
+      <td colspan="8">
         <div class="bt-fails">
           <div class="bt-fails-h">
             <span>Failed clips ({{ b.fails|length }})</span>
