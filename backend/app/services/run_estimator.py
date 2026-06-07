@@ -206,7 +206,8 @@ async def estimate_for_clip_ids(
 ) -> dict:
     """DB-first estimate for the UI: durations/kinds from clip_cache
     (offline-safe), history from run_telemetry. Uncached clips get a
-    conservative default duration rather than failing the whole estimate."""
+    conservative default duration rather than failing the whole estimate.
+    Returns n_unknown: count of clip_ids not present in the local cache."""
     version = await prompts_repo.get_version(conn, prompt_version_id)
     cached = await clip_cache_repo.get_many_by_ids(conn, provider_id, clip_ids)
     clips: list[ClipEstimateInput] = []
@@ -220,12 +221,16 @@ async def estimate_for_clip_ids(
             continue
         cj = row["canonical_json"] or {}
         media = cj.get("media") or {}
+        # name is last-ditch: clip titles sometimes carry an extension
+        # (fs provider). Misclassification falls through to "video+audio",
+        # the safe default for estimation.
         path = media.get("cached_path") or media.get("upstream_handle") or cj.get("name")
         clips.append(ClipEstimateInput(
             clip_id=cid,
             media_kind=classify_media_kind(str(path) if path else None),
             duration_secs=row["duration_secs"],
         ))
+    n_unknown = sum(1 for cid in clip_ids if cid not in cached)
     est = await estimate_clips(
         conn, run_telemetry_repo, clips,
         prompt_body=version.body, schema=version.output_schema,
@@ -240,4 +245,5 @@ async def estimate_for_clip_ids(
         "confidence": est.confidence,
         "n_samples": est.n_samples,
         "n_clips": est.n_clips,
+        "n_unknown": n_unknown,
     }

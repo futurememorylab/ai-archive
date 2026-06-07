@@ -4,7 +4,7 @@ inspecting annotation jobs. Delegates execution to the annotator service."""
 import asyncio
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from backend.app.deps import get_core_ctx
@@ -117,7 +117,7 @@ async def jobs_events(request: Request):
 
 class EstimateRequest(BaseModel):
     prompt_version_id: int
-    clip_ids: list[int]
+    clip_ids: list[int] = Field(max_length=2000)
 
 
 @router.post("/estimate")
