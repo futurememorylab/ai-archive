@@ -4,13 +4,17 @@ from pathlib import Path
 import pytest
 
 from backend.app.archive.model import CanonicalClip, MediaRef
+from backend.app.models.telemetry import TelemetryCtx
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
+from backend.app.repositories.run_telemetry import RunTelemetryRepo
 from backend.app.repositories.studio_runs import StudioRunsRepo
 from backend.app.services.annotator import run_job
 from backend.app.services.events import EventBus
+
+_TELEMETRY_CTX = TelemetryCtx(install_id="inst-test")
 
 
 class FakeResolver:
@@ -150,6 +154,8 @@ async def test_run_job_processes_two_clips_end_to_end(db, tmp_path):
         jobs_repo=jobs_repo,
         prompts_repo=prompts,
         studio_runs_repo=StudioRunsRepo(),
+        run_telemetry_repo=RunTelemetryRepo(),
+        telemetry_ctx=_TELEMETRY_CTX,
     )
 
     items = await jobs_repo.list_items(db, job_id)
@@ -204,6 +210,8 @@ async def test_run_job_marks_item_error_when_gemini_raises(db, tmp_path):
         jobs_repo=jobs_repo,
         prompts_repo=prompts,
         studio_runs_repo=StudioRunsRepo(),
+        run_telemetry_repo=RunTelemetryRepo(),
+        telemetry_ctx=_TELEMETRY_CTX,
     )
     items = await jobs_repo.list_items(db, job_id)
     assert items[0].status == "error"
@@ -218,6 +226,7 @@ async def test_job_error_message_includes_status_code_for_httpx_failure(tmp_path
     humanise() wrapper the user sees only 'HTTPStatusError' with no
     status code or body — unactionable."""
     import httpx
+
     from backend.app.services import annotator as annotator_mod
 
     request = httpx.Request("POST", "http://example/x")

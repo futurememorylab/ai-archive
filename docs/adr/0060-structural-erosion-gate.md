@@ -1,4 +1,4 @@
-# 0058. Structural erosion pre-commit gate (complexity-concentration ratchet)
+# 0060. Structural erosion pre-commit gate (complexity-concentration ratchet)
 
 **Date:** 2026-06-07
 **Status:** Accepted
@@ -57,3 +57,8 @@ without review.
 - Two new dev dependencies: `radon`, `pylint`.
 - Burn-down of the top offenders (`clips_list`, `status_for_clips`,
   `studio_page`) is opt-in follow-up that would drop the baseline to ~0.355.
+- The analysis above measured 0.410 on the branch point. Merging `main`
+  (PR #33, run telemetry) added new code that raised erosion to **0.423** and
+  max CC to 26; since that code landed through normal review before this gate
+  existed, the committed baseline was bumped to `0.4229` as part of that merge —
+  a conscious, reviewed re-baseline, exactly the path this ADR prescribes.

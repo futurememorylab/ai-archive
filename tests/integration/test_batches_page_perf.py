@@ -1,9 +1,9 @@
 """Pin the /batches read path against N+1 regressions (ADR 0046).
 
-list_batches(limit=50) + count_total_batches + failed_items_for_jobs must
-issue a CONSTANT number of SQL statements regardless of how many batches
-exist in the DB. Page is capped at 50 batches, so the failed-items IN list
-stays inside one statement.
+list_batches(limit=50) + count_total_batches + failed_items_for_jobs +
+cost_sums_by_job must issue a CONSTANT number of SQL statements regardless
+of how many batches exist in the DB. Page is capped at 50 batches, so the
+failed-items / cost IN lists stay inside one statement each.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 import pytest
 
 from backend.app.repositories.jobs import JobsRepo
+from backend.app.repositories.run_telemetry import RunTelemetryRepo
 from tests._helpers.query_count import assert_query_count
 
 
@@ -54,10 +55,13 @@ async def _seed_batches(db, n: int) -> None:
 async def test_batches_read_path_is_constant_query_count(db, n):
     await _seed_batches(db, n)
     repo = JobsRepo()
-    async with assert_query_count(db, 5) as counter:
+    tele = RunTelemetryRepo()
+    async with assert_query_count(db, 6) as counter:
         rows = await repo.list_batches(db, limit=50)
         await repo.count_total_batches(db)
         job_ids = [jid for r in rows for jid in r["job_ids"]]
         await repo.failed_items_for_jobs(db, job_ids)
+        await tele.cost_sums_by_job(db, job_ids)
     # list_batches (1) + count_total_batches (1) + failed_items_for_jobs (1)
-    assert counter.count == 3, f"[n={n}] expected 3 statements, got {counter.count}"
+    # + cost_sums_by_job (1)
+    assert counter.count == 4, f"[n={n}] expected 4 statements, got {counter.count}"

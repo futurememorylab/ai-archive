@@ -259,11 +259,20 @@ async def clips_list(
         for it in await ctx.jobs_repo.list_items(ctx.db, jid):
             batch_status_map[it.catdv_clip_id] = it.status
 
+    # Actual billable cost per clip for this batch: one batched aggregate
+    # over the batch's job ids, summed per clip in SQL (a clip may appear
+    # in more than one per-kind job, and retries add rows).
+    batch_cost_map: dict[int, float] = {}
+    if batch_ids:
+        batch_cost_map = await ctx.run_telemetry_repo.cost_totals_by_clip(ctx.db, batch_ids)
+
     # Annotate each row with its pending-draft counts and batch job id.
     pending_rows = await ctx.review_items_repo.list_pending_clips(ctx.db, limit=2000, offset=0)
     pmap = {r["catdv_clip_id"]: r for r in pending_rows}
     for row in ctx_dict["clips"]:
         row["batch_status"] = _batch_status_view(batch_status_map.get(row["id"]))
+        bc = batch_cost_map.get(row["id"])
+        row["batch_cost_usd"] = bc if bc else None
         p = pmap.get(row["id"])
         mc = p["marker_count"] if p else 0
         fc = p["field_count"] if p else 0
@@ -504,6 +513,15 @@ async def clip_detail_page(request: Request, clip_id: int, review: int | None = 
     )
     ctx_dict["draft"] = await _build_draft_for_clip(ctx, clip_id)
     ctx_dict["draft_arrays"] = draft_review_arrays(ctx_dict["draft"])
+    # Actual billable cost of the published annotation (its originating job).
+    # Latest annotation first (list_by_clip orders id DESC); skip live/manual
+    # annotations that have no job_id (nothing was billed for them).
+    ctx_dict["annotation_cost_usd"] = None
+    annotations = await ctx.annotations_repo.list_by_clip(ctx.db, clip_id)
+    job_id = next((a.job_id for a in annotations if a.job_id is not None), None)
+    if job_id is not None:
+        costs = await ctx.run_telemetry_repo.cost_totals_by_clip(ctx.db, [job_id])
+        ctx_dict["annotation_cost_usd"] = costs.get(clip_id)
     ctx_dict["host_local_proxies"] = getattr(
         getattr(ctx, "proxy_resolver", None), "is_host_local", False
     )

@@ -19,29 +19,37 @@ _T = TypeVar("_T")
 
 
 def chunked_in_clause(
-    keys: Iterable[tuple[str, str]],
+    keys: Iterable[tuple],
     *,
     chunk_size: int = 400,
-) -> Iterator[tuple[str, list[str]]]:
-    """Yield `(sql, params)` pairs for batched `WHERE (a, b) IN (…)` SQL.
+) -> Iterator[tuple[str, list]]:
+    """Yield `(sql, params)` pairs for batched `WHERE … IN (…)` SQL.
 
     Args:
-        keys: iterable of 2-tuples. Each tuple becomes one `(?, ?)` row.
+        keys: iterable of 1- or 2-tuples (uniform within one call). Each
+            tuple becomes one `(?)` / `(?, ?)` row. Single-column callers
+            wrap their keys as 1-tuples: `[(job_id,) for job_id in ids]`
+            and write `WHERE job_id IN ({fragment})`.
         chunk_size: max keys per chunk. Default 400 keeps the
-            per-statement parameter count under 800.
+            per-statement parameter count under 800 for the 2-column case.
 
     Yields:
         `(sql_fragment, params_list)` where `sql_fragment` is
-        `"(?, ?), (?, ?), …"` and `params_list` is the flattened
-        parameter list.
+        `"(?), (?), …"` or `"(?, ?), (?, ?), …"` and `params_list` is the
+        flattened parameter list.
 
     Raises:
-        ValueError: any element of `keys` is not a 2-tuple.
+        ValueError: any element of `keys` is not a 1- or 2-tuple.
     """
-    chunk: list[tuple[str, str]] = []
+    chunk: list[tuple] = []
+    width: int | None = None
     for k in keys:
-        if not (isinstance(k, tuple) and len(k) == 2):
-            raise ValueError(f"chunked_in_clause requires 2-tuple keys; got {k!r}")
+        if not (isinstance(k, tuple) and len(k) in (1, 2)):
+            raise ValueError(f"chunked_in_clause requires 1- or 2-tuple keys; got {k!r}")
+        if width is None:
+            width = len(k)
+        elif len(k) != width:
+            raise ValueError(f"chunked_in_clause keys must be uniform width; got {k!r}")
         chunk.append(k)
         if len(chunk) >= chunk_size:
             yield _format(chunk)
@@ -50,10 +58,9 @@ def chunked_in_clause(
         yield _format(chunk)
 
 
-def _format(keys: list[tuple[str, str]]) -> tuple[str, list[str]]:
-    sql = ", ".join(["(?, ?)"] * len(keys))
-    params: list[str] = []
-    for a, b in keys:
-        params.append(a)
-        params.append(b)
+def _format(keys: list[tuple]) -> tuple[str, list]:
+    width = len(keys[0])
+    row = "(" + ", ".join("?" * width) + ")"
+    sql = ", ".join([row] * len(keys))
+    params: list = [v for k in keys for v in k]
     return sql, params

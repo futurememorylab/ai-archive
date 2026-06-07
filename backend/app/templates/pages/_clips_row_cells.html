@@ -9,4 +9,5 @@
   {%- elif row.batch is not none -%}#{{ row.batch }}
   {%- else -%}—{%- endif -%}
 </td>
+{% if batch_query %}<td class="batch-cost num mono">{{ row.batch_cost_usd|usd }}</td>{% endif %}
 <td class="col-drafts mono">{{ row.draft_label or "—" }}</td>

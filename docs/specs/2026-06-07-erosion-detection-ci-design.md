@@ -161,7 +161,7 @@ down and we want to prevent it climbing back.
 - **edit** `pyproject.toml` — add `radon` and `pylint` to `[project.optional-dependencies].dev`
 - **edit** `.pre-commit-config.yaml` — two new `local` hooks
 - **add** `tests/unit/test_erosion_gate.py` — see Testing
-- **add** `docs/adr/0058-structural-erosion-gate.md` + row in `docs/decisions.md`
+- **add** `docs/adr/0060-structural-erosion-gate.md` + row in `docs/decisions.md`
 
 ### Pre-commit hooks (appended to the existing `local` repo block)
 

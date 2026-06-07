@@ -12,8 +12,10 @@ from backend.app.archive.model import (
     ClipQuery,
     MediaRef,
 )
+from backend.app.models.telemetry import RunTelemetryRecord
 from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.prompts import PromptsRepo
+from backend.app.repositories.run_telemetry import RunTelemetryRepo
 from tests._helpers.live_ctx import install_live_ctx
 
 
@@ -46,6 +48,20 @@ async def _seed_batch(ctx):
     its = await jobs.list_items(ctx.db, jid)
     await jobs.update_item_status(ctx.db, its[0].id, "review_ready")
     await jobs.update_item_status(ctx.db, its[1].id, "error", error="ProxyNotFound")
+    tele = RunTelemetryRepo()
+    await tele.insert(
+        ctx.db,
+        RunTelemetryRecord(
+            occurred_at=datetime.now(UTC).isoformat(),
+            install_id="inst-1",
+            kind="annotation",
+            model="gemini-2.5-pro",
+            status="ok",
+            job_id=jid,
+            clip_id=101,
+            cost_usd=0.12,
+        ),
+    )
     return jid
 
 
@@ -62,6 +78,9 @@ def test_batches_page_renders(monkeypatch, tmp_path):
         assert "rail-btn active" in r.text
         # failed count surfaced
         assert "1 failed" in r.text
+        # actual batch cost surfaced in its own <td> ($0.12 → 2 decimals via the usd filter)
+        assert "$0.12" in r.text
+        assert 'class="bt-cost mono"' in r.text
 
 
 def test_batches_table_partial(monkeypatch, tmp_path):
@@ -81,6 +100,29 @@ def test_batches_page_empty_state(monkeypatch, tmp_path):
         r = client.get("/batches")
         assert r.status_code == 200
         assert "No batches yet" in r.text
+
+
+def test_batches_cost_column_shows_dash_without_telemetry(monkeypatch, tmp_path):
+    """A batch with no telemetry rows renders '—' in the Cost column."""
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.core_ctx
+
+        async def _seed_no_tele(ctx):
+            prompts = PromptsRepo()
+            _, vid = await prompts.create_with_initial_version(
+                ctx.db, name="No-cost batch", description=None, body="p",
+                target_map={"x": {"kind": "markers"}}, output_schema={}, model="gemini-2.5-pro",
+            )
+            jobs = JobsRepo()
+            await jobs.create_job(
+                ctx.db, prompt_version_id=vid, clip_ids=[200], run_group="rg-notele"
+            )
+
+        asyncio.run(_seed_no_tele(ctx))
+        r = client.get("/batches/table")
+        assert r.status_code == 200
+        # em-dash rendered by the usd filter for None cost_usd
+        assert "—" in r.text
 
 
 def test_retry_failed_503_when_offline(monkeypatch, tmp_path):

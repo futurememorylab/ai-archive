@@ -28,6 +28,7 @@ def client(monkeypatch, tmp_path):
 
 def _seed_run_with_items(
     app, *, version_id, clip_id, scenes=None, fields=None, notes=None,
+    cost_usd=None,
 ):
     """Seed a studio_run + review_items rows.
 
@@ -50,9 +51,9 @@ def _seed_run_with_items(
 
             cur = await db.execute(
                 "INSERT INTO studio_run(prompt_version_id, clip_id, status, "
-                "output_json, model, finished_at) VALUES "
-                "(?, ?, 'ok', ?, 'gemini-2.5-pro', '2026-05-27T00:00:00Z')",
-                (version_id, clip_id, json.dumps(output_json)),
+                "output_json, model, cost_usd, finished_at) VALUES "
+                "(?, ?, 'ok', ?, 'gemini-2.5-pro', ?, '2026-05-27T00:00:00Z')",
+                (version_id, clip_id, json.dumps(output_json), cost_usd),
             )
             run_id = cur.lastrowid
 
@@ -108,11 +109,15 @@ def test_run_output_uses_anno_panels_and_has_run_json(client):
         main_mod.app, version_id=vid, clip_id=12041,
         scenes=[{"name": "scene-a", "in": {"secs": 1.0}, "out": {"secs": 2.0}}],
         fields={"pf.summary": "krátký"},
+        cost_usd=0.012,
     )
 
     r = client.get(f"/studio/_run?prompt_version_id={vid}&clip_id=12041")
     assert r.status_code == 200
     html = r.text
+
+    # Actual run cost is rendered via the shared usd filter (<$0.10 → 3 dp).
+    assert "$0.012" in html
 
     # Shared partial is in.
     assert 'class="anno-tabs"' in html
