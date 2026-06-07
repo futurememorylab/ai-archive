@@ -89,10 +89,12 @@ document.addEventListener('alpine:init', () => {
         });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const e = await r.json();
+        if (key !== _studioEstimateKey) return;  // selection changed mid-flight
         this.estimateLabel =
           `~${fmtUsd(e.cost_usd_p50)}–${fmtUsd(e.cost_usd_p90)} (${e.confidence})`;
       } catch (err) {
         console.error('estimate failed', err);  // advisory only
+        if (key !== _studioEstimateKey) return;  // selection changed mid-flight
         this.estimateLabel = '';
       }
     },

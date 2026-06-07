@@ -217,6 +217,7 @@
             return r.json();
           }));
           const order = { rough: 0, fair: 1, good: 2 };
+          if (key !== _batchEstimateKey) return;  // selection changed mid-flight
           this.estimate = parts.reduce((acc, p) => ({
             cost_usd_p50: (acc.cost_usd_p50 ?? 0) + (p.cost_usd_p50 ?? 0),
             cost_usd_p90: (acc.cost_usd_p90 ?? 0) + (p.cost_usd_p90 ?? 0),
@@ -227,6 +228,7 @@
           }), {});
         } catch (e) {
           console.error("estimate failed", e);   // advisory — no toast, no block
+          if (key !== _batchEstimateKey) return;  // selection changed mid-flight
           this.estimate = null;
         }
       },
