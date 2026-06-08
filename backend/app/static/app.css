@@ -1650,14 +1650,14 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 }
 
 /* Folder tree */
-.studio-folders {
+.studio-sets {
   display: flex;
   flex-direction: column;
   min-height: 0;
   height: 100%;
 }
 
-.studio-folders-hdr {
+.studio-sets-hdr {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1667,25 +1667,25 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   font-size: 13px;
 }
 
-.studio-folder-new {
+.studio-set-new {
   display: flex;
   gap: 6px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--line);
 }
-.studio-folder-new .txt { flex: 1; }
-.studio-folders-empty { padding: 12px; }
+.studio-set-new .txt { flex: 1; }
+.studio-sets-empty { padding: 12px; }
 
-.studio-folders-list {
+.studio-sets-list {
   overflow: auto;
   flex: 1;
 }
 
-.studio-folder {
+.studio-set {
   border-bottom: 1px solid var(--line);
 }
 
-.studio-folder-row {
+.studio-set-row {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1694,27 +1694,27 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   user-select: none;
 }
 
-.studio-folder-row:hover {
+.studio-set-row:hover {
   background: var(--surface-2);
 }
 
-.studio-folder-row .twist {
+.studio-set-row .twist {
   width: 12px;
   display: inline-flex;
 }
 
-.studio-folder-row .name {
+.studio-set-row .name {
   flex: 1;
   font-size: 13px;
 }
 
-.studio-folder-row .count {
+.studio-set-row .count {
   font-family: var(--f-mono, monospace);
   font-size: 11px;
   color: var(--text-3);
 }
 
-.studio-folder-kids {
+.studio-set-kids {
   padding: 4px 8px 8px;
   display: flex;
   flex-direction: column;
@@ -1818,6 +1818,56 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 
 .studio-clip-card:hover .remove-x {
   display: inline-flex;
+}
+
+/* ── Source tabs ─────────────────────────────────────────────────── */
+.studio-nav { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.studio-nav-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--line);
+}
+.studio-nav-tab {
+  display: flex; align-items: center; gap: 6px;
+  padding: 10px 14px;
+  background: none; border: none; cursor: pointer;
+  font-size: 13px; font-weight: 600;
+  color: var(--text-3);
+  border-bottom: 2px solid transparent;
+}
+.studio-nav-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.studio-nav-tab .ico { font-size: 13px; }
+.studio-nav-tab .badge {
+  font-family: var(--f-mono, monospace); font-size: 10.5px;
+  background: var(--surface-2); color: var(--text-3);
+  padding: 1px 6px; border-radius: 9px;
+}
+.studio-nav-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+/* ── Uploaded stub ───────────────────────────────────────────────── */
+.studio-uploaded-stub {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 6px;
+  padding: 32px 16px; text-align: center;
+}
+.studio-uploaded-stub .su-ico { font-size: 28px; opacity: .6; }
+.studio-uploaded-stub .su-title { font-weight: 600; }
+.studio-uploaded-stub .su-sub { font-size: 12px; }
+
+/* ── Selection checkboxes + thumbnail overlays ───────────────────── */
+.studio-set-row .set-check, .studio-clip-card .clip-check {
+  width: 14px; height: 14px; cursor: pointer; accent-color: var(--accent);
+}
+.studio-clip-card { grid-template-columns: 16px 64px 1fr; }
+.studio-clip-card .clip-check { align-self: center; }
+.studio-clip-card .thumb .yr {
+  position: absolute; left: 2px; top: 2px;
+  font-family: var(--f-mono, monospace); font-size: 9.5px;
+  background: rgba(0,0,0,.55); color: #fff; padding: 1px 3px; border-radius: 2px;
+}
+.studio-clip-card .thumb .tc {
+  position: absolute; right: 2px; bottom: 2px;
+  font-family: var(--f-mono, monospace); font-size: 9.5px;
+  background: rgba(0,0,0,.6); color: #fff; padding: 1px 3px; border-radius: 2px;
 }
 
 /* Prompt card */
