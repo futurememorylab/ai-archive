@@ -12,7 +12,7 @@
    This module owns:
      - `window.htmxAlpine.reinit(el)` — initTree + process for a subtree
        a caller just injected via fetch()+innerHTML.
-     - one global `htmx:afterSwap` listener for studio (folder-kids
+     - one global `htmx:afterSwap` listener for studio (set-kids
        `.selected` reconciliation + prompt-card re-init + version-state
        reconciliation into `Alpine.store('studio')`).
 
@@ -38,14 +38,14 @@ document.body.addEventListener('htmx:afterSwap', (evt) => {
   const page = window.Alpine?.store('studio');
   if (!page) return;
 
-  // When a folder's clip cards swap in (hx-trigger="intersect once" on
-  // .studio-folder-kids), reconcile `.selected` against the live
-  // focusedClipId. The server bakes a `clip_id=…` into each folder's
+  // When a set's clip cards swap in (hx-trigger="intersect once" on
+  // .studio-set-kids), reconcile `.selected` against the live
+  // focusedClipId. The server bakes a `clip_id=…` into each set's
   // hx-get URL at page-load time, so cards arrive pre-selected based on
   // the URL at that moment — but the user may have focused a different
   // clip via JS since, and the hx-get URL doesn't update. Clear the
   // server's guess, then apply the current focus.
-  if (evt.target.classList?.contains('studio-folder-kids')) {
+  if (evt.target.classList?.contains('studio-set-kids')) {
     evt.target.querySelectorAll('.studio-clip-card.selected')
       .forEach(el => el.classList.remove('selected'));
     if (page.focusedClipId) {

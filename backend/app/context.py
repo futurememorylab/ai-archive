@@ -57,7 +57,7 @@ from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.proxy_cache import ProxyCacheRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.run_telemetry import RunTelemetryRepo
-from backend.app.repositories.studio_folders import StudioFoldersRepo
+from backend.app.repositories.studio_sets import StudioSetsRepo
 from backend.app.repositories.studio_runs import StudioRunsRepo
 from backend.app.repositories.workspaces import WorkspacesRepo
 from backend.app.repositories.write_log import WriteLogRepo
@@ -98,7 +98,7 @@ class CoreCtx:
     workspaces_repo: WorkspacesRepo = field(default_factory=WorkspacesRepo)
     cache_actions_log_repo: CacheActionsLogRepo = field(default_factory=CacheActionsLogRepo)
     prefetch_queue_repo: PrefetchQueueRepo = field(default_factory=PrefetchQueueRepo)
-    studio_folders_repo: StudioFoldersRepo = field(default_factory=StudioFoldersRepo)
+    studio_sets_repo: StudioSetsRepo = field(default_factory=StudioSetsRepo)
     studio_runs_repo: StudioRunsRepo = field(default_factory=StudioRunsRepo)
     run_telemetry_repo: RunTelemetryRepo = field(default_factory=RunTelemetryRepo)
     telemetry_ctx: TelemetryCtx = field(init=False)
@@ -292,8 +292,8 @@ class LiveCtx:
         return self.core.prefetch_queue_repo
 
     @property
-    def studio_folders_repo(self) -> StudioFoldersRepo:
-        return self.core.studio_folders_repo
+    def studio_sets_repo(self) -> StudioSetsRepo:
+        return self.core.studio_sets_repo
 
     @property
     def studio_runs_repo(self) -> StudioRunsRepo:

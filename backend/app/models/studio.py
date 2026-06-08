@@ -1,7 +1,7 @@
 """Domain models for Prompt Studio.
 
-A StudioFolder is a flat-named bucket of clips picked from the archive.
-A StudioFolderClip is one row of the membership table.
+A StudioSet is a flat-named bucket of clips picked from the archive.
+A StudioSetClip is one row of the membership table.
 A StudioRun is one execution of a prompt version against a clip; one row
 per execution. History kept forever; UI shows the latest per
 (prompt_version_id, clip_id).
@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict
 StudioRunStatus = Literal["pending", "running", "ok", "error"]
 
 
-class StudioFolder(BaseModel):
+class StudioSet(BaseModel):
     id: int | None = None
     name: str
     created_at: str
@@ -22,8 +22,8 @@ class StudioFolder(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class StudioFolderClip(BaseModel):
-    folder_id: int
+class StudioSetClip(BaseModel):
+    set_id: int
     clip_id: int
     added_at: str
 

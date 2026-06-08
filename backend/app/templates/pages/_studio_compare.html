@@ -51,7 +51,7 @@
                  `&compare_id=${s.compareVersionId}`;
          } else {
            if (!s.focusedClipId) {
-             slot.innerHTML = '<div class=\'muted\'>Click a clip in a folder to focus it.</div>';
+             slot.innerHTML = '<div class=\'muted\'>Click a clip in a set to focus it.</div>';
              return;
            }
            url = `/studio/_compare?version_id=${s.activeVersionId}` +

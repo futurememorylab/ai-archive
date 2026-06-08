@@ -1,4 +1,4 @@
-"""REST API for Prompt Studio — folders, folder_clips, runs.
+"""REST API for Prompt Studio — sets, set_clips, runs.
 
 All under /api/studio. See docs/specs/2026-05-26-prompt-studio-design.md.
 """
@@ -20,11 +20,11 @@ router = APIRouter(prefix="/api/studio", tags=["studio"])
 # ── request models ──────────────────────────────────────────────────────────
 
 
-class FolderCreate(BaseModel):
+class SetCreate(BaseModel):
     name: str
 
 
-class FolderPatch(BaseModel):
+class SetPatch(BaseModel):
     name: str
 
 
@@ -38,86 +38,87 @@ class RunCreate(BaseModel):
     model: str | None = None
 
 
-# ── folders ─────────────────────────────────────────────────────────────────
+# ── sets ─────────────────────────────────────────────────────────────────────
 
 
-@router.get("/folders")
-async def list_folders(request: Request):
+@router.get("/sets")
+async def list_sets(request: Request, source: str = "archive"):
     ctx = get_core_ctx(request)
-    return await ctx.studio_folders_repo.list_folders_with_counts(ctx.db)
+    return await ctx.studio_sets_repo.list_sets_with_counts(ctx.db, source=source)
 
 
-@router.post("/folders", status_code=status.HTTP_201_CREATED)
-async def create_folder(
+@router.post("/sets", status_code=status.HTTP_201_CREATED)
+async def create_set(
     request: Request,
-    body: FolderCreate,
+    body: SetCreate,
+    source: str = "archive",
     hx_request: str | None = Header(None, alias="HX-Request"),
 ):
     ctx = get_core_ctx(request)
     try:
-        fid = await ctx.studio_folders_repo.create_folder(ctx.db, name=body.name)
+        sid = await ctx.studio_sets_repo.create_set(ctx.db, name=body.name, source=source)
     except aiosqlite.IntegrityError as exc:
-        raise HTTPException(409, f"folder name {body.name!r} already exists") from exc
+        raise HTTPException(409, f"set name {body.name!r} already exists") from exc
 
     if hx_request == "true":
-        f = {"id": fid, "name": body.name, "clip_count": 0}
+        s = {"id": sid, "name": body.name, "clip_count": 0}
         return templates.TemplateResponse(
             request,
-            "pages/_studio_folder_card.html",
-            {"f": f, "active_version": None, "focused_clip_id": None},
+            "pages/_studio_set_card.html",
+            {"f": s, "active_version": None, "focused_clip_id": None},
         )
-    return {"id": fid}
+    return {"id": sid}
 
 
-@router.patch("/folders/{folder_id}")
-async def rename_folder(request: Request, folder_id: int, body: FolderPatch):
+@router.patch("/sets/{set_id}")
+async def rename_set(request: Request, set_id: int, body: SetPatch):
     ctx = get_core_ctx(request)
     try:
-        await ctx.studio_folders_repo.rename_folder(ctx.db, folder_id, name=body.name)
+        await ctx.studio_sets_repo.rename_set(ctx.db, set_id, name=body.name)
     except aiosqlite.IntegrityError as exc:
-        raise HTTPException(409, f"folder name {body.name!r} already exists") from exc
-    return {"id": folder_id, "name": body.name}
+        raise HTTPException(409, f"set name {body.name!r} already exists") from exc
+    return {"id": set_id, "name": body.name}
 
 
-@router.delete("/folders/{folder_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_folder(request: Request, folder_id: int):
+@router.delete("/sets/{set_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_set(request: Request, set_id: int):
     ctx = get_core_ctx(request)
-    await ctx.studio_folders_repo.delete_folder(ctx.db, folder_id)
+    await ctx.studio_sets_repo.delete_set(ctx.db, set_id)
     return Response(status_code=204)
 
 
-# ── folder clips ────────────────────────────────────────────────────────────
+# ── set clips ─────────────────────────────────────────────────────────────────
 
 
-@router.get("/folders/{folder_id}/clips")
-async def list_folder_clips(request: Request, folder_id: int):
+@router.get("/sets/{set_id}/clips")
+async def list_set_clips(request: Request, set_id: int):
     ctx = get_core_ctx(request)
-    return await ctx.studio_folders_repo.list_clips(ctx.db, folder_id)
+    return await ctx.studio_sets_repo.list_clips(ctx.db, set_id)
 
 
-@router.post("/folders/{folder_id}/clips")
-async def add_folder_clips(
+@router.post("/sets/{set_id}/clips")
+async def add_set_clips(
     request: Request,
-    folder_id: int,
+    set_id: int,
     body: AddClips,
     hx_request: str | None = Header(None, alias="HX-Request"),
 ):
     ctx = get_core_ctx(request)
-    added = await ctx.studio_folders_repo.add_clips(ctx.db, folder_id, clip_ids=body.clip_ids)
+    added = await ctx.studio_sets_repo.add_clips(ctx.db, set_id, clip_ids=body.clip_ids)
     if hx_request == "true":
-        clips = await ctx.studio_folders_repo.list_clips(ctx.db, folder_id)
+        clips = await ctx.studio_sets_repo.list_clips(ctx.db, set_id)
         return templates.TemplateResponse(
             request,
-            "pages/_studio_folder.html",
-            {"clips": clips, "folder_id": folder_id},
+            "pages/_studio_set.html",
+            {"clips": clips, "set_id": set_id},
         )
     return {"added": added}
 
 
-@router.delete("/folders/{folder_id}/clips/{clip_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_folder_clip(request: Request, folder_id: int, clip_id: int):
+@router.delete("/sets/{set_id}/clips/{clip_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_set_clip(request: Request, set_id: int, clip_id: int):
     ctx = get_core_ctx(request)
-    await ctx.studio_folders_repo.remove_clip(ctx.db, folder_id, clip_id=clip_id)
+    await ctx.studio_sets_repo.remove_clip(ctx.db, set_id, clip_id=clip_id)
     return Response(status_code=204)
 
 

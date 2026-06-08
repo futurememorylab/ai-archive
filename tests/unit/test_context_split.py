@@ -69,7 +69,7 @@ def test_core_ctx_has_no_optional_service_fields() -> None:
         "workspaces_repo",
         "cache_actions_log_repo",
         "prefetch_queue_repo",
-        "studio_folders_repo",
+        "studio_sets_repo",
         "studio_runs_repo",
         "event_bus",
         "write_queue",

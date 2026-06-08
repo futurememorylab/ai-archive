@@ -1,6 +1,13 @@
-"""Folder list new-folder input + buttons use canonical primitives.
+"""Set list new-set input + buttons use canonical primitives.
 PR3 visual audit removes the inline style= and the undefined .mini
-button modifier."""
+button modifier.
+
+Note: the navigator now has source tabs (Archive/Uploaded); when no
+archive is connected (the offline test default) the index `/studio`
+renders the Uploaded stub, not the set list. So this test exercises the
+set-list partial directly via `/studio/_sets?source=archive`, which is
+the canonical render path for that markup.
+"""
 
 import importlib
 
@@ -23,11 +30,11 @@ def client(monkeypatch, tmp_path):
         yield c
 
 
-def test_folder_list_uses_canonical_primitives(client):
-    r = client.get("/studio")
+def test_set_list_uses_canonical_primitives(client):
+    r = client.get("/studio/_sets?source=archive")
     assert r.status_code == 200
-    # New-folder wrapper uses a class, not inline style.
-    assert "studio-folder-new" in r.text
+    # New-set wrapper uses a class, not inline style.
+    assert "studio-set-new" in r.text
     # The inline style="display:flex;..." string is gone.
     assert 'style="display:flex;gap:6px;padding:8px 12px' not in r.text
     # The .mini button modifier is gone (use .sm).
@@ -39,8 +46,8 @@ def test_folder_list_uses_canonical_primitives(client):
     assert 'style="padding:12px"' not in r.text
 
 
-def test_folder_list_input_uses_txt_class(client):
-    r = client.get("/studio")
+def test_set_list_input_uses_txt_class(client):
+    r = client.get("/studio/_sets?source=archive")
     assert r.status_code == 200
-    # The new-folder input is .txt sm (canonical input class).
+    # The new-set input is .txt sm (canonical input class).
     assert 'class="txt sm"' in r.text

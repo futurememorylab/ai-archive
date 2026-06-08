@@ -1,4 +1,4 @@
-"""T2-4: folder CRUD endpoints return HTMX partials when HX-Request: true,
+"""T2-4: set CRUD endpoints return HTMX partials when HX-Request: true,
 JSON otherwise. The HTMX path replaces the studio.js `location.reload()`
 pattern."""
 
@@ -23,9 +23,9 @@ def client(monkeypatch, tmp_path):
         yield c
 
 
-def test_create_folder_returns_partial_on_htmx_request(client):
+def test_create_set_returns_partial_on_htmx_request(client):
     r = client.post(
-        "/api/studio/folders",
+        "/api/studio/sets",
         json={"name": "My folder"},
         headers={"HX-Request": "true"},
     )
@@ -34,12 +34,12 @@ def test_create_folder_returns_partial_on_htmx_request(client):
     assert r.headers["content-type"].startswith("text/html"), (
         f"HX-Request expected HTML; got {r.headers['content-type']}"
     )
-    # Folder name appears in the rendered partial.
+    # Set name appears in the rendered partial.
     assert "My folder" in r.text
 
 
-def test_create_folder_returns_json_without_htmx_header(client):
-    r = client.post("/api/studio/folders", json={"name": "JSON folder"})
+def test_create_set_returns_json_without_htmx_header(client):
+    r = client.post("/api/studio/sets", json={"name": "JSON folder"})
     assert r.status_code in (200, 201)
     assert "application/json" in r.headers["content-type"]
     body = r.json()
@@ -47,12 +47,12 @@ def test_create_folder_returns_json_without_htmx_header(client):
 
 
 def test_add_clips_returns_partial_on_htmx_request(client):
-    # Create folder first.
-    r1 = client.post("/api/studio/folders", json={"name": "F"})
-    folder_id = r1.json()["id"]
+    # Create set first.
+    r1 = client.post("/api/studio/sets", json={"name": "F"})
+    set_id = r1.json()["id"]
 
     r2 = client.post(
-        f"/api/studio/folders/{folder_id}/clips",
+        f"/api/studio/sets/{set_id}/clips",
         json={"clip_ids": [1]},
         headers={"HX-Request": "true"},
     )

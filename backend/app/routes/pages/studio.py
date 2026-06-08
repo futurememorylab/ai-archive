@@ -26,6 +26,13 @@ def _archive(request: Request):
     return live.archive if live is not None else None
 
 
+def _archive_available(request: Request) -> bool:
+    """True when a live archive provider is wired (hide the Archive tab when
+    False, e.g. cloud deployments with no archive)."""
+    live = request.app.state.live_ctx
+    return live is not None and live.archive is not None
+
+
 @router.get("/studio", response_class=HTMLResponse)
 async def studio_page(
     request: Request,
@@ -36,7 +43,12 @@ async def studio_page(
 ):
     ctx = get_core_ctx(request)
     prompts = await ctx.prompts_repo.list_active(ctx.db)
-    folders = await ctx.studio_folders_repo.list_folders_with_counts(ctx.db)
+    archive_available = _archive_available(request)
+    nav_source = "archive" if archive_available else "uploaded"
+    sets = await ctx.studio_sets_repo.list_sets_with_counts(ctx.db, source="archive")
+    archive_clip_total = await ctx.studio_sets_repo.clip_total_for_source(
+        ctx.db, source="archive"
+    )
 
     selected_prompt = None
     versions: list = []
@@ -75,15 +87,13 @@ async def studio_page(
     ):
         compare_version = next(v for v in versions if v.id == compare_version_id)
 
-    # Find the folder that holds the focused clip so the sidebar can
+    # Find the set that holds the focused clip so the sidebar can
     # auto-expand it on load — otherwise after a prompt switch the player
-    # restores but the clip's card is buried inside a collapsed folder,
+    # restores but the clip's card is buried inside a collapsed set,
     # which looks like focus was lost.
-    focused_folder_id: int | None = None
+    focused_set_id: int | None = None
     if clip_id is not None:
-        focused_folder_id = await ctx.studio_folders_repo.folder_id_for_clip(
-            ctx.db, clip_id
-        )
+        focused_set_id = await ctx.studio_sets_repo.set_id_for_clip(ctx.db, clip_id)
 
     return templates.TemplateResponse(
         request,
@@ -94,32 +104,35 @@ async def studio_page(
             "versions": [v.model_dump() for v in versions],
             "active_version": active_version.model_dump() if active_version else None,
             "compare_version": compare_version.model_dump() if compare_version else None,
-            "folders": folders,
+            "sets": sets,
+            "archive_available": archive_available,
+            "nav_source": nav_source,
+            "archive_clip_total": archive_clip_total,
             "focused_clip_id": clip_id,
-            "focused_folder_id": focused_folder_id,
+            "focused_set_id": focused_set_id,
         },
     )
 
 
-@router.get("/studio/_folders", response_class=HTMLResponse)
-async def _studio_folders(request: Request):
+@router.get("/studio/_sets", response_class=HTMLResponse)
+async def _studio_sets(request: Request, source: str = "archive"):
     ctx = get_core_ctx(request)
-    folders = await ctx.studio_folders_repo.list_folders_with_counts(ctx.db)
+    sets = await ctx.studio_sets_repo.list_sets_with_counts(ctx.db, source=source)
     return templates.TemplateResponse(
         request,
-        "pages/_studio_folder_list.html",
-        {"folders": folders, "active_version": None},
+        "pages/_studio_set_list.html",
+        {"sets": sets, "active_version": None, "nav_source": source},
     )
 
 
-@router.get("/studio/_folder", response_class=HTMLResponse)
-async def _studio_folder(
+@router.get("/studio/_set", response_class=HTMLResponse)
+async def _studio_set(
     request: Request,
-    folder_id: int,
+    set_id: int,
     active_version_id: int | None = None,
     clip_id: int | None = None,
 ):
-    """Expanded folder view — clip cards with run-dots.
+    """Expanded set view — clip cards with run-dots.
 
     `clip_id` (when provided) is the currently-focused clip — used so the
     matching card renders with the `.selected` class from the start,
@@ -127,7 +140,7 @@ async def _studio_folder(
     """
     ctx = get_core_ctx(request)
     archive = _archive(request)
-    clips_rows = await ctx.studio_folders_repo.list_clips(ctx.db, folder_id)
+    clips_rows = await ctx.studio_sets_repo.list_clips(ctx.db, set_id)
 
     # Build per-clip "has any run with active version" / "any other version" flags.
     enriched = []
@@ -138,7 +151,12 @@ async def _studio_folder(
         has_cur = active_version_id is not None and active_version_id in versions
         has_other = any(v != active_version_id for v in versions)
         # Pull minimal clip metadata via the archive if available; fall back to id.
-        meta: dict = {"name": f"clip-{c['clip_id']}", "duration_secs": None, "year": None}
+        meta: dict = {
+            "name": f"clip-{c['clip_id']}",
+            "duration_secs": None,
+            "year": None,
+            "fps": 25.0,
+        }
         if archive is not None:
             try:
                 clip = await archive.get_clip(str(c["clip_id"]))
@@ -146,6 +164,7 @@ async def _studio_folder(
                     "name": clip.name,
                     "duration_secs": clip.duration_secs,
                     "year": (clip.provider_data or {}).get("pragafilm.rok.natoceni"),
+                    "fps": float(clip.fps or 25.0),
                 }
             except Exception:  # noqa: BLE001
                 pass
@@ -153,13 +172,13 @@ async def _studio_folder(
 
     return templates.TemplateResponse(
         request,
-        "pages/_studio_folder.html",
-        {"folder_id": folder_id, "clips": enriched, "focused_clip_id": clip_id},
+        "pages/_studio_set.html",
+        {"set_id": set_id, "clips": enriched, "focused_clip_id": clip_id},
     )
 
 
 @router.get("/studio/_archive_picker", response_class=HTMLResponse)
-async def _studio_archive_picker(request: Request, folder_id: int):
+async def _studio_archive_picker(request: Request, set_id: int):
     """Renders the archive-picker modal shell only. The result rows are
     fetched client-side from the shared /batches/picker endpoint (the same
     rich _video_list.html rows the New-batch picker renders), so this route
@@ -167,7 +186,7 @@ async def _studio_archive_picker(request: Request, folder_id: int):
     return templates.TemplateResponse(
         request,
         "pages/_studio_archive_picker.html",
-        {"folder_id": folder_id},
+        {"set_id": set_id},
     )
 
 

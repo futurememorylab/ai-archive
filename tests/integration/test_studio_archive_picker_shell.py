@@ -1,7 +1,7 @@
 """The studio archive-picker route renders only the modal shell; the result
 rows come client-side from the shared /batches/picker endpoint (spec:
 docs/specs/2026-06-04-studio-archive-picker-reuse-design.md). Fixture shape
-mirrors tests/integration/test_studio_folders_htmx_partials.py."""
+mirrors tests/integration/test_studio_sets_htmx_partials.py."""
 
 import importlib
 
@@ -25,7 +25,7 @@ def client(monkeypatch, tmp_path):
 
 
 def test_picker_shell_renders_offline(client):
-    r = client.get("/studio/_archive_picker?folder_id=7")
+    r = client.get("/studio/_archive_picker?set_id=7")
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/html")
     assert "archivePicker(7)" in r.text  # Alpine component wired
@@ -37,6 +37,6 @@ def test_picker_shell_renders_offline(client):
 
 
 def test_picker_shell_has_no_bare_rows_or_htmx_search(client):
-    r = client.get("/studio/_archive_picker?folder_id=7")
+    r = client.get("/studio/_archive_picker?set_id=7")
     assert "picker-row" not in r.text  # bare renderer deleted
     assert "hx-get" not in r.text      # search is Alpine-driven now

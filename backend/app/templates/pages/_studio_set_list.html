@@ -1,0 +1,25 @@
+{# Set list with single-expand-at-a-time behavior. Each set header toggles an
+   inline panel that HTMX-loads its clip cards from /studio/_set?set_id=X.
+   "+ Add from archive" inside the expanded panel opens the archive picker. #}
+<div class="studio-sets" x-data="studioSets({{ focused_set_id or 'null' }})">
+  <div class="studio-sets-hdr">
+    <span class="muted" x-text="setCountLabel()"></span>
+    <span class="grow"></span>
+    <button class="btn ghost sm" @click="newSetOpen = !newSetOpen" title="New set">+</button>
+  </div>
+
+  <div x-show="newSetOpen" x-cloak class="studio-set-new">
+    <input type="text" class="txt sm" placeholder="set name…"
+           x-model="newSetName" @keyup.enter="createSet()" />
+    <button class="btn primary sm" @click="createSet()">Create</button>
+  </div>
+
+  <div class="studio-sets-list">
+    {% for f in sets %}
+      {% include "pages/_studio_set_card.html" with context %}
+    {% endfor %}
+    {% if not sets %}
+      <div class="studio-sets-empty muted">No sets yet. Create one above.</div>
+    {% endif %}
+  </div>
+</div>
