@@ -33,9 +33,12 @@ window.studio = {
     document.querySelectorAll(`.studio-clip-card[data-clip-id="${clipId}"]`)
       .forEach(el => el.classList.add('selected'));
   },
-  removeClip(folderId, clipId, btnEl) {
-    if (!confirm('Remove from folder?')) return;
-    fetch(`/api/studio/folders/${folderId}/clips/${clipId}`, {method: 'DELETE'})
+  toggleClip(clipId, checked) {
+    this._root()?.toggleClip(clipId, checked);
+  },
+  removeClip(setId, clipId, btnEl) {
+    if (!confirm('Remove from set?')) return;
+    fetch(`/api/studio/sets/${setId}/clips/${clipId}`, {method: 'DELETE'})
       .then(() => btnEl.closest('.studio-clip-card').remove());
   },
 };
@@ -59,7 +62,7 @@ document.body.addEventListener('click', (evt) => {
   a.href = u.toString();
 });
 
-// The global `htmx:afterSwap` listener (studio-folder-kids `.selected`
+// The global `htmx:afterSwap` listener (studio-set-kids `.selected`
 // reconciliation + prompt-card re-init + version-state reconciliation)
 // lives in htmxAlpine.js — the single owner of HTMX↔Alpine lifecycle.
 
@@ -167,16 +170,16 @@ document.addEventListener('alpine:init', () => {
     },
   }));
 
-  Alpine.data('archivePicker', (folderId) => ({
+  Alpine.data('archivePicker', (setId) => ({
     ...window.clipPickerCore(),
-    folderId,
+    setId,
 
     init() { this.fetchPage(); },
 
     async addSelected() {
       const ids = this.selectedClips().map((c) => c.id);
       if (!ids.length) return;
-      const res = await fetch(`/api/studio/folders/${this.folderId}/clips`, {
+      const res = await fetch(`/api/studio/sets/${this.setId}/clips`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'HX-Request': 'true'},
         body: JSON.stringify({clip_ids: ids}),
@@ -184,19 +187,19 @@ document.addEventListener('alpine:init', () => {
       if (res.ok) {
         const html = await res.text();
         const kidsEl = document.querySelector(
-          `.studio-folder[data-folder-id="${this.folderId}"] .studio-folder-kids`
+          `.studio-set[data-set-id="${this.setId}"] .studio-set-kids`
         );
         if (kidsEl) {
           kidsEl.innerHTML = html;
           window.htmxAlpine.reinit(kidsEl);
         } else {
           console.warn(
-            `archivePicker.addSelected: .studio-folder-kids not found for folder ${this.folderId}`
+            `archivePicker.addSelected: .studio-set-kids not found for set ${this.setId}`
           );
         }
         this.close();  // close the archive picker modal
         Alpine.store('toast').push(
-          `Added ${ids.length} clip${ids.length === 1 ? '' : 's'} to folder.`,
+          `Added ${ids.length} clip${ids.length === 1 ? '' : 's'} to set.`,
           { level: 'success' },
         );
       } else {
@@ -213,54 +216,49 @@ document.addEventListener('alpine:init', () => {
     },
   }));
 
-  Alpine.data('studioFolders', (initialExpandedId = null) => ({
+  Alpine.data('studioSets', (initialExpandedId = null) => ({
     expandedId: initialExpandedId,
-    newFolderOpen: false,
-    newFolderName: '',
+    newSetOpen: false,
+    newSetName: '',
 
-    toggle(id) {
-      this.expandedId = this.expandedId === id ? null : id;
+    toggle(id) { this.expandedId = this.expandedId === id ? null : id; },
+
+    // Selection helpers (state lives in the store; see Task 9).
+    toggleSet(id) { Alpine.store('studio').toggleSet(id); },
+    setFullySelected(id) { return Alpine.store('studio').setFullySelected(id); },
+    setBadge(id, total) { return Alpine.store('studio').setBadge(id, total); },
+    setCountLabel() {
+      const n = document.querySelectorAll('.studio-sets-list .studio-set').length;
+      return `${n} set${n === 1 ? '' : 's'}`;
     },
 
-    async createFolder() {
-      const name = this.newFolderName.trim();
+    async createSet() {
+      const name = this.newSetName.trim();
       if (!name) return;
-      const res = await fetch('/api/studio/folders', {
+      const res = await fetch('/api/studio/sets', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'HX-Request': 'true'},
         body: JSON.stringify({name}),
       });
       if (res.ok) {
         const html = await res.text();
-        const folderList = document.querySelector('.studio-folders-list');
-        if (folderList) {
-          folderList.insertAdjacentHTML('beforeend', html);
-          // Select the appended folder card by its stable root class rather
-          // than `lastElementChild`, so this survives _studio_folder_card.html
-          // gaining trailing sibling root nodes (e.g. a comment or wrapper).
-          const cards = folderList.querySelectorAll('.studio-folder');
+        const list = document.querySelector('.studio-sets-list');
+        if (list) {
+          list.insertAdjacentHTML('beforeend', html);
+          const cards = list.querySelectorAll('.studio-set');
           const newCard = cards[cards.length - 1];
-          if (newCard) {
-            window.htmxAlpine.reinit(newCard);
-          } else {
-            console.warn('studioFolders.createFolder: no .studio-folder card after insert');
-          }
+          if (newCard) window.htmxAlpine.reinit(newCard);
+          else console.warn('studioSets.createSet: no .studio-set card after insert');
         } else {
-          console.warn('studioFolders.createFolder: .studio-folders-list not found');
+          console.warn('studioSets.createSet: .studio-sets-list not found');
         }
-        this.newFolderName = '';
-        this.newFolderOpen = false;
-        Alpine.store('toast').push(`Created folder "${name}".`, { level: 'success' });
+        this.newSetName = '';
+        this.newSetOpen = false;
+        Alpine.store('toast').push(`Created set "${name}".`, { level: 'success' });
       } else if (res.status === 409) {
-        Alpine.store('toast').push(
-          `Folder "${name}" already exists.`,
-          { level: 'error' },
-        );
+        Alpine.store('toast').push(`Set "${name}" already exists.`, { level: 'error' });
       } else {
-        Alpine.store('toast').push(
-          `Folder create failed (HTTP ${res.status}).`,
-          { level: 'error' },
-        );
+        Alpine.store('toast').push(`Set create failed (HTTP ${res.status}).`, { level: 'error' });
       }
     },
   }));
