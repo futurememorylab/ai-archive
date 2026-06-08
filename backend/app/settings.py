@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     clip_cache_ttl_hours: int = 168
     clip_list_cache_ttl_minutes: int = 10
 
+    # Prompt Studio uploads (Spec B). Web-safe only; no server-side
+    # transcode, so the allowlist is browser-playable container/codecs.
+    studio_upload_max_mb: int = 500
+    studio_upload_allowed_mimes: str = "video/mp4,video/webm"
+
     # Filesystem archive provider (when ARCHIVE_PROVIDER=fs)
     fs_root: Path | None = None
     fs_media_exts: str = ".mov,.mp4,.mkv,.mxf,.m4v,.avi"
