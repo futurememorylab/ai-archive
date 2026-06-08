@@ -261,6 +261,24 @@ document.addEventListener('alpine:init', () => {
         Alpine.store('toast').push(`Set create failed (HTTP ${res.status}).`, { level: 'error' });
       }
     },
+    async renameSet(setId, currentName) {
+      const name = (window.prompt('Rename set', currentName) || '').trim();
+      if (!name || name === currentName) return;
+      const res = await fetch(`/api/studio/sets/${setId}`, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name}),
+      });
+      if (res.ok) {
+        const card = document.querySelector(`.studio-set[data-set-id="${setId}"] .name`);
+        if (card) card.textContent = name;
+        Alpine.store('toast').push(`Renamed to "${name}".`, { level: 'success' });
+      } else if (res.status === 409) {
+        Alpine.store('toast').push(`A set named "${name}" already exists.`, { level: 'error' });
+      } else {
+        Alpine.store('toast').push(`Rename failed (HTTP ${res.status}).`, { level: 'error' });
+      }
+    },
   }));
 
   Alpine.data('studioPromptCard', (side = 'cur', model = '', state = '') => ({
