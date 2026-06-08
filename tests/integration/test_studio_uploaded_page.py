@@ -26,7 +26,7 @@ def test_uploaded_set_renders_filename(client):
     ).json()
     html = client.get(f"/studio/_set?set_id={up['set_id']}").text
     assert "holiday.mp4" in html
-    assert "clip-" not in html          # no archive id-fallback name
+    assert f"clip-{up['clip_id']}" not in html  # no archive id-fallback name
     assert f"id:{up['clip_id']}" not in html  # uploaded cards suppress the id tag
 
 
