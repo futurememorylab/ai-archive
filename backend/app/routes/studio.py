@@ -6,13 +6,23 @@ All under /api/studio. See docs/specs/2026-05-26-prompt-studio-design.md.
 import asyncio
 
 import aiosqlite
-from fastapi import APIRouter, Header, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import Response
 from pydantic import BaseModel
 
 from backend.app.deps import get_core_ctx
 from backend.app.routes.pages.templates import templates
 from backend.app.services.annotator import run_job
+from backend.app.uploaded_ids import to_clip_id
 
 router = APIRouter(prefix="/api/studio", tags=["studio"])
 
@@ -120,6 +130,107 @@ async def remove_set_clip(request: Request, set_id: int, clip_id: int):
     ctx = get_core_ctx(request)
     await ctx.studio_sets_repo.remove_clip(ctx.db, set_id, clip_id=clip_id)
     return Response(status_code=204)
+
+
+# ── uploads (Spec B) ──────────────────────────────────────────────────────────
+
+_EXT_BY_MIME = {"video/mp4": ".mp4", "video/webm": ".webm"}
+
+
+@router.post("/uploads", status_code=status.HTTP_201_CREATED)
+async def upload_clip(
+    request: Request,
+    file: UploadFile = File(...),
+    poster: UploadFile | None = File(None),
+    set_id: int | None = Form(None),
+    duration_secs: float | None = Form(None),
+    width: int | None = Form(None),
+    height: int | None = Form(None),
+    hx_request: str | None = Header(None, alias="HX-Request"),
+):
+    ctx = get_core_ctx(request)
+    s = ctx.settings
+
+    mime = (file.content_type or "").split(";")[0].strip()
+    allowed = {m.strip() for m in s.studio_upload_allowed_mimes.split(",") if m.strip()}
+    ext = _EXT_BY_MIME.get(mime)
+    if mime not in allowed or ext is None:
+        raise HTTPException(
+            415, f"Unsupported format {mime or 'unknown'!r}; allowed: {sorted(allowed)}"
+        )
+
+    data = await file.read()
+    max_bytes = int(s.studio_upload_max_mb) * 1024 * 1024
+    if len(data) > max_bytes:
+        raise HTTPException(
+            413, f"File too large ({len(data)} bytes); max {s.studio_upload_max_mb} MB"
+        )
+
+    if set_id is None:
+        set_id = await ctx.studio_sets_repo.get_or_create_default_uploaded_set(ctx.db)
+
+    pk = await ctx.uploaded_clips_repo.create(
+        ctx.db,
+        original_filename=file.filename or "upload",
+        mime=mime,
+        size_bytes=len(data),
+        ext=ext,
+        duration_secs=duration_secs,
+        width=width,
+        height=height,
+    )
+    clip_id = to_clip_id(pk)
+
+    uploads_dir = s.data_dir / "cache" / "uploads"
+    dest = uploads_dir / f"{clip_id}{ext}"
+
+    def _write_video() -> None:
+        uploads_dir.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(data)  # sync-io-ok: runs inside asyncio.to_thread (_write_video)
+
+    await asyncio.to_thread(_write_video)
+
+    await ctx.proxy_cache_repo.record(
+        ctx.db,
+        clip_id=clip_id,
+        file_path=str(dest),
+        size_bytes=len(data),
+        etag=None,
+        provider_id="uploaded",
+        provider_clip_id=str(clip_id),
+    )
+
+    if poster is not None:
+        poster_bytes = await poster.read()
+        thumbs_dir = s.data_dir / "cache" / "thumbs"
+        thumb_dest = thumbs_dir / f"{clip_id}.jpg"
+
+        def _write_poster() -> None:
+            thumbs_dir.mkdir(parents=True, exist_ok=True)
+            thumb_dest.write_bytes(poster_bytes)  # sync-io-ok: runs inside asyncio.to_thread (_write_poster)
+
+        await asyncio.to_thread(_write_poster)
+
+    await ctx.studio_sets_repo.add_clips(ctx.db, set_id, clip_ids=[clip_id])
+
+    if hx_request == "true":
+        c = {
+            "clip_id": clip_id,
+            "name": file.filename or f"upload-{clip_id}",
+            "duration_secs": duration_secs,
+            "year": None,
+            "fps": 25.0,
+            "has_cur": False,
+            "has_other": False,
+            "uploaded": True,
+        }
+        return templates.TemplateResponse(
+            request,
+            "pages/_studio_set_clip_card.html",
+            {"c": c, "set_id": set_id, "focused_clip_id": None},
+            status_code=status.HTTP_201_CREATED,
+        )
+    return {"clip_id": clip_id, "set_id": set_id}
 
 
 # ── runs ────────────────────────────────────────────────────────────────────
