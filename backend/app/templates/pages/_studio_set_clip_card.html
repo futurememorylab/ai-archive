@@ -1,0 +1,28 @@
+{# Clip card — focus on click, select via checkbox, remove on hover X,
+   run-dots top-right. Vanilla onclick (HTMX-injected, no x-data). Variables:
+     c       — dict: clip_id, name, duration_secs, year, fps, has_cur, has_other
+     set_id  — outer set id (used for the remove DELETE call) #}
+<div class="studio-clip-card{% if focused_clip_id is defined and focused_clip_id == c.clip_id %} selected{% endif %}"
+     onclick="window.studio.focusClip({{ c.clip_id }})"
+     data-clip-id="{{ c.clip_id }}">
+  <input type="checkbox" class="clip-check"
+         onclick="event.stopPropagation(); window.studio.toggleClip({{ c.clip_id }}, this.checked);" />
+  <div class="thumb"
+       {% set thumb_url = '/api/media/' ~ c.clip_id ~ '/thumb' %}
+       style="background-image:url('{{ thumb_url }}')">
+    {% if c.year %}<span class="yr">{{ c.year }}</span>{% endif %}
+    {% if c.duration_secs %}
+      <span class="tc">{{ smpte(c.duration_secs, c.fps or 25.0) }}</span>
+    {% endif %}
+  </div>
+  <div class="meta">
+    <div class="name" title="{{ c.name }}">{{ c.name }}</div>
+    <div class="tag">id:{{ c.clip_id }}{% if c.year %} · {{ c.year }}{% endif %}</div>
+  </div>
+  <div class="dots">
+    {% if c.has_cur %}<span class="rundot cur" title="ran with active version"></span>{% endif %}
+    {% if c.has_other %}<span class="rundot" title="ran with other version(s)"></span>{% endif %}
+  </div>
+  <button class="remove-x" title="remove from set"
+          onclick="event.stopPropagation(); window.studio.removeClip({{ set_id }}, {{ c.clip_id }}, this);">×</button>
+</div>

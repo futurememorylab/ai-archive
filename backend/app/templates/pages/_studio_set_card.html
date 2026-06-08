@@ -1,0 +1,20 @@
+{# Single set card — rendered both inside _studio_set_list.html's loop and as
+   the HTMX response to POST /api/studio/sets. Expects `f` (set) with
+   id / name / clip_count. #}
+<div class="studio-set" data-set-id="{{ f.id }}" :class="expandedId === {{ f.id }} && 'open'">
+  <div class="studio-set-row">
+    <input type="checkbox" class="set-check"
+           @click.stop="toggleSet({{ f.id }})"
+           :checked="setFullySelected({{ f.id }})" />
+    <span class="twist" @click="toggle({{ f.id }})"
+          x-text="expandedId === {{ f.id }} ? '▾' : '▸'"></span>
+    <span class="name" @click="toggle({{ f.id }})">{{ f.name }}</span>
+    <span class="count" x-text="setBadge({{ f.id }}, {{ f.clip_count }})">{{ f.clip_count }}</span>
+  </div>
+  <div class="studio-set-kids" x-show="expandedId === {{ f.id }}" x-cloak
+       hx-get="/studio/_set?set_id={{ f.id }}{% if active_version %}&active_version_id={{ active_version.id }}{% endif %}{% if focused_clip_id %}&clip_id={{ focused_clip_id }}{% endif %}"
+       hx-trigger="intersect once"
+       hx-swap="innerHTML">
+    <div class="muted">loading…</div>
+  </div>
+</div>

@@ -1,17 +1,17 @@
-{# Archive picker modal — search + multi-select add into a folder.
+{# Archive picker modal — search + multi-select add into a set.
 
    The modal is HTMX-swapped into #modal-root from the "+ Add from archive"
-   button inside an expanded folder (see _studio_folder.html). State and
+   button inside an expanded set (see _studio_set.html). State and
    picker behavior come from window.clipPickerCore() (static/clipPicker.js),
-   spread into the `archivePicker(folderId)` Alpine component; the close
+   spread into the `archivePicker(setId)` Alpine component; the close
    action wipes #modal-root. Rows are fetched from the shared
    /batches/picker endpoint into .nb-list.
 #}
-<div class="modal" x-data="archivePicker({{ folder_id }})" @keydown.escape.window="close()">
+<div class="modal" x-data="archivePicker({{ set_id }})" @keydown.escape.window="close()">
   <div class="modal-backdrop" @click="close()"></div>
   <div class="modal-card nb-card">
     <div class="modal-hdr">
-      <h2>Add clips to folder</h2>
+      <h2>Add clips to set</h2>
       <span class="grow"></span>
       <button class="btn ghost" @click="close()">×</button>
     </div>
