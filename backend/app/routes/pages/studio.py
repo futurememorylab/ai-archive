@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse
 
 from backend.app.deps import get_core_ctx
 from backend.app.routes.pages.templates import templates
+from backend.app.uploaded_ids import is_uploaded
 
 router = APIRouter(tags=["pages"])
 
@@ -142,32 +143,49 @@ async def _studio_set(
     archive = _archive(request)
     clips_rows = await ctx.studio_sets_repo.list_clips(ctx.db, set_id)
 
-    # Build per-clip "has any run with active version" / "any other version" flags.
+    uploaded_ids = [c["clip_id"] for c in clips_rows if is_uploaded(c["clip_id"])]
+    uploaded_meta = (
+        await ctx.uploaded_clips_repo.get_many(ctx.db, uploaded_ids)
+        if uploaded_ids
+        else {}
+    )
+
     enriched = []
     for c in clips_rows:
-        versions = await ctx.studio_runs_repo.versions_run_on_clip(
-            ctx.db, clip_id=c["clip_id"]
-        )
+        cid = c["clip_id"]
+        versions = await ctx.studio_runs_repo.versions_run_on_clip(ctx.db, clip_id=cid)
         has_cur = active_version_id is not None and active_version_id in versions
         has_other = any(v != active_version_id for v in versions)
-        # Pull minimal clip metadata via the archive if available; fall back to id.
-        meta: dict = {
-            "name": f"clip-{c['clip_id']}",
-            "duration_secs": None,
-            "year": None,
-            "fps": 25.0,
-        }
-        if archive is not None:
-            try:
-                clip = await archive.get_clip(str(c["clip_id"]))
-                meta = {
-                    "name": clip.name,
-                    "duration_secs": clip.duration_secs,
-                    "year": (clip.provider_data or {}).get("pragafilm.rok.natoceni"),
-                    "fps": float(clip.fps or 25.0),
-                }
-            except Exception:  # noqa: BLE001
-                pass
+
+        if is_uploaded(cid):
+            row = uploaded_meta.get(cid)
+            meta: dict = {
+                "name": (row or {}).get("original_filename") or f"upload-{cid}",
+                "duration_secs": (row or {}).get("duration_secs"),
+                "year": None,
+                "fps": 25.0,
+                "uploaded": True,
+            }
+        else:
+            meta = {
+                "name": f"clip-{cid}",
+                "duration_secs": None,
+                "year": None,
+                "fps": 25.0,
+                "uploaded": False,
+            }
+            if archive is not None:
+                try:
+                    clip = await archive.get_clip(str(cid))
+                    meta = {
+                        "name": clip.name,
+                        "duration_secs": clip.duration_secs,
+                        "year": (clip.provider_data or {}).get("pragafilm.rok.natoceni"),
+                        "fps": float(clip.fps or 25.0),
+                        "uploaded": False,
+                    }
+                except Exception:  # noqa: BLE001
+                    pass
         enriched.append({**c, **meta, "has_cur": has_cur, "has_other": has_other})
 
     return templates.TemplateResponse(
