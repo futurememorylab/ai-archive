@@ -130,7 +130,7 @@ def test_create_run_persists_pending_studio_run_and_job(client):
 
 
 def test_studio_e2e_happy_path(client):
-    """End-to-end integration test: prompt, folder, clip, run, studio page."""
+    """End-to-end integration test: prompt, set, clip, run, studio page."""
     # 1. Create a prompt
     r = client.post(
         "/api/prompts",
@@ -149,7 +149,7 @@ def test_studio_e2e_happy_path(client):
     vid = r.json()["latest_version_id"]
 
     # 2. Create a set
-    r = client.post("/api/studio/sets", json={"name": "e2e-folder"})
+    r = client.post("/api/studio/sets", json={"name": "e2e-set"})
     assert r.status_code == 201
     fid = r.json()["id"]
 
@@ -163,7 +163,7 @@ def test_studio_e2e_happy_path(client):
     assert r.status_code == 200
     f = next(x for x in r.json() if x["id"] == fid)
     assert f["clip_count"] == 1
-    assert f["name"] == "e2e-folder"
+    assert f["name"] == "e2e-set"
 
     # 5. POST a studio run with explicit model override
     r = client.post(
@@ -191,4 +191,9 @@ def test_studio_e2e_happy_path(client):
     # 8. GET /studio?prompt_id={pid} and assert studio page renders 200
     r = client.get(f"/studio?prompt_id={pid}")
     assert r.status_code == 200
-    assert "e2e-folder" in r.text
+    # The navigator now has source tabs; offline (no archive) the index
+    # renders the Uploaded stub, so the archive set list is served via the
+    # canonical /studio/_sets partial — assert the set name shows there.
+    r = client.get("/studio/_sets?source=archive")
+    assert r.status_code == 200
+    assert "e2e-set" in r.text

@@ -1,15 +1,15 @@
 """Studio domain models — round-trip + invariants."""
 
-from backend.app.models.studio import StudioFolder, StudioFolderClip, StudioRun
+from backend.app.models.studio import StudioRun, StudioSet, StudioSetClip
 
 
-def test_studio_folder_minimal():
-    f = StudioFolder(id=1, name="edge_cases", created_at="2026-05-26T10:00:00+00:00")
+def test_studio_set_minimal():
+    f = StudioSet(id=1, name="edge_cases", created_at="2026-05-26T10:00:00+00:00")
     assert f.name == "edge_cases"
 
 
-def test_studio_folder_clip_minimal():
-    fc = StudioFolderClip(folder_id=1, clip_id=12041, added_at="2026-05-26T10:00:00+00:00")
+def test_studio_set_clip_minimal():
+    fc = StudioSetClip(set_id=1, clip_id=12041, added_at="2026-05-26T10:00:00+00:00")
     assert fc.clip_id == 12041
 
 

@@ -1649,7 +1649,7 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   overflow: hidden;
 }
 
-/* Folder tree */
+/* Set tree */
 .studio-sets {
   display: flex;
   flex-direction: column;
@@ -1721,7 +1721,7 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   gap: 6px;
 }
 
-/* Clip card in folder */
+/* Clip card in set */
 .studio-clip-card {
   position: relative;
   display: grid;

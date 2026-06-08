@@ -402,7 +402,7 @@ document.addEventListener('alpine:init', () => {
       const slot = this.$refs.runSlot;
       if (!slot) return;
       if (!clipId) {
-        slot.innerHTML = '<div class="muted">Click a clip in a folder to focus it.</div>';
+        slot.innerHTML = '<div class="muted">Click a clip in a set to focus it.</div>';
         return;
       }
       try {
