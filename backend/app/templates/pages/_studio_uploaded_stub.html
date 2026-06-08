@@ -1,7 +1,21 @@
-{# backend/app/templates/pages/_studio_uploaded_stub.html
-   Spec A placeholder. The upload subsystem is Spec B. #}
-<div class="studio-uploaded-stub muted">
-  <div class="su-ico">☁</div>
-  <div class="su-title">Uploads coming soon</div>
-  <div class="su-sub">Uploaded clips will appear here.</div>
+{# Uploaded source body: a dropzone + file picker that ingests web-safe
+   videos, plus the uploaded set list. The dropzone JS lives in
+   studio.js (uploadClips). #}
+<div x-data="uploadClips()">
+  <div class="studio-dropzone"
+       :class="dragging && 'drag'"
+       @dragover.prevent="dragging = true"
+       @dragleave.prevent="dragging = false"
+       @drop.prevent="onDrop($event)"
+       @click="$refs.file.click()">
+    <input type="file" x-ref="file" accept="video/mp4,video/webm" class="hidden"
+           @change="onPick($event)" multiple />
+    <div class="dz-ico">⤒</div>
+    <div class="dz-title">Drop video files or click to upload</div>
+    <div class="dz-sub">mp4 / webm only</div>
+    <template x-if="busy">
+      <div class="dz-progress" x-text="`Uploading ${doneCount}/${totalCount}…`"></div>
+    </template>
+  </div>
 </div>
+{% include "pages/_studio_set_list.html" %}

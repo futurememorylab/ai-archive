@@ -104,7 +104,7 @@ def test_studio_page_renders_source_tabs(client):
     html = r.text
     # Both tabs present; Archive is hidden only when no archive is connected.
     assert 'data-nav-source="uploaded"' in html
-    assert "Uploads coming soon" in html  # the stub copy exists in the panel
+    assert "Drop video files or click to upload" in html  # the dropzone renders in the panel
 
 
 def test_studio_nav_has_bulk_action_bar(client):
@@ -119,3 +119,9 @@ def test_studio_sets_partial_partitions_by_source(client):
     r = client.get("/studio/_sets?source=uploaded")
     assert r.status_code == 200
     assert "a" not in r.text or "studio-set-card" not in r.text
+
+
+def test_studio_page_exposes_uploaded_total(client):
+    client.post("/api/studio/uploads", files={"file": ("a.mp4", b"x", "video/mp4")})
+    html = client.get("/studio").text
+    assert "data-studio-nav-body" in html

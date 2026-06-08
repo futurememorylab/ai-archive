@@ -50,6 +50,9 @@ async def studio_page(
     archive_clip_total = await ctx.studio_sets_repo.clip_total_for_source(
         ctx.db, source="archive"
     )
+    uploaded_clip_total = await ctx.studio_sets_repo.clip_total_for_source(
+        ctx.db, source="uploaded"
+    )
 
     selected_prompt = None
     versions: list = []
@@ -109,6 +112,7 @@ async def studio_page(
             "archive_available": archive_available,
             "nav_source": nav_source,
             "archive_clip_total": archive_clip_total,
+            "uploaded_clip_total": uploaded_clip_total,
             "focused_clip_id": clip_id,
             "focused_set_id": focused_set_id,
         },
@@ -119,9 +123,14 @@ async def studio_page(
 async def _studio_sets(request: Request, source: str = "archive"):
     ctx = get_core_ctx(request)
     sets = await ctx.studio_sets_repo.list_sets_with_counts(ctx.db, source=source)
+    template = (
+        "pages/_studio_uploaded_stub.html"
+        if source == "uploaded"
+        else "pages/_studio_set_list.html"
+    )
     return templates.TemplateResponse(
         request,
-        "pages/_studio_set_list.html",
+        template,
         {"sets": sets, "active_version": None, "nav_source": source},
     )
 

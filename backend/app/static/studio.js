@@ -146,22 +146,13 @@ document.addEventListener('alpine:init', () => {
     async switchSource(next, btn) {
       if (this.source === next) return;
       this.source = next;
-      // Clear any cross-tab selection when the source changes.
       Alpine.store('studio').clearSelection();
       const body = document.querySelector('[data-studio-nav-body]');
       if (!body) return;
       try {
         const html = await fetch(`/studio/_sets?source=${next}`).then(r => r.text());
-        if (next === 'uploaded') {
-          body.innerHTML =
-            '<div class="studio-uploaded-stub muted">' +
-            '<div class="su-ico">☁</div>' +
-            '<div class="su-title">Uploads coming soon</div>' +
-            '<div class="su-sub">Uploaded clips will appear here.</div></div>';
-        } else {
-          body.innerHTML = html;
-          window.htmxAlpine.reinit(body);
-        }
+        body.innerHTML = html;
+        window.htmxAlpine.reinit(body);
         localStorage.setItem('studio.navSource', next);
       } catch (err) {
         console.error('switchSource failed', err);
@@ -235,7 +226,8 @@ document.addEventListener('alpine:init', () => {
     async createSet() {
       const name = this.newSetName.trim();
       if (!name) return;
-      const res = await fetch('/api/studio/sets', {
+      const source = document.querySelector('.studio-nav-tab.active')?.dataset.navSource || 'archive';
+      const res = await fetch(`/api/studio/sets?source=${source}`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'HX-Request': 'true'},
         body: JSON.stringify({name}),
@@ -277,6 +269,104 @@ document.addEventListener('alpine:init', () => {
         Alpine.store('toast').push(`A set named "${name}" already exists.`, { level: 'error' });
       } else {
         Alpine.store('toast').push(`Rename failed (HTTP ${res.status}).`, { level: 'error' });
+      }
+    },
+  }));
+
+  Alpine.data('uploadClips', () => ({
+    dragging: false,
+    busy: false,
+    doneCount: 0,
+    totalCount: 0,
+
+    onDrop(evt) {
+      this.dragging = false;
+      this.uploadFiles([...(evt.dataTransfer?.files || [])]);
+    },
+    onPick(evt) {
+      this.uploadFiles([...(evt.target.files || [])]);
+      evt.target.value = '';  // allow re-picking the same file
+    },
+
+    async uploadFiles(files) {
+      const vids = files.filter(f => f.type === 'video/mp4' || f.type === 'video/webm');
+      const rejected = files.length - vids.length;
+      if (rejected > 0) {
+        Alpine.store('toast').push(
+          `${rejected} file${rejected === 1 ? '' : 's'} skipped — mp4/webm only.`,
+          { level: 'error' },
+        );
+      }
+      if (!vids.length) return;
+      this.busy = true;
+      this.totalCount = vids.length;
+      this.doneCount = 0;
+      for (const f of vids) {
+        try { await this.uploadOne(f); }
+        catch (err) {
+          console.error('upload failed', f.name, err);
+          Alpine.store('toast').push(
+            `Upload failed for ${f.name}: ${err.message || String(err)}`,
+            { level: 'error' },
+          );
+        } finally { this.doneCount++; }
+      }
+      this.busy = false;
+    },
+
+    // Capture a poster frame at ~1s via an offscreen <video> + <canvas>.
+    // Returns a Blob or null (decode failure → server-side placeholder).
+    async capturePoster(file, meta) {
+      try {
+        return await new Promise((resolve) => {
+          const v = document.createElement('video');
+          v.preload = 'metadata';
+          v.muted = true;
+          v.src = URL.createObjectURL(file);
+          const done = (blob) => { URL.revokeObjectURL(v.src); resolve(blob); };
+          v.onloadedmetadata = () => {
+            meta.duration = v.duration || null;
+            meta.width = v.videoWidth || null;
+            meta.height = v.videoHeight || null;
+            v.currentTime = Math.min(1, (v.duration || 1) / 2);
+          };
+          v.onseeked = () => {
+            try {
+              const c = document.createElement('canvas');
+              c.width = v.videoWidth; c.height = v.videoHeight;
+              c.getContext('2d').drawImage(v, 0, 0);
+              c.toBlob((b) => done(b), 'image/jpeg', 0.8);
+            } catch (e) { done(null); }
+          };
+          v.onerror = () => done(null);
+        });
+      } catch (e) { return null; }
+    },
+
+    async uploadOne(file) {
+      const meta = { duration: null, width: null, height: null };
+      const poster = await this.capturePoster(file, meta);
+      const fd = new FormData();
+      fd.append('file', file, file.name);
+      if (poster) fd.append('poster', poster, 'poster.jpg');
+      if (meta.duration != null) fd.append('duration_secs', String(meta.duration));
+      if (meta.width != null) fd.append('width', String(meta.width));
+      if (meta.height != null) fd.append('height', String(meta.height));
+      const res = await fetch('/api/studio/uploads', {
+        method: 'POST', headers: {'HX-Request': 'true'}, body: fd,
+      });
+      if (!res.ok) {
+        let detail = `HTTP ${res.status}`;
+        try { detail = (await res.json()).detail || detail; } catch (e) { /* non-JSON */ }
+        throw new Error(detail);
+      }
+      const card = await res.text();
+      Alpine.store('toast').push(`Uploaded ${file.name}.`, { level: 'success' });
+      const body = document.querySelector('[data-studio-nav-body]');
+      if (body) {
+        const html = await fetch('/studio/_sets?source=uploaded').then(r => r.text());
+        body.innerHTML = html;
+        window.htmxAlpine.reinit(body);
       }
     },
   }));

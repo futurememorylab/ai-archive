@@ -15,7 +15,7 @@
             :class="source === 'uploaded' && 'active'"
             @click="switchSource('uploaded', $el)">
       <span class="ico">⤒</span> Uploaded
-      <span class="badge">0</span>
+      <span class="badge">{{ uploaded_clip_total }}</span>
     </button>
   </div>
 
