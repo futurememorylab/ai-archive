@@ -19,6 +19,14 @@
     </button>
   </div>
 
+  <div class="studio-bulk-bar" x-show="$store.studio.selectedClipIds.length > 0" x-cloak>
+    <button class="btn primary sm"
+            :disabled="$store.studio.bulkRunning || !$store.studio.activeVersionId"
+            @click="$store.studio.runOnSelectedClips()"
+            x-text="$store.studio.bulkRunLabel()">Run on 0 clips</button>
+    <button class="btn ghost sm" @click="$store.studio.clearSelection()">Clear</button>
+  </div>
+
   <div class="studio-nav-body" data-studio-nav-body>
     {% if nav_source == 'uploaded' %}
       {% include "pages/_studio_uploaded_stub.html" %}

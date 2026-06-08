@@ -107,6 +107,12 @@ def test_studio_page_renders_source_tabs(client):
     assert "Uploads coming soon" in html  # the stub copy exists in the panel
 
 
+def test_studio_nav_has_bulk_action_bar(client):
+    html = client.get("/studio").text
+    assert "studio-bulk-bar" in html
+    assert "runOnSelectedClips()" in html
+
+
 def test_studio_sets_partial_partitions_by_source(client):
     # Create one archive set, then ask the uploaded partial — must be empty.
     client.post("/api/studio/sets", json={"name": "a"})
