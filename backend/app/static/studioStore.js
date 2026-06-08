@@ -24,6 +24,10 @@
 // x-effect from re-triggering when the store writes estimateLabel.
 let _studioEstimateKey = '';
 
+// Max concurrent studio runs during a bulk "Run on N clips" — protects the
+// single CatDV seat and Gemini quota. See spec §5.
+const BULK_RUN_CONCURRENCY = 2;
+
 document.addEventListener('alpine:init', () => {
   Alpine.store('studio', {
     // ── Shared page state (seeded by hydrate()) ──────────────────────
@@ -35,6 +39,13 @@ document.addEventListener('alpine:init', () => {
     compareVersionNum: null,
     mode: 'prompt',  // page-level tab state
     focusedClipId: null,
+    // ── Multi-select (navigator checkboxes → bulk run) ───────────────
+    // Set of clip ids selected in the CURRENT source tab. Plain array for
+    // Alpine reactivity friendliness; membership ops go through helpers.
+    selectedClipIds: [],
+    bulkRunning: false,
+    bulkDone: 0,
+    bulkTotal: 0,
     showList: true,
     showPlayer: true,
     layout: 'under',                 // 'under' | 'right'
@@ -186,10 +197,50 @@ document.addEventListener('alpine:init', () => {
       this.refreshPlayer();
     },
 
-    // No-op stub (Task 6). studioNav.switchSource() calls this when the
-    // source tab changes; the real cross-tab selection clearing lands in
-    // Task 9.
-    clearSelection() {},
+    // ── Selection ────────────────────────────────────────────────────
+    isClipSelected(clipId) { return this.selectedClipIds.includes(clipId); },
+
+    toggleClip(clipId, checked) {
+      const on = checked ?? !this.isClipSelected(clipId);
+      if (on && !this.isClipSelected(clipId)) {
+        this.selectedClipIds = [...this.selectedClipIds, clipId];
+      } else if (!on) {
+        this.selectedClipIds = this.selectedClipIds.filter(id => id !== clipId);
+      }
+    },
+
+    _clipIdsInSet(setId) {
+      const kids = document.querySelector(`.studio-set[data-set-id="${setId}"] .studio-set-kids`);
+      if (!kids) return [];
+      return [...kids.querySelectorAll('.studio-clip-card[data-clip-id]')]
+        .map(el => Number(el.dataset.clipId));
+    },
+
+    setFullySelected(setId) {
+      const ids = this._clipIdsInSet(setId);
+      return ids.length > 0 && ids.every(id => this.isClipSelected(id));
+    },
+
+    toggleSet(setId) {
+      const ids = this._clipIdsInSet(setId);
+      const allOn = ids.length > 0 && ids.every(id => this.isClipSelected(id));
+      ids.forEach(id => this.toggleClip(id, !allOn));
+      // Reflect into the rendered clip checkboxes (HTMX-injected, no x-model).
+      document.querySelectorAll(`.studio-set[data-set-id="${setId}"] .clip-check`)
+        .forEach((cb, i) => { cb.checked = !allOn; });
+    },
+
+    setBadge(setId, total) {
+      const ids = this._clipIdsInSet(setId);
+      const sel = ids.filter(id => this.isClipSelected(id)).length;
+      return sel > 0 ? `${sel}/${total}` : String(total);
+    },
+
+    clearSelection() {
+      this.selectedClipIds = [];
+      document.querySelectorAll('.studio-clip-card .clip-check, .studio-set .set-check')
+        .forEach(cb => { cb.checked = false; });
+    },
 
     toggleList() {
       this.showList = !this.showList;
@@ -301,6 +352,80 @@ document.addEventListener('alpine:init', () => {
         // No flash for error — error state is surfaced by the run-output partial.
         this._cancelRequested = false;
       }
+    },
+
+    // One run: POST + poll to terminal. Returns the final status string
+    // ('ok' | 'error' | 'cancelled' | null). Shared by single + bulk run.
+    async _runOne(clipId) {
+      const res = await fetch('/api/studio/runs', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          prompt_version_id: this.activeVersionId,
+          clip_id: clipId,
+          model: this.activeModel || null,
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const {run_id} = await res.json();
+      // Poll this run id to terminal status (independent of this.running).
+      while (true) {
+        await new Promise(r => setTimeout(r, 1000));
+        const pr = await fetch(`/api/studio/runs/${run_id}`);
+        if (!pr.ok) continue;
+        const run = await pr.json();
+        if (['ok', 'error', 'cancelled'].includes(run.status)) return run.status;
+      }
+    },
+
+    // Bulk "Run on N clips": run the active version over every selected clip
+    // with bounded concurrency. Per-clip failures toast and the loop
+    // continues. The navigator re-renders run-dots on next expand.
+    async runOnSelectedClips() {
+      if (!this.activeVersionId || this.bulkRunning) return;
+      const ids = [...this.selectedClipIds];
+      if (!ids.length) return;
+      this.bulkRunning = true;
+      this.bulkTotal = ids.length;
+      this.bulkDone = 0;
+      const queue = ids.slice();
+      const worker = async () => {
+        while (queue.length) {
+          const clipId = queue.shift();
+          try {
+            const status = await this._runOne(clipId);
+            if (status === 'error') {
+              Alpine.store('toast').push(`Run failed for clip ${clipId}.`, { level: 'error' });
+            }
+          } catch (err) {
+            console.error('bulk run failed', clipId, err);
+            Alpine.store('toast').push(
+              `Run failed for clip ${clipId}: ${err.message || String(err)}`,
+              { level: 'error' },
+            );
+          } finally {
+            this.bulkDone++;
+          }
+        }
+      };
+      try {
+        await Promise.all(
+          Array.from({length: Math.min(BULK_RUN_CONCURRENCY, ids.length)}, worker)
+        );
+        Alpine.store('toast').push(
+          `Ran ${this.bulkDone} clip${this.bulkDone === 1 ? '' : 's'}.`,
+          { level: 'success' },
+        );
+        this.pendingRunSwap++;  // nudge the focused-clip output to refresh
+      } finally {
+        this.bulkRunning = false;
+      }
+    },
+
+    bulkRunLabel() {
+      return this.bulkRunning
+        ? `Running ${this.bulkDone}/${this.bulkTotal}…`
+        : `Run on ${this.selectedClipIds.length} clip${this.selectedClipIds.length === 1 ? '' : 's'}`;
     },
 
     async _poll(runId) {
