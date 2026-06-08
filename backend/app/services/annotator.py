@@ -35,6 +35,7 @@ from backend.app.services.events import EventBus
 from backend.app.services.pricing import compute_cost
 from backend.app.services.proxy_resolver import ProxyNotFound
 from backend.app.services.target_map import expand
+from backend.app.uploaded_ids import is_uploaded
 from backend.app.services.telemetry_capture import (
     extract_finish_reason,
     extract_usage,
@@ -203,6 +204,7 @@ async def run_job(
     jobs_repo: JobsRepo,
     prompts_repo: PromptsRepo,
     studio_runs_repo: StudioRunsRepo,
+    uploaded_clips_repo,
     run_telemetry_repo: RunTelemetryRepo,
     telemetry_ctx: TelemetryCtx,
     only_clip_ids: set[int] | None = None,
@@ -244,6 +246,7 @@ async def run_job(
                 review_items_repo=review_items_repo,
                 jobs_repo=jobs_repo,
                 studio_runs_repo=studio_runs_repo,
+                uploaded_clips_repo=uploaded_clips_repo,
                 run_telemetry_repo=run_telemetry_repo,
                 telemetry_ctx=telemetry_ctx,
                 event_bus=event_bus,
@@ -294,6 +297,48 @@ async def run_job(
         await publish_job_progress(event_bus, jobs_repo, db, job_id, status=final_status)
 
 
+@dataclass
+class _ClipMeta:
+    clip_key: tuple[str, str]
+    duration_secs: float
+    media_kind: str
+    clip_name: str | None
+    media_fps: float | None
+    media_bytes: int | None
+    media_ext: str | None
+    clip_snapshot: dict[str, Any]
+
+
+async def _resolve_clip_meta(db, *, clip_id, archive, uploaded_clips_repo) -> _ClipMeta:
+    """Resolve the per-clip metadata + AI-store key for one run item,
+    branching on whether `clip_id` is an uploaded synthetic id."""
+    if is_uploaded(clip_id):
+        row = await uploaded_clips_repo.get(db, clip_id)
+        stored = (row or {}).get("stored_filename") or ""
+        return _ClipMeta(
+            clip_key=("uploaded", str(clip_id)),
+            duration_secs=float((row or {}).get("duration_secs") or 0.0),
+            media_kind="video",  # web-safe constraint guarantees video
+            clip_name=(row or {}).get("original_filename"),
+            media_fps=None,
+            media_bytes=(row or {}).get("size_bytes"),
+            media_ext=(Path(stored).suffix.lower() or None) if stored else None,
+            clip_snapshot={},
+        )
+    canonical = await archive.get_clip(str(clip_id))
+    media_path = str((canonical.media.cached_path or canonical.media.upstream_handle) or "")
+    return _ClipMeta(
+        clip_key=("catdv", str(clip_id)),
+        duration_secs=float(canonical.duration_secs or 0.0),
+        media_kind=classify_media_kind(media_path or None),
+        clip_name=canonical.name or None,
+        media_fps=canonical.fps or None,
+        media_bytes=canonical.media.size_bytes,
+        media_ext=(Path(media_path).suffix.lower() or None) if media_path else None,
+        clip_snapshot=dict(canonical.provider_data),
+    )
+
+
 async def _process_item(
     *,
     db,
@@ -308,12 +353,24 @@ async def _process_item(
     review_items_repo,
     jobs_repo,
     studio_runs_repo: StudioRunsRepo,
+    uploaded_clips_repo,
     run_telemetry_repo: RunTelemetryRepo,
     telemetry_ctx: TelemetryCtx,
     event_bus,
     topic,
 ) -> None:
-    clip_key = ("catdv", str(item.catdv_clip_id))
+    # Compute the AI-store key cheaply (no archive call). Full per-clip
+    # metadata is resolved lazily below, AFTER the proxy/AI-store cache-miss
+    # short-circuit — so a clip that is in neither cache fails fast WITHOUT
+    # ever calling archive.get_clip / hitting the seat-limited CatDV server.
+    # This preserves the invariant guarded by
+    # test_run_fails_clearly_when_neither_cached and the cache/seat discipline
+    # in CLAUDE.md (the spec says the proxy/ai-store flow is "reused as-is").
+    clip_key = (
+        ("uploaded", str(item.catdv_clip_id))
+        if is_uploaded(item.catdv_clip_id)
+        else ("catdv", str(item.catdv_clip_id))
+    )
 
     # Fast path: if the AI store already has this clip, skip the local
     # resolver + upload entirely. Gemini reads from GCS directly via the
@@ -349,12 +406,19 @@ async def _process_item(
 
     file_ref = await ai_store.reference_for_gemini(upload)
 
-    canonical = await archive.get_clip(str(item.catdv_clip_id))
-    clip_snapshot: dict[str, Any] = dict(canonical.provider_data)
-    duration_secs = float(canonical.duration_secs or 0.0)
-
-    media_path = str((canonical.media.cached_path or canonical.media.upstream_handle) or "")
-    media_kind = classify_media_kind(media_path or None)
+    # Resolve full metadata now — only reached once the clip is known to be
+    # available (proxy resolved or already in the AI store). For archive
+    # clips this is where the single archive.get_clip call happens; uploaded
+    # clips read their row from UploadedClipsRepo.
+    meta = await _resolve_clip_meta(
+        db,
+        clip_id=item.catdv_clip_id,
+        archive=archive,
+        uploaded_clips_repo=uploaded_clips_repo,
+    )
+    clip_snapshot: dict[str, Any] = meta.clip_snapshot
+    duration_secs = meta.duration_secs
+    media_kind = meta.media_kind
 
     # Pre-call estimate (spec §6; stamped onto the telemetry row so
     # est-vs-actual is one query). Blind to the outcome by construction.
@@ -383,10 +447,10 @@ async def _process_item(
     capture = CaptureMeta(
         media_kind=media_kind,
         media_duration_secs=duration_secs or None,
-        media_fps=canonical.fps or None,
-        media_bytes=canonical.media.size_bytes,
-        media_ext=(Path(media_path).suffix.lower() or None) if media_path else None,
-        clip_name=canonical.name or None,
+        media_fps=meta.media_fps,
+        media_bytes=meta.media_bytes,
+        media_ext=meta.media_ext,
+        clip_name=meta.clip_name,
         prompt_chars_rendered=len(rendered_body),
     )
     t0 = time.monotonic()
