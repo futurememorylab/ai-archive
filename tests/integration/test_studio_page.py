@@ -96,3 +96,20 @@ def test_studio_page_ignores_compare_equal_to_cur(client):
     r = client.get(f"/studio?prompt_id={pid}&version_id={v1}&compare_version_id={v1}")
     assert r.status_code == 200
     assert "compareVersionId: null" in r.text
+
+
+def test_studio_page_renders_source_tabs(client):
+    r = client.get("/studio")
+    assert r.status_code == 200
+    html = r.text
+    # Both tabs present; Archive is hidden only when no archive is connected.
+    assert 'data-nav-source="uploaded"' in html
+    assert "Uploads coming soon" in html  # the stub copy exists in the panel
+
+
+def test_studio_sets_partial_partitions_by_source(client):
+    # Create one archive set, then ask the uploaded partial — must be empty.
+    client.post("/api/studio/sets", json={"name": "a"})
+    r = client.get("/studio/_sets?source=uploaded")
+    assert r.status_code == 200
+    assert "a" not in r.text or "studio-set-card" not in r.text
