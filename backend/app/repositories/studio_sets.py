@@ -11,6 +11,8 @@ from typing import Any
 
 import aiosqlite
 
+DEFAULT_UPLOADED_SET_NAME = "Uploads"
+
 
 def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
@@ -28,6 +30,22 @@ class StudioSetsRepo:
         assert sid is not None
         await conn.commit()
         return sid
+
+    async def get_or_create_default_uploaded_set(
+        self, conn: aiosqlite.Connection
+    ) -> int:
+        """Return the id of the well-known uploaded 'Uploads' set, creating
+        it on first use. Lets a user drop a file before making a set."""
+        cur = await conn.execute(
+            "SELECT id FROM studio_set WHERE source='uploaded' AND name=? LIMIT 1",
+            (DEFAULT_UPLOADED_SET_NAME,),
+        )
+        row = await cur.fetchone()
+        if row is not None:
+            return int(row[0])
+        return await self.create_set(
+            conn, name=DEFAULT_UPLOADED_SET_NAME, source="uploaded"
+        )
 
     async def rename_set(
         self, conn: aiosqlite.Connection, set_id: int, *, name: str
