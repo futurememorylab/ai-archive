@@ -41,3 +41,8 @@ INSERT INTO studio_set_clip (set_id, clip_id, added_at)
 
 DROP TABLE studio_folder_clip;
 DROP TABLE studio_folder;
+
+-- Restore FK enforcement: PRAGMA foreign_keys is connection-level and would
+-- otherwise stay OFF for the life of the migrating connection, silently
+-- disabling the studio_set_clip ON DELETE CASCADE on that same connection.
+PRAGMA foreign_keys = ON;
