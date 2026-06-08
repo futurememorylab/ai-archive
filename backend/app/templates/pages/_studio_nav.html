@@ -1,0 +1,29 @@
+{# Source tabs for the studio navigator. Archive is hidden when no archive is
+   connected (archive_available False). The active list is swapped by HTMX
+   from /studio/_sets?source=…; the Uploaded tab is a Spec-A stub. #}
+<div class="studio-nav" x-data="studioNav('{{ nav_source }}')">
+  <div class="studio-nav-tabs" role="tablist">
+    {% if archive_available %}
+    <button class="studio-nav-tab" data-nav-source="archive"
+            :class="source === 'archive' && 'active'"
+            @click="switchSource('archive', $el)">
+      <span class="ico">🗄</span> Archive
+      <span class="badge">{{ archive_clip_total }}</span>
+    </button>
+    {% endif %}
+    <button class="studio-nav-tab" data-nav-source="uploaded"
+            :class="source === 'uploaded' && 'active'"
+            @click="switchSource('uploaded', $el)">
+      <span class="ico">⤒</span> Uploaded
+      <span class="badge">0</span>
+    </button>
+  </div>
+
+  <div class="studio-nav-body" data-studio-nav-body>
+    {% if nav_source == 'uploaded' %}
+      {% include "pages/_studio_uploaded_stub.html" %}
+    {% else %}
+      {% include "pages/_studio_set_list.html" %}
+    {% endif %}
+  </div>
+</div>

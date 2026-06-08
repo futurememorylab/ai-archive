@@ -138,6 +138,35 @@ document.addEventListener('alpine:init', () => {
     };
   });
 
+  Alpine.data('studioNav', (initial = 'archive') => ({
+    source: initial,
+    async switchSource(next, btn) {
+      if (this.source === next) return;
+      this.source = next;
+      // Clear any cross-tab selection when the source changes.
+      Alpine.store('studio').clearSelection();
+      const body = document.querySelector('[data-studio-nav-body]');
+      if (!body) return;
+      try {
+        const html = await fetch(`/studio/_sets?source=${next}`).then(r => r.text());
+        if (next === 'uploaded') {
+          body.innerHTML =
+            '<div class="studio-uploaded-stub muted">' +
+            '<div class="su-ico">☁</div>' +
+            '<div class="su-title">Uploads coming soon</div>' +
+            '<div class="su-sub">Uploaded clips will appear here.</div></div>';
+        } else {
+          body.innerHTML = html;
+          window.htmxAlpine.reinit(body);
+        }
+        localStorage.setItem('studio.navSource', next);
+      } catch (err) {
+        console.error('switchSource failed', err);
+        Alpine.store('toast').push(`Could not load ${next} sets.`, { level: 'error' });
+      }
+    },
+  }));
+
   Alpine.data('archivePicker', (folderId) => ({
     ...window.clipPickerCore(),
     folderId,

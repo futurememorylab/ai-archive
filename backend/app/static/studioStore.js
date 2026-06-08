@@ -186,6 +186,11 @@ document.addEventListener('alpine:init', () => {
       this.refreshPlayer();
     },
 
+    // No-op stub (Task 6). studioNav.switchSource() calls this when the
+    // source tab changes; the real cross-tab selection clearing lands in
+    // Task 9.
+    clearSelection() {},
+
     toggleList() {
       this.showList = !this.showList;
       this._saveLayoutPrefs();

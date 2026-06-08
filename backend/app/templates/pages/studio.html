@@ -24,7 +24,7 @@
   <div class="studio-body{% if not focused_clip_id %} no-player{% endif %}"
        :class="{ 'no-list': !showList, 'no-player': !showPlayer || !focusedClipId }">
     <aside class="studio-videos">
-      {% include "pages/_studio_set_list.html" %}
+      {% include "pages/_studio_nav.html" %}
     </aside>
     <section class="studio-right" :class="{ 'layout-right': layout === 'right' }">
       <div class="studio-player-slot" data-studio-player-slot></div>
