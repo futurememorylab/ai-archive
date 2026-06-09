@@ -123,7 +123,7 @@ All three runtime processes wired now, env-gated so phase 1 deploys run plain uv
 - Create: `Dockerfile` (repo root)
 - Create: `.dockerignore` (repo root)
 
-- [ ] **Step 1: Write `deploy/entrypoint.sh`**
+- [x] **Step 1: Write `deploy/entrypoint.sh`**
 
 ```sh
 #!/bin/sh
@@ -162,7 +162,7 @@ fi
 exec $UVICORN
 ```
 
-- [ ] **Step 2: Write `deploy/litestream.yml`**
+- [x] **Step 2: Write `deploy/litestream.yml`**
 
 ```yaml
 # Litestream config baked into the image. Both values come from env
@@ -176,7 +176,7 @@ dbs:
       - url: ${LITESTREAM_REPLICA_URL}
 ```
 
-- [ ] **Step 3: Write `Dockerfile`**
+- [x] **Step 3: Write `Dockerfile`**
 
 ```dockerfile
 FROM python:3.13-slim
@@ -203,7 +203,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh && mkdir -p /data
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 ```
 
-- [ ] **Step 4: Write `.dockerignore`**
+- [x] **Step 4: Write `.dockerignore`**
 
 ```
 .env
@@ -225,7 +225,7 @@ __pycache__/
 
 `.env`, `data/`, `.secret/` are the load-bearing lines — local credentials and state must never enter an image layer.
 
-- [ ] **Step 5: Syntax-check the entrypoint**
+- [x] **Step 5: Syntax-check the entrypoint**
 
 Run: `sh -n deploy/entrypoint.sh && echo OK`
 Expected: `OK`
@@ -246,7 +246,7 @@ curl -fsS http://127.0.0.1:18765/api/health
 
 Expected: `{"status":"ok","mode":...}`. Stop the container with `docker stop` (SIGTERM — never `kill -9`, same seat discipline as dev). If Docker is not installed on this machine, note it and rely on the first Cloud Run deploy (Task 6) as the smoke test.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add Dockerfile .dockerignore deploy/entrypoint.sh deploy/litestream.yml
