@@ -1,4 +1,4 @@
-# 0061. Two-mode popover menu module + design-language enforcement guard
+# 0062. Two-mode popover menu module + design-language enforcement guard
 
 **Date:** 2026-06-09
 **Status:** Accepted

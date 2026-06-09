@@ -1,23 +1,35 @@
 {# Clip card — focus on click, select via checkbox, remove on hover X,
    run-dots top-right. Vanilla onclick (HTMX-injected, no x-data). Variables:
-     c       — dict: clip_id, name, duration_secs, year, fps, has_cur, has_other
+     c       — dict: clip_id, name, duration_secs, year, fps, has_cur,
+               has_other, uploaded (bool)
      set_id  — outer set id (used for the remove DELETE call) #}
-<div class="studio-clip-card{% if focused_clip_id is defined and focused_clip_id == c.clip_id %} selected{% endif %}"
+<div class="studio-clip-card{% if focused_clip_id is defined and focused_clip_id == c.clip_id %} selected{% endif %}{% if c.uploaded %} uploaded{% endif %}"
      onclick="window.studio.focusClip({{ c.clip_id }})"
      data-clip-id="{{ c.clip_id }}">
   <input type="checkbox" class="clip-check"
          onclick="event.stopPropagation(); window.studio.toggleClip({{ c.clip_id }}, this.checked);" />
-  <div class="thumb"
-       {% set thumb_url = '/api/media/' ~ c.clip_id ~ '/thumb' %}
-       style="background-image:url('{{ thumb_url }}')">
-    {% if c.year %}<span class="yr">{{ c.year }}</span>{% endif %}
-    {% if c.duration_secs %}
-      <span class="tc">{{ smpte(c.duration_secs, c.fps or 25.0) }}</span>
-    {% endif %}
-  </div>
+  {% set thumb_url = '/api/media/' ~ c.clip_id ~ '/thumb' %}
+  {% if c.uploaded %}
+    <div class="thumb">
+      <img class="thumb-img" src="{{ thumb_url }}" alt=""
+           onerror="this.closest('.thumb').classList.add('thumb-missing'); this.remove();" />
+      {% if c.duration_secs %}
+        <span class="tc">{{ smpte(c.duration_secs, c.fps or 25.0) }}</span>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="thumb" style="background-image:url('{{ thumb_url }}')">
+      {% if c.year %}<span class="yr">{{ c.year }}</span>{% endif %}
+      {% if c.duration_secs %}
+        <span class="tc">{{ smpte(c.duration_secs, c.fps or 25.0) }}</span>
+      {% endif %}
+    </div>
+  {% endif %}
   <div class="meta">
     <div class="name" title="{{ c.name }}">{{ c.name }}</div>
-    <div class="tag">id:{{ c.clip_id }}{% if c.year %} · {{ c.year }}{% endif %}</div>
+    {% if not c.uploaded %}
+      <div class="tag">id:{{ c.clip_id }}{% if c.year %} · {{ c.year }}{% endif %}</div>
+    {% endif %}
   </div>
   <div class="dots">
     {% if c.has_cur %}<span class="rundot cur" title="ran with active version"></span>{% endif %}

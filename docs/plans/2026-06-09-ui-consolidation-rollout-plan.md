@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-09
 **Spec:** `docs/specs/2026-06-09-popover-menu-module-and-design-language-guard-design.md`
-**ADR:** `docs/adr/0061-popover-menu-module-and-design-language-guard.md`
+**ADR:** `docs/adr/0062-popover-menu-module-and-design-language-guard.md`
 
 Execution plan for finishing the menu consolidation and widening the
 enforcement guard so the whole UI is frozen against further growth. Maps
@@ -15,7 +15,7 @@ the work to parallel-safe units for subagent execution.
 - Guard `tests/unit/test_design_language_guard.py` (btn/menu classes +
   JS formatters).
 - Migrated 2 pilot menus (prompt version picker, studio version chip);
-  deleted their CSS; `design-language.md` §8; ADR 0061.
+  deleted their CSS; `design-language.md` §8; ADR 0062.
 - 570 tests green.
 
 ## Remaining work

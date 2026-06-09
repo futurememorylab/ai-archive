@@ -2361,3 +2361,37 @@ body.studio-resizing {
 .timeline .range.draft-range { cursor: grab; background: color-mix(in oklab, var(--info) 50%, transparent); }
 .timeline .range.draft-range.editing { background: color-mix(in oklab, #9a6cff 68%, transparent); outline: 1px solid #9a6cff; outline-offset: 1px; }
 .timeline .range.draft-range:hover { filter: brightness(1.2); }
+
+/* ── Studio uploads (Spec B) ─────────────────────────────────────────── */
+.studio-dropzone {
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-3);
+  padding: 16px;
+  margin: 8px;
+  text-align: center;
+  cursor: pointer;
+  color: var(--text-3);
+  transition: border-color .15s, background .15s;
+}
+.studio-dropzone.drag { border-color: var(--accent); background: var(--surface-2); }
+.studio-dropzone .dz-ico { font-size: 20px; }
+.studio-dropzone .dz-title { font-weight: 600; color: var(--text); margin-top: 4px; }
+.studio-dropzone .dz-sub { font-size: 12px; }
+.studio-dropzone .dz-progress { margin-top: 6px; color: var(--accent); }
+.studio-dropzone .hidden { display: none; }
+
+.studio-clip-card .thumb-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.studio-clip-card .thumb.thumb-missing {
+  background: var(--surface-2);
+  display: flex; align-items: center; justify-content: center;
+}
+.studio-clip-card .thumb.thumb-missing::after {
+  content: "▶"; color: var(--text-3); font-size: 18px;
+}
+
+.studio-set-row .set-rename {
+  background: none; border: 0; cursor: pointer;
+  color: var(--text-3); opacity: 0; transition: opacity .12s;
+}
+.studio-set-row:hover .set-rename { opacity: 1; }
+.studio-set-row .set-rename:hover { color: var(--text); }

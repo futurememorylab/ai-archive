@@ -9,6 +9,8 @@
     <span class="twist" @click="toggle({{ f.id }})"
           x-text="expandedId === {{ f.id }} ? '▾' : '▸'"></span>
     <span class="name" @click="toggle({{ f.id }})">{{ f.name }}</span>
+    <button class="set-rename" title="rename set"
+            @click.stop="renameSet({{ f.id }}, '{{ f.name|e }}')">✎</button>
     <span class="count" x-text="setBadge({{ f.id }}, {{ f.clip_count }})">{{ f.clip_count }}</span>
   </div>
   <div class="studio-set-kids" x-show="expandedId === {{ f.id }}" x-cloak

@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse
 
 from backend.app.deps import get_core_ctx
 from backend.app.routes.pages.templates import templates
+from backend.app.uploaded_ids import is_uploaded
 
 router = APIRouter(tags=["pages"])
 
@@ -40,14 +41,27 @@ async def studio_page(
     version_id: int | None = None,
     compare_version_id: int | None = None,
     clip_id: int | None = None,
+    source: str | None = None,
+    open_set_id: int | None = None,
 ):
     ctx = get_core_ctx(request)
     prompts = await ctx.prompts_repo.list_active(ctx.db)
     archive_available = _archive_available(request)
-    nav_source = "archive" if archive_available else "uploaded"
-    sets = await ctx.studio_sets_repo.list_sets_with_counts(ctx.db, source="archive")
+    # Tab selection: honor an explicit `source` (carried across a prompt switch
+    # by the prompt-picker link, so the navigator doesn't snap back to Archive)
+    # when valid; otherwise default to Archive when connected, else Uploaded.
+    if source in ("archive", "uploaded"):
+        nav_source = source
+    else:
+        nav_source = "archive" if archive_available else "uploaded"
+    if nav_source == "archive" and not archive_available:
+        nav_source = "uploaded"
+    sets = await ctx.studio_sets_repo.list_sets_with_counts(ctx.db, source=nav_source)
     archive_clip_total = await ctx.studio_sets_repo.clip_total_for_source(
         ctx.db, source="archive"
+    )
+    uploaded_clip_total = await ctx.studio_sets_repo.clip_total_for_source(
+        ctx.db, source="uploaded"
     )
 
     selected_prompt = None
@@ -91,8 +105,10 @@ async def studio_page(
     # auto-expand it on load — otherwise after a prompt switch the player
     # restores but the clip's card is buried inside a collapsed set,
     # which looks like focus was lost.
-    focused_set_id: int | None = None
-    if clip_id is not None:
+    # Prefer the explicitly-carried open set (preserves the navigator's
+    # expanded set across a prompt switch); fall back to the focused clip's set.
+    focused_set_id: int | None = open_set_id
+    if focused_set_id is None and clip_id is not None:
         focused_set_id = await ctx.studio_sets_repo.set_id_for_clip(ctx.db, clip_id)
 
     return templates.TemplateResponse(
@@ -108,6 +124,7 @@ async def studio_page(
             "archive_available": archive_available,
             "nav_source": nav_source,
             "archive_clip_total": archive_clip_total,
+            "uploaded_clip_total": uploaded_clip_total,
             "focused_clip_id": clip_id,
             "focused_set_id": focused_set_id,
         },
@@ -140,40 +157,63 @@ async def _studio_set(
     """
     ctx = get_core_ctx(request)
     archive = _archive(request)
+    set_source = await ctx.studio_sets_repo.source_for_set(ctx.db, set_id)
     clips_rows = await ctx.studio_sets_repo.list_clips(ctx.db, set_id)
 
-    # Build per-clip "has any run with active version" / "any other version" flags.
+    uploaded_ids = [c["clip_id"] for c in clips_rows if is_uploaded(c["clip_id"])]
+    uploaded_meta = (
+        await ctx.uploaded_clips_repo.get_many(ctx.db, uploaded_ids)
+        if uploaded_ids
+        else {}
+    )
+
     enriched = []
     for c in clips_rows:
-        versions = await ctx.studio_runs_repo.versions_run_on_clip(
-            ctx.db, clip_id=c["clip_id"]
-        )
+        cid = c["clip_id"]
+        versions = await ctx.studio_runs_repo.versions_run_on_clip(ctx.db, clip_id=cid)
         has_cur = active_version_id is not None and active_version_id in versions
         has_other = any(v != active_version_id for v in versions)
-        # Pull minimal clip metadata via the archive if available; fall back to id.
-        meta: dict = {
-            "name": f"clip-{c['clip_id']}",
-            "duration_secs": None,
-            "year": None,
-            "fps": 25.0,
-        }
-        if archive is not None:
-            try:
-                clip = await archive.get_clip(str(c["clip_id"]))
-                meta = {
-                    "name": clip.name,
-                    "duration_secs": clip.duration_secs,
-                    "year": (clip.provider_data or {}).get("pragafilm.rok.natoceni"),
-                    "fps": float(clip.fps or 25.0),
-                }
-            except Exception:  # noqa: BLE001
-                pass
+
+        if is_uploaded(cid):
+            row = uploaded_meta.get(cid)
+            meta: dict = {
+                "name": (row or {}).get("original_filename") or f"upload-{cid}",
+                "duration_secs": (row or {}).get("duration_secs"),
+                "year": None,
+                "fps": 25.0,
+                "uploaded": True,
+            }
+        else:
+            meta = {
+                "name": f"clip-{cid}",
+                "duration_secs": None,
+                "year": None,
+                "fps": 25.0,
+                "uploaded": False,
+            }
+            if archive is not None:
+                try:
+                    clip = await archive.get_clip(str(cid))
+                    meta = {
+                        "name": clip.name,
+                        "duration_secs": clip.duration_secs,
+                        "year": (clip.provider_data or {}).get("pragafilm.rok.natoceni"),
+                        "fps": float(clip.fps or 25.0),
+                        "uploaded": False,
+                    }
+                except Exception:  # noqa: BLE001
+                    pass
         enriched.append({**c, **meta, "has_cur": has_cur, "has_other": has_other})
 
     return templates.TemplateResponse(
         request,
         "pages/_studio_set.html",
-        {"set_id": set_id, "clips": enriched, "focused_clip_id": clip_id},
+        {
+            "set_id": set_id,
+            "set_source": set_source,
+            "clips": enriched,
+            "focused_clip_id": clip_id,
+        },
     )
 
 
@@ -290,11 +330,18 @@ async def _studio_player(
     ctx = get_core_ctx(request)
     archive = _archive(request)
 
-    # Resolve clip metadata via the archive when available.
+    # Resolve clip metadata. Uploaded clips carry their duration in the
+    # uploaded_clip table (captured client-side at upload); their synthetic id
+    # is not in the archive, so resolve them directly. fps is unknown for
+    # uploads → default 25.0 (matches the uploaded path elsewhere).
     fps: float = 25.0
     duration_secs: float | None = None
     duration_smpte: str = ""
-    if archive is not None:
+    if is_uploaded(clip_id):
+        row = await ctx.uploaded_clips_repo.get(ctx.db, clip_id)
+        if row is not None:
+            duration_secs = row.get("duration_secs")
+    elif archive is not None:
         try:
             clip = await archive.get_clip(str(clip_id))
             fps = float(clip.fps or 25.0)

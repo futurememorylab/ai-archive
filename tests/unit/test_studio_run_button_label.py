@@ -89,6 +89,34 @@ def test_version_number_renders_verbatim(v, expected):
     ) == expected
 
 
+def test_selection_switches_to_run_on_n_clips():
+    # When clips are checked, the single Run button targets the selection.
+    assert run_button_label(
+        running=False, cancelling=False,
+        done_flash_until_ms=0, cancelled_flash_until_ms=0, now_ms=1000.0,
+        active_version_num=3, elapsed_label="0:00",
+        selected_count=4,
+    ) == "▶ Run on 4 clips · v3"
+
+
+def test_selection_of_one_is_singular():
+    assert run_button_label(
+        running=False, cancelling=False,
+        done_flash_until_ms=0, cancelled_flash_until_ms=0, now_ms=1000.0,
+        active_version_num=3, elapsed_label="0:00",
+        selected_count=1,
+    ) == "▶ Run on 1 clip · v3"
+
+
+def test_bulk_running_shows_progress():
+    assert run_button_label(
+        running=False, cancelling=False,
+        done_flash_until_ms=0, cancelled_flash_until_ms=0, now_ms=1000.0,
+        active_version_num=3, elapsed_label="0:00",
+        selected_count=4, bulk_running=True, bulk_done=2, bulk_total=4,
+    ) == "⟳ Running… 2/4"
+
+
 def test_cancelled_flash_renders():
     assert run_button_label(
         running=False, cancelling=False,

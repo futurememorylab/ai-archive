@@ -1,11 +1,11 @@
-# 0062. One modal vocabulary: ui.modal shell + canonical .modal-* classes
+# 0063. One modal vocabulary: ui.modal shell + canonical .modal-* classes
 
 **Date:** 2026-06-09
 **Status:** Accepted
 
 Implements "Candidate B" — a non-goal of the menu-consolidation spec
 (`docs/specs/2026-06-09-popover-menu-module-and-design-language-guard-design.md`),
-done as a stacked follow-up. Cross-ref ADR 0061.
+done as a stacked follow-up. Cross-ref ADR 0062.
 
 ## Context
 
@@ -14,7 +14,7 @@ Two modal vocabularies had drifted: `modal-overlay` / `modal-dialog` /
 `modal-backdrop` / `modal-card` / `modal-hdr` / `modal-actions` (bulk-annotate,
 new-batch, archive picker), plus `modal-foot` (archive picker) and
 inline-styled `modal-h` titles. Each re-wrote escape / backdrop-close. The
-design-language guard (ADR 0061) already *froze* all `modal-*` classes; this
+design-language guard (ADR 0062) already *froze* all `modal-*` classes; this
 collapses them.
 
 ## Alternatives

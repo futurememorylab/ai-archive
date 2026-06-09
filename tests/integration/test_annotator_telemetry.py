@@ -12,6 +12,7 @@ from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.run_telemetry import RunTelemetryRepo
 from backend.app.repositories.studio_runs import StudioRunsRepo
+from backend.app.repositories.uploaded_clips import UploadedClipsRepo
 from backend.app.services.annotator import run_job
 from backend.app.services.events import EventBus
 
@@ -94,6 +95,7 @@ def _run_kwargs(db, files, gemini):
         jobs_repo=JobsRepo(),
         prompts_repo=PromptsRepo(),
         studio_runs_repo=StudioRunsRepo(),
+        uploaded_clips_repo=UploadedClipsRepo(),
         run_telemetry_repo=RunTelemetryRepo(),
         telemetry_ctx=TCTX,
     )

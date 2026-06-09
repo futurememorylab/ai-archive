@@ -23,6 +23,7 @@ from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.run_telemetry import RunTelemetryRepo
 from backend.app.repositories.studio_runs import StudioRunsRepo
+from backend.app.repositories.uploaded_clips import UploadedClipsRepo
 from backend.app.services.annotator import run_job
 from backend.app.services.events import EventBus
 from backend.app.services.proxy_resolver import ProxyNotFound
@@ -132,6 +133,7 @@ async def test_studio_kind_persists_run_skips_catdv_write(db):
         jobs_repo=jobs,
         prompts_repo=prompts,
         studio_runs_repo=runs,
+        uploaded_clips_repo=UploadedClipsRepo(),
         run_telemetry_repo=RunTelemetryRepo(),
         telemetry_ctx=TelemetryCtx(install_id="inst-test"),
     )
@@ -209,6 +211,7 @@ async def test_ai_cache_hit_skips_proxy_resolver(db):
         jobs_repo=jobs,
         prompts_repo=prompts,
         studio_runs_repo=runs,
+        uploaded_clips_repo=UploadedClipsRepo(),
         run_telemetry_repo=RunTelemetryRepo(),
         telemetry_ctx=TelemetryCtx(install_id="inst-test"),
     )
@@ -269,6 +272,7 @@ async def test_run_fails_clearly_when_neither_cached(db):
         jobs_repo=jobs,
         prompts_repo=prompts,
         studio_runs_repo=runs,
+        uploaded_clips_repo=UploadedClipsRepo(),
         run_telemetry_repo=RunTelemetryRepo(),
         telemetry_ctx=TelemetryCtx(install_id="inst-test"),
     )

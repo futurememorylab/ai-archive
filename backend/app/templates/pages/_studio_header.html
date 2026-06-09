@@ -82,9 +82,9 @@
           x-effect="$store.studio.refreshEstimate()"
           x-text="$store.studio.estimateLabel"></span>
     <button class="btn primary"
-            :disabled="!focusedClipId || cancelling || doneFlashUntilMs > 0"
+            :disabled="(!focusedClipId && $store.studio.selectedClipIds.length === 0) || cancelling || $store.studio.bulkRunning || doneFlashUntilMs > 0"
             @click="runOrCancel()"
-            :title="focusedClipId ? '' : 'Click a clip in a set to focus it'">
+            :title="(focusedClipId || $store.studio.selectedClipIds.length) ? '' : 'Click a clip to focus it, or check clips to run several'">
       <span x-text="runButtonLabel()">▶ Run on this clip · v{{ active_version.version_num }}</span>
     </button>
   {% else %}

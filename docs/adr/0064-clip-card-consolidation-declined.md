@@ -1,4 +1,4 @@
-# 0063. Clip card consolidation (Candidate D) explored and declined
+# 0064. Clip card consolidation (Candidate D) explored and declined
 
 **Date:** 2026-06-09
 **Status:** Accepted
