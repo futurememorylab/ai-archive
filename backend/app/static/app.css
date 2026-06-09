@@ -348,10 +348,10 @@ a { color: inherit; text-decoration: none; }
 }
 .filter-clear:hover { color: var(--text); background: var(--hover); }
 
-/* ─── actions split dropdown ─────────────────────────────────────────── */
-.actions-dropdown { position: relative; }
-.actions-btn { display: inline-flex; align-items: center; gap: 6px; }
-.actions-btn .caret { font-size: 10px; color: var(--text-3); }
+/* ─── actions dropdown (popover/menu module; bespoke trigger) ─────────── */
+/* Trigger caret: muted by default, inverts on the active (selection) state.
+   The panel + rows come from .popover-panel / .menu / .menu-item. */
+.actions-dropdown .btn .caret { font-size: 10px; color: var(--text-3); }
 .btn.actions-btn-active {
   background: var(--accent);
   color: var(--accent-fg);
@@ -362,37 +362,12 @@ a { color: inherit; text-decoration: none; }
   background: color-mix(in oklab, var(--accent) 90%, white 10%);
 }
 .btn.actions-btn-active .caret { color: var(--accent-fg); }
-.actions-menu {
-  position: absolute; right: 0; top: calc(100% + 4px);
-  min-width: 200px;
-  background: var(--panel-2);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-2);
-  box-shadow: 0 8px 22px rgba(0,0,0,0.45);
-  padding: 4px;
-  z-index: 30;
-}
-.actions-item {
-  display: block; width: 100%;
-  text-align: left;
-  padding: 8px 10px;
-  background: transparent; border: 0;
-  color: var(--text); font: inherit;
-  border-radius: var(--r-1);
-  cursor: pointer;
-}
-.actions-item:hover { background: var(--hover); }
-.actions-item-danger { color: var(--bad); }
 .actions-kinds {
   display: flex; flex-direction: row; flex-wrap: wrap; gap: 4px 10px;
   padding: 4px 10px 6px;
   font-size: 11.5px; color: var(--text-2);
 }
 .actions-kinds label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
-.actions-sep {
-  height: 1px; background: var(--line-2);
-  margin: 4px 6px;
-}
 [x-cloak] { display: none !important; }
 
 .clips-region { display: flex; flex-direction: column; min-height: 0; flex: 1; }
