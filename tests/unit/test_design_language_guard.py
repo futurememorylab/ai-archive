@@ -49,8 +49,6 @@ GRANDFATHERED = {
     "shutdown-btn",
     "rail-btn",
     # to migrate onto ui.menu / .btn (delete each as it lands)
-    "actions-btn",
-    "actions-menu",
     "annotate-menu",
     "hdr-title-btn",
     "hdr-tmenu",

@@ -106,6 +106,30 @@ def test_clips_list_returns_full_page(monkeypatch, tmp_path):
         assert "/api/media/12041/thumb" in r.text  # thumbnail img wired (clip id from _canonical)
 
 
+def test_clips_actions_menu_uses_popover_module(monkeypatch, tmp_path):
+    """The bulk Actions dropdown is migrated onto the shared popover/menu
+    module — canonical .popover-panel/.menu/.menu-item, not the retired
+    bespoke .actions-menu/.actions-item vocabulary."""
+    with _make_client(monkeypatch, tmp_path) as client:
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
+        r = client.get("/")
+        assert r.status_code == 200
+        # Migrated onto the shared module.
+        assert 'class="popover actions-dropdown"' in r.text
+        assert 'x-data="popover()"' in r.text
+        assert 'class="popover-panel menu align-right"' in r.text
+        assert 'class="menu-item"' in r.text
+        # Every action preserved.
+        assert "reviewSelected()" in r.text
+        assert "applyDrafts()" in r.text
+        assert "openAnnotate()" in r.text
+        assert "bulkEvict()" in r.text
+        # Bespoke vocabulary fully retired.
+        assert "actions-menu" not in r.text
+        assert 'class="actions-item' not in r.text
+        assert "actions-sep" not in r.text
+
+
 def test_clips_list_htmx_returns_partial(monkeypatch, tmp_path):
     with _make_client(monkeypatch, tmp_path) as client:
         install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))

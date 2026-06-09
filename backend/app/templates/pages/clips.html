@@ -80,42 +80,27 @@
          :class="{ 'is-disabled': !active }"
          href="/">Reset filters</a>
       <span class="grow"></span>
-      <div class="actions-dropdown"
-           x-data="{ open: false }"
-           @keydown.escape.window="open = false"
-           @click.outside="open = false">
+      <div class="popover actions-dropdown" x-data="popover()"
+           @keydown.escape.window="close()"
+           @click.outside="close()">
         <button type="button"
-                class="btn sm actions-btn"
+                class="btn sm"
                 :class="{ 'actions-btn-active': count > 0 }"
                 :disabled="count === 0"
-                @click="open = !open">
+                @click="toggle()">
           Actions
           <span class="caret" aria-hidden="true">▾</span>
         </button>
-        <div class="actions-menu" x-show="open" x-cloak>
-          <button type="button" class="actions-item" @click="open = false; reviewSelected()">
-            Review selected →
-          </button>
-          <button type="button" class="actions-item" @click="open = false; applyDrafts()">
-            Apply drafts (selected)
-          </button>
-          <button type="button" class="actions-item" @click="open = false; openAnnotate()">
-            Annotate selected →
-          </button>
-          <div class="actions-sep" role="separator"></div>
+        <div class="popover-panel menu align-right" x-show="open" x-cloak>
+          {{ ui.menu_item('Review selected →', action='close(); reviewSelected()') }}
+          {{ ui.menu_item('Apply drafts (selected)', action='close(); applyDrafts()') }}
+          {{ ui.menu_item('Annotate selected →', action='close(); openAnnotate()') }}
+          {{ ui.menu_sep() }}
           {% if not host_local_proxies and mode == "online" %}
-          <button type="button"
-                  class="actions-item"
-                  @click="open = false; bulkPrefetch()">
-            Cache locally
-          </button>
+          {{ ui.menu_item('Cache locally', action='close(); bulkPrefetch()') }}
           {% endif %}
           {% if not host_local_proxies %}
-          <button type="button"
-                  class="actions-item actions-item-danger"
-                  @click="open = false; bulkEvict()">
-            Remove from local cache
-          </button>
+          {{ ui.menu_item('Remove from local cache', action='close(); bulkEvict()', danger=true) }}
           {% endif %}
         </div>
       </div>
