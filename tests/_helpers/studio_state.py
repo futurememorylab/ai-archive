@@ -17,6 +17,10 @@ def run_button_label(
     now_ms: float,
     active_version_num: int | None,
     elapsed_label: str,
+    selected_count: int = 0,
+    bulk_running: bool = False,
+    bulk_done: int = 0,
+    bulk_total: int = 0,
 ) -> str:
     if done_flash_until_ms and now_ms < done_flash_until_ms:
         return "✓ Done"
@@ -24,7 +28,12 @@ def run_button_label(
         return "⊘ Cancelled"
     if cancelling:
         return "⟳ Cancelling…"
+    if bulk_running:
+        return f"⟳ Running… {bulk_done}/{bulk_total}"
     if running:
         return f"⟳ Running… {elapsed_label}"
     v = active_version_num if active_version_num is not None else "?"
+    if selected_count > 0:
+        s = "" if selected_count == 1 else "s"
+        return f"▶ Run on {selected_count} clip{s} · v{v}"
     return f"▶ Run on this clip · v{v}"

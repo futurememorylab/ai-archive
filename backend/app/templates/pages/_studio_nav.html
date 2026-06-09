@@ -19,11 +19,12 @@
     </button>
   </div>
 
+  {# Selection only needs a Clear here — running the checked clips is driven by
+     the single header Run button (it targets the selection when any clip is
+     checked), so there's no duplicate run control in the navigator. #}
   <div class="studio-bulk-bar" x-show="$store.studio.selectedClipIds.length > 0" x-cloak>
-    <button class="btn primary sm"
-            :disabled="$store.studio.bulkRunning || !$store.studio.activeVersionId"
-            @click="$store.studio.runOnSelectedClips()"
-            x-text="$store.studio.bulkRunLabel()">Run on 0 clips</button>
+    <span class="muted" x-text="`${$store.studio.selectedClipIds.length} selected`"></span>
+    <span class="grow"></span>
     <button class="btn ghost sm" @click="$store.studio.clearSelection()">Clear</button>
   </div>
 

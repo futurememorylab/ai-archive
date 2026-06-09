@@ -110,10 +110,51 @@ def test_studio_page_renders_source_tabs(client):
     assert "studio-sets" in html
 
 
-def test_studio_nav_has_bulk_action_bar(client):
+def test_source_param_preserves_tab(client, monkeypatch):
+    # When a prompt switch carries the current tab (?source=…), the server
+    # honors it instead of snapping back to the availability default.
+    from backend.app.routes.pages import studio as studio_mod
+    monkeypatch.setattr(studio_mod, "_archive_available", lambda req: True)
+    # No source → default is archive (archive available).
+    assert "studioNav('archive')" in client.get("/studio").text
+    # Explicit source=uploaded is honored.
+    assert "studioNav('uploaded')" in client.get("/studio?source=uploaded").text
+
+
+def test_source_param_selects_matching_set_list(client, monkeypatch):
+    from backend.app.routes.pages import studio as studio_mod
+    monkeypatch.setattr(studio_mod, "_archive_available", lambda req: True)
+    client.post("/api/studio/sets?source=archive", json={"name": "arc-set"})
+    client.post("/api/studio/sets?source=uploaded", json={"name": "up-set"})
+    html = client.get("/studio?source=uploaded").text
+    assert "up-set" in html
+    assert "arc-set" not in html
+
+
+def test_open_set_id_expands_that_set(client):
+    sid = client.post(
+        "/api/studio/sets?source=uploaded", json={"name": "up"}
+    ).json()["id"]
+    html = client.get(f"/studio?source=uploaded&open_set_id={sid}").text
+    # studioSets is seeded with the open set id so it auto-expands on load.
+    assert f"studioSets({sid})" in html
+
+
+def test_prompt_switch_link_carries_tab_and_open_set():
+    from pathlib import Path
+    js = Path("backend/app/static/studio.js").read_text()
+    assert "u.searchParams.set('source'" in js
+    assert "u.searchParams.set('open_set_id'" in js
+
+
+def test_studio_nav_bulk_bar_is_clear_only(client):
+    # The bulk bar holds only Clear now — running is driven by the single
+    # header Run button (which targets the selection when clips are checked),
+    # so there is no duplicate "Run on N clips" button in the navigator.
     html = client.get("/studio").text
     assert "studio-bulk-bar" in html
-    assert "runOnSelectedClips()" in html
+    assert "clearSelection()" in html
+    assert "runOnSelectedClips()" not in html
 
 
 def test_studio_sets_partial_partitions_by_source(client):

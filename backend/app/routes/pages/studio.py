@@ -41,12 +41,22 @@ async def studio_page(
     version_id: int | None = None,
     compare_version_id: int | None = None,
     clip_id: int | None = None,
+    source: str | None = None,
+    open_set_id: int | None = None,
 ):
     ctx = get_core_ctx(request)
     prompts = await ctx.prompts_repo.list_active(ctx.db)
     archive_available = _archive_available(request)
-    nav_source = "archive" if archive_available else "uploaded"
-    sets = await ctx.studio_sets_repo.list_sets_with_counts(ctx.db, source="archive")
+    # Tab selection: honor an explicit `source` (carried across a prompt switch
+    # by the prompt-picker link, so the navigator doesn't snap back to Archive)
+    # when valid; otherwise default to Archive when connected, else Uploaded.
+    if source in ("archive", "uploaded"):
+        nav_source = source
+    else:
+        nav_source = "archive" if archive_available else "uploaded"
+    if nav_source == "archive" and not archive_available:
+        nav_source = "uploaded"
+    sets = await ctx.studio_sets_repo.list_sets_with_counts(ctx.db, source=nav_source)
     archive_clip_total = await ctx.studio_sets_repo.clip_total_for_source(
         ctx.db, source="archive"
     )
@@ -95,8 +105,10 @@ async def studio_page(
     # auto-expand it on load — otherwise after a prompt switch the player
     # restores but the clip's card is buried inside a collapsed set,
     # which looks like focus was lost.
-    focused_set_id: int | None = None
-    if clip_id is not None:
+    # Prefer the explicitly-carried open set (preserves the navigator's
+    # expanded set across a prompt switch); fall back to the focused clip's set.
+    focused_set_id: int | None = open_set_id
+    if focused_set_id is None and clip_id is not None:
         focused_set_id = await ctx.studio_sets_repo.set_id_for_clip(ctx.db, clip_id)
 
     return templates.TemplateResponse(

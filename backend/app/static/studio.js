@@ -59,6 +59,14 @@ document.body.addEventListener('click', (evt) => {
   const u = new URL(a.href, location.origin);
   if (fid) u.searchParams.set('clip_id', String(fid));
   else u.searchParams.delete('clip_id');
+  // Preserve the navigator's tab + open set across the prompt switch so the
+  // sidebar doesn't snap back to Archive (honored by studio_page).
+  const tab = document.querySelector('.studio-nav-tab.active')?.dataset.navSource;
+  if (tab) u.searchParams.set('source', tab);
+  else u.searchParams.delete('source');
+  const openSet = document.querySelector('.studio-set.open')?.dataset.setId;
+  if (openSet) u.searchParams.set('open_set_id', openSet);
+  else u.searchParams.delete('open_set_id');
   a.href = u.toString();
 });
 

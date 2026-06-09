@@ -159,9 +159,12 @@ document.addEventListener('alpine:init', () => {
       if (this.doneFlashUntilMs && now < this.doneFlashUntilMs) return '✓ Done';
       if (this.cancelledFlashUntilMs && now < this.cancelledFlashUntilMs) return '⊘ Cancelled';
       if (this.cancelling) return '⟳ Cancelling…';
+      if (this.bulkRunning) return `⟳ Running… ${this.bulkDone}/${this.bulkTotal}`;
       if (this.running) return `⟳ Running… ${this.runningElapsedLabel}`;
       const v = (this.activeVersionNum !== null && this.activeVersionNum !== undefined)
         ? this.activeVersionNum : '?';
+      const n = this.selectedClipIds.length;
+      if (n > 0) return `▶ Run on ${n} clip${n === 1 ? '' : 's'} · v${v}`;
       return `▶ Run on this clip · v${v}`;
     },
 
@@ -171,6 +174,10 @@ document.addEventListener('alpine:init', () => {
       // visually shows ✓/⊘.
       if (this.cancelling || this.doneFlashUntilMs || this.cancelledFlashUntilMs) return;
       if (this.running) return this.cancel();
+      if (this.bulkRunning) return;  // bulk has no cancel; ignore re-clicks
+      // Checked clips take priority — the single button runs the selection
+      // when any clips are checked, else the focused clip.
+      if (this.selectedClipIds.length > 0) return this.runOnSelectedClips();
       return this.runOnFocusedClip();
     },
 
@@ -420,12 +427,6 @@ document.addEventListener('alpine:init', () => {
       } finally {
         this.bulkRunning = false;
       }
-    },
-
-    bulkRunLabel() {
-      return this.bulkRunning
-        ? `Running ${this.bulkDone}/${this.bulkTotal}…`
-        : `Run on ${this.selectedClipIds.length} clip${this.selectedClipIds.length === 1 ? '' : 's'}`;
     },
 
     async _poll(runId) {
