@@ -20,7 +20,7 @@
     {% if selected_prompt %}
       <div class="hdr-tpicker" x-data="popover()"
            @click.outside="close()" @keydown.escape.window="close()">
-        <button class="hdr-title hdr-title-btn" :class="open && 'open'"
+        <button class="hdr-title hdr-title-trigger" :class="open && 'open'"
                 @click="toggle()" title="switch prompt">
           <span class="hdr-title-text">{{ selected_prompt.name }}</span>
           <span class="caret">▾</span>
@@ -81,7 +81,7 @@
     <span class="muted" style="white-space:nowrap;"
           x-effect="$store.studio.refreshEstimate()"
           x-text="$store.studio.estimateLabel"></span>
-    <button class="btn primary studio-run-btn"
+    <button class="btn primary"
             :disabled="!focusedClipId || cancelling || doneFlashUntilMs > 0"
             @click="runOrCancel()"
             :title="focusedClipId ? '' : 'Click a clip in a set to focus it'">

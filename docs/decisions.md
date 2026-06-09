@@ -70,3 +70,4 @@ available number. See any existing ADR for the template.
 | 0060 | 2026-06-07 | [Structural erosion pre-commit gate (complexity-concentration ratchet)](./adr/0060-structural-erosion-gate.md) |
 | 0061 | 2026-06-09 | [Two-mode popover menu module + design-language enforcement guard](./adr/0061-popover-menu-module-and-design-language-guard.md) |
 | 0062 | 2026-06-09 | [One modal vocabulary: ui.modal shell + canonical .modal-* classes](./adr/0062-one-modal-vocabulary-ui-modal.md) |
+| 0063 | 2026-06-09 | [Clip card consolidation (Candidate D) explored and declined](./adr/0063-clip-card-consolidation-declined.md) |

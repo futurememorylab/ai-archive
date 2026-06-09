@@ -45,14 +45,11 @@ ALLOWED = {"btn", "menu"}
 # "to migrate" block is deleted entry-by-entry as each menu/button moves
 # onto the popover/menu module.
 GRANDFATHERED = {
-    # permanent, intentional (not action buttons)
+    # permanent, intentional exceptions — status / chrome / nav affordances
+    # that are not action buttons (so not the .btn system). Everything else is
+    # migrated onto .btn / ui.menu; this is the floor.
     "shutdown-btn",
     "rail-btn",
-    # bespoke *button* styling — a separate follow-up axis (frozen by the
-    # guard; not part of the menu consolidation). All menus are migrated.
-    "hdr-title-btn",
-    "mp-fail-btn",
-    "studio-run-btn",
 }
 
 # Modal classes — the single canonical vocabulary (Candidate B done: one

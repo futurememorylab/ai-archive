@@ -87,6 +87,7 @@ modifiers — combine freely:
 | `.ghost` | transparent, hairline border (secondary) |
 | `.danger` | red text/border (destructive) |
 | `.sm` | small height (`--btn-h-sm`) |
+| `.link` | bare text button (no chrome), underline on hover; combine with `.danger` for a destructive text link |
 | `.icon` | square, no horizontal padding (icon-only) |
 | `.icon.sm` | small square |
 | `.is-disabled` / `:disabled` | dimmed, non-interactive (also `.disabled`) |

@@ -307,6 +307,13 @@ a { color: inherit; text-decoration: none; }
 .btn.danger { color: var(--bad); border-color: color-mix(in oklab, var(--bad) 45%, var(--line-2)); background: transparent; }
 .btn.danger:hover { background: color-mix(in oklab, var(--bad) 12%, transparent); }
 .btn.sm { height: var(--btn-h-sm); padding: 0 10px; font-size: 12px; }
+.btn.link {
+  height: auto; min-height: 0; padding: 0; border: 0; background: none;
+  color: var(--text-2); font-weight: inherit;
+}
+.btn.link:hover { background: none; color: var(--text); text-decoration: underline; }
+.btn.link.danger { color: var(--bad); }
+.btn.link.danger:hover { color: var(--bad); background: none; }
 .btn.icon { width: var(--btn-h); padding: 0; }
 .btn.icon.sm { width: var(--btn-h-sm); }
 .btn.is-disabled, .btn.disabled, .btn:disabled { opacity: 0.4; pointer-events: none; }
@@ -362,12 +369,6 @@ a { color: inherit; text-decoration: none; }
   background: color-mix(in oklab, var(--accent) 90%, white 10%);
 }
 .btn.actions-btn-active .caret { color: var(--accent-fg); }
-.actions-kinds {
-  display: flex; flex-direction: row; flex-wrap: wrap; gap: 4px 10px;
-  padding: 4px 10px 6px;
-  font-size: 11.5px; color: var(--text-2);
-}
-.actions-kinds label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
 [x-cloak] { display: none !important; }
 
 .clips-region { display: flex; flex-direction: column; min-height: 0; flex: 1; }
@@ -1818,7 +1819,7 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   font-weight: 600;
   color: var(--text);
 }
-.studio-hdr .hdr-title-btn {
+.studio-hdr .hdr-title-trigger {
   appearance: none;
   background: transparent;
   border: 0;
@@ -1828,9 +1829,9 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   cursor: pointer;
   color: inherit;
 }
-.studio-hdr .hdr-title-btn:hover { background: var(--surface-2); }
-.studio-hdr .hdr-title-btn.open { background: var(--surface-2); }
-.studio-hdr .hdr-title-btn .caret { font-size: 11px; color: var(--text-3); }
+.studio-hdr .hdr-title-trigger:hover { background: var(--surface-2); }
+.studio-hdr .hdr-title-trigger.open { background: var(--surface-2); }
+.studio-hdr .hdr-title-trigger .caret { font-size: 11px; color: var(--text-3); }
 
 /* ── Studio: archive picker modal ──────────────────────────────────────── */
 
@@ -2276,8 +2277,6 @@ body.studio-resizing {
 .miniprog .mp-bar > span.fill-run { background: var(--info); }
 
 .bt-actions { text-align: right; white-space: nowrap; display: flex; gap: 6px; justify-content: flex-end; }
-.mp-fail-btn { background: none; border: 0; padding: 0; color: var(--bad); cursor: pointer; font-family: var(--f-mono); font-size: 11.5px; }
-.mp-fail-btn:hover { text-decoration: underline; }
 .bt-detail > td { padding: 0 12px 14px; background: var(--bg-2); border-bottom: 1px solid var(--line); }
 .bt-fails { border: 1px solid color-mix(in oklab, var(--bad) 30%, var(--line)); border-radius: var(--r-2); background: var(--panel); padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
 .bt-fails-h { display: flex; align-items: center; gap: 8px; padding-bottom: 6px; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
