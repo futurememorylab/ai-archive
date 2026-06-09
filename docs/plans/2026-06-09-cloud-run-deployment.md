@@ -427,7 +427,7 @@ git commit -m "Deploy: Cloud Run env file + one-time GCP setup runbook"
 **Files:**
 - Create: `.github/workflows/deploy.yml`
 
-- [ ] **Step 1: Write the workflow**
+- [x] **Step 1: Write the workflow**
 
 ```yaml
 name: Deploy to Cloud Run
@@ -502,13 +502,13 @@ jobs:
           curl -fsS -H "Authorization: Bearer $TOKEN" "$URL/api/health"
 ```
 
-- [ ] **Step 2: Validate YAML locally**
+- [x] **Step 2: Validate YAML locally**
 
 Run: `.venv/bin/python -c "import yaml,sys; yaml.safe_load(open('.github/workflows/deploy.yml')); print('OK')"`
 (If `yaml` is missing, `pip install pyyaml` into the venv first.)
 Expected: `OK`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add .github/workflows/deploy.yml
