@@ -650,7 +650,7 @@ Run the "Phase 2" block in `deploy/README.md`, push, then spec flow 3: create a 
 - Modify: `backend/app/services/catdv_client.py:103`
 - Test: `tests/unit/test_catdv_logout_timeout.py` (create)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 """Shutdown budget: Cloud Run grants 10s after SIGTERM, shared by the
@@ -681,12 +681,12 @@ async def test_logout_uses_short_timeout(monkeypatch):
     assert captured.get("timeout") == 3.0
 ```
 
-- [ ] **Step 2: Run it — must fail**
+- [x] **Step 2: Run it — must fail**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_catdv_logout_timeout.py -v`
 Expected: FAIL — `captured.get("timeout")` is `None`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `logout()`, change line 103 from:
 
@@ -703,12 +703,12 @@ to:
             await self.http.delete(f"{self._base}/catdv/api/9/session", timeout=3.0)
 ```
 
-- [ ] **Step 4: Run the test and the full suite**
+- [x] **Step 4: Run the test and the full suite**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_catdv_logout_timeout.py tests/unit/test_aclose_ordering.py -v && .venv/bin/python -m pytest`
 Expected: all PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/services/catdv_client.py tests/unit/test_catdv_logout_timeout.py

@@ -100,7 +100,10 @@ class CatdvClient:
         if self._client is None or not self._logged_in:
             return
         try:
-            await self.http.delete(f"{self._base}/catdv/api/9/session")
+            # Bounded: on shutdown this shares Cloud Run's 10s SIGTERM
+            # grace with Litestream's final WAL sync; a dead tunnel must
+            # not starve it. 3s matches uvicorn --timeout-graceful-shutdown.
+            await self.http.delete(f"{self._base}/catdv/api/9/session", timeout=3.0)
         except Exception:
             logging.getLogger(__name__).warning(
                 "CatDV logout (DELETE /session) failed; the license seat may "
