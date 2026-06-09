@@ -819,7 +819,7 @@ git commit -m "Settings: playback_source preference (local|gcs)"
 - Modify: `backend/app/services/gcs.py`
 - Test: `tests/unit/test_gcs_signed_url.py` (create)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 """signed_url must parse any gs:// handle (not assume the default
@@ -863,12 +863,12 @@ def test_signed_url_parses_gs_uri(monkeypatch):
     assert captured["version"] == "v4"
 ```
 
-- [ ] **Step 2: Run it — must fail**
+- [x] **Step 2: Run it — must fail**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_gcs_signed_url.py -v`
 Expected: FAIL — no attribute `signed_url`.
 
-- [ ] **Step 3: Implement** — in `backend/app/services/gcs.py`, add imports at the top:
+- [x] **Step 3: Implement** — in `backend/app/services/gcs.py`, add imports at the top:
 
 ```python
 from datetime import timedelta
@@ -907,7 +907,7 @@ and this method on `GcsService`:
             )
 ```
 
-- [ ] **Step 4: Run tests and commit**
+- [x] **Step 4: Run tests and commit**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_gcs_signed_url.py -v && .venv/bin/python -m pytest`
 Expected: PASS

@@ -2,8 +2,11 @@
 files to the configured bucket and returns gs:// URIs for the GCS
 AIInputStore adapter."""
 
+from datetime import timedelta
 from pathlib import Path
 
+import google.auth
+import google.auth.transport.requests
 from google.cloud import storage  # type: ignore[import-not-found]
 
 
@@ -32,3 +35,29 @@ class GcsService:
     def delete(self, clip_id: int) -> None:
         blob = self._bucket.blob(f"clips/{clip_id}.mov")
         blob.delete()
+
+    def signed_url(self, gs_uri: str, *, expires_s: int = 3600) -> str:
+        """V4 signed URL for a gs:// handle (e.g. an UploadedRef.handle).
+
+        Blocking (may call the IAM credentials API) -- callers in async
+        context must wrap in asyncio.to_thread. With a key file
+        (GOOGLE_APPLICATION_CREDENTIALS, local dev) the library signs
+        directly; on Cloud Run ADC has no private key, so fall back to
+        IAM signBlob (needs roles/iam.serviceAccountTokenCreator on the
+        runtime SA -- see deploy/README.md).
+        """
+        bucket_name, _, blob_name = gs_uri.removeprefix("gs://").partition("/")
+        blob = self._client.bucket(bucket_name).blob(blob_name)
+        expiration = timedelta(seconds=expires_s)
+        try:
+            return blob.generate_signed_url(version="v4", expiration=expiration)
+        except AttributeError:
+            # ADC without a private key (Cloud Run): sign via IAM.
+            credentials, _ = google.auth.default()
+            credentials.refresh(google.auth.transport.requests.Request())
+            return blob.generate_signed_url(
+                version="v4",
+                expiration=expiration,
+                service_account_email=credentials.service_account_email,
+                access_token=credentials.token,
+            )
