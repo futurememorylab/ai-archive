@@ -765,7 +765,7 @@ Then spec flow 4: UI shows CatDV online; disable the office peer → offline ban
 - Modify: `tests/unit/test_settings_pure_env.py` (add a test)
 - Modify: `.env.example`
 
-- [ ] **Step 1: Write the failing test** (append to `tests/unit/test_settings_pure_env.py`)
+- [x] **Step 1: Write the failing test** (append to `tests/unit/test_settings_pure_env.py`)
 
 ```python
 def test_playback_source_defaults_local_overridable(monkeypatch, tmp_path):
@@ -778,12 +778,12 @@ def test_playback_source_defaults_local_overridable(monkeypatch, tmp_path):
     assert Settings().playback_source == "gcs"
 ```
 
-- [ ] **Step 2: Run it — must fail**
+- [x] **Step 2: Run it — must fail**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_settings_pure_env.py -v`
 Expected: FAIL — `Settings` has no `playback_source`.
 
-- [ ] **Step 3: Implement** — in `backend/app/settings.py`, after the `clip_list_cache_ttl_minutes` line, add:
+- [x] **Step 3: Implement** — in `backend/app/settings.py`, after the `clip_list_cache_ttl_minutes` line, add:
 
 ```python
     # Playback byte-source preference (NOT exclusive): MediaLocator tries
@@ -793,7 +793,7 @@ Expected: FAIL — `Settings` has no `playback_source`.
     playback_source: Literal["local", "gcs"] = "local"
 ```
 
-- [ ] **Step 4: Run tests, document, commit**
+- [x] **Step 4: Run tests, document, commit**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_settings_pure_env.py -v`
 Expected: PASS

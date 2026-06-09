@@ -31,3 +31,13 @@ def test_settings_resolve_from_pure_env(monkeypatch, tmp_path):
     assert s.catdv_catalog_id == 881507
     assert str(s.data_dir) == "/data"
     assert s.google_application_credentials is None  # ADC in cloud
+
+
+def test_playback_source_defaults_local_overridable(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    for key, value in _REQUIRED.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.delenv("PLAYBACK_SOURCE", raising=False)
+    assert Settings().playback_source == "local"
+    monkeypatch.setenv("PLAYBACK_SOURCE", "gcs")
+    assert Settings().playback_source == "gcs"
