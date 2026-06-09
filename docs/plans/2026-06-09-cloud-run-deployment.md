@@ -923,7 +923,7 @@ git commit -m "GcsService.signed_url: V4 signed URLs with IAM-signBlob fallback"
 - Create: `backend/app/services/media_locator.py`
 - Test: `tests/unit/test_media_locator.py` (create)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 """MediaLocator ordering matrix. playback_source is a preference order,
@@ -1026,12 +1026,12 @@ async def test_none_resolver_is_a_miss_not_a_crash():
         await make(None, store, "local").locate(7)
 ```
 
-- [ ] **Step 2: Run them — must fail**
+- [x] **Step 2: Run them — must fail**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_media_locator.py -v`
 Expected: FAIL — module does not exist.
 
-- [ ] **Step 3: Implement `backend/app/services/media_locator.py`**
+- [x] **Step 3: Implement `backend/app/services/media_locator.py`**
 
 ```python
 """MediaLocator -- decides where playback bytes for a clip come from.
@@ -1131,7 +1131,7 @@ class MediaLocator:
 
 Notes for the implementer: the broad `except Exception` here is the deliberate "try the other layer" semantic, recorded in the miss list and surfaced in `MediaNotAvailable` — no caller infers absence from it (ADR 0042 discipline). The clip-key shape `("catdv", str(clip_id))` matches `services/annotator.py` (`clip_key=("catdv", str(clip_id))`). `signed_url` is wrapped in `asyncio.to_thread` because its IAM fallback does network I/O.
 
-- [ ] **Step 4: Run tests and commit**
+- [x] **Step 4: Run tests and commit**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_media_locator.py -v && .venv/bin/python -m pytest`
 Expected: PASS
