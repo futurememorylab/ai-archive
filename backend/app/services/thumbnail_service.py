@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from backend.app.media_kind import is_image_path
+from backend.app.uploaded_ids import is_uploaded
 
 if TYPE_CHECKING:
     from backend.app.archive.provider import ArchiveProvider
@@ -60,6 +61,11 @@ class ThumbnailService:
         dest = self.path_for(clip_id)
         if dest.exists() and dest.stat().st_size > 0:  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
             return dest
+        if is_uploaded(clip_id):
+            # Uploaded posters are pre-stored at path_for(clip_id) during
+            # ingest. A miss is terminal — render the placeholder, never
+            # consult CatDV (uploaded clips have no archive record).
+            return None
         if self._catdv is None:
             return None
         if self._is_online is not None and not self._is_online():

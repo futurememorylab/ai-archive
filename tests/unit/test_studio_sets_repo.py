@@ -9,6 +9,7 @@ import pytest
 from backend.app.db import open_db
 from backend.app.migrations_runner import apply_migrations
 from backend.app.repositories.studio_sets import StudioSetsRepo
+from backend.app.repositories.studio_sets import DEFAULT_UPLOADED_SET_NAME
 
 
 @pytest.fixture
@@ -111,3 +112,13 @@ async def test_set_id_for_clip(db):
     await repo.add_clips(db, sid, clip_ids=[42])
     assert await repo.set_id_for_clip(db, 42) == sid
     assert await repo.set_id_for_clip(db, 999) is None
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_default_uploaded_set_is_idempotent(db):
+    repo = StudioSetsRepo()
+    a = await repo.get_or_create_default_uploaded_set(db)
+    b = await repo.get_or_create_default_uploaded_set(db)
+    assert a == b
+    sets = await repo.list_sets_with_counts(db, source="uploaded")
+    assert [s["name"] for s in sets] == [DEFAULT_UPLOADED_SET_NAME]

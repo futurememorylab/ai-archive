@@ -59,6 +59,7 @@ from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.run_telemetry import RunTelemetryRepo
 from backend.app.repositories.studio_sets import StudioSetsRepo
 from backend.app.repositories.studio_runs import StudioRunsRepo
+from backend.app.repositories.uploaded_clips import UploadedClipsRepo
 from backend.app.repositories.workspaces import WorkspacesRepo
 from backend.app.repositories.write_log import WriteLogRepo
 from backend.app.services.cache_actions import CacheActions
@@ -100,6 +101,7 @@ class CoreCtx:
     prefetch_queue_repo: PrefetchQueueRepo = field(default_factory=PrefetchQueueRepo)
     studio_sets_repo: StudioSetsRepo = field(default_factory=StudioSetsRepo)
     studio_runs_repo: StudioRunsRepo = field(default_factory=StudioRunsRepo)
+    uploaded_clips_repo: UploadedClipsRepo = field(default_factory=UploadedClipsRepo)
     run_telemetry_repo: RunTelemetryRepo = field(default_factory=RunTelemetryRepo)
     telemetry_ctx: TelemetryCtx = field(init=False)
     event_bus: EventBus = field(default_factory=EventBus)
@@ -298,6 +300,10 @@ class LiveCtx:
     @property
     def studio_runs_repo(self) -> StudioRunsRepo:
         return self.core.studio_runs_repo
+
+    @property
+    def uploaded_clips_repo(self) -> UploadedClipsRepo:
+        return self.core.uploaded_clips_repo
 
     @property
     def run_telemetry_repo(self) -> RunTelemetryRepo:
@@ -678,8 +684,9 @@ async def _build_sync_subsystem(
         tick_interval_s=float(settings.lru_tick_interval_s),
     )
     media_prefetcher: MediaPrefetcher | None = None
+    _inner_resolver = getattr(arch.proxy_resolver, "inner", arch.proxy_resolver)
     if arch.proxy_resolver is not None and not isinstance(
-        arch.proxy_resolver, LocalCacheOnlyResolver
+        _inner_resolver, LocalCacheOnlyResolver
     ):
         media_prefetcher = MediaPrefetcher(
             queue_repo=core.prefetch_queue_repo,

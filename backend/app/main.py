@@ -2,8 +2,10 @@
 and owns the context lifecycle (build CoreCtx + LiveCtx at startup, aclose
 at shutdown to release the CatDV session seat)."""
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
+from time import perf_counter
 
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
@@ -105,6 +107,34 @@ def register_routers(app: FastAPI) -> None:
 app = FastAPI(title="CatDV Annotator", lifespan=lifespan)
 _STATIC_DIR.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+
+
+_timing_log = logging.getLogger("backend.app.timing")
+
+
+@app.middleware("http")
+async def _request_timing(request: Request, call_next):
+    """Measure wall-clock time per request and expose it.
+
+    - Sets ``X-Process-Time`` header (seconds, 3dp) so DevTools shows it.
+    - Logs anything slower than 250 ms at WARNING with method+path+status.
+    - Skips ``/static/*`` to keep the log readable.
+    """
+    is_static = request.url.path.startswith("/static/")
+    t0 = perf_counter()
+    response = await call_next(request)
+    elapsed = perf_counter() - t0
+    if not is_static:
+        response.headers["X-Process-Time"] = f"{elapsed:.3f}"
+        if elapsed >= 0.25:
+            _timing_log.warning(
+                "slow %s %s -> %d in %.3fs",
+                request.method,
+                request.url.path,
+                response.status_code,
+                elapsed,
+            )
+    return response
 
 
 @app.middleware("http")

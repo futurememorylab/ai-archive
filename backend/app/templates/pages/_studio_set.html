@@ -1,11 +1,34 @@
 {% for c in clips %}
   {% include "pages/_studio_set_clip_card.html" with context %}
 {% endfor %}
-{% if not clips %}
+{% if not clips and set_source != 'uploaded' %}
+  {# Uploaded sets skip the placeholder — the dropzone below is their empty state. #}
   <div class="muted" style="padding:8px 4px">Empty set.</div>
 {% endif %}
-<button class="btn ghost mini studio-add-from-archive"
-        hx-get="/studio/_archive_picker?set_id={{ set_id }}"
-        hx-target="#modal-root" hx-swap="innerHTML">
-  + Add from archive
-</button>
+{% if set_source == 'uploaded' %}
+  {# Uploaded sets ingest via a per-set dropzone — the upload analogue of the
+     archive picker. JS (uploadClips in studio.js) posts each file to this set. #}
+  <div x-data="uploadClips({{ set_id }})">
+    <div class="studio-dropzone"
+         :class="dragging && 'drag'"
+         @dragover.prevent="dragging = true"
+         @dragleave.prevent="dragging = false"
+         @drop.prevent="onDrop($event)"
+         @click="$refs.file.click()">
+      <input type="file" x-ref="file" accept="video/mp4,video/webm" class="hidden"
+             @change="onPick($event)" multiple />
+      <div class="dz-ico">⤒</div>
+      <div class="dz-title">Drop video files or click to upload</div>
+      <div class="dz-sub">mp4 / webm only</div>
+      <template x-if="busy">
+        <div class="dz-progress" x-text="`Uploading ${doneCount}/${totalCount}…`"></div>
+      </template>
+    </div>
+  </div>
+{% else %}
+  <button class="btn ghost mini studio-add-from-archive"
+          hx-get="/studio/_archive_picker?set_id={{ set_id }}"
+          hx-target="#modal-root" hx-swap="innerHTML">
+    + Add from archive
+  </button>
+{% endif %}

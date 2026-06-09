@@ -5,24 +5,55 @@ import mimetypes
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 
-from backend.app.deps import get_live_ctx
+from backend.app.deps import get_core_ctx, get_live_ctx
+
+from backend.app.uploaded_ids import is_uploaded
 
 router = APIRouter(prefix="/api/media", tags=["media"])
 
 _DEFAULT_CHUNK = 1 << 16
 
+# Short-lived 404 cache for the thumb endpoint. Browsers don't cache 404s
+# reliably without an explicit Cache-Control, so list pages re-fire the
+# same misses on every visit. A small TTL collapses the storm; it must
+# stay short so a freshly-prefetched file or CatDV reconnect becomes
+# visible without a forced reload.
+_THUMB_MISS_CACHE = "public, max-age=300"
+
+
+def _thumb_404(detail: str) -> Response:
+    return Response(
+        status_code=404,
+        content=detail.encode(),
+        media_type="text/plain",
+        headers={"Cache-Control": _THUMB_MISS_CACHE},
+    )
+
 
 @router.get("/{clip_id}/thumb")
 async def stream_thumbnail(request: Request, clip_id: int):
+    if is_uploaded(clip_id):
+        # Uploaded posters are pre-stored at ingest in the DB-first thumb
+        # cache; serve them via the core ctx so uploads thumbnail fully
+        # offline (no live CatDV/Gemini wiring required).
+        core = get_core_ctx(request)
+        path = core.settings.data_dir / "cache" / "thumbs" / f"{clip_id}.jpg"
+        if not path.exists() or path.stat().st_size == 0:  # sync-io-ok: uploaded poster lookup, tracked for the tier-4 async-io pass
+            return _thumb_404("no thumbnail")
+        return FileResponse(
+            path,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
     ctx = get_live_ctx(request)
     svc = ctx.thumbnail_service
     if svc is None:
-        raise HTTPException(404, "thumbnails unavailable")
+        return _thumb_404("thumbnails unavailable")
     path = await svc.get_or_fetch(clip_id)
     if path is None:
-        raise HTTPException(404, "no thumbnail")
+        return _thumb_404("no thumbnail")
     return FileResponse(
         path,
         media_type="image/jpeg",
@@ -32,14 +63,24 @@ async def stream_thumbnail(request: Request, clip_id: int):
 
 @router.get("/{clip_id}")
 async def stream_media(request: Request, clip_id: int):
-    ctx = get_live_ctx(request)
-    if ctx.proxy_resolver is None:
-        raise HTTPException(503, "proxy resolver not initialized")
-
-    try:
-        path: Path = await ctx.proxy_resolver.path_for_clip_id(clip_id)
-    except Exception as exc:
-        raise HTTPException(404, f"proxy unavailable: {exc}") from exc
+    if is_uploaded(clip_id):
+        # Uploaded clips are pre-seeded into the proxy cache at ingest and
+        # served DB-first via the core ctx — playable fully offline.
+        core = get_core_ctx(request)
+        row = await core.proxy_cache_repo.get(core.db, clip_id)
+        if row is None:
+            raise HTTPException(404, f"uploaded clip {clip_id} not in local cache")
+        path = Path(row["file_path"])
+        if not path.exists() or path.stat().st_size == 0:  # sync-io-ok: uploaded proxy lookup, tracked for the tier-4 async-io pass
+            raise HTTPException(404, f"uploaded clip {clip_id} file missing: {path}")
+    else:
+        ctx = get_live_ctx(request)
+        if ctx.proxy_resolver is None:
+            raise HTTPException(503, "proxy resolver not initialized")
+        try:
+            path = await ctx.proxy_resolver.path_for_clip_id(clip_id)
+        except Exception as exc:
+            raise HTTPException(404, f"proxy unavailable: {exc}") from exc
 
     mime = mimetypes.guess_type(str(path))[0] or "video/quicktime"
     size = path.stat().st_size  # sync-io-ok: pre-existing, single metadata call on the stream-response path

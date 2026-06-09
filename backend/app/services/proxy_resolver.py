@@ -11,6 +11,7 @@ import aiosqlite
 
 from backend.app.media_kind import is_image_path
 from backend.app.repositories.proxy_cache import ProxyCacheRepo
+from backend.app.uploaded_ids import is_uploaded
 
 if TYPE_CHECKING:
     from backend.app.services.media_store_map import MediaStoreMap
@@ -209,6 +210,43 @@ class LocalCacheOnlyResolver:
         return True
 
 
+class UploadAwareResolver:
+    """Wraps an inner resolver, serving uploaded clips from the local
+    proxy cache and never delegating uploaded ids to the inner (which
+    would CatDV-download or get_clip). Archive ids pass straight through.
+    """
+
+    def __init__(
+        self,
+        inner: ProxyResolver,
+        *,
+        repo: ProxyCacheRepo,
+        db_provider: Callable[[], aiosqlite.Connection],
+    ) -> None:
+        self._inner = inner
+        self._repo = repo
+        self._db_provider = db_provider
+        self.is_host_local = getattr(inner, "is_host_local", False)
+
+    @property
+    def inner(self) -> ProxyResolver:
+        return self._inner
+
+    async def path_for_clip_id(self, clip_id: int) -> Path:
+        if not is_uploaded(clip_id):
+            return await self._inner.path_for_clip_id(clip_id)
+        row = await self._repo.get(self._db_provider(), clip_id)
+        if row is None:
+            raise ProxyNotFound(f"uploaded clip {clip_id} not in local cache")
+        p = Path(row["file_path"])
+        if not p.exists() or p.stat().st_size == 0:  # sync-io-ok: pre-existing pattern, tier-4 async-io pass
+            raise ProxyNotFound(f"uploaded clip {clip_id} cache row present but file missing: {p}")
+        return p
+
+    def is_managed(self, path: Path) -> bool:
+        return self._inner.is_managed(path)
+
+
 def build_resolver(
     *,
     source: str,
@@ -230,15 +268,21 @@ def build_resolver(
     if source == "rest":
         if cache_dir is None or catdv_client is None:
             raise ValueError("rest source requires catdv_client and cache_dir")
-        return RestProxyResolver(
+        inner = RestProxyResolver(
             catdv=catdv_client,
             cache_dir=cache_dir,
             proxy_cache_repo=proxy_cache_repo,
             db_provider=db_provider,
             archive=archive,
         )
+        if proxy_cache_repo is not None and db_provider is not None:
+            return UploadAwareResolver(inner, repo=proxy_cache_repo, db_provider=db_provider)
+        return inner
     if source == "filesystem":
         if archive is None or media_store_map is None:
             raise ValueError("filesystem source requires archive provider and media_store_map")
-        return FilesystemProxyResolver(archive=archive, media_store_map=media_store_map)
+        inner = FilesystemProxyResolver(archive=archive, media_store_map=media_store_map)
+        if proxy_cache_repo is not None and db_provider is not None:
+            return UploadAwareResolver(inner, repo=proxy_cache_repo, db_provider=db_provider)
+        return inner
     raise ValueError(f"unknown PROXY_SOURCE: {source!r}")

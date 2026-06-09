@@ -101,3 +101,27 @@ def test_thumb_404_when_unavailable(monkeypatch, tmp_path):
 
         r = client.get("/api/media/42/thumb")
         assert r.status_code == 404
+
+
+def test_thumb_404_is_short_lived_cacheable(monkeypatch, tmp_path):
+    """A 404 must carry a short browser cache so repeat page renders don't
+    re-fire the same request storm against the thumb endpoint when CatDV is
+    offline and the file isn't local."""
+    app = _app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        async def get_or_fetch(clip_id):
+            return None
+
+        install_live_ctx(
+            client.app,
+            thumbnail_service=MagicMock(get_or_fetch=get_or_fetch),
+        )
+
+        r = client.get("/api/media/42/thumb")
+        assert r.status_code == 404
+        cc = r.headers.get("cache-control", "")
+        assert "max-age=" in cc, f"missing max-age in {cc!r}"
+        # Short lived: must not be longer than 10 minutes — the file may
+        # arrive shortly via a prefetch or a CatDV reconnect.
+        max_age = int(cc.split("max-age=")[1].split(",")[0].strip())
+        assert 0 < max_age <= 600, f"max-age out of bounds: {max_age}"

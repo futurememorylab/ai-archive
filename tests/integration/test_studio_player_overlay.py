@@ -138,6 +138,24 @@ def _two_versions(client):
     return pid, v1, v2
 
 
+def test_player_uploaded_clip_has_duration_and_transport(client):
+    # Uploaded clips carry their duration in the uploaded_clip table (captured
+    # client-side at upload). The player route must read it so the transport
+    # (timeline + controls) renders — the archive lookup can't resolve the
+    # synthetic upload id.
+    up = client.post(
+        "/api/studio/uploads",
+        files={"file": ("clip.mp4", b"x", "video/mp4")},
+        data={"duration_secs": "5.0"},
+    ).json()
+    r = client.get(f"/studio/_player?clip_id={up['clip_id']}")
+    assert r.status_code == 200
+    # Real duration handed to the Alpine player component (not 0).
+    assert "player(25.0, 5.0," in r.text
+    # The transport block (gated on duration_secs) is present.
+    assert 'class="transport"' in r.text
+
+
 def test_player_two_rows_with_compare_id(client):
     pid, v1, v2 = _two_versions(client)
     _seed_run(client, version_id=v1, clip_id=12041, scenes=[
