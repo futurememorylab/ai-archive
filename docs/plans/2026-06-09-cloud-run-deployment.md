@@ -534,7 +534,7 @@ No code. Operator runs `deploy/README.md` steps 1–7, sets the two GitHub secre
 **Files:**
 - Test: `tests/unit/test_db_wal_pragma.py` (create)
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 ```python
 """Litestream (deploy/litestream.yml) requires WAL journaling; open_db
@@ -550,12 +550,12 @@ async def test_open_db_sets_wal(tmp_path):
     assert row[0].lower() == "wal"
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_db_wal_pragma.py -v`
 Expected: PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/unit/test_db_wal_pragma.py
