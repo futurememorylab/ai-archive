@@ -142,6 +142,10 @@ def test_clip_detail_renders_empty_draft_when_no_annotation(monkeypatch, tmp_pat
         assert r.status_code == 200
         assert "review-bar" in r.text
         assert "draftFields: []" in r.text
+        # Annotate dropdown migrated onto the shared popover/menu module.
+        assert "popover-panel menu" in r.text
+        assert "menu-item" in r.text
+        assert "annotate-menu" not in r.text
 
 
 def test_clip_detail_renders_draft_when_annotation_exists(monkeypatch, tmp_path):

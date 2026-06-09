@@ -1,4 +1,4 @@
-<div class="annotate-wrap">
+<div class="popover">
   <button type="button"
           class="btn primary"
           :disabled="running"
@@ -10,7 +10,8 @@
     </span>
   </button>
 
-  <div class="annotate-menu" x-show="open" x-cloak @click.outside="open = false">
+  <div class="popover-panel menu align-right" x-show="open" x-cloak
+       @click.outside="open = false" @keydown.escape.window="open = false">
     <template x-if="loading">
       <p class="muted">Loading prompts…</p>
     </template>
@@ -24,20 +25,16 @@
       </p>
     </template>
     <template x-if="!loading && prompts && prompts.length > 0">
-      <ul class="annotate-list">
-        <template x-for="p in prompts" :key="p.id">
-          <li>
-            <button type="button" class="annotate-item" @click="pick(p)">
-              <span class="annotate-name" x-text="p.name"></span>
-              <span class="annotate-meta mono">
-                <span x-show="p.media_kind && p.media_kind !== 'any'"
-                      class="tag" x-text="p.media_kind"></span>
-                v<span x-text="p.current_production_version_num"></span>
-              </span>
-            </button>
-          </li>
-        </template>
-      </ul>
+      <template x-for="p in prompts" :key="p.id">
+        <button type="button" class="menu-item" @click="pick(p)">
+          <span class="menu-lbl" x-text="p.name"></span>
+          <span class="menu-meta">
+            <span x-show="p.media_kind && p.media_kind !== 'any'"
+                  class="tag" x-text="p.media_kind"></span>
+            v<span x-text="p.current_production_version_num"></span>
+          </span>
+        </button>
+      </template>
     </template>
   </div>
 </div>

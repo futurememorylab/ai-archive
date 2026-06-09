@@ -1261,29 +1261,9 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 .btn-row { gap: 8px; }
 
 /* ─── Annotate dropdown ──────────────────────────────────────────────── */
-.annotate-wrap { position: relative; display: inline-block; }
-.annotate-wrap .btn:disabled { cursor: progress; }
-.annotate-menu {
-  position: absolute; top: calc(100% + 4px); right: 0;
-  min-width: 280px; max-height: 360px; overflow-y: auto;
-  background: var(--surface, #fff);
-  border: 1px solid var(--line, #d0d0d0);
-  border-radius: var(--r-2);
-  padding: 6px;
-  z-index: 50;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-}
-.annotate-list { list-style: none; margin: 0; padding: 0; }
-.annotate-item {
-  display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
-  width: 100%; padding: 6px 8px;
-  background: transparent; border: 0; cursor: pointer; text-align: left;
-  color: var(--text);
-  border-radius: var(--r-1);
-}
-.annotate-item:hover { background: var(--hover); color: var(--text); }
-.annotate-name { font-weight: 500; color: var(--text); }
-.annotate-meta { color: var(--text-3); font-size: 0.9em; }
+/* Migrated onto the popover/menu module (.popover + .popover-panel .menu).
+   The running-spinner trigger keeps a progress cursor while disabled. */
+.popover .btn:disabled { cursor: progress; }
 
 /* ─── Published↔Draft scope toggle ────────────────────────────────── */
 .anno-scope {
