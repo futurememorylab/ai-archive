@@ -87,6 +87,7 @@ modifiers — combine freely:
 | `.ghost` | transparent, hairline border (secondary) |
 | `.danger` | red text/border (destructive) |
 | `.sm` | small height (`--btn-h-sm`) |
+| `.link` | bare text button (no chrome), underline on hover; combine with `.danger` for a destructive text link |
 | `.icon` | square, no horizontal padding (icon-only) |
 | `.icon.sm` | small square |
 | `.is-disabled` / `:disabled` | dimmed, non-interactive (also `.disabled`) |
@@ -222,7 +223,107 @@ scripts), so `window.*` exist before anything initializes. Three globals:
 **Never re-implement timecode or byte formatting — call these.** A
 divergent formatter means two clips show the same duration differently.
 
-## 8. Red flags — stop and reuse
+## 8. Menus & popovers
+
+One dropdown vocabulary — a trigger that opens a floating panel of items
+that dismisses on click-outside / `Esc`. **Do not hand-roll a new
+`*-menu` class or a second `x-data="{ open: false }"` toggle.** The three
+pieces:
+
+| What | Where | How you use it |
+|---|---|---|
+| Open/close behavior | `static/popover.js` (`Alpine.data("popover")`) | `x-data="popover()"` → `open` / `toggle()` / `close()` |
+| Panel + item classes | `app.css` (`.popover-panel`, `.menu`, `.menu-item`, …) | apply classes |
+| Markup macros | `components/_ui.html` (`menu`, `menu_item`, `menu_sep`, `menu_header`) | `{% call ui.menu(...) %}…{% endcall %}` |
+
+### Standard menu (plain `.btn` trigger)
+
+```jinja
+{% call ui.menu(label='v' ~ version.version_num, trigger_cls='mono-cell') %}
+  {{ ui.menu_item('Promote', post='/prompts/%d/_promote' % p.id) }}
+  {{ ui.menu_item('Open in Studio', href='/studio?prompt_id=%d' % p.id) }}
+  {{ ui.menu_sep() }}
+  {{ ui.menu_item('Archive', post='/prompts/%d/_archive' % p.id, danger=true) }}
+{% endcall %}
+```
+
+`menu_item` picks the element from exactly one of `post=` (a
+`<form>`+submit), `href=` (an `<a>`), or neither (a `<button>`, with
+`action=` for an `@click` expression). Knobs: `danger`, `current`
+(active row), `meta` (right-aligned mono), `desc` (sub-line), `icon`,
+`attrs` (raw `hx-*` / `data-*`).
+
+### Hosted mode (menu inside a larger component)
+
+When the menu lives inside a component that already owns the open flag
+(`studioPage`, `bulkSel`, …), pass `state=` so the macro binds to that
+flag and emits **no `x-data`** — a nested `x-data` would *shadow* the
+parent scope (e.g. `studioPage.focusedClipId` would read `undefined`):
+
+```jinja
+{# inside x-data="bulkSel()", which declares annoOpen #}
+{% call ui.menu(label='Annotate', variant='primary', state='annoOpen') %}…{% endcall %}
+```
+
+### Bespoke trigger
+
+When the trigger isn't a plain labeled button (a chip, a title button),
+skip `menu()` and use the pieces directly — still `popover()` for
+behavior and `.popover-panel`/`.menu` for the panel:
+
+```jinja
+<span class="pc-vchip" x-data="popover()"
+      @click.outside="close()" @keydown.escape.window="close()">
+  <button class="btn sm ghost" :class="open && 'open'" @click="toggle()">…</button>
+  <div class="popover-panel menu" x-show="open" x-cloak>
+    {{ ui.menu_header('versions') }}
+    <button class="menu-item" @click="close()">…</button>
+  </div>
+</span>
+```
+
+A new bespoke `*-menu` class fails CI (`tests/unit/test_design_language_guard.py`).
+
+## 9. Modals
+
+One modal vocabulary — a fixed overlay + click-backdrop + centered card with
+escape-to-close. **Do not hand-roll a `modal-overlay` / `modal-dialog` or a
+second modal shell.** The pieces:
+
+| Class | Purpose |
+|---|---|
+| `.modal` | fixed overlay (flex-centers the card) |
+| `.modal-backdrop` | dim layer; click to close |
+| `.modal-card` | the dialog box (`.sm` = narrow form; `.nb-card` = wide picker) |
+| `.modal-hdr` + `.modal-title` | header row + title |
+| `.modal-body` | scrollable content |
+| `.modal-actions` | footer button row |
+
+```jinja
+{% call ui.modal('dupOpen', label='Duplicate prompt', card_cls='sm') %}
+  <form @submit.prevent="duplicate()">
+    <div class="modal-body">
+      {{ ui.field('Name', 'dupName', input_attrs='x-model="dupName"') }}
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" @click="dupOpen = false">Cancel</button>
+      <button type="submit" class="btn primary">Duplicate</button>
+    </div>
+  </form>
+{% endcall %}
+```
+
+`ui.modal(state, label='', card_cls='')` owns the overlay + backdrop + escape;
+`state` is the Alpine flag that shows it. Pass `label` for a default titled
+header, or omit it and put a custom `.modal-hdr` in the body (e.g. a
+selected-count). Use `.field` / `ui.field` for form fields inside — there is no
+`modal-field` / `modal-label`. A modal with a bespoke lifecycle (HTMX-injected,
+no flag — the archive picker) uses the `.modal-*` classes directly with its own
+`@click` / escape wiring.
+
+A new `modal-*` class outside this vocabulary fails CI.
+
+## 10. Red flags — stop and reuse
 
 If you catch yourself doing any of these, stop:
 
@@ -242,3 +343,10 @@ If you catch yourself doing any of these, stop:
   inline it.
 - **Adding a `setInterval` to resize a textarea.** → `.txt-area` autosizes
   itself via `format.js`; just use the class.
+- **Writing a new `*-menu` class or a second `x-data="{ open: false }"`
+  dropdown toggle.** → Use `{{ ui.menu(...) }}` / `ui.menu_item`, or
+  `popover()` + `.popover-panel` / `.menu` for a bespoke trigger (§8).
+  A new `*-menu` / `*-btn` class fails CI.
+- **Writing a `modal-overlay` / `modal-dialog` or a new modal shell.** →
+  `{% call ui.modal(state, label) %}` + `.modal-body` / `.modal-actions`, and
+  `.field` / `ui.field` for form fields (§9). A new `modal-*` class fails CI.

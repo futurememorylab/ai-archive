@@ -48,6 +48,79 @@
   <span class="pill {{ state }}"><span class="led"></span>{{ label }}</span>
 {%- endmacro %}
 
+{# ── Menus & popovers ───────────────────────────────────────────────
+   One dropdown vocabulary. `menu()` renders a standard .btn trigger + the
+   floating panel; items go in the {% call %} body. Open/close/escape/
+   click-outside come from popover() (static/popover.js).
+
+   Modes (see docs/design-language.md):
+   - Standalone (default): the macro emits x-data="popover()" and uses its
+     own `open`. For leaf menus with a plain button trigger.
+   - Hosted: pass state='someFlag' when the menu lives inside a larger
+     component that already owns the flag. The macro then binds to that
+     flag and emits NO x-data, so the parent scope is not shadowed.
+
+   Bespoke triggers (a chip, a title button) skip menu() and use the
+   pieces directly: <… x-data="popover()"> + .popover-panel.menu + the
+   menu_item/menu_header/menu_sep macros. #}
+{% macro menu(label='', variant='ghost', size='sm', align='left', state=None, trigger_cls='', trigger_attrs='') -%}
+  {%- set _open = state if state else 'open' -%}
+  {%- set _toggle = (state ~ ' = !' ~ state) if state else 'toggle()' -%}
+  {%- set _close = (state ~ ' = false') if state else 'close()' -%}
+  <div class="popover"{% if not state %} x-data="popover()"{% endif %}>
+    <button type="button" class="{{ ('btn ' ~ variant ~ ' ' ~ size ~ ' ' ~ trigger_cls).split() | join(' ') }}"
+            :class="{{ _open }} && 'open'" @click="{{ _toggle }}" {{ trigger_attrs|safe }}>
+      {{ label|safe }}<span class="caret">▾</span>
+    </button>
+    <div class="popover-panel menu{% if align == 'right' %} align-right{% endif %}"
+         x-show="{{ _open }}" x-cloak
+         @click.outside="{{ _close }}" @keydown.escape.window="{{ _close }}">
+      {{ caller() }}
+    </div>
+  </div>
+{%- endmacro %}
+
+{# One menu row. Exactly one of post / href / action selects the element:
+   post → <form method=post><button submit>; href → <a>; else → <button>
+   (action is a raw Alpine @click expression). attrs passes through raw
+   markup (hx-*, data-*, @click handlers). #}
+{% macro menu_item(label, href=None, post=None, action=None, icon=None, danger=False, current=False, meta=None, desc=None, attrs='') -%}
+  {%- set cls = ('menu-item' ~ (' danger' if danger else '') ~ (' is-current' if current else '')) -%}
+  {%- set body %}
+    {%- if icon %}{{ icon|safe }}{% endif -%}
+    <span class="menu-lbl">{{ label }}{% if desc %}<span class="menu-desc">{{ desc }}</span>{% endif %}</span>
+    {%- if meta is not none %}<span class="menu-meta">{{ meta }}</span>{% endif -%}
+  {%- endset -%}
+  {%- if post -%}
+    <form method="post" action="{{ post }}"><button type="submit" class="{{ cls }}" {{ attrs|safe }}>{{ body }}</button></form>
+  {%- elif href -%}
+    <a class="{{ cls }}" href="{{ href }}" {{ attrs|safe }}>{{ body }}</a>
+  {%- else -%}
+    <button type="button" class="{{ cls }}" {% if action %}@click="{{ action }}"{% endif %} {{ attrs|safe }}>{{ body }}</button>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro menu_sep() -%}<div class="menu-sep"></div>{%- endmacro %}
+
+{% macro menu_header(label) -%}<div class="menu-header">{{ label }}</div>{%- endmacro %}
+
+{# Modal shell: fixed overlay + backdrop (click to close) + centered card,
+   escape-to-close. `state` is the Alpine flag that shows it. The caller
+   supplies the body (.modal-body) and footer (.modal-actions). Pass `label`
+   for a default .modal-hdr with a title; omit it to supply a custom .modal-hdr
+   in the body (e.g. with extra header content). `card_cls` adds modifiers
+   (e.g. 'sm' for a narrow form dialog, 'nb-card' for the wide picker). #}
+{% macro modal(state, label='', card_cls='') -%}
+  <div class="modal" x-show="{{ state }}" x-cloak @keydown.escape.window="{{ state }} = false">
+    <div class="modal-backdrop" @click="{{ state }} = false"></div>
+    <div class="modal-card{% if card_cls %} {{ card_cls }}{% endif %}" role="dialog" aria-modal="true"
+         {%- if label %} aria-label="{{ label }}"{% endif %}>
+      {%- if label %}<div class="modal-hdr"><h2 class="modal-title">{{ label }}</h2></div>{% endif %}
+      {{ caller() }}
+    </div>
+  </div>
+{%- endmacro %}
+
 {# Prompt version state chip: draft / production / archived. The single
    shared component used by the prompt editor and Studio. Production and
    archived are read-only, so they carry a lock icon; draft (editable)

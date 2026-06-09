@@ -191,3 +191,14 @@ def test_picker_uses_hx_get_to_swap_card(client):
     assert 'hx-get="/studio/_prompt_card' in html
     assert 'hx-target="closest .studio-prompt-card"' in html
     assert 'hx-swap="outerHTML"' in html
+
+
+def test_version_picker_uses_canonical_menu_module(client):
+    _, _, v2 = _make_prompt_two_versions(client)
+    html = client.get(f"/studio/_prompt_card?side=cur&prompt_version_id={v2}").text
+    # Migrated onto the shared popover/menu module (popover.js + .menu CSS).
+    assert "popover-panel menu" in html
+    assert 'class="menu-item' in html
+    assert 'x-data="popover()"' in html
+    # The bespoke pc-vmenu vocabulary is gone.
+    assert "pc-vmenu" not in html

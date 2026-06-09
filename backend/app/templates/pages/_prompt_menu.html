@@ -1,35 +1,24 @@
-{# Rendered inside x-data='promptEditor(...)' so we have prompt_id/version_id at hand.
-   But for form actions we use the server-rendered IDs directly — simpler and a
-   plain progressive-enhancement form. #}
-<div class="tmpl-menu">
-  <form method="post" action="/prompts/{{ selected.id }}/_new_version">
-    <button type="submit" class="tmpl-menu-item">+ Create new version</button>
-  </form>
-  <a class="tmpl-menu-item" href="/studio?prompt_id={{ selected.id }}">
-    {% include "icons/_flask.svg" %}
-    Open in Studio
-  </a>
+{# Prompt actions ("⋯") menu. Rendered inside x-data='promptEditor(...)' and a
+   parent `x-show="menuOpen"` wrapper (see _prompt_detail.html). Uses the shared
+   popover/menu module; mixed row types via ui.menu_item (post / href / action). #}
+{% import "components/_ui.html" as ui %}
+{% set flask %}{% include "icons/_flask.svg" %}{% endset %}
+<div class="popover-panel menu align-right">
+  {{ ui.menu_item('Create new version', icon='+', post='/prompts/' ~ selected.id ~ '/_new_version') }}
+  {{ ui.menu_item('Open in Studio', icon=flask, href='/studio?prompt_id=' ~ selected.id) }}
   {% if selected_version.state == "draft" %}
-  <form method="post"
-        action="/prompts/{{ selected.id }}/versions/{{ selected_version.id }}/_promote">
-    <button type="submit" class="tmpl-menu-item">&#9654; Promote to production</button>
-  </form>
+    {{ ui.menu_item('Promote to production', icon='▶',
+                    post='/prompts/' ~ selected.id ~ '/versions/' ~ selected_version.id ~ '/_promote') }}
   {% endif %}
-  <div class="tmpl-menu-sep"></div>
-  <button type="button" class="tmpl-menu-item" @click="openDuplicate()">&#9192; Duplicate&hellip;</button>
-  <a class="tmpl-menu-item"
-     href="/api/prompts/{{ selected.id }}/versions/{{ selected_version.id }}/export"
-     download="prompt-{{ selected.id }}-v{{ selected_version.version_num }}.json">
-     &#11015; Export JSON
-  </a>
-  <div class="tmpl-menu-sep"></div>
+  {{ ui.menu_sep() }}
+  {{ ui.menu_item('Duplicate…', icon='⎘', action='openDuplicate()') }}
+  {{ ui.menu_item('Export JSON', icon='⬇',
+                  href='/api/prompts/' ~ selected.id ~ '/versions/' ~ selected_version.id ~ '/export',
+                  attrs='download="prompt-' ~ selected.id ~ '-v' ~ selected_version.version_num ~ '.json"') }}
+  {{ ui.menu_sep() }}
   {% if not selected.archived %}
-  <form method="post" action="/prompts/{{ selected.id }}/_archive">
-    <button type="submit" class="tmpl-menu-item danger">&#9635; Archive</button>
-  </form>
+    {{ ui.menu_item('Archive', icon='▢', post='/prompts/' ~ selected.id ~ '/_archive', danger=true) }}
   {% else %}
-  <form method="post" action="/prompts/{{ selected.id }}/_restore">
-    <button type="submit" class="tmpl-menu-item">&#8634; Restore</button>
-  </form>
+    {{ ui.menu_item('Restore', icon='↺', post='/prompts/' ~ selected.id ~ '/_restore') }}
   {% endif %}
 </div>

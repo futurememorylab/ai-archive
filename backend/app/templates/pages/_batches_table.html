@@ -29,7 +29,7 @@
           <div class="mp-label">
             <span>{{ b.completed }}/{{ b.ran }}</span>
             {% if b.failed %}
-            <button type="button" class="mp-fail-btn" @click.stop="toggle('{{ b.batch_key }}')">·
+            <button type="button" class="btn link danger sm mono" @click.stop="toggle('{{ b.batch_key }}')">·
               {{ b.failed }} failed
               <span x-text="expanded['{{ b.batch_key }}'] ? '▴' : '▾'">▾</span>
             </button>
