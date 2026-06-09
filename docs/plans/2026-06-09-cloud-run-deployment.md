@@ -1303,14 +1303,14 @@ git commit -m "stream_media: locate via MediaLocator; 307 to GCS signed URLs"
 **Files:**
 - Modify: `deploy/cloudrun.env.yaml`
 
-- [ ] **Step 1: Add to `deploy/cloudrun.env.yaml`**
+- [x] **Step 1: Add to `deploy/cloudrun.env.yaml`**
 
 ```yaml
 # Phase 4: playback prefers GCS signed URLs (local disk is ephemeral).
 PLAYBACK_SOURCE: "gcs"
 ```
 
-- [ ] **Step 2: Commit and push**
+- [x] **Step 2: Commit and push**
 
 ```bash
 git add deploy/cloudrun.env.yaml
