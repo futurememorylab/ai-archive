@@ -1611,6 +1611,7 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 }
 
 .studio-clip-card .meta .tag {
+  align-self: start;
   font-family: var(--f-mono, monospace);
   font-size: 10.5px;
   color: var(--text-3);
