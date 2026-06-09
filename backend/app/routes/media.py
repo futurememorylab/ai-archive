@@ -5,7 +5,7 @@ import mimetypes
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from backend.app.deps import get_core_ctx, get_live_ctx
 
@@ -14,6 +14,22 @@ from backend.app.uploaded_ids import is_uploaded
 router = APIRouter(prefix="/api/media", tags=["media"])
 
 _DEFAULT_CHUNK = 1 << 16
+
+# Short-lived 404 cache for the thumb endpoint. Browsers don't cache 404s
+# reliably without an explicit Cache-Control, so list pages re-fire the
+# same misses on every visit. A small TTL collapses the storm; it must
+# stay short so a freshly-prefetched file or CatDV reconnect becomes
+# visible without a forced reload.
+_THUMB_MISS_CACHE = "public, max-age=300"
+
+
+def _thumb_404(detail: str) -> Response:
+    return Response(
+        status_code=404,
+        content=detail.encode(),
+        media_type="text/plain",
+        headers={"Cache-Control": _THUMB_MISS_CACHE},
+    )
 
 
 @router.get("/{clip_id}/thumb")
@@ -25,7 +41,7 @@ async def stream_thumbnail(request: Request, clip_id: int):
         core = get_core_ctx(request)
         path = core.settings.data_dir / "cache" / "thumbs" / f"{clip_id}.jpg"
         if not path.exists() or path.stat().st_size == 0:  # sync-io-ok: uploaded poster lookup, tracked for the tier-4 async-io pass
-            raise HTTPException(404, "no thumbnail")
+            return _thumb_404("no thumbnail")
         return FileResponse(
             path,
             media_type="image/jpeg",
@@ -34,10 +50,10 @@ async def stream_thumbnail(request: Request, clip_id: int):
     ctx = get_live_ctx(request)
     svc = ctx.thumbnail_service
     if svc is None:
-        raise HTTPException(404, "thumbnails unavailable")
+        return _thumb_404("thumbnails unavailable")
     path = await svc.get_or_fetch(clip_id)
     if path is None:
-        raise HTTPException(404, "no thumbnail")
+        return _thumb_404("no thumbnail")
     return FileResponse(
         path,
         media_type="image/jpeg",
