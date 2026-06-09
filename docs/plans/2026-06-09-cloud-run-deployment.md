@@ -723,7 +723,7 @@ git commit -m "Bound CatDV logout to 3s (Cloud Run shutdown-grace budget)"
 
 - [ ] **Step 1 (operator): WG peer + secret** — run the "Phase 3" block in `deploy/README.md`.
 
-- [ ] **Step 2: Update `deploy/cloudrun.env.yaml`**
+- [x] **Step 2: Update `deploy/cloudrun.env.yaml`**
 
 Flip `CATDV_OFFLINE` and add the tunnel config (values from the office WG server):
 
@@ -737,7 +737,7 @@ WG_SOURCE_IP: "<tunnel IP assigned to the cloud peer, e.g. 10.6.0.9>"
 
 (All three are non-secret; only the private key lives in Secret Manager.)
 
-- [ ] **Step 3: Add the secret to the deploy step**
+- [x] **Step 3: Add the secret to the deploy step**
 
 In `.github/workflows/deploy.yml`, change the `--set-secrets` line to:
 
