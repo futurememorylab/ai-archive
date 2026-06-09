@@ -1,60 +1,53 @@
 {# Bulk-annotate picker. Lives inside the page-clips x-data="bulkSel()" root
    so it shares the selection state. One prompt dropdown per media kind in
    the current selection; unassigned kinds are flagged as skipped. #}
-<div class="modal" x-show="annoOpen" x-cloak
-     @keydown.escape.window="annoOpen = false">
-  <div class="modal-backdrop" @click="annoOpen = false"></div>
-  <div class="modal-card" role="dialog" aria-label="Annotate selected clips">
-    <div class="modal-hdr">
-      <h2 class="modal-h" style="padding:0;border:0">Annotate selected</h2>
-    </div>
+{% import "components/_ui.html" as ui %}
+{% call ui.modal('annoOpen', label='Annotate selected') %}
+  <div class="modal-body">
+    <template x-if="annoLoading"><p class="muted">Loading prompts…</p></template>
+    <template x-if="annoError"><p class="muted" style="color:var(--bad)" x-text="annoError"></p></template>
 
-    <div class="modal-body">
-      <template x-if="annoLoading"><p class="muted">Loading prompts…</p></template>
-      <template x-if="annoError"><p class="muted" style="color:var(--bad)" x-text="annoError"></p></template>
-
-      <template x-if="!annoLoading && !annoError">
-        <div class="ba-groups">
-          <template x-for="g in annoGroups" :key="g.kind">
-            <div class="ba-group">
-              <div class="ba-group-head">
-                <span class="tag mono" x-text="g.kind"></span>
-                <span class="muted" x-text="g.clipIds.length + ' clip(s)'"></span>
-              </div>
-              <template x-if="(annoPromptsByKind[g.kind] || []).length">
-                <select x-model="g.promptVersionId" class="ba-select">
-                  <option value="">— skip this kind —</option>
-                  <template x-for="p in annoPromptsByKind[g.kind]" :key="p.id">
-                    <option :value="p.current_production_version_id"
-                            x-text="p.name"></option>
-                  </template>
-                </select>
-              </template>
-              <template x-if="!(annoPromptsByKind[g.kind] || []).length">
-                <p class="ba-skip muted">
-                  No compatible production prompt — these clips will be skipped.
-                </p>
-              </template>
+    <template x-if="!annoLoading && !annoError">
+      <div class="ba-groups">
+        <template x-for="g in annoGroups" :key="g.kind">
+          <div class="ba-group">
+            <div class="ba-group-head">
+              <span class="tag mono" x-text="g.kind"></span>
+              <span class="muted" x-text="g.clipIds.length + ' clip(s)'"></span>
             </div>
-          </template>
-        </div>
-      </template>
+            <template x-if="(annoPromptsByKind[g.kind] || []).length">
+              <select x-model="g.promptVersionId" class="ba-select">
+                <option value="">— skip this kind —</option>
+                <template x-for="p in annoPromptsByKind[g.kind]" :key="p.id">
+                  <option :value="p.current_production_version_id"
+                          x-text="p.name"></option>
+                </template>
+              </select>
+            </template>
+            <template x-if="!(annoPromptsByKind[g.kind] || []).length">
+              <p class="ba-skip muted">
+                No compatible production prompt — these clips will be skipped.
+              </p>
+            </template>
+          </div>
+        </template>
+      </div>
+    </template>
 
-      <template x-if="!annoLoading && annoSkippedCount() > 0">
-        <p class="ba-skip-note"
-           x-text="annoSkippedCount() + ' clip(s) will be skipped (no prompt assigned).'">
-        </p>
-      </template>
-    </div>
-
-    <div class="modal-actions">
-      <button type="button" class="btn ghost" @click="annoOpen = false">Cancel</button>
-      <button type="button" class="btn primary" :disabled="!annoRunnable()"
-              @click="runAnnotate()"
-              x-text="annoRunCount() ? ('Annotate ' + annoRunCount() + ' clip(s)' +
-                       (annoSkippedCount() ? ' (skipping ' + annoSkippedCount() + ')' : ''))
-                       : 'Select a prompt'">
-      </button>
-    </div>
+    <template x-if="!annoLoading && annoSkippedCount() > 0">
+      <p class="ba-skip-note"
+         x-text="annoSkippedCount() + ' clip(s) will be skipped (no prompt assigned).'">
+      </p>
+    </template>
   </div>
-</div>
+
+  <div class="modal-actions">
+    <button type="button" class="btn ghost" @click="annoOpen = false">Cancel</button>
+    <button type="button" class="btn primary" :disabled="!annoRunnable()"
+            @click="runAnnotate()"
+            x-text="annoRunCount() ? ('Annotate ' + annoRunCount() + ' clip(s)' +
+                     (annoSkippedCount() ? ' (skipping ' + annoSkippedCount() + ')' : ''))
+                     : 'Select a prompt'">
+    </button>
+  </div>
+{% endcall %}

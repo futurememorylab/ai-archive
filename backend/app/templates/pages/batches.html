@@ -43,15 +43,13 @@
   </div>
 
   <!-- ───────── NEW BATCH PICKER MODAL ───────── -->
-  <div class="modal" x-show="newOpen" x-cloak @keydown.escape.window="newOpen = false">
-    <div class="modal-backdrop" @click="newOpen = false"></div>
-    <div class="modal-card nb-card" role="dialog" aria-label="New batch">
-      <div class="modal-hdr">
-        <h2 class="modal-h" style="margin:0;font-size:14px">New batch</h2>
-        <span class="grow"></span>
-        <span class="meta mono" x-text="selCount() + ' selected'"></span>
-      </div>
-      <div class="nb-body">
+  {% call ui.modal('newOpen', card_cls='nb-card') %}
+    <div class="modal-hdr">
+      <h2 class="modal-title">New batch</h2>
+      <span class="grow"></span>
+      <span class="meta mono" x-text="selCount() + ' selected'"></span>
+    </div>
+    <div class="nb-body">
         {% include "pages/_clip_picker_main.html" %}
         <div class="nb-side">
           {% include "pages/_clip_picker_basket.html" %}
@@ -79,8 +77,7 @@
         <button type="button" class="btn primary" :disabled="!canStart()" @click="startBatch()"
                 x-text="selCount() ? ('▶ Start batch — ' + runnableCount() + ' clip' + (runnableCount() === 1 ? '' : 's')) : 'Select clips'"></button>
       </div>
-    </div>
-  </div>
+  {% endcall %}
 </div>
 
 <script>

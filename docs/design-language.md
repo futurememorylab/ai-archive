@@ -283,7 +283,46 @@ behavior and `.popover-panel`/`.menu` for the panel:
 
 A new bespoke `*-menu` class fails CI (`tests/unit/test_design_language_guard.py`).
 
-## 9. Red flags — stop and reuse
+## 9. Modals
+
+One modal vocabulary — a fixed overlay + click-backdrop + centered card with
+escape-to-close. **Do not hand-roll a `modal-overlay` / `modal-dialog` or a
+second modal shell.** The pieces:
+
+| Class | Purpose |
+|---|---|
+| `.modal` | fixed overlay (flex-centers the card) |
+| `.modal-backdrop` | dim layer; click to close |
+| `.modal-card` | the dialog box (`.sm` = narrow form; `.nb-card` = wide picker) |
+| `.modal-hdr` + `.modal-title` | header row + title |
+| `.modal-body` | scrollable content |
+| `.modal-actions` | footer button row |
+
+```jinja
+{% call ui.modal('dupOpen', label='Duplicate prompt', card_cls='sm') %}
+  <form @submit.prevent="duplicate()">
+    <div class="modal-body">
+      {{ ui.field('Name', 'dupName', input_attrs='x-model="dupName"') }}
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" @click="dupOpen = false">Cancel</button>
+      <button type="submit" class="btn primary">Duplicate</button>
+    </div>
+  </form>
+{% endcall %}
+```
+
+`ui.modal(state, label='', card_cls='')` owns the overlay + backdrop + escape;
+`state` is the Alpine flag that shows it. Pass `label` for a default titled
+header, or omit it and put a custom `.modal-hdr` in the body (e.g. a
+selected-count). Use `.field` / `ui.field` for form fields inside — there is no
+`modal-field` / `modal-label`. A modal with a bespoke lifecycle (HTMX-injected,
+no flag — the archive picker) uses the `.modal-*` classes directly with its own
+`@click` / escape wiring.
+
+A new `modal-*` class outside this vocabulary fails CI.
+
+## 10. Red flags — stop and reuse
 
 If you catch yourself doing any of these, stop:
 
@@ -307,3 +346,6 @@ If you catch yourself doing any of these, stop:
   dropdown toggle.** → Use `{{ ui.menu(...) }}` / `ui.menu_item`, or
   `popover()` + `.popover-panel` / `.menu` for a bespoke trigger (§8).
   A new `*-menu` / `*-btn` class fails CI.
+- **Writing a `modal-overlay` / `modal-dialog` or a new modal shell.** →
+  `{% call ui.modal(state, label) %}` + `.modal-body` / `.modal-actions`, and
+  `.field` / `ui.field` for form fields (§9). A new `modal-*` class fails CI.

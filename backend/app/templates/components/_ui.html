@@ -104,6 +104,23 @@
 
 {% macro menu_header(label) -%}<div class="menu-header">{{ label }}</div>{%- endmacro %}
 
+{# Modal shell: fixed overlay + backdrop (click to close) + centered card,
+   escape-to-close. `state` is the Alpine flag that shows it. The caller
+   supplies the body (.modal-body) and footer (.modal-actions). Pass `label`
+   for a default .modal-hdr with a title; omit it to supply a custom .modal-hdr
+   in the body (e.g. with extra header content). `card_cls` adds modifiers
+   (e.g. 'sm' for a narrow form dialog, 'nb-card' for the wide picker). #}
+{% macro modal(state, label='', card_cls='') -%}
+  <div class="modal" x-show="{{ state }}" x-cloak @keydown.escape.window="{{ state }} = false">
+    <div class="modal-backdrop" @click="{{ state }} = false"></div>
+    <div class="modal-card{% if card_cls %} {{ card_cls }}{% endif %}" role="dialog" aria-modal="true"
+         {%- if label %} aria-label="{{ label }}"{% endif %}>
+      {%- if label %}<div class="modal-hdr"><h2 class="modal-title">{{ label }}</h2></div>{% endif %}
+      {{ caller() }}
+    </div>
+  </div>
+{%- endmacro %}
+
 {# Prompt version state chip: draft / production / archived. The single
    shared component used by the prompt editor and Studio. Production and
    archived are read-only, so they carry a lock icon; draft (editable)

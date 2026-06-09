@@ -86,37 +86,26 @@
        input_attrs='x-model="draft.output_schema_text" :readonly="!canEdit"') }}
 
   {# Duplicate-prompt modal. #}
-  <div class="modal-overlay" x-show="dupOpen" x-cloak
-       @keydown.escape.window="dupOpen = false"
-       @click.self="dupOpen = false">
-    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="dup-title">
-      <div class="modal-h" id="dup-title">Duplicate prompt</div>
-      <form @submit.prevent="duplicate()">
-        <div class="modal-body">
-          <label class="modal-field">
-            <span class="modal-label">Name</span>
-            <input type="text" class="txt" x-model="dupName" x-ref="dupNameInput"
-                   required maxlength="200" autocomplete="off">
-          </label>
-          <label class="modal-field">
-            <span class="modal-label">Description</span>
-            <textarea class="txt-area" x-model="dupDesc"></textarea>
-          </label>
-          <div class="error-banner" x-show="dupError" x-cloak x-text="dupError"></div>
-          <div class="field-help">
-            Creates a new prompt with v1 (draft) cloned from this prompt&rsquo;s current production version.
-          </div>
+  {% call ui.modal('dupOpen', label='Duplicate prompt', card_cls='sm') %}
+    <form @submit.prevent="duplicate()">
+      <div class="modal-body">
+        {{ ui.field('Name', 'dupName',
+                    input_attrs='x-model="dupName" x-ref="dupNameInput" required maxlength="200" autocomplete="off"') }}
+        {{ ui.textarea_field('Description', 'dupDesc', input_attrs='x-model="dupDesc"') }}
+        <div class="error-banner" x-show="dupError" x-cloak x-text="dupError"></div>
+        <div class="field-help">
+          Creates a new prompt with v1 (draft) cloned from this prompt&rsquo;s current production version.
         </div>
-        <div class="modal-actions">
-          <button type="button" class="btn ghost" @click="dupOpen = false">Cancel</button>
-          <button type="submit" class="btn primary" :disabled="dupSaving || !dupName.trim()">
-            <span x-show="!dupSaving">Duplicate</span>
-            <span x-show="dupSaving" x-cloak>Duplicating&hellip;</span>
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" @click="dupOpen = false">Cancel</button>
+        <button type="submit" class="btn primary" :disabled="dupSaving || !dupName.trim()">
+          <span x-show="!dupSaving">Duplicate</span>
+          <span x-show="dupSaving" x-cloak>Duplicating&hellip;</span>
+        </button>
+      </div>
+    </form>
+  {% endcall %}
 </div>
 {% else %}
   <div class="empty-state">Select a prompt or create one.</div>

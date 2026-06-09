@@ -12,8 +12,8 @@ in place and forbids *new* growth on each:
 
 - **Buttons / menus** — class tokens ending in ``btn`` / ``menu`` (outside the
   canonical bases ``btn`` / ``menu``). Reuse ``.btn`` / ``ui.menu``.
-- **Modals** — ``modal`` / ``modal-*`` classes. (Candidate B will collapse the
-  two modal vocabularies; until then they are frozen.)
+- **Modals** — ``modal`` / ``modal-*`` outside the canonical ``ui.modal``
+  vocabulary (Candidate B done). Reuse ``ui.modal``.
 - **Cards** — ``*-card`` classes. (Candidate D will unify the clip media card.)
 - **Inline styles on form controls** — banned outright, except ``min-height``
   (the one inline style the library sanctions, via ``ui.textarea_field``).
@@ -55,20 +55,16 @@ GRANDFATHERED = {
     "studio-run-btn",
 }
 
-# Modal classes — frozen pending Candidate B (one ui.modal vocabulary).
-MODAL_GRANDFATHERED = {
+# Modal classes — the single canonical vocabulary (Candidate B done: one
+# ui.modal shell + these classes). Any new modal-* outside this set fails CI.
+MODAL_ALLOWED = {
     "modal",
-    "modal-actions",
     "modal-backdrop",
-    "modal-body",
     "modal-card",
-    "modal-dialog",
-    "modal-field",
-    "modal-foot",
-    "modal-h",
     "modal-hdr",
-    "modal-label",
-    "modal-overlay",
+    "modal-title",
+    "modal-body",
+    "modal-actions",
 }
 
 # Card classes — frozen pending Candidate D (one ui.clip_card). shutdown-card
@@ -154,8 +150,8 @@ def test_no_unlisted_modal_classes():
     _assert_within(
         "modal",
         _scan_tokens(_is_modal),
-        MODAL_GRANDFATHERED,
-        "reuse the modal vocabulary (one ui.modal is coming — Candidate B)",
+        MODAL_ALLOWED,
+        "reuse ui.modal and the canonical .modal-* classes",
     )
 
 
@@ -172,7 +168,6 @@ def test_grandfather_lists_have_no_dead_entries():
     """Keep the allow-lists honest: every grandfathered token still exists."""
     checks = [
         ("menu/btn", GRANDFATHERED, set(_scan_tokens(_is_menu_or_btn))),
-        ("modal", MODAL_GRANDFATHERED, set(_scan_tokens(_is_modal))),
         ("card", CARD_GRANDFATHERED, set(_scan_tokens(_is_card))),
     ]
     dead = {name: sorted(allow - live) for name, allow, live in checks if allow - live}
