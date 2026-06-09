@@ -571,7 +571,7 @@ The entrypoint and `litestream.yml` already exist (Task 3); this turns them on.
 - Create: `docs/adr/0066-cloud-run-single-instance-litestream.md` (use the next free number if 0066 is taken by then)
 - Modify: `docs/decisions.md` (index row)
 
-- [ ] **Step 1: Add to `deploy/cloudrun.env.yaml`**
+- [x] **Step 1: Add to `deploy/cloudrun.env.yaml`**
 
 ```yaml
 # Phase 2: SQLite persistence. DB_PATH must equal
@@ -580,7 +580,7 @@ DB_PATH: "/data/app.db"
 LITESTREAM_REPLICA_URL: "gcs://catdav-annotator-db/litestream"
 ```
 
-- [ ] **Step 2: Write the ADR**
+- [x] **Step 2: Write the ADR**
 
 `docs/adr/0066-cloud-run-single-instance-litestream.md`, MADR-lite format (match any existing ADR):
 
@@ -627,7 +627,7 @@ SIGTERM) are fine; traffic-split canaries are forbidden.
 
 Add the row to the index table in `docs/decisions.md`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add deploy/cloudrun.env.yaml docs/adr/0066-cloud-run-single-instance-litestream.md docs/decisions.md
