@@ -3,6 +3,10 @@
 This app runs in two places: the developer's Mac (dev) and the CatDV server (prod).
 The same code; only env vars differ.
 
+> **Cloud Run:** see `deploy/README.md` (one-time GCP setup) and
+> `docs/specs/2026-06-09-cloud-run-deployment-design.md`. The sections
+> below describe the original Mac-dev / CatDV-server systemd deploy.
+
 ## Dev (Mac)
 
 ```bash

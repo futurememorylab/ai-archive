@@ -260,7 +260,7 @@ git commit -m "Container: Dockerfile + entrypoint (uvicorn/litestream/onetun, en
 - Create: `deploy/README.md`
 - Modify: `docs/DEPLOY.md` (add a pointer)
 
-- [ ] **Step 1: Write `deploy/cloudrun.env.yaml`**
+- [x] **Step 1: Write `deploy/cloudrun.env.yaml`**
 
 Copy `CATDV_USERNAME`'s value from the local `.env` (it is not a secret; the password is).
 
@@ -288,7 +288,7 @@ AI_INPUT_STORE: "gcs"
 
 (Replace `<copy from local .env>` with the actual username before committing — it is non-secret.)
 
-- [ ] **Step 2: Write `deploy/README.md` — the one-time GCP setup**
+- [x] **Step 2: Write `deploy/README.md` — the one-time GCP setup**
 
 ```markdown
 # Cloud Run deployment — one-time GCP setup
@@ -405,7 +405,7 @@ its public key, and the tunnel IP assigned to the new peer.
 
 Replace `<github-org>/<repo>` with the actual GitHub `owner/name` of this repository (check `git remote -v`).
 
-- [ ] **Step 3: Add a pointer in `docs/DEPLOY.md`**
+- [x] **Step 3: Add a pointer in `docs/DEPLOY.md`**
 
 At the top of `docs/DEPLOY.md`, after the intro line, add:
 
@@ -415,7 +415,7 @@ At the top of `docs/DEPLOY.md`, after the intro line, add:
 > below describe the original Mac-dev / CatDV-server systemd deploy.
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add deploy/cloudrun.env.yaml deploy/README.md docs/DEPLOY.md
