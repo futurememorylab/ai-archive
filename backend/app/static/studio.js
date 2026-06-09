@@ -273,7 +273,11 @@ document.addEventListener('alpine:init', () => {
     },
   }));
 
-  Alpine.data('uploadClips', () => ({
+  // Per-set dropzone (rendered inside an expanded uploaded set — see
+  // _studio_set.html). `setId` is the set every dropped file is added to;
+  // after a batch we refresh just that set's body.
+  Alpine.data('uploadClips', (setId) => ({
+    setId,
     dragging: false,
     busy: false,
     doneCount: 0,
@@ -301,8 +305,9 @@ document.addEventListener('alpine:init', () => {
       this.busy = true;
       this.totalCount = vids.length;
       this.doneCount = 0;
+      let ok = 0;
       for (const f of vids) {
-        try { await this.uploadOne(f); }
+        try { await this.uploadOne(f); ok++; }
         catch (err) {
           console.error('upload failed', f.name, err);
           Alpine.store('toast').push(
@@ -312,6 +317,25 @@ document.addEventListener('alpine:init', () => {
         } finally { this.doneCount++; }
       }
       this.busy = false;
+      // Re-render this set's body once so the new cards appear alongside a
+      // fresh dropzone. (Done after the loop — the swap replaces this very
+      // component, so it must be the last thing we touch.)
+      if (ok > 0) await this.refreshSet();
+    },
+
+    async refreshSet() {
+      const kidsEl = document.querySelector(
+        `.studio-set[data-set-id="${this.setId}"] .studio-set-kids`
+      );
+      if (!kidsEl) {
+        console.warn(`uploadClips.refreshSet: .studio-set-kids not found for set ${this.setId}`);
+        return;
+      }
+      const av = Alpine.store('studio')?.activeVersionId;
+      const url = `/studio/_set?set_id=${this.setId}` + (av ? `&active_version_id=${av}` : '');
+      const html = await fetch(url).then(r => r.text());
+      kidsEl.innerHTML = html;
+      window.htmxAlpine.reinit(kidsEl);
     },
 
     // Capture a poster frame at ~1s via an offscreen <video> + <canvas>.
@@ -348,6 +372,7 @@ document.addEventListener('alpine:init', () => {
       const poster = await this.capturePoster(file, meta);
       const fd = new FormData();
       fd.append('file', file, file.name);
+      fd.append('set_id', String(this.setId));
       if (poster) fd.append('poster', poster, 'poster.jpg');
       if (meta.duration != null) fd.append('duration_secs', String(meta.duration));
       if (meta.width != null) fd.append('width', String(meta.width));
@@ -360,14 +385,7 @@ document.addEventListener('alpine:init', () => {
         try { detail = (await res.json()).detail || detail; } catch (e) { /* non-JSON */ }
         throw new Error(detail);
       }
-      const card = await res.text();
       Alpine.store('toast').push(`Uploaded ${file.name}.`, { level: 'success' });
-      const body = document.querySelector('[data-studio-nav-body]');
-      if (body) {
-        const html = await fetch('/studio/_sets?source=uploaded').then(r => r.text());
-        body.innerHTML = html;
-        window.htmxAlpine.reinit(body);
-      }
     },
   }));
 

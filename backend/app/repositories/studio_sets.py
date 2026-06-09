@@ -135,6 +135,16 @@ class StudioSetsRepo:
         )
         return [{"clip_id": r[0], "added_at": r[1]} for r in await cur.fetchall()]
 
+    async def source_for_set(
+        self, conn: aiosqlite.Connection, set_id: int
+    ) -> str | None:
+        """The `source` ('archive' | 'uploaded') of a set, or None if missing."""
+        cur = await conn.execute(
+            "SELECT source FROM studio_set WHERE id = ?", (set_id,)
+        )
+        row = await cur.fetchone()
+        return str(row[0]) if row is not None else None
+
     async def set_id_for_clip(
         self, conn: aiosqlite.Connection, clip_id: int
     ) -> int | None:

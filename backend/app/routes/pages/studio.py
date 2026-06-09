@@ -123,14 +123,9 @@ async def studio_page(
 async def _studio_sets(request: Request, source: str = "archive"):
     ctx = get_core_ctx(request)
     sets = await ctx.studio_sets_repo.list_sets_with_counts(ctx.db, source=source)
-    template = (
-        "pages/_studio_uploaded_stub.html"
-        if source == "uploaded"
-        else "pages/_studio_set_list.html"
-    )
     return templates.TemplateResponse(
         request,
-        template,
+        "pages/_studio_set_list.html",
         {"sets": sets, "active_version": None, "nav_source": source},
     )
 
@@ -150,6 +145,7 @@ async def _studio_set(
     """
     ctx = get_core_ctx(request)
     archive = _archive(request)
+    set_source = await ctx.studio_sets_repo.source_for_set(ctx.db, set_id)
     clips_rows = await ctx.studio_sets_repo.list_clips(ctx.db, set_id)
 
     uploaded_ids = [c["clip_id"] for c in clips_rows if is_uploaded(c["clip_id"])]
@@ -200,7 +196,12 @@ async def _studio_set(
     return templates.TemplateResponse(
         request,
         "pages/_studio_set.html",
-        {"set_id": set_id, "clips": enriched, "focused_clip_id": clip_id},
+        {
+            "set_id": set_id,
+            "set_source": set_source,
+            "clips": enriched,
+            "focused_clip_id": clip_id,
+        },
     )
 
 
@@ -317,11 +318,18 @@ async def _studio_player(
     ctx = get_core_ctx(request)
     archive = _archive(request)
 
-    # Resolve clip metadata via the archive when available.
+    # Resolve clip metadata. Uploaded clips carry their duration in the
+    # uploaded_clip table (captured client-side at upload); their synthetic id
+    # is not in the archive, so resolve them directly. fps is unknown for
+    # uploads → default 25.0 (matches the uploaded path elsewhere).
     fps: float = 25.0
     duration_secs: float | None = None
     duration_smpte: str = ""
-    if archive is not None:
+    if is_uploaded(clip_id):
+        row = await ctx.uploaded_clips_repo.get(ctx.db, clip_id)
+        if row is not None:
+            duration_secs = row.get("duration_secs")
+    elif archive is not None:
         try:
             clip = await archive.get_clip(str(clip_id))
             fps = float(clip.fps or 25.0)

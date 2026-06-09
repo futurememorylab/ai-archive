@@ -104,7 +104,10 @@ def test_studio_page_renders_source_tabs(client):
     html = r.text
     # Both tabs present; Archive is hidden only when no archive is connected.
     assert 'data-nav-source="uploaded"' in html
-    assert "Drop video files or click to upload" in html  # the dropzone renders in the panel
+    # The dropzone is per-set now — it appears inside an expanded uploaded set
+    # (loaded via HTMX), not on the bare page. The uploaded view shows the set
+    # list shell instead.
+    assert "studio-sets" in html
 
 
 def test_studio_nav_has_bulk_action_bar(client):

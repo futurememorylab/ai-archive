@@ -28,10 +28,8 @@
   </div>
 
   <div class="studio-nav-body" data-studio-nav-body>
-    {% if nav_source == 'uploaded' %}
-      {% include "pages/_studio_uploaded_stub.html" %}
-    {% else %}
-      {% include "pages/_studio_set_list.html" %}
-    {% endif %}
+    {# Both sources render the same set list; uploaded sets host their own
+       per-set dropzone (see _studio_set.html), archive sets the picker. #}
+    {% include "pages/_studio_set_list.html" %}
   </div>
 </div>
