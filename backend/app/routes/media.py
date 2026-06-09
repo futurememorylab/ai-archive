@@ -5,9 +5,10 @@ import mimetypes
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 
 from backend.app.deps import get_core_ctx, get_live_ctx
+from backend.app.services.media_locator import LocalFile, MediaNotAvailable, RemoteUrl
 
 from backend.app.uploaded_ids import is_uploaded
 
@@ -75,12 +76,15 @@ async def stream_media(request: Request, clip_id: int):
             raise HTTPException(404, f"uploaded clip {clip_id} file missing: {path}")
     else:
         ctx = get_live_ctx(request)
-        if ctx.proxy_resolver is None:
-            raise HTTPException(503, "proxy resolver not initialized")
         try:
-            path = await ctx.proxy_resolver.path_for_clip_id(clip_id)
-        except Exception as exc:
-            raise HTTPException(404, f"proxy unavailable: {exc}") from exc
+            located = await ctx.media_locator.locate(clip_id)
+        except MediaNotAvailable as exc:
+            raise HTTPException(404, str(exc)) from exc
+        if isinstance(located, RemoteUrl):
+            # Browser follows to GCS; range requests for seeking go
+            # straight to the signed URL, bytes never transit this app.
+            return RedirectResponse(located.url, status_code=307)
+        path = located.path
 
     mime = mimetypes.guess_type(str(path))[0] or "video/quicktime"
     size = path.stat().st_size  # sync-io-ok: pre-existing, single metadata call on the stream-response path

@@ -1148,7 +1148,7 @@ git commit -m "MediaLocator: ordered two-layer playback source (local cache / GC
 - Modify: `backend/app/routes/media.py:64-83` (the non-uploaded branch of `stream_media`)
 - Test: `tests/unit/test_stream_media_locator.py` (create)
 
-- [ ] **Step 1: Write the failing route tests**
+- [x] **Step 1: Write the failing route tests**
 
 ```python
 """stream_media must serve LocalFile via the existing file path and
@@ -1229,12 +1229,12 @@ async def test_miss_is_404():
     assert "local cache" in resp.text
 ```
 
-- [ ] **Step 2: Run them — must fail**
+- [x] **Step 2: Run them — must fail**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_stream_media_locator.py -v`
 Expected: FAIL — `StubLive` has `media_locator` but the route still calls `ctx.proxy_resolver`.
 
-- [ ] **Step 3: Add the `media_locator` property to `LiveCtx`**
+- [x] **Step 3: Add the `media_locator` property to `LiveCtx`**
 
 In `backend/app/context.py`, add to the imports section:
 
@@ -1258,7 +1258,7 @@ and add this property on the `LiveCtx` class (next to the other delegation prope
         )
 ```
 
-- [ ] **Step 4: Rewrite the non-uploaded branch of `stream_media`**
+- [x] **Step 4: Rewrite the non-uploaded branch of `stream_media`**
 
 In `backend/app/routes/media.py`: add imports
 
@@ -1286,12 +1286,12 @@ and replace the `else:` branch of `stream_media` (currently lines 76–83, the `
 
 (The `if ctx.proxy_resolver is None: raise HTTPException(503, ...)` guard is removed — the locator treats a missing resolver as a layer miss, and a both-miss is a 404, which is the truthful answer.)
 
-- [ ] **Step 5: Run the new tests and the full suite**
+- [x] **Step 5: Run the new tests and the full suite**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_stream_media_locator.py -v && .venv/bin/python -m pytest && .venv/bin/lint-imports`
 Expected: all PASS, import contracts green (locator import in routes is services-from-routes, which is allowed).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/context.py backend/app/routes/media.py tests/unit/test_stream_media_locator.py
