@@ -31,6 +31,7 @@ raises the cost of the common cases, it does not prove the absence of all
 duplication.
 """
 
+import functools
 import re
 from pathlib import Path
 
@@ -93,6 +94,7 @@ _CONTROL_STYLE = re.compile(
     r'<(?:input|textarea|select)\b[^>]*\bstyle\s*=\s*"([^"]*)"', re.IGNORECASE
 )
 _MIN_HEIGHT_ONLY = re.compile(r"^\s*min-height\s*:[^;]+;?\s*$", re.IGNORECASE)
+_BYTE_SCALE = re.compile(r"\b1024\b")  # hand-rolled byte-scaling loop in JS
 
 
 def _class_tokens(text: str) -> set[str]:
@@ -102,13 +104,23 @@ def _class_tokens(text: str) -> set[str]:
     return tokens
 
 
+@functools.lru_cache(maxsize=1)
+def _scanned_templates() -> tuple[tuple[str, str, frozenset[str]], ...]:
+    """(name, text, class-token set) for every template — read+tokenized once."""
+    out = []
+    for path in sorted(TEMPLATES.rglob("*.html")):
+        text = path.read_text(encoding="utf-8")
+        out.append((path.name, text, frozenset(_class_tokens(text))))
+    return tuple(out)
+
+
 def _scan_tokens(predicate) -> dict[str, list[str]]:
     """token -> sorted files, over all templates, for tokens matching predicate."""
     hits: dict[str, set[str]] = {}
-    for path in sorted(TEMPLATES.rglob("*.html")):
-        for tok in _class_tokens(path.read_text(encoding="utf-8")):
+    for name, _text, tokens in _scanned_templates():
+        for tok in tokens:
             if predicate(tok):
-                hits.setdefault(tok, set()).add(path.name)
+                hits.setdefault(tok, set()).add(name)
     return {tok: sorted(files) for tok, files in hits.items()}
 
 
@@ -177,14 +189,14 @@ def test_grandfather_lists_have_no_dead_entries():
 def test_no_inline_style_on_form_controls():
     """No inline style= on input/textarea/select, except a sole min-height."""
     offenders: dict[str, list[str]] = {}
-    for path in sorted(TEMPLATES.rglob("*.html")):
+    for name, text, _tokens in _scanned_templates():
         bad = [
             s
-            for s in _CONTROL_STYLE.findall(path.read_text(encoding="utf-8"))
+            for s in _CONTROL_STYLE.findall(text)
             if not _MIN_HEIGHT_ONLY.match(s)
         ]
         if bad:
-            offenders[path.name] = bad
+            offenders[name] = bad
     assert not offenders, (
         "Inline style= on a form control — use .field / .txt / .txt-area or "
         f"ui.field / ui.textarea_field (min-height is the only exception): {offenders}"
@@ -201,7 +213,7 @@ def test_no_hand_rolled_formatters_in_js():
         flags = []
         if "padStart" in text and "% 60" in text:
             flags.append("hand-rolled timecode -> window.fmtTimecode")
-        if re.search(r"\b1024\b", text):
+        if _BYTE_SCALE.search(text):
             flags.append("byte-scaling loop -> window.fmtBytes")
         if flags:
             offenders[path.name] = flags
