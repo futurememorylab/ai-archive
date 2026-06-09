@@ -72,8 +72,9 @@ parallelised — done sequentially to keep those files coherent:
   shadowing fix).
 - **model-menu** (`_prompt_detail.html` + `_studio_prompt_card.html`,
   selection, `modelOpen` in both `promptEditor.js` and `studio.js`).
-- **player.js timecode** → `fmtTimecode`; remove `player.js` from the
-  formatter grandfather list.
+- **player.js timecode** — CORRECTION (found in implementation): `tc()` is a
+  frame-accurate SMPTE formatter (`hh:mm:ss:ff`), not an `m:ss` duplicate of
+  `fmtTimecode`. It stays; `player.js` is a *permanent* formatter exception.
 
 ### Phase 3 — Reconcile + close out — owner: lead
 

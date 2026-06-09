@@ -48,13 +48,11 @@ GRANDFATHERED = {
     # permanent, intentional (not action buttons)
     "shutdown-btn",
     "rail-btn",
-    # to migrate onto ui.menu / .btn (delete each as it lands)
+    # bespoke *button* styling — a separate follow-up axis (frozen by the
+    # guard; not part of the menu consolidation). All menus are migrated.
     "hdr-title-btn",
-    "hdr-tmenu",
-    "model-menu",
     "mp-fail-btn",
     "studio-run-btn",
-    "tmpl-menu",
 }
 
 # Modal classes — frozen pending Candidate B (one ui.modal vocabulary).
@@ -85,8 +83,9 @@ CARD_GRANDFATHERED = {
     "studio-prompt-card",
 }
 
-# JS files still carrying a hand-rolled formatter (player.js timecode is
-# swept onto fmtTimecode in Phase 2).
+# player.js owns the canonical frame-accurate SMPTE formatter `tc()`
+# (hh:mm:ss:ff, fps-aware) — a distinct, unique module, NOT a duplicate of
+# fmtTimecode (which is m:ss). Permanent exception.
 FORMATTER_GRANDFATHERED = {"player.js"}
 
 # class-attr scanners: double- and single-quoted handled separately so an attr

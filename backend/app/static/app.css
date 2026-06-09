@@ -1051,78 +1051,7 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 .model-picker .btn .dot {
   width: 6px; height: 6px; border-radius: 50%; background: var(--info);
 }
-.model-menu {
-  position: absolute;
-  top: calc(100% + 5px); right: 0;
-  z-index: 30;
-  min-width: 200px;
-  background: var(--panel);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-2);
-  box-shadow: 0 12px 32px rgba(0,0,0,0.45), 0 2px 6px rgba(0,0,0,0.25);
-  padding: 4px;
-  display: flex; flex-direction: column; gap: 1px;
-}
-.model-menu-item {
-  appearance: none; background: transparent; border: 0;
-  text-align: left;
-  padding: 6px 8px;
-  border-radius: 4px;
-  display: flex; align-items: center; gap: 8px;
-  font: inherit;
-  color: var(--text-2);
-  cursor: pointer;
-}
-.model-menu-item:hover { background: var(--surface-2); color: var(--text); }
-.model-menu-item.is-current {
-  background: color-mix(in oklab, var(--info) 12%, transparent);
-  color: var(--text);
-}
-.model-menu-item.is-current::before {
-  content: "✓"; color: var(--info); font-size: 11px; margin-right: -2px;
-}
-.model-menu-dot {
-  width: 7px; height: 7px; border-radius: 50%;
-  background: var(--info);
-  flex: none;
-}
-.model-menu-lbl {
-  font-family: var(--f-mono);
-  font-size: 11.5px;
-  color: var(--text);
-}
 
-/* ─── prompt actions kebab menu ──────────────────────────────────────── */
-.tmpl-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  min-width: 180px;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
-  padding: 4px;
-  z-index: 50;
-}
-.tmpl-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 7px 10px;
-  background: transparent;
-  border: 0;
-  color: var(--text);
-  font: inherit;
-  font-size: 12.5px;
-  text-align: left;
-  border-radius: 4px;
-  cursor: pointer;
-}
-.tmpl-menu-item:hover { background: var(--hover); }
-.tmpl-menu-item.danger { color: var(--bad); }
-.tmpl-menu-sep { height: 1px; background: var(--line); margin: 4px 2px; }
 
 /* ─── JSON editor + syntax ───────────────────────────────────────────── */
 .json-editor {
@@ -1931,66 +1860,6 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .studio-hdr .hdr-title-btn:hover { background: var(--surface-2); }
 .studio-hdr .hdr-title-btn.open { background: var(--surface-2); }
 .studio-hdr .hdr-title-btn .caret { font-size: 11px; color: var(--text-3); }
-.studio-hdr .hdr-tmenu {
-  position: absolute;
-  top: calc(100% + 5px);
-  left: 0;
-  z-index: 30;
-  min-width: 360px;
-  max-width: 520px;
-  max-height: 60vh;
-  overflow: auto;
-  background: var(--panel);
-  border: 1px solid var(--line-2, var(--line));
-  border-radius: var(--r-2, 6px);
-  box-shadow: 0 12px 32px rgba(0,0,0,0.45), 0 2px 6px rgba(0,0,0,0.25);
-  padding: 4px;
-  display: flex; flex-direction: column; gap: 1px;
-}
-.studio-hdr .hdr-tmenu-h {
-  padding: 6px 8px 4px;
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-3);
-}
-.studio-hdr .hdr-tmenu-item {
-  text-decoration: none;
-  color: var(--text-2);
-  padding: 6px 8px;
-  border-radius: 4px;
-  display: flex; align-items: flex-start; gap: 8px;
-}
-.studio-hdr .hdr-tmenu-item:hover {
-  background: var(--surface-2);
-  color: var(--text);
-}
-.studio-hdr .hdr-tmenu-item.is-current {
-  background: color-mix(in oklab, var(--accent) 14%, transparent);
-  color: var(--text);
-}
-.studio-hdr .hdr-tmenu-lbl {
-  display: flex; flex-direction: column; gap: 1px;
-  min-width: 0;
-}
-.studio-hdr .hdr-tmenu-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text);
-}
-.studio-hdr .hdr-tmenu-desc {
-  font-size: 11px;
-  color: var(--text-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-.studio-hdr .hdr-tmenu-v {
-  font-size: 10.5px;
-  color: var(--text-3);
-}
 
 /* ── Studio: archive picker modal ──────────────────────────────────────── */
 
@@ -2037,6 +1906,7 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .popover { position: relative; display: inline-flex; }
 .popover-panel {
   position: absolute; top: calc(100% + 4px); left: 0; min-width: 180px;
+  max-width: min(520px, 92vw); max-height: 60vh; overflow-y: auto;
   background: var(--panel-2); border: 1px solid var(--line-2);
   border-radius: var(--r-2); padding: 4px; z-index: 30;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
@@ -2056,7 +1926,11 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .menu-item.danger:hover { background: color-mix(in oklab, var(--bad) 12%, transparent); }
 .menu-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .menu-lbl { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.menu-desc { color: var(--text-3); font-size: 11px; font-weight: 400; }
+.menu-desc {
+  color: var(--text-3); font-size: 11px; font-weight: 400;
+  overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
 .menu-meta {
   margin-left: auto; padding-left: 12px;
   color: var(--text-3); font-family: var(--f-mono); font-size: 11px;

@@ -335,10 +335,11 @@ Suggested order (each PR green, each shrinks the grandfathered list):
 2. **PR 2 — the trickier menus.** `tmpl-menu` (mixed row types →
    `menu_item` variants), `hdr-tmenu` (hosted mode, proves the
    shadowing fix), `annotate-menu` (hosted, async body kept),
-   `model-menu` (hosted, selection), `actions-menu`. Sweep the
-   `player.js:181` timecode into `fmtTimecode` (closes the formatter
-   check). Delete the remaining migrated entries; allow-list ends at
-   `{shutdown-btn, transport-btn, rail-btn}`.
+   `model-menu` (hosted, selection), `actions-menu`. Delete the remaining
+   migrated entries; the menu/btn allow-list ends at the permanent
+   exceptions. (Implementation note: `player.js`'s `tc()` is frame-accurate
+   SMPTE, NOT an `m:ss` duplicate of `fmtTimecode` — it stays, permanently
+   grandfathered for the formatter check.)
 
 ## Manual acceptance flows
 
@@ -367,9 +368,10 @@ them off.
 5. **Model picker selection (`model-menu`).** On `/studio` (or
    `/prompts`) open the model picker; the current model shows its LED
    dot / `is-current`, picking another updates and closes.
-6. **Timecode is unified.** Player and Studio timestamps display
-   correctly; grep confirms `player.js` no longer hand-rolls
-   `padStart`/`% 60` — it calls `fmtTimecode`.
+6. **Timecode still correct.** Player (SMPTE `hh:mm:ss:ff`) and Studio
+   timestamps display correctly. `player.js`'s `tc()` stays (the unique
+   frame-accurate SMPTE formatter); the guard's formatter check blocks *new*
+   `m:ss`/byte re-implementations elsewhere.
 7. **The guard fails on a fresh bespoke class.** Add a throwaway
    `class="foo-menu"` (or `foo-btn`) to any template and run
    `pytest tests/unit/test_design_language_guard.py` — it fails, naming

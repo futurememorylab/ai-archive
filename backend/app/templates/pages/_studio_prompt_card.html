@@ -33,13 +33,13 @@
           <span x-text="model"></span>
           <span class="caret">▾</span>
         </button>
-        <div class="model-menu" x-show="modelOpen" x-cloak>
+        <div class="popover-panel menu align-right" x-show="modelOpen" x-cloak
+             @keydown.escape.window="modelOpen = false">
           {% set models = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-pro'] %}
           {% for m in models %}
-            <button class="model-menu-item" :class="model === '{{ m }}' && 'is-current'"
+            <button class="menu-item" :class="model === '{{ m }}' && 'is-current'"
                     @click="pickModel('{{ m }}')">
-              <span class="model-menu-dot"></span>
-              <span class="model-menu-lbl">{{ m }}</span>
+              <span class="menu-lbl mono-cell">{{ m }}</span>
             </button>
           {% endfor %}
         </div>

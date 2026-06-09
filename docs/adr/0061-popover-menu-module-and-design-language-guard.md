@@ -62,8 +62,10 @@ separate deepenings the guard is built to cover later.
   so the library stays load-bearing instead of advisory.
 - Delivered incrementally: PR 1 lands the module + guard + two pilot menus
   (prompt version picker, studio version chip) and deletes their vocabularies;
-  PR 2 migrates the remaining five menus, sweeps the `player.js` timecode onto
-  `fmtTimecode`, and shrinks `GRANDFATHERED` to the permanent exceptions.
+  PR 2 migrates the remaining five menus and shrinks the menu/btn allow-list
+  to the permanent exceptions. (Found in implementation: `player.js`'s `tc()`
+  is a frame-accurate SMPTE formatter (`hh:mm:ss:ff`), not an `m:ss` duplicate
+  of `fmtTimecode` — it stays, as a permanent formatter exception.)
 - The `state=`-selected mode is a small interface knob callers must learn; the
   design-language doc (§8) carries the standalone / hosted / bespoke-trigger
   examples.
