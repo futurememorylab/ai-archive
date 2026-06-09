@@ -158,7 +158,9 @@ SIGTERM grace.
   prod values: `APP_ENV: prod`, `CATDV_OFFLINE: "true"` (until phase
   3), `CATDV_BASE_URL: http://127.0.0.1:18080`,
   `CATDV_CATALOG_ID: "881507"`, `GCP_PROJECT_ID: catdav`,
-  `GCP_LOCATION: europe-west3`, `GCS_BUCKET_NAME: catdav-proxies`,
+  `GCP_LOCATION: global` (matching the working local `.env` — Gemini
+  model availability is region-bound, so don't change it as part of
+  deployment), `GCS_BUCKET_NAME: catdav-proxies`,
   `ARCHIVE_PROVIDER: catdv`, `AI_INPUT_STORE: gcs`, `DATA_DIR: /data`.
 - `GOOGLE_APPLICATION_CREDENTIALS` stays **unset** in Cloud Run — ADC
   falls through to the runtime service account. Only local dev sets it.
@@ -191,11 +193,12 @@ gcloud run deploy catdv-annotator \
   --set-secrets="CATDV_PASSWORD=catdv-password:latest,GEMINI_API_KEY=gemini-api-key:latest"
 ```
 
-3. Verify step: poll `GET /healthz` on the service URL with an
-   identity token; fail the workflow on non-200. The app has no health
-   endpoint today — phase 1 adds `GET /healthz` (CoreCtx only, returns
-   `{"status": "ok"}`, never touches CatDV/GCS so it cannot consume a
-   seat or block on the tunnel).
+3. Verify step: poll the existing `GET /api/health` (`main.py`) on the
+   service URL with an identity token; fail the workflow on non-200.
+   That endpoint reads only in-process connection-monitor state — it
+   never touches CatDV/GCS, so it cannot consume a seat or block on
+   the tunnel, and it reports `mode: offline` rather than failing when
+   CatDV is unreachable.
 
 One-time GCP setup (documented in `deploy/README.md`, not automated):
 Artifact Registry repo, runtime service account
@@ -352,8 +355,9 @@ Thumbnails are explicitly unchanged (see Non-goals).
 TDD per phase (project discipline):
 
 - **Phase 1:** unit test that `Settings` resolves pure-env config with
-  no `.env` present; route test for `GET /healthz` (200 without
-  LiveCtx); CI workflow validated by its own `test` job gating;
+  no `.env` present; existing `GET /api/health` covers the CI verify
+  step (no new endpoint); CI workflow validated by its own `test` job
+  gating;
   container boot smoke-tested locally with `docker run` +
   `CATDV_OFFLINE=true` before first deploy.
 - **Phase 2:** WAL-mode assertion test on the DB layer; manual
