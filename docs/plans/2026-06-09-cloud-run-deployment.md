@@ -24,12 +24,12 @@
 - Delete: `backend/app/secrets.py`
 - Modify: `pyproject.toml` (remove `google-cloud-secret-manager` from `dependencies`)
 
-- [ ] **Step 1: Verify nothing imports it**
+- [x] **Step 1: Verify nothing imports it**
 
 Run: `grep -rn "app.secrets\|google.cloud import secretmanager\|secret_manager" backend/ tests/ --include="*.py" | grep -v "backend/app/secrets.py"`
 Expected: no output (already verified during planning; re-verify in case of drift).
 
-- [ ] **Step 2: Delete the module and the dependency**
+- [x] **Step 2: Delete the module and the dependency**
 
 ```bash
 git rm backend/app/secrets.py
@@ -41,12 +41,12 @@ In `pyproject.toml`, delete the line:
   "google-cloud-secret-manager>=2.20",
 ```
 
-- [ ] **Step 3: Reinstall and run the full suite**
+- [x] **Step 3: Reinstall and run the full suite**
 
 Run: `.venv/bin/pip install -q -e ".[dev]" && .venv/bin/python -m pytest`
 Expected: all tests pass (the module had zero callers).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add -A
