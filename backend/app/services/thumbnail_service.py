@@ -10,8 +10,9 @@ already-cached files are served — no network attempts.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -44,6 +45,9 @@ class ThumbnailService:
         archive: ArchiveProvider,
         catdv: CatdvClient | None = None,
         is_online_provider: Callable[[], bool] | None = None,
+        metadata_cached_provider: (
+            Callable[[int], bool] | Callable[[int], Awaitable[bool]] | None
+        ) = None,
     ) -> None:
         self._cache_dir = cache_dir
         self._cache_dir.mkdir(parents=True, exist_ok=True)
@@ -53,6 +57,10 @@ class ThumbnailService:
         # resolver. None means "always online if catdv is set" (used by
         # tests that don't wire a connection monitor).
         self._is_online = is_online_provider
+        # When set and returns False, suppress the network step entirely —
+        # without a clip_cache row we can't know posterID, so calling
+        # CatDV just wastes a 60 s timeout per orphan thumb on /cache.
+        self._metadata_cached = metadata_cached_provider
 
     def path_for(self, clip_id: int) -> Path:
         return self._cache_dir / f"{clip_id}.jpg"
@@ -71,6 +79,13 @@ class ThumbnailService:
         if self._is_online is not None and not self._is_online():
             # Offline: cache miss is terminal — no network attempts.
             return None
+        if self._metadata_cached is not None:
+            result = self._metadata_cached(clip_id)
+            if inspect.isawaitable(result):
+                result = await result
+            if not result:
+                # No clip_cache row → posterID is unknowable; skip CatDV.
+                return None
 
         try:
             clip = await self._archive.get_clip(str(clip_id))

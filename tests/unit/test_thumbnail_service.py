@@ -129,3 +129,54 @@ async def test_offline_provider_still_serves_cached_hit(tmp_path: Path):
     )
     assert await svc.get_or_fetch(42) == tmp_path / "42.jpg"
     assert catdv.calls == []
+
+
+class _RecordingArchive:
+    """Tracks whether get_clip was called — never returns a value."""
+
+    def __init__(self):
+        self.calls: list[str] = []
+
+    async def get_clip(self, clip: str):  # pragma: no cover — should not be called
+        self.calls.append(clip)
+        raise AssertionError("get_clip should not be called for unmetadata'd clips")
+
+
+@pytest.mark.asyncio
+async def test_no_cached_metadata_skips_network(tmp_path: Path):
+    """When metadata_cached_provider returns False, the service must not
+    touch the archive or the CatDV client — there is no way to know the
+    posterID without metadata, so the network call would be pure waste
+    and (if CatDV is slow / unresponsive) a per-row 60 s stall.
+
+    This is the orphan case on the /cache page: clips with bytes in
+    proxy_cache or ai_store_files but no clip_cache row.
+    """
+    catdv = _FakeCatdv()
+    archive = _RecordingArchive()
+    svc = ThumbnailService(
+        cache_dir=tmp_path,
+        archive=archive,
+        catdv=catdv,
+        metadata_cached_provider=lambda _cid: False,
+    )
+    assert await svc.get_or_fetch(42) is None
+    assert archive.calls == []
+    assert catdv.calls == []
+
+
+@pytest.mark.asyncio
+async def test_metadata_cached_proceeds_to_network(tmp_path: Path):
+    """The gate must NOT block clips whose metadata IS cached — those
+    still go through the normal fetch path when the local thumb file
+    is missing."""
+    catdv = _FakeCatdv()
+    svc = ThumbnailService(
+        cache_dir=tmp_path,
+        archive=_FakeArchive({"posterID": 9000}),
+        catdv=catdv,
+        metadata_cached_provider=lambda _cid: True,
+    )
+    out = await svc.get_or_fetch(42)
+    assert out == tmp_path / "42.jpg"
+    assert catdv.calls == [9000]

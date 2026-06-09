@@ -611,11 +611,26 @@ async def _build_archive_subsystem(
     # reports offline, cache misses are terminal (no network attempts).
     thumbnail_service: ThumbnailService | None = None
     if use_catdv:
+        # Orphan thumbs on /cache (clips with bytes in proxy_cache /
+        # ai_store_files but no clip_cache row) used to stall up to 60 s
+        # each on `archive.get_clip()` whenever CatDV was reachable-but-slow
+        # or during the 30 s blind spot between failure and the connection
+        # monitor flipping to offline. Without a clip_cache row, posterID is
+        # unknowable — short-circuit before the network call.
+        async def _has_clip_metadata(clip_id: int) -> bool:
+            row = await core.clip_cache_repo.get_row(
+                core.db,
+                provider_id=archive.id,
+                provider_clip_id=str(clip_id),
+            )
+            return row is not None
+
         thumbnail_service = ThumbnailService(
             cache_dir=settings.data_dir / "cache" / "thumbs",
             archive=archive,
             catdv=catdv,
             is_online_provider=_is_online,
+            metadata_cached_provider=_has_clip_metadata,
         )
 
     return _ArchiveSubsystem(
