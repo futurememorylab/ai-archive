@@ -85,17 +85,24 @@ Where to look first:
 - `grep` patterns that pay off: `grep -rln "anno-\|range\|marker\|panels\|x-data" backend/app/templates/`.
 
 There is also a small shared UI library for the primitives — buttons,
-form fields, page headers, breadcrumbs, status pills, and JS formatters.
-**Read `docs/design-language.md` and reuse it before hand-rolling any of
-these.** The canonical pieces: the `.btn` system + `{{ ui.button(...) }}`
-macro, `{{ ui.field(...) }}` / `{{ ui.textarea_field(...) }}`,
+form fields, dropdown menus, modals, page headers, breadcrumbs, status
+pills, and JS formatters. **Read `docs/design-language.md` and reuse it
+before hand-rolling any of these.** The canonical pieces: the `.btn`
+system (incl. `.btn.link` for bare text buttons) + `{{ ui.button(...) }}`
+macro, `{{ ui.field(...) }}` / `{{ ui.textarea_field(...) }}`, **dropdown
+menus** via `{{ ui.menu(...) }}` / `{{ ui.menu_item(...) }}` + the
+`popover()` behaviour (`static/popover.js`), **modals** via
+`{{ ui.modal(...) }}` + `.modal-body` / `.modal-actions`,
 `{{ ui.page_header(...) }}`, `{{ ui.breadcrumb(...) }}`,
 `{{ ui.status_pill(...) }}` (all in
 `backend/app/templates/components/_ui.html`), the `:root` design tokens in
 `backend/app/static/app.css`, and the `fmtTimecode` / `fmtBytes` /
 `autosize` helpers in `backend/app/static/format.js`. Use tokens not raw
-hex; use `.btn` not `*-btn`; call the formatters instead of re-deriving
-timecodes or byte sizes.
+hex; use `.btn` not `*-btn`; use `ui.menu` / `ui.modal` not a new
+`*-menu` / `modal-*` vocabulary; call the formatters instead of
+re-deriving timecodes or byte sizes. **`tests/unit/test_design_language_guard.py`
+fails CI if you hand-roll any of these instead of reusing the library** —
+so reuse is cheaper than the rework.
 
 Red flags that mean you're about to duplicate something:
 
@@ -108,6 +115,14 @@ Red flags that mean you're about to duplicate something:
   at `_video_list.html` and the clip card patterns first.
 - You're writing a search-and-pick modal for archive clips — the
   archive picker pattern already exists.
+- You're writing a dropdown (a button that opens a floating panel of
+  items, dismissing on click-outside / Esc) — use `{{ ui.menu(...) }}` /
+  `ui.menu_item` + `popover()`, never a new `*-menu` class
+  (`design-language.md` §8).
+- You're writing a modal / dialog — use `{{ ui.modal(state, label) }}`
+  + `.modal-body` / `.modal-actions` (and `ui.field` for its form
+  fields), never `modal-overlay` / `modal-dialog` or a new modal shell
+  (`design-language.md` §9).
 
 If you genuinely need a new component, say so in the spec/ADR and
 explain why the existing one couldn't be extended (size? coupling? a
