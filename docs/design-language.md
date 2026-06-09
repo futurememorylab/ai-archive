@@ -222,7 +222,68 @@ scripts), so `window.*` exist before anything initializes. Three globals:
 **Never re-implement timecode or byte formatting — call these.** A
 divergent formatter means two clips show the same duration differently.
 
-## 8. Red flags — stop and reuse
+## 8. Menus & popovers
+
+One dropdown vocabulary — a trigger that opens a floating panel of items
+that dismisses on click-outside / `Esc`. **Do not hand-roll a new
+`*-menu` class or a second `x-data="{ open: false }"` toggle.** The three
+pieces:
+
+| What | Where | How you use it |
+|---|---|---|
+| Open/close behavior | `static/popover.js` (`Alpine.data("popover")`) | `x-data="popover()"` → `open` / `toggle()` / `close()` |
+| Panel + item classes | `app.css` (`.popover-panel`, `.menu`, `.menu-item`, …) | apply classes |
+| Markup macros | `components/_ui.html` (`menu`, `menu_item`, `menu_sep`, `menu_header`) | `{% call ui.menu(...) %}…{% endcall %}` |
+
+### Standard menu (plain `.btn` trigger)
+
+```jinja
+{% call ui.menu(label='v' ~ version.version_num, trigger_cls='mono-cell') %}
+  {{ ui.menu_item('Promote', post='/prompts/%d/_promote' % p.id) }}
+  {{ ui.menu_item('Open in Studio', href='/studio?prompt_id=%d' % p.id) }}
+  {{ ui.menu_sep() }}
+  {{ ui.menu_item('Archive', post='/prompts/%d/_archive' % p.id, danger=true) }}
+{% endcall %}
+```
+
+`menu_item` picks the element from exactly one of `post=` (a
+`<form>`+submit), `href=` (an `<a>`), or neither (a `<button>`, with
+`action=` for an `@click` expression). Knobs: `danger`, `current`
+(active row), `meta` (right-aligned mono), `desc` (sub-line), `icon`,
+`attrs` (raw `hx-*` / `data-*`).
+
+### Hosted mode (menu inside a larger component)
+
+When the menu lives inside a component that already owns the open flag
+(`studioPage`, `bulkSel`, …), pass `state=` so the macro binds to that
+flag and emits **no `x-data`** — a nested `x-data` would *shadow* the
+parent scope (e.g. `studioPage.focusedClipId` would read `undefined`):
+
+```jinja
+{# inside x-data="bulkSel()", which declares annoOpen #}
+{% call ui.menu(label='Annotate', variant='primary', state='annoOpen') %}…{% endcall %}
+```
+
+### Bespoke trigger
+
+When the trigger isn't a plain labeled button (a chip, a title button),
+skip `menu()` and use the pieces directly — still `popover()` for
+behavior and `.popover-panel`/`.menu` for the panel:
+
+```jinja
+<span class="pc-vchip" x-data="popover()"
+      @click.outside="close()" @keydown.escape.window="close()">
+  <button class="btn sm ghost" :class="open && 'open'" @click="toggle()">…</button>
+  <div class="popover-panel menu" x-show="open" x-cloak>
+    {{ ui.menu_header('versions') }}
+    <button class="menu-item" @click="close()">…</button>
+  </div>
+</span>
+```
+
+A new bespoke `*-menu` class fails CI (`tests/unit/test_design_language_guard.py`).
+
+## 9. Red flags — stop and reuse
 
 If you catch yourself doing any of these, stop:
 
@@ -242,3 +303,7 @@ If you catch yourself doing any of these, stop:
   inline it.
 - **Adding a `setInterval` to resize a textarea.** → `.txt-area` autosizes
   itself via `format.js`; just use the class.
+- **Writing a new `*-menu` class or a second `x-data="{ open: false }"`
+  dropdown toggle.** → Use `{{ ui.menu(...) }}` / `ui.menu_item`, or
+  `popover()` + `.popover-panel` / `.menu` for a bespoke trigger (§8).
+  A new `*-menu` / `*-btn` class fails CI.

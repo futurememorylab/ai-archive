@@ -255,3 +255,13 @@ def test_new_prompt_post_invalid_target_map_shape_returns_400(client):
 def test_action_new_version_404_on_unknown_prompt(client):
     r = client.post("/prompts/99999/_new_version", follow_redirects=False)
     assert r.status_code == 404
+
+
+def test_version_picker_uses_canonical_menu_module(client):
+    pid = client.post("/api/prompts", json=_new_body()).json()["id"]
+    html = client.get(f"/prompts/{pid}").text
+    # Migrated onto the shared ui.menu macro (popover + .menu-item).
+    assert 'class="menu-item' in html
+    assert 'x-data="popover()"' in html
+    # The bespoke version-menu vocabulary is gone.
+    assert "version-menu" not in html

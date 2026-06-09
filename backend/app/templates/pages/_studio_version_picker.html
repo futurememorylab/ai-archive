@@ -1,28 +1,33 @@
 {# Version chip + dropdown for a single prompt-card. Picking a row triggers
    an HTMX swap of the surrounding card to /studio/_prompt_card.
 
+   Bespoke trigger (pill chip with an inline state chip), so it uses the
+   popover() behaviour + canonical .popover-panel/.menu classes directly
+   rather than the ui.menu macro. See docs/design-language.md.
+
    Required scope from the enclosing card:
      active_version, versions, side, clip_id (optional)
 #}
 {% import "components/_ui.html" as ui %}
-<span class="pc-vchip" x-data="{ open: false }" @click.outside="open = false">
+<span class="pc-vchip" x-data="popover()"
+      @click.outside="close()" @keydown.escape.window="close()">
   <button type="button" class="btn sm ghost" :class="open && 'open'"
-          @click="open = !open" title="Switch version">
+          @click="toggle()" title="Switch version">
     <span class="pc-vlbl">v{{ active_version.version_num }}</span>
     {{ ui.prompt_state_chip(active_version.state) }}
     <span class="caret">▾</span>
   </button>
-  <div class="pc-vmenu" x-show="open" x-cloak>
-    <div class="pc-vmenu-h mono-cell">versions</div>
+  <div class="popover-panel menu" x-show="open" x-cloak>
+    {{ ui.menu_header('versions') }}
     {% for v in versions %}
       <button type="button"
-              class="pc-vmenu-item{% if v.id == active_version.id %} is-current{% endif %}"
+              class="menu-item{% if v.id == active_version.id %} is-current{% endif %}"
               data-version-pick="{{ v.id }}"
               hx-get="/studio/_prompt_card?side={{ side }}&prompt_version_id={{ v.id }}{% if clip_id %}&clip_id={{ clip_id }}{% endif %}"
               hx-target="closest .studio-prompt-card"
               hx-swap="outerHTML"
-              @click="open = false">
-        <span class="pc-vmenu-lbl">v{{ v.version_num }}</span>
+              @click="close()">
+        <span class="menu-lbl">v{{ v.version_num }}</span>
         {{ ui.prompt_state_chip(v.state) }}
       </button>
     {% endfor %}

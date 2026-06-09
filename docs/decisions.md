@@ -68,3 +68,4 @@ available number. See any existing ADR for the template.
 | 0058 | 2026-06-07 | [Run telemetry — local-first with deferred cloud pipeline](./adr/0058-run-telemetry-local-first.md) |
 | 0059 | 2026-06-07 | [Actual run cost on the UI — total-spend semantics + shared usd filter](./adr/0059-actual-run-cost-ui-surfaces.md) |
 | 0060 | 2026-06-07 | [Structural erosion pre-commit gate (complexity-concentration ratchet)](./adr/0060-structural-erosion-gate.md) |
+| 0061 | 2026-06-09 | [Two-mode popover menu module + design-language enforcement guard](./adr/0061-popover-menu-module-and-design-language-guard.md) |
