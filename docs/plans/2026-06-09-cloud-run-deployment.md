@@ -63,7 +63,7 @@ Proves the Cloud Run config path: a container has no `.env`, everything arrives 
 **Files:**
 - Test: `tests/unit/test_settings_pure_env.py` (create)
 
-- [ ] **Step 1: Write the failing-or-passing test (regression guard)**
+- [x] **Step 1: Write the failing-or-passing test (regression guard)**
 
 ```python
 """Settings must resolve from OS env alone — the Cloud Run container has
@@ -101,12 +101,12 @@ def test_settings_resolve_from_pure_env(monkeypatch, tmp_path):
     assert s.google_application_credentials is None  # ADC in cloud
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_settings_pure_env.py -v`
 Expected: PASS (pydantic-settings already prefers OS env and tolerates a missing env_file). If it fails, the failure is the bug to fix — do not weaken the test.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/unit/test_settings_pure_env.py
