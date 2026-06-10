@@ -91,10 +91,18 @@ class AiStoreBackend:
             mime = mimetypes.guess_type(str(path))[0] or _DEFAULT_MIME
             await self._ai_store.ensure_uploaded(key, path, mime)
         finally:
-            # Keep peak ephemeral-disk usage to a single proxy: drop the
-            # staging file + its proxy_cache row even on upload failure.
-            await asyncio.to_thread(path.unlink, True)  # missing_ok=True
-            await self._proxy_cache_repo.delete(self._db_provider(), clip_id)
+            # Cleanup is best-effort: keep peak ephemeral-disk usage to a
+            # single proxy (drop the staging file + its proxy_cache row,
+            # even on upload failure), but never let a cleanup error mask
+            # the real download/upload exception that's propagating.
+            try:
+                await asyncio.to_thread(path.unlink, True)  # missing_ok=True
+            except OSError:
+                log.warning("could not delete staging file %s", path, exc_info=True)
+            try:
+                await self._proxy_cache_repo.delete(self._db_provider(), clip_id)
+            except Exception:  # noqa: BLE001 -- best-effort cleanup, must not mask
+                log.warning("could not delete proxy_cache row for clip %s", clip_id, exc_info=True)
 
     async def locate(self, clip_id: int) -> LocalFile | RemoteUrl | None:
         ref = await self._ai_store.status(_clip_key(clip_id))

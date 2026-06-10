@@ -70,6 +70,7 @@ async def test_ensure_cached_uploads_then_deletes_temp(tmp_path):
 async def test_ensure_cached_deletes_temp_on_upload_failure(tmp_path):
     p = tmp_path / "5.mov"
     p.write_bytes(b"video")
+    repo = _ProxyCacheRepo()
 
     class _Boom(_AiStore):
         async def ensure_uploaded(self, key, path, mime):
@@ -77,11 +78,12 @@ async def test_ensure_cached_deletes_temp_on_upload_failure(tmp_path):
 
     b = AiStoreBackend(
         rest_resolver=_Resolver(p), ai_store=_Boom(), gcs=_Gcs(),
-        proxy_cache_repo=_ProxyCacheRepo(), db_provider=lambda: None,
+        proxy_cache_repo=repo, db_provider=lambda: None,
     )
     with pytest.raises(RuntimeError):
         await b.ensure_cached(5)
     assert not p.exists()           # temp still cleaned up
+    assert repo.deleted == [5]      # proxy_cache row still removed
 
 
 async def test_locate_returns_signed_url_on_status_hit():
