@@ -2,14 +2,12 @@
 streaming of proxy files resolved by ProxyResolver."""
 
 import mimetypes
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 
 from backend.app.deps import get_core_ctx, get_live_ctx
-from backend.app.services.media_locator import LocalFile, MediaNotAvailable, RemoteUrl
-
+from backend.app.services.media_locator import RemoteUrl
 from backend.app.uploaded_ids import is_uploaded
 
 router = APIRouter(prefix="/api/media", tags=["media"])
@@ -64,27 +62,18 @@ async def stream_thumbnail(request: Request, clip_id: int):
 
 @router.get("/{clip_id}")
 async def stream_media(request: Request, clip_id: int):
-    if is_uploaded(clip_id):
-        # Uploaded clips are pre-seeded into the proxy cache at ingest and
-        # served DB-first via the core ctx — playable fully offline.
-        core = get_core_ctx(request)
-        row = await core.proxy_cache_repo.get(core.db, clip_id)
-        if row is None:
-            raise HTTPException(404, f"uploaded clip {clip_id} not in local cache")
-        path = Path(row["file_path"])
-        if not path.exists() or path.stat().st_size == 0:  # sync-io-ok: uploaded proxy lookup, tracked for the tier-4 async-io pass
-            raise HTTPException(404, f"uploaded clip {clip_id} file missing: {path}")
-    else:
-        ctx = get_live_ctx(request)
-        try:
-            located = await ctx.media_locator.locate(clip_id)
-        except MediaNotAvailable as exc:
-            raise HTTPException(404, str(exc)) from exc
-        if isinstance(located, RemoteUrl):
-            # Browser follows to GCS; range requests for seeking go
-            # straight to the signed URL, bytes never transit this app.
-            return RedirectResponse(located.url, status_code=307)
-        path = located.path
+    ctx = get_live_ctx(request)
+    backend = ctx.media_cache_backend
+    if backend is None:
+        raise HTTPException(503, "media cache backend unavailable")
+    located = await backend.locate(clip_id)
+    if located is None:
+        raise HTTPException(404, f"clip {clip_id} not available")
+    if isinstance(located, RemoteUrl):
+        # Browser follows to GCS; range requests for seeking go
+        # straight to the signed URL, bytes never transit this app.
+        return RedirectResponse(located.url, status_code=307)
+    path = located.path
 
     mime = mimetypes.guess_type(str(path))[0] or "video/quicktime"
     size = path.stat().st_size  # sync-io-ok: pre-existing, single metadata call on the stream-response path
