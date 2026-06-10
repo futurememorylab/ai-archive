@@ -162,8 +162,12 @@ async def health(request: Request) -> dict:
         mode = "online"
     elif getattr(monitor, "is_forced", False) or getattr(monitor, "_forced_offline", False):
         mode = "forced_offline"
+    elif monitor.current_state() == ConnectionState.online:
+        mode = "online"
+    elif monitor.current_state() == ConnectionState.disconnected:
+        mode = "disconnected"
     else:
-        mode = "online" if monitor.current_state() == ConnectionState.online else "offline"
+        mode = "offline"
     return {"status": "ok", "mode": mode}
 
 
