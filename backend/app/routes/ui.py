@@ -15,20 +15,25 @@ from backend.app.routes.pages.templates import templates
 router = APIRouter(prefix="/ui", tags=["ui"])
 
 
-@router.get("/connection-pill", response_class=HTMLResponse)
-async def connection_pill(request: Request):
-    ctx = get_core_ctx(request)
+def _pill_context(request: Request) -> dict:
     live = request.app.state.live_ctx
+    settings = request.app.state.core_ctx.settings
     state = "online"
     if live is not None:
         state = str(live.connection_monitor.current_state().value)
+    return {
+        "state": state,
+        "connect_mode": getattr(settings, "catdv_connect_mode", "manual"),
+    }
+
+
+@router.get("/connection-pill", response_class=HTMLResponse)
+async def connection_pill(request: Request):
+    ctx = get_core_ctx(request)
     rows = await ctx.pending_ops_repo.list_pending(ctx.db)
-    pending_count = len(rows)
-    return templates.TemplateResponse(
-        request,
-        "connection_pill.html",
-        {"state": state, "pending_count": pending_count},
-    )
+    context = _pill_context(request)
+    context["pending_count"] = len(rows)
+    return templates.TemplateResponse(request, "connection_pill.html", context)
 
 
 @router.get("/workspace-switcher", response_class=HTMLResponse)
