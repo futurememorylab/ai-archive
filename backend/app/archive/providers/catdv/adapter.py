@@ -88,14 +88,14 @@ class CatdvArchiveAdapter:
         # we'd always answer "offline" and the monitor would stay
         # offline forever. Only the absent-client case short-circuits.
         if self._client is None:
-            return ProviderHealth(ok=False, detail="offline")
+            return ProviderHealth(ok=False, reachable=False, detail="offline")
         t0 = perf_counter()
         try:
             await self._client.health()
         except CatdvAuthError as exc:
-            return ProviderHealth(ok=False, detail=f"auth: {exc}")
+            return ProviderHealth(ok=False, reachable=True, detail=f"auth: {exc}")
         except CatdvBusyError as exc:
-            return ProviderHealth(ok=False, detail=f"busy: {exc}")
+            return ProviderHealth(ok=False, reachable=True, detail=f"busy: {exc}")
         except CatdvError as exc:
             # health() has a return-type contract (always ProviderHealth);
             # the other five except-CatdvError blocks raise NotFoundError on
@@ -104,7 +104,7 @@ class CatdvArchiveAdapter:
             # (which on the /api/info endpoint means misconfigured base URL,
             # not a missing clip) — into ok=False so ConnectionMonitor can
             # report offline cleanly.
-            return ProviderHealth(ok=False, detail=str(exc))
+            return ProviderHealth(ok=False, reachable=False, detail=str(exc))
         latency_ms = (perf_counter() - t0) * 1000.0
         return ProviderHealth(ok=True, latency_ms=latency_ms)
 

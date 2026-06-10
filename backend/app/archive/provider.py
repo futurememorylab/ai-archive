@@ -34,6 +34,10 @@ class ProviderHealth:
     ok: bool
     latency_ms: float | None = None
     detail: str | None = None
+    # True when the provider answered at all (even an error envelope);
+    # False when it could not be reached (transport) or has no client.
+    # The connection monitor maps reachable-but-not-ok → "disconnected".
+    reachable: bool = True
 
 
 @runtime_checkable
