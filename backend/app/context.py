@@ -57,18 +57,19 @@ from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.proxy_cache import ProxyCacheRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.run_telemetry import RunTelemetryRepo
-from backend.app.repositories.studio_sets import StudioSetsRepo
 from backend.app.repositories.studio_runs import StudioRunsRepo
+from backend.app.repositories.studio_sets import StudioSetsRepo
 from backend.app.repositories.uploaded_clips import UploadedClipsRepo
 from backend.app.repositories.workspaces import WorkspacesRepo
 from backend.app.repositories.write_log import WriteLogRepo
 from backend.app.services.cache_actions import CacheActions
 from backend.app.services.cache_inspector import CacheInspector
-from backend.app.services.idle_disconnector import IdleDisconnector
-from backend.app.services.media_locator import MediaLocator
 from backend.app.services.connection_monitor import ConnectionMonitor
 from backend.app.services.events import EventBus
+from backend.app.services.idle_disconnector import IdleDisconnector
 from backend.app.services.lru_eviction import LruEviction
+from backend.app.services.media_cache import MediaCacheBackend, build_media_cache_backend
+from backend.app.services.media_locator import MediaLocator
 from backend.app.services.media_prefetcher import MediaPrefetcher
 from backend.app.services.proxy_cache_reconciler import ProxyCacheReconciler
 from backend.app.services.sync_engine import SyncEngine
@@ -220,6 +221,7 @@ class LiveCtx:
     catdv: CatdvClient | None = None
     proxy_resolver: ProxyResolver | None = None
     thumbnail_service: ThumbnailService | None = None
+    media_cache_backend: MediaCacheBackend | None = None
     media_prefetcher: MediaPrefetcher | None = None
     idle_disconnector: IdleDisconnector | None = None
 
@@ -732,6 +734,17 @@ async def _build_sync_subsystem(
         media_cache_cap_bytes=cap_bytes,
         tick_interval_s=float(settings.lru_tick_interval_s),
     )
+    media_cache_backend: MediaCacheBackend | None = None
+    if arch.proxy_resolver is not None:
+        media_cache_backend = build_media_cache_backend(
+            media_cache=settings.media_cache,
+            resolver=arch.proxy_resolver,
+            ai_store=arch.ai_store,
+            gcs=arch.gcs_service,
+            proxy_cache_repo=core.proxy_cache_repo,
+            db_provider=lambda: core.db,
+        )
+
     media_prefetcher: MediaPrefetcher | None = None
     _inner_resolver = getattr(arch.proxy_resolver, "inner", arch.proxy_resolver)
     if arch.proxy_resolver is not None and not isinstance(
@@ -767,6 +780,7 @@ async def _build_sync_subsystem(
         catdv=arch.catdv,
         proxy_resolver=arch.proxy_resolver,
         thumbnail_service=arch.thumbnail_service,
+        media_cache_backend=media_cache_backend,
         media_prefetcher=media_prefetcher,
         idle_disconnector=idle_disconnector,
     )

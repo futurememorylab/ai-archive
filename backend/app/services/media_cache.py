@@ -112,3 +112,14 @@ class AiStoreBackend:
             self._gcs.signed_url, ref.handle, expires_s=SIGNED_URL_TTL_S
         )
         return RemoteUrl(url)
+
+
+def build_media_cache_backend(
+    *, media_cache, resolver, ai_store, gcs, proxy_cache_repo, db_provider
+) -> MediaCacheBackend:
+    if media_cache == "ai_store":
+        return AiStoreBackend(
+            rest_resolver=resolver, ai_store=ai_store, gcs=gcs,
+            proxy_cache_repo=proxy_cache_repo, db_provider=db_provider,
+        )
+    return LocalProxyBackend(resolver=resolver, ai_store=ai_store, gcs=gcs)
