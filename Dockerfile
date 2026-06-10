@@ -1,10 +1,14 @@
 FROM python:3.13-slim
 
 # Static binaries for phases 2-3; inert until their env vars are set.
-# If a tag 404s at build time, check the latest release on
-# github.com/aramperes/onetun / github.com/benbjohnson/litestream and
-# pin that instead -- keep it pinned, never :latest.
-COPY --from=ghcr.io/aramperes/onetun:0.3.10 /onetun /usr/local/bin/onetun
+# onetun publishes NO container image (ghcr.io/aramperes/onetun does not
+# exist) -- only GitHub release binaries, so fetch the pinned linux-amd64
+# asset directly (Cloud Run is linux/amd64). litestream does publish an
+# image, so COPY its binary. Keep both pinned, never moving refs. If a
+# ref 404s, check the latest release on github.com/aramperes/onetun /
+# github.com/benbjohnson/litestream and re-pin.
+ADD https://github.com/aramperes/onetun/releases/download/v0.3.10/onetun-linux-amd64 /usr/local/bin/onetun
+RUN chmod +x /usr/local/bin/onetun
 COPY --from=litestream/litestream:0.3.13 /usr/local/bin/litestream /usr/local/bin/litestream
 
 WORKDIR /srv/app
