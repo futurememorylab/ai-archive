@@ -14,11 +14,15 @@ clips stay playable when CatDV is offline.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import mimetypes
+from pathlib import Path
 from typing import Protocol
 
 from backend.app.archive.model import ClipKey
 from backend.app.services.media_locator import (
+    SIGNED_URL_TTL_S,
     LocalFile,
     MediaLocator,
     MediaNotAvailable,
@@ -61,3 +65,42 @@ class LocalProxyBackend:
             return await self._locator.locate(clip_id)
         except MediaNotAvailable:
             return None
+
+
+class AiStoreBackend:
+    """Cloud backend: cache writes upload to the AI store (GCS); the local
+    staging file is deleted after upload. Playback is a signed URL. The
+    local proxy cache is never consulted for reads."""
+
+    def __init__(
+        self, *, rest_resolver, ai_store, gcs, proxy_cache_repo, db_provider
+    ) -> None:
+        self._resolver = rest_resolver
+        self._ai_store = ai_store
+        self._gcs = gcs
+        self._proxy_cache_repo = proxy_cache_repo
+        self._db_provider = db_provider
+
+    async def ensure_cached(self, clip_id: int) -> None:
+        key = _clip_key(clip_id)
+        if await self._ai_store.status(key) is not None:
+            return  # already in GCS -- no tunnel hit (status-first fast-path)
+
+        path: Path = await self._resolver.path_for_clip_id(clip_id)
+        try:
+            mime = mimetypes.guess_type(str(path))[0] or _DEFAULT_MIME
+            await self._ai_store.ensure_uploaded(key, path, mime)
+        finally:
+            # Keep peak ephemeral-disk usage to a single proxy: drop the
+            # staging file + its proxy_cache row even on upload failure.
+            await asyncio.to_thread(path.unlink, True)  # missing_ok=True
+            await self._proxy_cache_repo.delete(self._db_provider(), clip_id)
+
+    async def locate(self, clip_id: int) -> LocalFile | RemoteUrl | None:
+        ref = await self._ai_store.status(_clip_key(clip_id))
+        if ref is None or not ref.handle.startswith("gs://"):
+            return None
+        url = await asyncio.to_thread(
+            self._gcs.signed_url, ref.handle, expires_s=SIGNED_URL_TTL_S
+        )
+        return RemoteUrl(url)
