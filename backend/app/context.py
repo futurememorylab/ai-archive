@@ -69,7 +69,6 @@ from backend.app.services.events import EventBus
 from backend.app.services.idle_disconnector import IdleDisconnector
 from backend.app.services.lru_eviction import LruEviction
 from backend.app.services.media_cache import MediaCacheBackend, build_media_cache_backend
-from backend.app.services.media_locator import MediaLocator
 from backend.app.services.media_prefetcher import MediaPrefetcher
 from backend.app.services.proxy_cache_reconciler import ProxyCacheReconciler
 from backend.app.services.sync_engine import SyncEngine
@@ -337,19 +336,6 @@ class LiveCtx:
     @property
     def _running_jobs(self) -> dict[int, object]:
         return self.core._running_jobs
-
-    @property
-    def media_locator(self) -> MediaLocator:
-        """Playback byte-source chooser. Built per access (cheap: pure
-        wiring); composition stays in the composition root, so the
-        route never touches _gcs_service / ai_store directly."""
-        return MediaLocator(
-            proxy_resolver=self.proxy_resolver,
-            ai_store=self.ai_store,
-            gcs_service=self._gcs_service,
-            prefer="local",  # TODO: stopgap — remove once callers use media_cache_backend.
-            # settings.media_cache ("local"/"ai_store") != MediaLocator.prefer ("local"/"gcs").
-        )
 
     async def aclose(self) -> None:
         # Stop the live services in the documented order, then close the
