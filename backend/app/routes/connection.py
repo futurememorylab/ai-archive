@@ -11,7 +11,6 @@ ship the endpoint without a template so the wire shape is locked.
 from __future__ import annotations
 
 import json
-import json as _json
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -46,13 +45,20 @@ def _monitor(request: Request):
     return live.connection_monitor if live is not None else None
 
 
-def _pill_or_json(request: Request, monitor, *, status_code: int = 200,
-                  headers: dict[str, str] | None = None):
+async def _pill_or_json(request: Request, monitor, *, status_code: int = 200,
+                        headers: dict[str, str] | None = None):
     if request.headers.get("HX-Request") == "true":
         from backend.app.routes.ui import _pill_context
 
+        # Include pending_count so the swapped-in pill's "Sync now (N)"
+        # button renders correctly instead of flashing "Sync now ()" until
+        # the next /ui/connection-pill poll (mirrors that handler).
+        ctx = get_core_ctx(request)
+        context = _pill_context(request)
+        rows = await ctx.pending_ops_repo.list_pending(ctx.db)
+        context["pending_count"] = len(rows)
         return _templates.TemplateResponse(
-            request, "connection_pill.html", _pill_context(request),
+            request, "connection_pill.html", context,
             status_code=status_code, headers=headers,
         )
     body = {"state": str(monitor.current_state().value) if monitor else "online",
@@ -142,7 +148,7 @@ async def set_online(request: Request) -> dict:
 
 
 def _toast_header(message: str, level: str = "error") -> dict[str, str]:
-    return {"HX-Trigger": _json.dumps({"toast": {"message": message, "level": level}})}
+    return {"HX-Trigger": json.dumps({"toast": {"message": message, "level": level}})}
 
 
 @router.post("/connect")
@@ -154,17 +160,17 @@ async def connect(request: Request):
     try:
         await live.catdv.login()
     except CatdvBusyError as exc:
-        return _pill_or_json(request, monitor, status_code=409,
-                             headers=_toast_header(f"CatDV seat busy: {humanise(exc)}"))
+        return await _pill_or_json(request, monitor, status_code=409,
+                                   headers=_toast_header(f"CatDV seat busy: {humanise(exc)}"))
     except CatdvAuthError as exc:
-        return _pill_or_json(request, monitor, status_code=401,
-                             headers=_toast_header(f"CatDV login rejected: {humanise(exc)}"))
+        return await _pill_or_json(request, monitor, status_code=401,
+                                   headers=_toast_header(f"CatDV login rejected: {humanise(exc)}"))
     except Exception as exc:  # noqa: BLE001 — transport / unreachable
-        return _pill_or_json(request, monitor, status_code=502,
-                             headers=_toast_header(f"CatDV unreachable: {humanise(exc)}"))
+        return await _pill_or_json(request, monitor, status_code=502,
+                                   headers=_toast_header(f"CatDV unreachable: {humanise(exc)}"))
     if monitor is not None:
         await monitor.probe_once()
-    return _pill_or_json(request, monitor)
+    return await _pill_or_json(request, monitor)
 
 
 @router.post("/disconnect")
@@ -175,7 +181,7 @@ async def disconnect(request: Request):
         await live.catdv.logout()
     if monitor is not None:
         await monitor.probe_once()
-    return _pill_or_json(request, monitor)
+    return await _pill_or_json(request, monitor)
 
 
 @router.get("/events")

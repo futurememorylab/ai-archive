@@ -96,3 +96,16 @@ def test_disconnect_frees_seat(monkeypatch, tmp_path):
         assert r.status_code == 200
         assert c.logged_in is False
         assert client.get("/api/connection/state").json()["state"] == "disconnected"
+
+
+def test_htmx_pill_response_includes_pending_count(monkeypatch, tmp_path):
+    # The swapped-in pill must render "Sync now (N)" with a real count, not a
+    # blank "Sync now ()" flash until the next poll.
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        c = FakeClient()
+        _install(client.app, c)
+        r = client.post("/api/connection/connect", headers={"HX-Request": "true"})
+        assert r.status_code == 200
+        assert "Sync now (0)" in r.text
+        assert "Sync now ()" not in r.text
