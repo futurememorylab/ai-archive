@@ -200,6 +200,15 @@ async def upload_clip(
         provider_clip_id=str(clip_id),
     )
 
+    if s.media_cache == "ai_store":
+        # Cloud: the local upload file is ephemeral. Push it to the AI
+        # store so playback (a GCS signed URL) survives instance restarts.
+        # Additive to the local write above; the local copy is a transient
+        # within-instance convenience, GCS is the durable copy.
+        live = request.app.state.live_ctx
+        if live is not None:
+            await live.ai_store.ensure_uploaded(("uploaded", str(clip_id)), dest, mime)
+
     if poster is not None:
         poster_bytes = await poster.read()
         thumbs_dir = s.data_dir / "cache" / "thumbs"
