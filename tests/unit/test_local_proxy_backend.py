@@ -1,4 +1,3 @@
-import pytest
 from backend.app.services.media_cache import LocalProxyBackend
 from backend.app.services.media_locator import LocalFile, RemoteUrl
 

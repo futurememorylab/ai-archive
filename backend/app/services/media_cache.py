@@ -15,8 +15,6 @@ clips stay playable when CatDV is offline.
 from __future__ import annotations
 
 import logging
-import mimetypes
-from pathlib import Path
 from typing import Protocol
 
 from backend.app.archive.model import ClipKey
@@ -25,7 +23,6 @@ from backend.app.services.media_locator import (
     MediaLocator,
     MediaNotAvailable,
     RemoteUrl,
-    SIGNED_URL_TTL_S,
 )
 from backend.app.uploaded_ids import is_uploaded
 
