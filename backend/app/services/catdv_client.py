@@ -6,6 +6,7 @@ resolver."""
 import asyncio
 import logging
 import re
+import time
 from pathlib import Path
 from typing import Any, Self
 
@@ -58,6 +59,7 @@ class CatdvClient:
         self._login_lock = asyncio.Lock()
         self._timeout = timeout_secs
         self._logged_in = False
+        self._last_activity: float = 0.0
 
     async def __aenter__(self) -> Self:
         self._client = httpx.AsyncClient(timeout=self._timeout)
@@ -78,6 +80,16 @@ class CatdvClient:
         assert self._client is not None, "CatdvClient must be used as async context manager"
         return self._client
 
+    @property
+    def logged_in(self) -> bool:
+        return self._logged_in
+
+    @property
+    def last_activity(self) -> float:
+        """Monotonic timestamp of the last operator-driven API call (0.0 if
+        none yet). The health probe deliberately does not update this."""
+        return self._last_activity
+
     async def login(self) -> None:
         async with self._login_lock:
             resp = await self.http.post(
@@ -90,6 +102,7 @@ class CatdvClient:
             if not env.is_ok:
                 raise CatdvAuthError(env.error_message or "login rejected")
             self._logged_in = True
+            self._last_activity = time.monotonic()
 
     async def logout(self) -> None:
         """Best-effort DELETE /session so we don't orphan a server-side slot.
@@ -113,7 +126,10 @@ class CatdvClient:
         finally:
             self._logged_in = False
 
-    async def _call_json(self, method: str, path: str, *, json: Any = None, reauth: bool = True) -> Envelope:
+    async def _call_json(
+        self, method: str, path: str, *, json: Any = None, reauth: bool = True,
+        track_activity: bool = True,
+    ) -> Envelope:
         """Issue a JSON request. Re-login once on AUTH (unless reauth=False); raise on ERROR."""
         url = f"{self._base}{path}"
         resp = await self.http.request(method, url, json=json)
@@ -128,6 +144,8 @@ class CatdvClient:
             raise CatdvBusyError(env.error_message or "CatDV session limit reached")
         if not env.is_ok:
             raise CatdvError(env.error_message or "CatDV ERROR")
+        if track_activity:
+            self._last_activity = time.monotonic()
         return env
 
     async def list_clips(
@@ -159,7 +177,8 @@ class CatdvClient:
         return env.data
 
     async def _call_json_with_params(
-        self, method: str, path: str, *, params: dict[str, str] | None = None
+        self, method: str, path: str, *, params: dict[str, str] | None = None,
+        track_activity: bool = True,
     ) -> Envelope:
         url = f"{self._base}{path}"
         resp = await self.http.request(method, url, params=params)
@@ -172,6 +191,8 @@ class CatdvClient:
             raise CatdvBusyError(env.error_message or "CatDV session limit reached")
         if not env.is_ok:
             raise CatdvError(env.error_message or "CatDV ERROR")
+        if track_activity:
+            self._last_activity = time.monotonic()
         return env
 
     async def download_proxy(self, clip_id: int, dest: Path, chunk_size: int = 1024 * 1024) -> None:
@@ -279,7 +300,7 @@ class CatdvClient:
         propagating CatdvAuthError is the right behaviour — Reconnect
         button triggers a login when the user is ready to spend a seat.
         """
-        env = await self._call_json("GET", "/catdv/api/info", reauth=False)
+        env = await self._call_json("GET", "/catdv/api/info", reauth=False, track_activity=False)
         return env.data or {}
 
     async def list_fields(self) -> list[dict[str, Any]]:
