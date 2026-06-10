@@ -1,5 +1,5 @@
 """Media routes — HTTP endpoints under /api/media for HTTP Range
-streaming of proxy files resolved by ProxyResolver."""
+streaming of media located by MediaCacheBackend (local proxy cache or GCS signed URL)."""
 
 import mimetypes
 

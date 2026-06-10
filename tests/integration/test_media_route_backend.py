@@ -30,6 +30,15 @@ def _client(located, tmp_path=None):
     return TestClient(app)
 
 
+def _client_no_backend():
+    app = FastAPI()
+    app.include_router(router)
+    live = type("FakeLive", (), {"media_cache_backend": None})()
+    app.state.live_ctx = live
+    app.state.core_ctx = None
+    return TestClient(app)
+
+
 def test_remote_url_returns_307():
     c = _client(RemoteUrl("https://storage.googleapis.com/x"))
     r = c.get("/api/media/5", follow_redirects=False)
@@ -59,3 +68,9 @@ def test_local_file_range_request(tmp_path):
     r = c.get("/api/media/5", headers={"Range": "bytes=10-19"})
     assert r.status_code == 206
     assert r.content == bytes(range(10, 20))
+
+
+def test_backend_none_returns_503():
+    c = _client_no_backend()
+    r = c.get("/api/media/5")
+    assert r.status_code == 503
