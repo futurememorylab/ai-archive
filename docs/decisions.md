@@ -75,3 +75,4 @@ available number. See any existing ADR for the template.
 | 0065 | 2026-06-09 | [Thumbnail service short-circuits when clip has no cached metadata](./adr/0065-thumbnail-service-skips-network-without-clip-cache.md) |
 | 0066 | 2026-06-09 | [Cloud Run pinned to one instance; SQLite persisted via Litestream](./adr/0066-cloud-run-single-instance-litestream.md) |
 | 0067 | 2026-06-10 | [onetun packaged from its GitHub release binary, not a container image](./adr/0067-onetun-packaged-from-release-binary.md) |
+| 0068 | 2026-06-10 | [CatDV connection is manual on-demand on Cloud Run](./adr/0068-catdv-manual-connect.md) |
