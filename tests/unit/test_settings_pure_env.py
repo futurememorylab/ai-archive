@@ -33,11 +33,11 @@ def test_settings_resolve_from_pure_env(monkeypatch, tmp_path):
     assert s.google_application_credentials is None  # ADC in cloud
 
 
-def test_playback_source_defaults_local_overridable(monkeypatch, tmp_path):
+def test_media_cache_defaults_local_overridable(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     for key, value in _REQUIRED.items():
         monkeypatch.setenv(key, value)
-    monkeypatch.delenv("PLAYBACK_SOURCE", raising=False)
-    assert Settings().playback_source == "local"
-    monkeypatch.setenv("PLAYBACK_SOURCE", "gcs")
-    assert Settings().playback_source == "gcs"
+    monkeypatch.delenv("MEDIA_CACHE", raising=False)
+    assert Settings().media_cache == "local"
+    monkeypatch.setenv("MEDIA_CACHE", "ai_store")
+    assert Settings().media_cache == "ai_store"

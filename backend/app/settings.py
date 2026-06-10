@@ -40,11 +40,12 @@ class Settings(BaseSettings):
     ai_input_store: str = "gcs"
     clip_cache_ttl_hours: int = 168
     clip_list_cache_ttl_minutes: int = 10
-    # Playback byte-source preference (NOT exclusive): MediaLocator tries
-    # both cache layers, this just orders them. "local" = proxy cache
-    # first (dev); "gcs" = signed URL from the AI store first (cloud,
-    # where local disk is ephemeral). See the Cloud Run deployment spec.
-    playback_source: Literal["local", "gcs"] = "local"
+    # Proxy-media cache + playback backend. "local" (dev): download to
+    # the local proxy cache and serve from disk, GCS as read fallback.
+    # "ai_store" (cloud, ephemeral disk): cache writes upload to GCS and
+    # playback redirects to signed URLs; the local proxy cache is unused.
+    # See docs/specs/2026-06-10-cloud-media-cache-ai-store-design.md.
+    media_cache: Literal["local", "ai_store"] = "local"
 
     # Prompt Studio uploads (Spec B). Web-safe only; no server-side
     # transcode, so the allowlist is browser-playable container/codecs.

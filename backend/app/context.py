@@ -345,7 +345,7 @@ class LiveCtx:
             proxy_resolver=self.proxy_resolver,
             ai_store=self.ai_store,
             gcs_service=self._gcs_service,
-            prefer=self.core.settings.playback_source,
+            prefer="local",
         )
 
     async def aclose(self) -> None:
