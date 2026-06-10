@@ -18,7 +18,7 @@ import asyncio
 import logging
 import mimetypes
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
 
 from backend.app.archive.model import ClipKey
 from backend.app.services.media_locator import (
@@ -115,7 +115,13 @@ class AiStoreBackend:
 
 
 def build_media_cache_backend(
-    *, media_cache, resolver, ai_store, gcs, proxy_cache_repo, db_provider
+    *,
+    media_cache: Literal["local", "ai_store"],
+    resolver,
+    ai_store,
+    gcs,
+    proxy_cache_repo,
+    db_provider,
 ) -> MediaCacheBackend:
     if media_cache == "ai_store":
         return AiStoreBackend(
