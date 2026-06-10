@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.app.services.media_locator import LocalFile
 from backend.app.uploaded_ids import is_uploaded
 from tests._helpers.live_ctx import install_live_ctx
 
@@ -29,6 +30,16 @@ def ctx(monkeypatch, tmp_path):
 
 def test_upload_creates_clip_and_membership(ctx):
     client, data_dir = ctx
+
+    # Wire a minimal media_cache_backend so /api/media/<id> can serve the
+    # uploaded file from disk. The upload handler stores the file at
+    # data_dir/cache/uploads/<clip_id>.mp4 before we GET the media route.
+    async def _locate(clip_id):
+        path = data_dir / "cache" / "uploads" / f"{clip_id}.mp4"
+        return LocalFile(path) if path.exists() else None
+
+    install_live_ctx(client.app, media_cache_backend=MagicMock(locate=_locate))
+
     r = client.post(
         "/api/studio/uploads",
         files={
