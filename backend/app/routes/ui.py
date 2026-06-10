@@ -38,10 +38,13 @@ async def connection_pill(request: Request):
 
 @router.get("/connection-chip", response_class=HTMLResponse)
 async def connection_chip(request: Request):
-    # The topbar chip self-refreshes every 5s by polling this. The chip
-    # template computes its own mode/connect_mode from the request, so no
-    # context is needed here.
-    return templates.TemplateResponse(request, "_connection_chip.html", {})
+    # The stable #connection-chip container polls this every 5s and swaps the
+    # result into its innerHTML, so we return the INNER partial (label +
+    # action), which computes its own mode/connect_mode from the request.
+    # no-store: a status partial must never be served stale from cache.
+    resp = templates.TemplateResponse(request, "_connection_chip_inner.html", {})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @router.get("/workspace-switcher", response_class=HTMLResponse)

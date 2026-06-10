@@ -53,8 +53,10 @@ async def _pill_or_json(request: Request, monitor, *, status_code: int = 200,
         # is returned otherwise.) The chip computes its own mode from the
         # request, so no context is needed.
         if request.headers.get("HX-Target") == "connection-chip":
+            # Return the inner partial — it swaps into the stable
+            # #connection-chip container's innerHTML.
             return _templates.TemplateResponse(
-                request, "_connection_chip.html", {},
+                request, "_connection_chip_inner.html", {},
                 status_code=status_code, headers=headers,
             )
         from backend.app.routes.ui import _pill_context
@@ -116,9 +118,10 @@ async def retry_now(request: Request):
     if wants_pill:
         return await _pill_or_json(request, monitor)
     if is_htmx:
+        # Inner partial → swaps into the stable #connection-chip container.
         return _templates.TemplateResponse(
             request,
-            "_connection_chip.html",
+            "_connection_chip_inner.html",
             {"mode": body["mode"]},
         )
     return body

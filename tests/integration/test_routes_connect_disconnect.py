@@ -127,7 +127,9 @@ def test_connect_targeting_chip_returns_chip(monkeypatch, tmp_path):
             headers={"HX-Request": "true", "HX-Target": "connection-chip"},
         )
         assert r.status_code == 200
-        assert 'id="connection-chip"' in r.text
+        # Inner partial (swaps into the stable container). After connect the
+        # client is logged in → online → shows the Disconnect action.
+        assert "/api/connection/disconnect" in r.text and "Disconnect" in r.text
 
 
 def test_htmx_pill_response_includes_pending_count(monkeypatch, tmp_path):

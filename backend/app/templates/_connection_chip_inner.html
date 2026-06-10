@@ -1,0 +1,60 @@
+{# Inner content of the topbar connection chip — label + the live action.
+   Swapped into the stable #connection-chip container via innerHTML by the
+   5s poll and by the Connect/Disconnect/Retry actions, so the polling
+   container is never destroyed (an outerHTML self-swap of the polling
+   element throws htmx swapError). Buttons target #connection-chip with
+   hx-swap="innerHTML". Rendered standalone it computes its own mode;
+   included by the container it inherits layout.html's `mode`. #}
+{%- if connect_mode is not defined -%}
+  {%- set connect_mode = request.app.state.core_ctx.settings.catdv_connect_mode
+        if request is defined and request else "manual" -%}
+{%- endif -%}
+{%- if mode is not defined -%}
+  {%- set _live = request.app.state.live_ctx if request is defined else None -%}
+  {%- set _monitor = _live.connection_monitor if _live else None -%}
+  {%- if _monitor is none -%}
+    {%- set mode = "online" -%}
+  {%- elif _monitor.is_forced -%}
+    {%- set mode = "forced_offline" -%}
+  {%- elif _monitor.current_state().value == "online" -%}
+    {%- set mode = "online" -%}
+  {%- elif _monitor.current_state().value == "disconnected" -%}
+    {%- set mode = "disconnected" -%}
+  {%- else -%}
+    {%- set mode = "offline" -%}
+  {%- endif -%}
+{%- endif -%}
+{% if connect_mode == "manual" %}
+  {% if mode == "online" %}
+    <span class="dot dot--green" aria-hidden="true">●</span><span>Connected</span>
+    <button type="button" class="btn link" hx-post="/api/connection/disconnect"
+            hx-target="#connection-chip" hx-swap="innerHTML"
+            title="Log out of CatDV and release the seat">Disconnect</button>
+  {% elif mode == "disconnected" %}
+    <span class="dot dot--grey" aria-hidden="true">○</span><span>Disconnected</span>
+    <button type="button" class="btn link" hx-post="/api/connection/connect"
+            hx-target="#connection-chip" hx-swap="innerHTML"
+            title="Log in to CatDV (takes the license seat)">Connect</button>
+  {% elif mode == "forced_offline" %}
+    <span class="dot dot--red" aria-hidden="true"
+          title="Set CATDV_OFFLINE=false and restart to reconnect">●</span><span>Offline (forced)</span>
+  {% else %}{# offline == unreachable — re-probe the tunnel #}
+    <span class="dot dot--yellow" aria-hidden="true" title="VPN tunnel unreachable">●</span><span>Unreachable</span>
+    <button type="button" class="btn link" hx-post="/api/connection/retry"
+            hx-target="#connection-chip" hx-swap="innerHTML"
+            title="Re-check the VPN tunnel">Retry</button>
+  {% endif %}
+{% else %}{# auto mode: legacy read-only label + Reconnect probe #}
+  {% if mode == "online" %}
+    <span class="dot dot--green" aria-hidden="true">●</span><span>Online</span>
+  {% elif mode == "forced_offline" %}
+    <span class="dot dot--red" aria-hidden="true"
+          title="Set CATDV_OFFLINE=false and restart to reconnect">●</span><span>Offline (forced)</span>
+  {% else %}
+    <button type="button" class="btn link" hx-post="/api/connection/retry"
+            hx-target="#connection-chip" hx-swap="innerHTML"
+            title="Click to try reconnecting">
+      <span class="dot dot--yellow" aria-hidden="true">●</span><span>Offline — click to reconnect</span>
+    </button>
+  {% endif %}
+{% endif %}
