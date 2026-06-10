@@ -77,3 +77,4 @@ available number. See any existing ADR for the template.
 | 0067 | 2026-06-10 | [onetun packaged from its GitHub release binary, not a container image](./adr/0067-onetun-packaged-from-release-binary.md) |
 | 0068 | 2026-06-10 | [CatDV connection is manual on-demand on Cloud Run](./adr/0068-catdv-manual-connect.md) |
 | 0069 | 2026-06-10 | [Cloud media cache: AI-store-only on GCP](./adr/0069-cloud-media-cache-ai-store.md) |
+| 0070 | 2026-06-10 | [GCS proxy upload is content-aware, not presence-only](./adr/0070-gcs-content-aware-upload.md) |
