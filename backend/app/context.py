@@ -748,12 +748,14 @@ async def _build_sync_subsystem(
 
     media_prefetcher: MediaPrefetcher | None = None
     _inner_resolver = getattr(arch.proxy_resolver, "inner", arch.proxy_resolver)
-    if arch.proxy_resolver is not None and not isinstance(
-        _inner_resolver, LocalCacheOnlyResolver
+    if (
+        arch.proxy_resolver is not None
+        and media_cache_backend is not None
+        and not isinstance(_inner_resolver, LocalCacheOnlyResolver)
     ):
         media_prefetcher = MediaPrefetcher(
             queue_repo=core.prefetch_queue_repo,
-            resolver=arch.proxy_resolver,
+            backend=media_cache_backend,
             db_provider=lambda: core.db,
             tick_interval_s=float(settings.prefetch_tick_interval_s),
         )
