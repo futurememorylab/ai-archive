@@ -115,6 +115,21 @@ def test_retry_targeting_pill_reprobes_and_returns_pill(monkeypatch, tmp_path):
         assert "/api/connection/connect" in r.text  # reprobed → Disconnected → Connect
 
 
+def test_connect_targeting_chip_returns_chip(monkeypatch, tmp_path):
+    # The topbar chip is the live control surface; when it targets the
+    # connect endpoint it must get the chip partial back (not the pill).
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        c = FakeClient()
+        _install(client.app, c)
+        r = client.post(
+            "/api/connection/connect",
+            headers={"HX-Request": "true", "HX-Target": "connection-chip"},
+        )
+        assert r.status_code == 200
+        assert 'id="connection-chip"' in r.text
+
+
 def test_htmx_pill_response_includes_pending_count(monkeypatch, tmp_path):
     # The swapped-in pill must render "Sync now (N)" with a real count, not a
     # blank "Sync now ()" flash until the next poll.

@@ -36,6 +36,14 @@ async def connection_pill(request: Request):
     return templates.TemplateResponse(request, "connection_pill.html", context)
 
 
+@router.get("/connection-chip", response_class=HTMLResponse)
+async def connection_chip(request: Request):
+    # The topbar chip self-refreshes every 5s by polling this. The chip
+    # template computes its own mode/connect_mode from the request, so no
+    # context is needed here.
+    return templates.TemplateResponse(request, "_connection_chip.html", {})
+
+
 @router.get("/workspace-switcher", response_class=HTMLResponse)
 async def workspace_switcher(request: Request, ws_id: int | None = None):
     ctx = get_core_ctx(request)

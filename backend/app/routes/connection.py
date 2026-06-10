@@ -48,6 +48,15 @@ def _monitor(request: Request):
 async def _pill_or_json(request: Request, monitor, *, status_code: int = 200,
                         headers: dict[str, str] | None = None):
     if request.headers.get("HX-Request") == "true":
+        # The topbar chip is the live control surface; return it when the
+        # chip targets us. (The connection pill is an alternate surface and
+        # is returned otherwise.) The chip computes its own mode from the
+        # request, so no context is needed.
+        if request.headers.get("HX-Target") == "connection-chip":
+            return _templates.TemplateResponse(
+                request, "_connection_chip.html", {},
+                status_code=status_code, headers=headers,
+            )
         from backend.app.routes.ui import _pill_context
 
         # Include pending_count so the swapped-in pill's "Sync now (N)"
