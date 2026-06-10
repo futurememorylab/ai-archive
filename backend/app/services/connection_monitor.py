@@ -20,6 +20,7 @@ class ConnectionState(StrEnum):
     degraded = "degraded"
     offline = "offline"
     syncing = "syncing"
+    disconnected = "disconnected"
 
 
 def _now_iso() -> str:
@@ -38,6 +39,8 @@ class ConnectionMonitor:
         clock: Callable[[], datetime] | None = None,
         forced_offline: bool = False,
         initial_state: ConnectionState = ConnectionState.online,
+        manual: bool = False,
+        logged_in: "Callable[[], bool] | None" = None,
     ) -> None:
         self._provider = provider
         self._db_provider = db_provider
@@ -48,6 +51,8 @@ class ConnectionMonitor:
         self._state: ConnectionState = initial_state
         self._manual_offline: bool = False
         self._forced_offline: bool = forced_offline
+        self._manual = manual
+        self._logged_in = logged_in or (lambda: True)
         if forced_offline:
             self._state = ConnectionState.offline
         self._task: asyncio.Task | None = None
@@ -91,7 +96,13 @@ class ConnectionMonitor:
             detail = f"{type(exc).__name__}: {exc}"
         else:
             ok = getattr(health, "ok", True) if health is not None else True
-            if ok:
+            reachable = getattr(health, "reachable", True) if health is not None else True
+            if ok and self._logged_in():
+                new_state = ConnectionState.online
+            elif self._manual and (ok or reachable):
+                new_state = ConnectionState.disconnected
+                detail = "reachable; not logged in"
+            elif ok:
                 new_state = ConnectionState.online
             else:
                 new_state = ConnectionState.offline
@@ -147,8 +158,8 @@ class ConnectionMonitor:
                 state = await self.probe_once()
             except Exception:  # noqa: BLE001 — loop must not die
                 state = ConnectionState.offline
-            if state != ConnectionState.online:
-                # halt — user must explicitly retry_now() to resume
+            if not self._manual and state != ConnectionState.online:
+                # auto mode: halt — user must explicitly retry_now() to resume
                 return
             try:
                 await asyncio.wait_for(self._stop_evt.wait(), timeout=self._interval_s)
