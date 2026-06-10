@@ -52,7 +52,11 @@ def test_online_shows_disconnect(monkeypatch, tmp_path):
     assert "Disconnect" in html
 
 
-def test_unreachable_disables_connect(monkeypatch, tmp_path):
+def test_unreachable_offers_retry(monkeypatch, tmp_path):
+    # Unreachable must not be a dead end: it shows the Unreachable label and a
+    # working Retry button that re-probes the tunnel via /api/connection/retry.
     html = _pill(monkeypatch, tmp_path, ConnectionState.offline)
-    assert "disabled" in html
     assert "Unreachable" in html
+    assert "/api/connection/retry" in html
+    assert "Retry" in html
+    assert "disabled" not in html

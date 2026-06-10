@@ -83,10 +83,15 @@ async def get_state(request: Request) -> dict:
 async def retry_now(request: Request):
     monitor = _monitor(request)
     is_htmx = request.headers.get("HX-Request") == "true"
+    # The pill (manual mode) and the chip (auto mode) both re-probe via this
+    # endpoint; each wants its own partial back. Route by the HTMX target.
+    wants_pill = request.headers.get("HX-Target") == "connection-pill"
 
     if monitor is None:
         body = {"state": "online", "mode": "online"}
     elif getattr(monitor, "is_forced", False) or getattr(monitor, "_forced_offline", False):
+        if wants_pill:
+            return await _pill_or_json(request, monitor, status_code=409)
         if is_htmx:
             return _templates.TemplateResponse(
                 request,
@@ -99,6 +104,8 @@ async def retry_now(request: Request):
         state = await monitor.retry_now()
         body = {"state": str(state.value), "mode": _mode(monitor)}
 
+    if wants_pill:
+        return await _pill_or_json(request, monitor)
     if is_htmx:
         return _templates.TemplateResponse(
             request,

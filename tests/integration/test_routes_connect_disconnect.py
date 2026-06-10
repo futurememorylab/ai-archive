@@ -98,6 +98,23 @@ def test_disconnect_frees_seat(monkeypatch, tmp_path):
         assert client.get("/api/connection/state").json()["state"] == "disconnected"
 
 
+def test_retry_targeting_pill_reprobes_and_returns_pill(monkeypatch, tmp_path):
+    # From the Unreachable pill state the user must be able to re-probe: a
+    # retry that targets the pill re-probes and returns the PILL partial (not
+    # the chip), so a recovered tunnel flips to Disconnected (Connect enabled).
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        c = FakeClient()  # not logged in; probe P.health() → ok=False, reachable=True
+        _install(client.app, c)
+        r = client.post(
+            "/api/connection/retry",
+            headers={"HX-Request": "true", "HX-Target": "connection-pill"},
+        )
+        assert r.status_code == 200
+        assert 'id="connection-pill"' in r.text  # pill partial, not the chip
+        assert "/api/connection/connect" in r.text  # reprobed → Disconnected → Connect
+
+
 def test_htmx_pill_response_includes_pending_count(monkeypatch, tmp_path):
     # The swapped-in pill must render "Sync now (N)" with a real count, not a
     # blank "Sync now ()" flash until the next poll.

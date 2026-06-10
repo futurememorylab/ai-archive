@@ -29,8 +29,11 @@
         <button hx-post="/api/connection/connect"
                 hx-target="#connection-pill" hx-swap="outerHTML"
                 hx-indicator="#connection-pill">Connect</button>
-      {% else %}{# offline / unreachable #}
-        <button disabled title="VPN tunnel down">Connect</button>
+      {% else %}{# offline / unreachable — re-probe the tunnel #}
+        <button hx-post="/api/connection/retry"
+                hx-target="#connection-pill" hx-swap="outerHTML"
+                hx-indicator="#connection-pill"
+                title="VPN tunnel unreachable — click to re-check">Retry</button>
       {% endif %}
     {% else %}
       {% if state == "offline" %}
