@@ -2,8 +2,9 @@
 
 Consults the two existing cache layers through their own interfaces
 (ProxyResolver for the local proxy cache, AIInputStore for GCS) in the
-order given by ``settings.playback_source``. The setting is a
-preference order, not an exclusive mode: both layers are always tried
+order given by the ``prefer`` argument the locator is constructed with
+(``"local"`` tries the proxy cache first; ``"gcs"`` tries GCS first).
+The argument is a preference order, not an exclusive mode: both layers are always tried
 before giving up, and a both-miss raises ``MediaNotAvailable`` naming
 what each layer said (CLAUDE.md: errors must name WHICH cache layer
 missed). The locator never fetches and never talks to CatDV/GCS

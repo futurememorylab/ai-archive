@@ -1,3 +1,6 @@
+import pytest
+from pydantic import ValidationError
+
 from backend.app.settings import Settings
 
 
@@ -22,3 +25,8 @@ def test_media_cache_accepts_ai_store():
 
 def test_playback_source_is_removed():
     assert not hasattr(_minimal(), "playback_source")
+
+
+def test_media_cache_rejects_old_gcs_value():
+    with pytest.raises(ValidationError):
+        _minimal(media_cache="gcs")

@@ -345,7 +345,7 @@ class LiveCtx:
             proxy_resolver=self.proxy_resolver,
             ai_store=self.ai_store,
             gcs_service=self._gcs_service,
-            prefer="local",
+            prefer="local",  # TODO: stopgap until the MediaCacheBackend task removes this property; MediaLocator.prefer ("local"/"gcs") no longer matches settings.media_cache ("local"/"ai_store").
         )
 
     async def aclose(self) -> None:
