@@ -63,6 +63,16 @@ class Settings(BaseSettings):
     # Reconnect button / the background probe). Kept short so dev restarts are
     # snappy; distinct from the 60s client timeout used for real downloads.
     catdv_startup_login_timeout_s: float = 2.0
+    # CatDV connection lifecycle. "manual" (default): build the client but
+    # do NOT log in at boot — the operator clicks Connect to spend a seat
+    # and Disconnect to release it (the Cloud Run instance is always-on, so
+    # auto-login would hold a seat 24/7). "auto": log in at startup (legacy
+    # behavior, for local dev). CATDV_OFFLINE=true still wins (no client).
+    catdv_connect_mode: Literal["auto", "manual"] = "manual"
+    # Auto-disconnect (logout, freeing the seat) after this many seconds
+    # with no operator-driven CatDV API call. The 5s pill poll and the
+    # background health probe do NOT count as activity.
+    catdv_idle_logout_s: int = 900
     # set by run.sh when launching uvicorn with --reload; disables the
     # in-app shutdown button (the reloader supervisor may respawn the worker)
     dev_reload: bool = False
