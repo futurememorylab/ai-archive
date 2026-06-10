@@ -56,20 +56,34 @@ concurrency; a second CatDV seat.
   `health()` probe — `GET /catdv/api/info` with `reauth=False`
   (`catdv_client.py:282`), which deliberately never logs in.
 
-## Key insight: one seat-free probe yields both signals
+## Key insight: the seat truth + a reachability probe
 
-`health()`'s `/api/info` probe (no login, no seat) already returns three
-distinguishable outcomes. Today `ConnectionMonitor.probe_once` collapses
-the last two into `offline`; we stop collapsing them:
+Two independent facts drive the indicator:
 
-| Probe outcome | Meaning | New `ConnectionState` |
-|---|---|---|
-| success (envelope OK) | logged in, seat held | `online` (Connected) |
-| `CatdvAuthError` (AUTH envelope) | tunnel up, **not** logged in | `disconnected` (new) |
-| transport error / timeout | **tunnel/VPN down** | `offline` (Unreachable) |
+- **Do we hold a seat?** — authoritative from `CatdvClient._logged_in`,
+  *not* inferred from a probe. (The existing `health()` docstring assumes
+  `/api/info` requires a session, but that path was only ever exercised
+  while already logged in; if `/api/info` is actually public, a
+  probe-only model would falsely read "connected". Using the login flag
+  is robust either way.)
+- **Is CatDV reachable?** — the **seat-free** `health()` probe
+  (`GET /api/info`, `reauth=False`): the catdv adapter **returns**
+  `ProviderHealth(ok=False, reachable=True, …)` when the server answers
+  (even an AUTH/BUSY envelope) and **raises** (→ caught as offline) on a
+  transport failure.
 
-So a single probe tells us both "is the WireGuard tunnel up?" and "do we
-hold a seat?" — no separate tunnel pinger is added.
+`ConnectionMonitor.probe_once` combines them:
+
+| `logged_in` | probe result | `ConnectionState` | Meaning |
+|---|---|---|---|
+| true | `ok=True` | `online` | Connected, seat held |
+| false | answered (`ok`, or `reachable=True`) | `disconnected` (new) | tunnel up, no seat |
+| any | raised / unreachable | `offline` | tunnel/VPN down |
+
+So no separate tunnel pinger is added, and a public `/api/info` can't
+fake a seat. `Connecting…`/`Disconnecting…` are **`hx-indicator`
+spinners** during the in-flight POST — transient UI, not server states —
+so the enum only gains `disconnected`.
 
 ## Design
 
@@ -94,10 +108,14 @@ to `catdv_offline=false` + `manual` once the tunnel is up; local
 ### 2. ConnectionState + probe
 
 Add `disconnected` to the `ConnectionState` enum (stored as a string in
-`connection_events`, so no migration). `probe_once` gains an explicit
-`except CatdvAuthError → disconnected` arm **before** the generic
-`except Exception → offline`. `current_state()` returns `disconnected`
-when reachable-but-logged-out; `is_forced`/`manual_offline` paths are
+`connection_events`, so no migration) and a `reachable: bool = True`
+field to `ProviderHealth`. The catdv adapter sets `reachable=True` on the
+auth/busy returns (server answered) and `reachable=False` on the
+absent-client / generic-error returns. `ConnectionMonitor` gains a
+`manual: bool` flag and a `logged_in: Callable[[], bool] | None`; its
+`probe_once` maps per the table above (online only when `logged_in()` and
+`ok`; reachable-but-not-logged-in → `disconnected`; raised/unreachable →
+`offline`). `current_state()`'s `is_forced`/`manual_offline` paths are
 unchanged.
 
 `retry_now()` stays a pure probe (never logs in) — it just refreshes the
@@ -127,8 +145,10 @@ in `manual` mode):
   the seat; already best-effort with a warning), stop the monitor loop,
   state → `disconnected`. Always returns the pill partial.
 
-All user-facing errors go through `Alpine.store('toast')` and
-`services/errors.py::humanise`, per the project rules.
+Connect-failure errors go through `Alpine.store('toast')` via a small,
+reusable `HX-Trigger: {"toast": …}` bridge added to `toast.js` (it has
+no HTMX hook today), with messages from `services/errors.py::humanise`,
+per the project rules.
 
 ### 4. Idle auto-disconnect (seat safety net)
 
@@ -142,9 +162,10 @@ reset idle forever and auto-disconnect would never fire. A background task (sibl
 the same lifespan block, stopped in `aclose()` before logout) checks
 every 60 s: if `logged_in` and `now - last_activity >
 catdv_idle_logout_s` (new setting, default `900`), it calls the same
-disconnect path — `logout()`, state → `disconnected`, publish a
-`connection` event with `detail="idle auto-disconnect"` so the SSE/pill
-reflect it and a toast informs the operator.
+disconnect path — `logout()` then `monitor.probe_once()` → state
+`disconnected`, which writes a `connection_events` row (`detail="idle
+auto-disconnect"`). The pill's 5 s poll surfaces the flip; no SSE→toast
+bridge is built (none exists today).
 
 ### 5. UI — one pill, sub-states
 
@@ -210,9 +231,10 @@ Run on the deployed service via
    **gone**. Cloud Run logs show the `DELETE /session` succeeded.
 4. **Idle auto-disconnect frees a forgotten seat.** Click **Connect**,
    then leave the app untouched for the idle window (default 15 min,
-   shorten via `CATDV_IDLE_LOGOUT_S` to test). The pill returns to
-   **⚪ Disconnected** on its own, a toast says the session was released
-   for inactivity, and the CatDV admin shows the seat freed.
+   shorten via `CATDV_IDLE_LOGOUT_S` to test). Within its 5 s poll the
+   pill returns to **⚪ Disconnected** on its own, the CatDV admin shows
+   the seat freed, and a `connection_events` row records `idle
+   auto-disconnect`.
 5. **Tunnel down is visible and non-fatal.** While disconnected, disable
    the cloud peer on the office WireGuard server. Within the probe
    interval the pill shows **🔴 Unreachable** and **Connect** is disabled
