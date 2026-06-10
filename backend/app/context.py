@@ -64,6 +64,7 @@ from backend.app.repositories.workspaces import WorkspacesRepo
 from backend.app.repositories.write_log import WriteLogRepo
 from backend.app.services.cache_actions import CacheActions
 from backend.app.services.cache_inspector import CacheInspector
+from backend.app.services.idle_disconnector import IdleDisconnector
 from backend.app.services.media_locator import MediaLocator
 from backend.app.services.connection_monitor import ConnectionMonitor
 from backend.app.services.events import EventBus
@@ -220,6 +221,7 @@ class LiveCtx:
     proxy_resolver: ProxyResolver | None = None
     thumbnail_service: ThumbnailService | None = None
     media_prefetcher: MediaPrefetcher | None = None
+    idle_disconnector: IdleDisconnector | None = None
 
     # --- thin delegators to the composed CoreCtx -------------------
     # Live-route handlers touch both core fields (db, repos) and live
@@ -355,6 +357,8 @@ class LiveCtx:
             await self.lru_eviction.stop()
         if self.sync_engine is not None:
             await self.sync_engine.stop()
+        if self.idle_disconnector is not None:
+            await self.idle_disconnector.stop()
         if self.connection_monitor is not None:
             await self.connection_monitor.stop()
         if self.catdv is not None:
@@ -372,6 +376,7 @@ class _OnlineFlags(NamedTuple):
 
     forced_offline: bool
     login_failed: bool
+    manual: bool = False
 
 
 class _ArchiveSubsystem(NamedTuple):
@@ -468,6 +473,8 @@ async def _build_archive_subsystem(
     settings = core.settings
     use_catdv = settings.archive_provider == "catdv"
     forced_offline = bool(getattr(settings, "catdv_offline", False)) and use_catdv
+    connect_mode = getattr(settings, "catdv_connect_mode", "manual")
+    manual = use_catdv and not forced_offline and connect_mode == "manual"
     login_failed = False
     catdv: CatdvClient | None = None
 
@@ -495,61 +502,64 @@ async def _build_archive_subsystem(
             password=settings.catdv_password or "",
         )
         await catdv.__aenter__()
-        # CatdvClient.__aenter__ only opens the httpx pool; auth is
-        # lazy. Force one round-trip so an unreachable host or bad
-        # credentials degrade us to offline cleanly at startup
-        # instead of half-booting and tripping the first request.
-        #
-        # Bound this probe with catdv_startup_login_timeout_s: the client's
-        # own 60s timeout is sized for large downloads, but a silently
-        # unreachable host (VPN drop, server off) would otherwise stall every
-        # restart for that full window. A timeout here is transport-like, so
-        # it lands in the generic `except` below — client kept alive, booted
-        # offline, recoverable via the Reconnect button.
-        try:
-            await asyncio.wait_for(
-                catdv.login(),
-                timeout=settings.catdv_startup_login_timeout_s,
-            )
-        except CatdvAuthError as exc:
-            # Bad credentials — retry won't help. Tear down the client
-            # so the monitor cannot misread "client present" as
-            # "reauthable" later.
-            from backend.app.services.errors import humanise
+        if connect_mode == "auto":
+            # CatdvClient.__aenter__ only opens the httpx pool; auth is
+            # lazy. Force one round-trip so an unreachable host or bad
+            # credentials degrade us to offline cleanly at startup
+            # instead of half-booting and tripping the first request.
+            #
+            # Bound this probe with catdv_startup_login_timeout_s: the client's
+            # own 60s timeout is sized for large downloads, but a silently
+            # unreachable host (VPN drop, server off) would otherwise stall every
+            # restart for that full window. A timeout here is transport-like, so
+            # it lands in the generic `except` below — client kept alive, booted
+            # offline, recoverable via the Reconnect button.
+            try:
+                await asyncio.wait_for(
+                    catdv.login(),
+                    timeout=settings.catdv_startup_login_timeout_s,
+                )
+            except CatdvAuthError as exc:
+                # Bad credentials — retry won't help. Tear down the client
+                # so the monitor cannot misread "client present" as
+                # "reauthable" later.
+                from backend.app.services.errors import humanise
 
-            logging.getLogger(__name__).warning(
-                "CatDV login rejected at startup (%s); booting offline",
-                humanise(exc),
-            )
-            await catdv.__aexit__(None, None, None)
-            catdv = None
-            login_failed = True
-        except CatdvBusyError as exc:
-            # Seat limit reached — recoverable. Keep the client alive so
-            # ConnectionMonitor.retry_now() can re-probe once the stale
-            # session times out or the admin frees the seat.
-            from backend.app.services.errors import humanise
+                logging.getLogger(__name__).warning(
+                    "CatDV login rejected at startup (%s); booting offline",
+                    humanise(exc),
+                )
+                await catdv.__aexit__(None, None, None)
+                catdv = None
+                login_failed = True
+            except CatdvBusyError as exc:
+                # Seat limit reached — recoverable. Keep the client alive so
+                # ConnectionMonitor.retry_now() can re-probe once the stale
+                # session times out or the admin frees the seat.
+                from backend.app.services.errors import humanise
 
-            logging.getLogger(__name__).warning(
-                "CatDV seat limit reached at startup (%s); booting offline — "
-                "click Reconnect once a seat frees up",
-                humanise(exc),
-            )
-            login_failed = True
-        except Exception as exc:  # noqa: BLE001 — transport / DNS / parse
-            # Network-side failure. Could be VPN flap, server stop, or a
-            # non-JSON 5xx body (the seat-limit web servlet sometimes
-            # answers with HTML). Keep the client alive for retry.
-            # Route through humanise() so httpx exceptions with empty
-            # str() (e.g. ConnectError on VPN down) don't log as "()".
-            from backend.app.services.errors import humanise
+                logging.getLogger(__name__).warning(
+                    "CatDV seat limit reached at startup (%s); booting offline — "
+                    "click Reconnect once a seat frees up",
+                    humanise(exc),
+                )
+                login_failed = True
+            except Exception as exc:  # noqa: BLE001 — transport / DNS / parse
+                # Network-side failure. Could be VPN flap, server stop, or a
+                # non-JSON 5xx body (the seat-limit web servlet sometimes
+                # answers with HTML). Keep the client alive for retry.
+                # Route through humanise() so httpx exceptions with empty
+                # str() (e.g. ConnectError on VPN down) don't log as "()".
+                from backend.app.services.errors import humanise
 
-            logging.getLogger(__name__).warning(
-                "CatDV unreachable at startup (%s); booting offline — "
-                "click Reconnect once the server is reachable",
-                humanise(exc),
-            )
-            login_failed = True
+                logging.getLogger(__name__).warning(
+                    "CatDV unreachable at startup (%s); booting offline — "
+                    "click Reconnect once the server is reachable",
+                    humanise(exc),
+                )
+                login_failed = True
+        # Manual mode: client is built but stays logged out until the
+        # operator clicks Connect (POST /api/connection/connect).
 
     # The is_online provider reads the monitor's state once the sync
     # subsystem constructs it (via the shared holder). We delegate to the
@@ -654,7 +664,9 @@ async def _build_archive_subsystem(
         catdv=catdv,
         proxy_resolver=proxy_resolver,
         thumbnail_service=thumbnail_service,
-        flags=_OnlineFlags(forced_offline=forced_offline, login_failed=login_failed),
+        flags=_OnlineFlags(
+            forced_offline=forced_offline, login_failed=login_failed, manual=manual
+        ),
     )
 
 
@@ -673,6 +685,13 @@ async def _build_sync_subsystem(
     cap_bytes = int(settings.media_cache_cap_gb) * 1024**3
     flags = arch.flags
 
+    if flags.manual:
+        initial_state = ConnectionState.disconnected
+    elif flags.login_failed:
+        initial_state = ConnectionState.offline
+    else:
+        initial_state = ConnectionState.online
+
     connection_monitor = ConnectionMonitor(
         provider=arch.archive,
         db_provider=lambda: core.db,
@@ -680,7 +699,9 @@ async def _build_sync_subsystem(
         timeout_s=float(settings.health_probe_timeout_s),
         event_bus=core.event_bus,
         forced_offline=flags.forced_offline,
-        initial_state=(ConnectionState.offline if flags.login_failed else ConnectionState.online),
+        initial_state=initial_state,
+        manual=flags.manual,
+        logged_in=(lambda: arch.catdv.logged_in) if arch.catdv is not None else None,
     )
     # Publish the monitor so the archive subsystem's is_online closure can
     # read it (defer-read; the closure was installed before this point).
@@ -723,6 +744,16 @@ async def _build_sync_subsystem(
             tick_interval_s=float(settings.prefetch_tick_interval_s),
         )
 
+    idle_disconnector = None
+    if flags.manual and arch.catdv is not None:
+        from backend.app.services.idle_disconnector import IdleDisconnector
+
+        idle_disconnector = IdleDisconnector(
+            client=arch.catdv,
+            monitor=connection_monitor,
+            idle_timeout_s=float(settings.catdv_idle_logout_s),
+        )
+
     return LiveCtx(
         core=core,
         archive=arch.archive,
@@ -737,4 +768,5 @@ async def _build_sync_subsystem(
         proxy_resolver=arch.proxy_resolver,
         thumbnail_service=arch.thumbnail_service,
         media_prefetcher=media_prefetcher,
+        idle_disconnector=idle_disconnector,
     )

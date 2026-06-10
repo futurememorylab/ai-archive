@@ -38,6 +38,10 @@ def _set_env(monkeypatch, tmp_path, base_url):
     # conftest.py defaults CATDV_OFFLINE=true for the whole suite; tests
     # that exercise the real boot login path must opt out.
     monkeypatch.delenv("CATDV_OFFLINE", raising=False)
+    # These tests assert on the startup-login round-trip (auth/busy/transport
+    # error handling); manual mode (the new default) defers login, so opt
+    # into the legacy auto-login boot.
+    monkeypatch.setenv("CATDV_CONNECT_MODE", "auto")
     monkeypatch.setenv("CATDV_BASE_URL", base_url)
     monkeypatch.setenv("CATDV_USERNAME", "klientAI")
     monkeypatch.setenv("CATDV_PASSWORD", "secret")

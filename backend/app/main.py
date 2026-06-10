@@ -73,6 +73,8 @@ async def lifespan(app: FastAPI):
     await run_startup_cleanup(core.db)
     if live is not None:
         await live.connection_monitor.start()
+        if live.idle_disconnector is not None:
+            await live.idle_disconnector.start()
         await live.sync_engine.start()
         await live.lru_eviction.start()
         if live.media_prefetcher is not None:
