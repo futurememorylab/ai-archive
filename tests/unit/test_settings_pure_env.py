@@ -17,7 +17,7 @@ _REQUIRED = {
 def test_settings_resolve_from_pure_env(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)  # no .env in cwd
     for key in list(os.environ):
-        if key.startswith(("CATDV_", "GCP_", "GCS_", "APP_", "DATA_")):
+        if key.startswith(("CATDV_", "GCP_", "GCS_", "APP_", "DATA_", "GOOGLE_")):
             monkeypatch.delenv(key, raising=False)
     for key, value in _REQUIRED.items():
         monkeypatch.setenv(key, value)
