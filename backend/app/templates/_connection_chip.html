@@ -1,5 +1,10 @@
-{# Topbar connection chip. Reads mode from request.app.state.live_ctx so it
-   works as both an embedded include and a standalone HTMX swap target. #}
+{# Topbar connection chip. Read-only in manual connect_mode (the pill owns
+   Connect/Disconnect); the legacy auto-mode Reconnect button is kept for
+   auto mode. mode is one of online|disconnected|offline|forced_offline. #}
+{%- if connect_mode is not defined -%}
+  {%- set connect_mode = request.app.state.core_ctx.settings.catdv_connect_mode
+        if request is defined and request else "manual" -%}
+{%- endif -%}
 {%- if mode is not defined -%}
   {%- set _live = request.app.state.live_ctx if request is defined else None -%}
   {%- set _monitor = _live.connection_monitor if _live else None -%}
@@ -9,26 +14,28 @@
     {%- set mode = "forced_offline" -%}
   {%- elif _monitor.current_state().value == "online" -%}
     {%- set mode = "online" -%}
+  {%- elif _monitor.current_state().value == "disconnected" -%}
+    {%- set mode = "disconnected" -%}
   {%- else -%}
     {%- set mode = "offline" -%}
   {%- endif -%}
 {%- endif -%}
 <div id="connection-chip" class="conn-chip conn-chip--{{ mode }}">
   {% if mode == "online" %}
-    <span class="dot dot--green" aria-hidden="true">●</span>
-    <span>Online</span>
-  {% elif mode == "offline" %}
-    <button
-      type="button"
-      hx-post="/api/connection/retry"
-      hx-target="#connection-chip"
-      hx-swap="outerHTML"
-      title="Click to try reconnecting">
+    <span class="dot dot--green" aria-hidden="true">●</span><span>Connected</span>
+  {% elif mode == "disconnected" %}
+    <span class="dot dot--grey" aria-hidden="true">○</span><span>Disconnected</span>
+  {% elif mode == "forced_offline" %}
+    <span class="dot dot--red" aria-hidden="true"
+          title="Set CATDV_OFFLINE=false and restart to reconnect">●</span><span>Offline (forced)</span>
+  {% elif connect_mode == "manual" %}{# offline == unreachable, read-only #}
+    <span class="dot dot--yellow" aria-hidden="true" title="VPN tunnel down">●</span><span>Unreachable</span>
+  {% else %}{# auto mode: keep the Reconnect probe button #}
+    <button type="button" hx-post="/api/connection/retry"
+            hx-target="#connection-chip" hx-swap="outerHTML"
+            title="Click to try reconnecting">
       <span class="dot dot--yellow" aria-hidden="true">●</span>
       <span>Offline — click to reconnect</span>
     </button>
-  {% else %}{# forced_offline #}
-    <span class="dot dot--red" aria-hidden="true" title="Set CATDV_OFFLINE=false and restart to reconnect">●</span>
-    <span>Offline (forced)</span>
   {% endif %}
 </div>
