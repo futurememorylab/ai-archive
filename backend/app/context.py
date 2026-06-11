@@ -27,6 +27,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
+import asyncio
+
 import aiosqlite
 
 if TYPE_CHECKING:
@@ -45,6 +47,7 @@ from backend.app.migrations_runner import apply_migrations
 from backend.app.models.telemetry import TelemetryCtx
 from backend.app.repositories.ai_store_files import AIStoreFilesRepo
 from backend.app.repositories.annotations import AnnotationsRepo
+from backend.app.repositories import app_meta as app_meta_repo
 from backend.app.repositories.app_meta import get_or_create_install_id
 from backend.app.repositories.cache_actions_log import CacheActionsLogRepo
 from backend.app.repositories.clip_cache import ClipCacheRepo
@@ -74,6 +77,7 @@ from backend.app.services.media_prefetcher import MediaPrefetcher
 from backend.app.services.proxy_cache_reconciler import ProxyCacheReconciler
 from backend.app.services.sync_engine import SyncEngine
 from backend.app.services.workspace_manager import WorkspaceManager
+from backend.app.services.vpn_supervisor import VpnSupervisor
 from backend.app.services.write_queue import WriteQueue
 from backend.app.settings import Settings
 
@@ -225,6 +229,7 @@ class LiveCtx:
     media_cache_backend: MediaCacheBackend | None = None
     media_prefetcher: MediaPrefetcher | None = None
     idle_disconnector: IdleDisconnector | None = None
+    vpn_supervisor: VpnSupervisor | None = None
 
     # --- thin delegators to the composed CoreCtx -------------------
     # Live-route handlers touch both core fields (db, repos) and live
@@ -346,6 +351,8 @@ class LiveCtx:
     async def aclose(self) -> None:
         # Stop the live services in the documented order, then close the
         # core (DB). Order matches the pre-split teardown exactly.
+        if self.vpn_supervisor is not None:
+            await self.vpn_supervisor.aclose()
         if self.media_prefetcher is not None:
             await self.media_prefetcher.stop()
         if self.lru_eviction is not None:
@@ -776,6 +783,51 @@ async def _build_sync_subsystem(
             idle_timeout_s=float(settings.catdv_idle_logout_s),
         )
 
+    vpn_supervisor = None
+    if settings.vpn_managed:
+        import os
+
+        def _make_spawn():
+            async def _spawn():
+                env = {
+                    **os.environ,
+                    # Pass the key via env, not argv — avoids leaking it in
+                    # `ps` and onetun's "private key on CLI" warning.
+                    "ONETUN_PRIVATE_KEY": settings.wg_private_key.get_secret_value(),
+                }
+                return await asyncio.create_subprocess_exec(
+                    "onetun",
+                    "--endpoint-addr", settings.wg_endpoint,
+                    "--endpoint-public-key", settings.wg_peer_pubkey,
+                    "--source-peer-ip", settings.wg_source_ip,
+                    "--keep-alive", str(settings.wg_keepalive_s),
+                    "--max-transmission-unit", str(settings.onetun_mtu),
+                    settings.onetun_local_forward,
+                    env=env,
+                )
+            return _spawn
+
+        async def _probe_tunnel() -> bool:
+            # Unauthenticated GET /catdv/api/info through the tunnel — tests
+            # the tunnel without spending a seat. Bounded by the health probe
+            # timeout so a dead tunnel returns False fast.
+            if arch.catdv is None:
+                return False
+            try:
+                await asyncio.wait_for(
+                    arch.catdv.health(), timeout=float(settings.health_probe_timeout_s)
+                )
+                return True
+            except Exception:  # noqa: BLE001 — any failure ⇒ tunnel not healthy
+                return False
+
+        vpn_supervisor = VpnSupervisor(
+            spawn=_make_spawn(),
+            get_desired=lambda: app_meta_repo.get_vpn_desired(core.db),
+            set_desired=lambda v: app_meta_repo.set_vpn_desired(core.db, v),
+            probe_health=_probe_tunnel,
+        )
+
     return LiveCtx(
         core=core,
         archive=arch.archive,
@@ -792,4 +844,5 @@ async def _build_sync_subsystem(
         media_cache_backend=media_cache_backend,
         media_prefetcher=media_prefetcher,
         idle_disconnector=idle_disconnector,
+        vpn_supervisor=vpn_supervisor,
     )
