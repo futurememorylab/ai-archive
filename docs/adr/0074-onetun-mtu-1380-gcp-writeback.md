@@ -1,7 +1,14 @@
 # 0074. Cloud CatDV writeback: MTU hygiene, and the real cause (WireGuard peer-key collision)
 
 **Date:** 2026-06-11
-**Status:** Accepted
+**Status:** Partially superseded by ADR 0076 — the "real cause = WireGuard
+peer-key collision" conclusion below is **REFUTED**. A non-mutating outbound
+size-sweep (Mac WG down, tunnel healthy) proved the failure is a deterministic
+**outbound path-MTU black-hole**: 1380 was still too high (~1440 B wire packet
+exceeds the Cloud Run → gateway path MTU), and lowering `ONETUN_MTU` to 1000
+fixes it. The "90 KB inbound read disproves MTU" argument was a flawed test
+(receive path ≠ send path). Read ADR 0076 for the corrected root cause; the
+text below is retained for history.
 
 ## Context
 

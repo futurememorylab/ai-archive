@@ -12,7 +12,8 @@ _BASE = dict(
 def test_vpn_unmanaged_when_wg_absent():
     s = Settings(**_BASE, _env_file=None)
     assert s.vpn_managed is False
-    assert s.onetun_mtu == 1380
+    # 1000 = verified-safe default under the Cloud Run -> gateway path MTU (ADR 0076)
+    assert s.onetun_mtu == 1000
 
 
 def test_vpn_managed_when_all_wg_present():

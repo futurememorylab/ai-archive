@@ -87,8 +87,11 @@ class Settings(BaseSettings):
     wg_peer_pubkey: str | None = None
     wg_source_ip: str | None = None
     wg_keepalive_s: int = 25
-    # onetun tunnel MTU. 1380 = 1460 - 80 (GCP hygiene; see ADR 0074).
-    onetun_mtu: int = 1380
+    # onetun tunnel MTU. 1000 (~1060B WireGuard wire packet) is verified to clear
+    # the Cloud Run -> gateway path MTU; 1380 black-holed outbound multi-segment
+    # requests (the writeback PUT). Prod overrides via ONETUN_MTU. See ADR 0076
+    # (corrects ADR 0074).
+    onetun_mtu: int = 1000
     onetun_local_forward: str = "127.0.0.1:18080:192.168.1.41:8080:TCP"
 
     # sync engine
