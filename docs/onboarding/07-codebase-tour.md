@@ -22,8 +22,8 @@ catdv-annotator/
 │   ├── CONTEXT.md         ← one-sentence glossary
 │   ├── DEPLOY.md          ← production deployment
 │   └── decisions.md       ← ADR index
-├── deploy/                ← systemd unit + one-shot Gemini Live key script
-├── scripts/               ← scripts/setup-gcp.sh (one-time GCP infra)
+├── deploy/                ← Cloud Run deploy (README, Dockerfile bits, env,
+│                            entrypoint, Litestream) + Gemini Live key script
 ├── run.sh                 ← venv + uvicorn launcher
 ├── pyproject.toml         ← deps, ruff, pytest, basedpyright, interrogate
 ├── .importlinter          ← layer contracts

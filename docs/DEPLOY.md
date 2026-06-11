@@ -3,9 +3,12 @@
 This app runs in two places: the developer's Mac (dev) and the CatDV server (prod).
 The same code; only env vars differ.
 
-> **Cloud Run:** see `deploy/README.md` (one-time GCP setup) and
-> `docs/specs/2026-06-09-cloud-run-deployment-design.md`. The sections
-> below describe the original Mac-dev / CatDV-server systemd deploy.
+> **Cloud Run** is the primary deployment. Its complete guide —
+> one-time GCP setup, CI/CD pipeline, local-proxy access, and the
+> local-vs-cloud env-var matrix — lives in
+> [`../deploy/README.md`](../deploy/README.md) (spec:
+> `docs/specs/2026-06-09-cloud-run-deployment-design.md`). The sections
+> below describe the local Mac-dev and CatDV-server systemd deploys.
 
 ## Dev (Mac)
 
@@ -20,6 +23,47 @@ cp .env.example .env
 ```
 
 VPN to CatDV (`192.168.1.41`) must be up before starting.
+
+### One-time GCP bootstrap (local dev)
+
+Local dev needs a GCP project with the AI/storage APIs enabled, a
+`catdv-annotator` service account, a proxy bucket, and a key JSON for
+`GOOGLE_APPLICATION_CREDENTIALS`. This runs **once per project** (the
+Cloud Run deployment uses project `catdav`; local dev can share it or use
+a separate project). Each dev mints their own key from the shared SA.
+
+```bash
+export PROJECT_ID=<your-project>          # e.g. catdav
+export REGION=europe-west3
+export BUCKET=${PROJECT_ID}-proxies
+export SA=catdv-annotator@${PROJECT_ID}.iam.gserviceaccount.com
+
+# APIs
+gcloud services enable aiplatform.googleapis.com storage.googleapis.com \
+  secretmanager.googleapis.com iamcredentials.googleapis.com --project=$PROJECT_ID
+
+# Bucket + service account (idempotent — skip if they exist)
+gsutil mb -p $PROJECT_ID -l $REGION gs://$BUCKET
+gcloud iam service-accounts create catdv-annotator \
+  --display-name="CatDV Annotator" --project=$PROJECT_ID
+
+# Roles: write the proxy bucket, call Vertex AI
+gsutil iam ch serviceAccount:${SA}:objectAdmin gs://$BUCKET
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member=serviceAccount:$SA --role=roles/aiplatform.user
+
+# Per-dev key JSON for GOOGLE_APPLICATION_CREDENTIALS (cap: 10 keys/SA)
+mkdir -p ~/.gcp
+gcloud iam service-accounts keys create ~/.gcp/catdv-annotator-key.json \
+  --iam-account=$SA --project=$PROJECT_ID
+echo "GOOGLE_APPLICATION_CREDENTIALS=$HOME/.gcp/catdv-annotator-key.json" >> .env
+```
+
+Keys are sensitive: keep them outside the repo, `chmod 600`, never
+commit. Cloud Run does **not** use these keys — it authenticates as the
+runtime SA via Application Default Credentials. To enable the optional
+Gemini Live assistant, run `deploy/enable-gemini-live.sh` (see the
+top-level `README.md`).
 
 ## Prod (CatDV server)
 

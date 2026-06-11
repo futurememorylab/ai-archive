@@ -135,8 +135,8 @@ New to the codebase? Read these two first:
 - `tests/` — unit + integration tests
 - `docs/specs/` — design spec
 - `docs/plans/` — implementation plans
-- `docs/DEPLOY.md` — production deployment guide
-- `scripts/setup-gcp.sh` — one-time GCP infra setup
+- `docs/DEPLOY.md` — local/on-prem deployment + one-time GCP bootstrap
+- `deploy/` — Cloud Run deployment (`deploy/README.md`), Gemini Live key script
 
 ## Status
 
@@ -147,7 +147,8 @@ New to the codebase? Read these two first:
 
 ## Annotate a clip from the UI
 
-Once `scripts/setup-gcp.sh` has been run and `.env` has the GCP variables set:
+Once the one-time GCP bootstrap (see `docs/DEPLOY.md` → "One-time GCP
+bootstrap") has been run and `.env` has the GCP variables set:
 
 1. Open a clip detail page (e.g. `http://localhost:8765/clips/881603`).
 2. Click **Annotate** in the header — a dropdown lists every prompt that has a
@@ -190,9 +191,10 @@ Prereqs:
 - `gcloud components install alpha` (the API-keys subcommand lives there)
 - The signed-in account has `roles/serviceusage.serviceUsageAdmin` and
   `roles/serviceusage.apiKeysAdmin` on `$GCP_PROJECT_ID`
-- This is **separate** from the existing `scripts/setup-gcp.sh` /
-  `GOOGLE_APPLICATION_CREDENTIALS` setup. Vertex / batch annotation keeps
-  using the service-account key; Live uses a Generative Language API key.
+- This is **separate** from the `GOOGLE_APPLICATION_CREDENTIALS` setup
+  (the one-time GCP bootstrap in `docs/DEPLOY.md`). Vertex / batch
+  annotation keeps using the service-account key; Live uses a Generative
+  Language API key.
 
 ```bash
 # 1. Mint the API key (idempotent — re-uses an existing one if present)

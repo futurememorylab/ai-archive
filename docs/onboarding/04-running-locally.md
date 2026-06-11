@@ -7,15 +7,16 @@
   either fails to start or auto-degrades to offline mode (see below).
 - A **GCP service-account key** with permission to write to the project
   GCS bucket and call Vertex AI (path stored in
-  `GOOGLE_APPLICATION_CREDENTIALS`). Per-dev minting steps below;
-  one-time project bootstrap is `scripts/setup-gcp.sh`.
+  `GOOGLE_APPLICATION_CREDENTIALS`). Per-dev minting steps below; the
+  one-time project bootstrap is in `docs/DEPLOY.md` → "One-time GCP
+  bootstrap".
 
 ## GCP service-account key
 
 The app uploads proxies to GCS and calls Vertex AI as the shared
 `catdv-annotator` service account. Each dev mints their own key JSON
-from that SA — the bucket and project already exist (created once by
-`scripts/setup-gcp.sh`).
+from that SA — the bucket and project already exist (created once by the
+one-time GCP bootstrap in `docs/DEPLOY.md`).
 
 ```bash
 # 1. Authenticate gcloud (browser flow) and pick the project
@@ -33,7 +34,7 @@ echo 'GOOGLE_APPLICATION_CREDENTIALS=/Users/<you>/.gcp/catdv-annotator-key.json'
 
 Notes:
 
-- The SA email pattern is fixed by `scripts/setup-gcp.sh`:
+- The SA email pattern is fixed by the bootstrap:
   `catdv-annotator@<project-id>.iam.gserviceaccount.com`.
 - Keys are **sensitive**. Keep them outside the repo (`~/.gcp/` is a
   fine convention), `chmod 600`, never commit, never paste into chat.
@@ -41,8 +42,8 @@ Notes:
   List with `gcloud iam service-accounts keys list --iam-account=<sa>`
   and delete old ones with
   `gcloud iam service-accounts keys delete <key-id> --iam-account=<sa>`.
-- If the project / bucket / SA don't exist yet, run
-  `scripts/setup-gcp.sh` first — that's the one-time bootstrap, not a
+- If the project / bucket / SA don't exist yet, run the one-time GCP
+  bootstrap in `docs/DEPLOY.md` first — that's the one-time setup, not a
   per-dev step.
 
 ## First run
