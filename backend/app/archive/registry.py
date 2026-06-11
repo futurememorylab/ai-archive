@@ -21,6 +21,7 @@ def build_archive_provider(
     clip_cache_repo: Any = None,
     field_def_cache_repo: Any = None,
     clip_list_cache_repo: Any = None,
+    poster_cache_repo: Any = None,
     db_provider: Any = None,
     is_online_provider: Any = None,
 ) -> ArchiveProvider:
@@ -43,6 +44,7 @@ def build_archive_provider(
             clip_cache_repo=clip_cache_repo,
             field_def_cache_repo=field_def_cache_repo,
             clip_list_cache_repo=clip_list_cache_repo,
+            poster_cache_repo=poster_cache_repo,
             db_provider=db_provider,
             clip_cache_ttl_hours=int(getattr(settings, "clip_cache_ttl_hours", 168)),
             clip_list_cache_ttl_minutes=int(getattr(settings, "clip_list_cache_ttl_minutes", 10)),

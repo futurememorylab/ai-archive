@@ -54,6 +54,7 @@ class CatdvArchiveAdapter:
         clip_cache_repo: Any = None,
         field_def_cache_repo: Any = None,
         clip_list_cache_repo: Any = None,
+        poster_cache_repo: Any = None,
         db_provider: Callable[[], Any] | None = None,
         clip_cache_ttl_hours: int = 168,
         clip_list_cache_ttl_minutes: int = 10,
@@ -65,6 +66,7 @@ class CatdvArchiveAdapter:
         self._clip_cache = clip_cache_repo
         self._field_def_cache = field_def_cache_repo
         self._clip_list_cache = clip_list_cache_repo
+        self._poster_cache = poster_cache_repo
         self._db_provider = db_provider
         self._ttl = timedelta(hours=clip_cache_ttl_hours)
         self._list_ttl = timedelta(minutes=clip_list_cache_ttl_minutes)
@@ -146,6 +148,7 @@ class CatdvArchiveAdapter:
             limit=query.limit,
         )
         await self._write_list_through(catalog, query, page, fetched_at=now)
+        await self._write_poster_cache(raw_items or [])
         return page
 
     async def _list_clips_from_cache(self, catalog: str, query: ClipQuery) -> ClipPage:
@@ -422,6 +425,20 @@ class CatdvArchiveAdapter:
             total=page.total,
             items=page.items,
             fetched_at_iso=fetched_at.isoformat(),
+        )
+
+    async def _write_poster_cache(self, raw_items: list[dict[str, Any]]) -> None:
+        if self._poster_cache is None:
+            return
+        entries = [
+            (int(raw["ID"]), int(raw["posterID"]))
+            for raw in raw_items
+            if raw.get("ID") is not None and raw.get("posterID")
+        ]
+        if not entries:
+            return
+        await self._poster_cache.upsert_many(
+            self._db_provider(), provider_id=self.id, entries=entries
         )
 
     def _is_expired(self, fetched_at_iso: str | None, *, ttl: timedelta | None = None) -> bool:
