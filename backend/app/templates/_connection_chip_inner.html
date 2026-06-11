@@ -24,6 +24,30 @@
     {%- set mode = "offline" -%}
   {%- endif -%}
 {%- endif -%}
+{%- set _live = request.app.state.live_ctx if request is defined and request else None -%}
+{%- set _sup = _live.vpn_supervisor if _live else None -%}
+{%- set vpn = _sup.status() if _sup else None -%}
+{% if vpn and vpn.managed %}
+  <span class="vpn-row">
+    {% if vpn.desired == "off" %}
+      <span class="dot dot--grey" aria-hidden="true" title="WireGuard tunnel is off">○</span><span>VPN off</span>
+      <button type="button" class="btn link" hx-post="/api/vpn/enable"
+              hx-target="#connection-chip" hx-swap="innerHTML"
+              title="Bring the WireGuard tunnel up">Turn on</button>
+    {% elif vpn.healthy %}
+      <span class="dot dot--green" aria-hidden="true" title="Tunnel up and reaching CatDV">●</span><span>VPN on</span>
+      <button type="button" class="btn link"
+              hx-post="/api/vpn/disable" hx-confirm="Turn the VPN off? This drops the CatDV connection and cedes the tunnel."
+              hx-target="#connection-chip" hx-swap="innerHTML"
+              title="Drop the tunnel and release the CatDV seat">Turn off</button>
+    {% else %}
+      <span class="dot dot--yellow" aria-hidden="true" title="Tunnel process up but not reaching CatDV">●</span><span>VPN on · unreachable</span>
+      <button type="button" class="btn link"
+              hx-post="/api/vpn/disable" hx-confirm="Turn the VPN off? This drops the CatDV connection and cedes the tunnel."
+              hx-target="#connection-chip" hx-swap="innerHTML">Turn off</button>
+    {% endif %}
+  </span>
+{% endif %}
 {% if connect_mode == "manual" %}
   {% if mode == "online" %}
     <span class="dot dot--green" aria-hidden="true">●</span><span>Connected</span>
@@ -32,9 +56,14 @@
             title="Log out of CatDV and release the seat">Disconnect</button>
   {% elif mode == "disconnected" %}
     <span class="dot dot--grey" aria-hidden="true">○</span><span>Disconnected</span>
-    <button type="button" class="btn link" hx-post="/api/connection/connect"
-            hx-target="#connection-chip" hx-swap="innerHTML"
-            title="Log in to CatDV (takes the license seat)">Connect</button>
+    {% if vpn and vpn.managed and vpn.desired == "off" %}
+      <span class="btn link" aria-disabled="true"
+            title="Turn the VPN on first">Connect</span>
+    {% else %}
+      <button type="button" class="btn link" hx-post="/api/connection/connect"
+              hx-target="#connection-chip" hx-swap="innerHTML"
+              title="Log in to CatDV (takes the license seat)">Connect</button>
+    {% endif %}
   {% elif mode == "forced_offline" %}
     <span class="dot dot--red" aria-hidden="true"
           title="Set CATDV_OFFLINE=false and restart to reconnect">●</span><span>Offline (forced)</span>
