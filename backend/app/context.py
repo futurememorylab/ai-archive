@@ -637,12 +637,19 @@ async def _build_archive_subsystem(
             )
             return row is not None
 
+        durable_thumb_store = None
+        if settings.media_cache == "ai_store":
+            from backend.app.services.thumbnail_store import GcsThumbnailStore
+
+            durable_thumb_store = GcsThumbnailStore(gcs_service)
+
         thumbnail_service = ThumbnailService(
             cache_dir=settings.data_dir / "cache" / "thumbs",
             archive=archive,
             catdv=catdv,
             is_online_provider=_is_online,
             metadata_cached_provider=_has_clip_metadata,
+            durable_store=durable_thumb_store,
         )
 
     return _ArchiveSubsystem(
