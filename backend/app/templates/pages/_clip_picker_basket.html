@@ -9,7 +9,7 @@
 <div class="nb-basket">
   <template x-for="c in selectedClips()" :key="c.id">
     <div class="nb-bchip">
-      <img class="thumb" :src="c.thumb" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+      <img class="thumb" :src="c.thumb" alt="" loading="lazy" onerror="this.classList.add('thumb--empty'); this.removeAttribute('src');">
       <span class="nb-bname" x-text="c.name" :title="c.name"></span>
       <span class="nb-bk" x-text="c.kind"></span>
       <button type="button" class="nb-bx" title="Remove from selection" @click="removeSel(c.id)">✕</button>

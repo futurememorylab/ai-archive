@@ -101,7 +101,7 @@
         if (!items.length) { root.innerHTML = '<div class="nb-empty">No clips selected.</div>'; return; }
         root.innerHTML = '<div class="nb-selbox">' + items.map((c) =>
           '<label class="nb-bchip"><input type="checkbox" class="row-check" value="catdv/' + c.id + '" checked>' +
-          '<img class="thumb" src="' + this._esc(c.thumb) + '" alt="" onerror="this.style.visibility=\'hidden\'">' +
+          '<img class="thumb" src="' + this._esc(c.thumb) + '" alt="" onerror="this.classList.add(\'thumb--empty\'); this.removeAttribute(\'src\');">' +
           '<span class="nb-bname" title="' + this._esc(c.name) + '">' + this._esc(c.name) + '</span>' +
           '<span class="nb-bk col-type">' + this._esc(c.kind) + '</span></label>'
         ).join('') + '</div>';
