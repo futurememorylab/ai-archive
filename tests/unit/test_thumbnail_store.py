@@ -37,3 +37,11 @@ async def test_put_swallows_exception(tmp_path: Path):
     gcs.upload_thumb.side_effect = RuntimeError("gcs down")
     store = GcsThumbnailStore(gcs)
     await store.put(7, tmp_path / "7.jpg")  # must NOT raise
+
+
+@pytest.mark.asyncio
+async def test_get_propagates_false_from_gcs(tmp_path: Path):
+    gcs = MagicMock()
+    gcs.download_thumb.return_value = False  # blob absent / empty body
+    store = GcsThumbnailStore(gcs)
+    assert await store.get(7, tmp_path / "7.jpg") is False
