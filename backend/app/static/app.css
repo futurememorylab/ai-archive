@@ -441,7 +441,8 @@ a { color: inherit; text-decoration: none; }
    studio clip card (.thumb.thumb-missing). */
 .thumb--empty,
 .vlist .thumb--empty,
-.studio-clip-card .thumb.thumb-missing {
+.studio-clip-card .thumb.thumb-missing,
+.nb-bchip .thumb.thumb--empty {
   animation: none;
   background-color: #2a221a;
   background-image:
