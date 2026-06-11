@@ -56,6 +56,35 @@ class GcsService:
         blob = self._bucket.blob(f"clips/{clip_id}.mov")
         blob.delete()
 
+    def thumb_uri(self, clip_id: int) -> str:
+        return f"gs://{self._bucket.name}/thumbs/{clip_id}.jpg"
+
+    def download_thumb(self, clip_id: int, dest: Path) -> bool:
+        """Download thumbs/{clip_id}.jpg to dest. Return True only if the blob
+        existed and a non-empty file was written; False on miss or empty body.
+        Blocking (network) — call via asyncio.to_thread."""
+        blob = self._bucket.get_blob(f"thumbs/{clip_id}.jpg")
+        if blob is None:
+            return False
+        try:
+            blob.download_to_filename(str(dest))
+        except Exception:
+            Path(dest).unlink(missing_ok=True)
+            raise
+        if dest.exists() and dest.stat().st_size > 0:
+            return True
+        dest.unlink(missing_ok=True)
+        return False
+
+    def upload_thumb(self, clip_id: int, local_path: Path) -> str:
+        """Upload local_path to thumbs/{clip_id}.jpg, overwriting
+        unconditionally. JPEGs are tiny, so overwriting on every write kills
+        the stale-blob / clip-id-reuse risk (ADR 0070) at write time without
+        an md5 compare. Blocking — call via asyncio.to_thread."""
+        blob = self._bucket.blob(f"thumbs/{clip_id}.jpg")
+        blob.upload_from_filename(str(local_path), content_type="image/jpeg")
+        return f"gs://{self._bucket.name}/thumbs/{clip_id}.jpg"
+
     def signed_url(self, gs_uri: str, *, expires_s: int = 3600) -> str:
         """V4 signed URL for a gs:// handle (e.g. an UploadedRef.handle).
 

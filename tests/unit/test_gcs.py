@@ -79,3 +79,50 @@ def test_delete_calls_blob_delete():
 
     service.delete(clip_id=42)
     blob.delete.assert_called_once()
+
+
+def test_thumb_uri_path():
+    bucket = MagicMock(); bucket.name = "test-bucket"
+    service = GcsService.__new__(GcsService); service._bucket = bucket
+    assert service.thumb_uri(7) == "gs://test-bucket/thumbs/7.jpg"
+
+
+def test_download_thumb_returns_false_when_absent(tmp_path: Path):
+    bucket = MagicMock(); bucket.name = "test-bucket"
+    bucket.get_blob.return_value = None
+    service = GcsService.__new__(GcsService); service._bucket = bucket
+    assert service.download_thumb(7, tmp_path / "7.jpg") is False
+
+
+def test_download_thumb_writes_and_returns_true(tmp_path: Path):
+    bucket = MagicMock(); bucket.name = "test-bucket"
+    blob = MagicMock()
+    blob.download_to_filename.side_effect = lambda p, **k: Path(p).write_bytes(b"\xff\xd8jpg")
+    bucket.get_blob.return_value = blob
+    service = GcsService.__new__(GcsService); service._bucket = bucket
+    dest = tmp_path / "7.jpg"
+    assert service.download_thumb(7, dest) is True
+    assert dest.read_bytes() == b"\xff\xd8jpg"
+    bucket.get_blob.assert_called_with("thumbs/7.jpg")
+
+
+def test_download_thumb_false_on_empty_body(tmp_path: Path):
+    bucket = MagicMock(); bucket.name = "test-bucket"
+    blob = MagicMock()
+    blob.download_to_filename.side_effect = lambda p, **k: Path(p).write_bytes(b"")
+    bucket.get_blob.return_value = blob
+    service = GcsService.__new__(GcsService); service._bucket = bucket
+    dest = tmp_path / "7.jpg"
+    assert service.download_thumb(7, dest) is False
+    assert not dest.exists()
+
+
+def test_upload_thumb_overwrites_unconditionally(tmp_path: Path):
+    local = tmp_path / "7.jpg"; local.write_bytes(b"jpg")
+    bucket = MagicMock(); bucket.name = "test-bucket"
+    blob = MagicMock(); bucket.blob.return_value = blob
+    service = GcsService.__new__(GcsService); service._bucket = bucket
+    uri = service.upload_thumb(7, local)
+    blob.upload_from_filename.assert_called_once_with(str(local), content_type="image/jpeg")
+    assert uri == "gs://test-bucket/thumbs/7.jpg"
+    bucket.blob.assert_called_with("thumbs/7.jpg")
