@@ -1,9 +1,8 @@
 """app_meta — tiny key/value store for install-scoped facts.
 
-Today it holds exactly one key: ``install_id``, a uuid4 generated on
-first read and stable for the lifetime of the data dir. Telemetry rows
-carry it so records stay attributable if they ever leave this machine
-(Phase 2 collector). Repos are leaves: no service imports here.
+Keys include ``install_id`` (a uuid4 stable for the lifetime of the data
+dir, carried on telemetry rows) and ``vpn_desired`` (opt-in WireGuard
+auto-connect preference). Repos are leaves: no service imports here.
 """
 
 import uuid
