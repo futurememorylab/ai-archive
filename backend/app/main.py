@@ -78,6 +78,8 @@ async def lifespan(app: FastAPI):
         await seed_live_system_instruction(core.db, seed_path=live_seed)
     await run_startup_cleanup(core.db)
     if live is not None:
+        if live.vpn_supervisor is not None:
+            await live.vpn_supervisor.start()
         await live.connection_monitor.start()
         if live.idle_disconnector is not None:
             await live.idle_disconnector.start()

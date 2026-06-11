@@ -23,6 +23,7 @@ Build returns a ``CoreCtx`` always and a ``LiveCtx | None`` (None when
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
@@ -76,8 +77,8 @@ from backend.app.services.media_cache import MediaCacheBackend, build_media_cach
 from backend.app.services.media_prefetcher import MediaPrefetcher
 from backend.app.services.proxy_cache_reconciler import ProxyCacheReconciler
 from backend.app.services.sync_engine import SyncEngine
-from backend.app.services.workspace_manager import WorkspaceManager
 from backend.app.services.vpn_supervisor import VpnSupervisor
+from backend.app.services.workspace_manager import WorkspaceManager
 from backend.app.services.write_queue import WriteQueue
 from backend.app.settings import Settings
 
@@ -785,8 +786,6 @@ async def _build_sync_subsystem(
 
     vpn_supervisor = None
     if settings.vpn_managed:
-        import os
-
         def _make_spawn():
             async def _spawn():
                 env = {
