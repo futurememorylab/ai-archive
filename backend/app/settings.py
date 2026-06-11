@@ -5,7 +5,7 @@ cache caps, provider selection, etc.)."""
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -78,6 +78,19 @@ class Settings(BaseSettings):
     # in-app shutdown button (the reloader supervisor may respawn the worker)
     dev_reload: bool = False
 
+    # WireGuard / onetun (cloud only). Today consumed by entrypoint.sh; now
+    # read here so the app can supervise onetun and expose a status/toggle.
+    # vpn_managed (all four present) gates the whole VPN feature — true on
+    # Cloud Run, false in local dev (no tunnel). WG_PRIVATE_KEY is a secret.
+    wg_private_key: SecretStr | None = None
+    wg_endpoint: str | None = None
+    wg_peer_pubkey: str | None = None
+    wg_source_ip: str | None = None
+    wg_keepalive_s: int = 25
+    # onetun tunnel MTU. 1380 = 1460 - 80 (GCP hygiene; see ADR 0074).
+    onetun_mtu: int = 1380
+    onetun_local_forward: str = "127.0.0.1:18080:192.168.1.41:8080:TCP"
+
     # sync engine
     sync_retry_base_s: int = 2
     sync_retry_max_s: int = 300
@@ -102,6 +115,17 @@ class Settings(BaseSettings):
             if empty:
                 raise ValueError("FS_ROOT is required when ARCHIVE_PROVIDER=fs")
         return self
+
+    @property
+    def vpn_managed(self) -> bool:
+        """True when WireGuard is configured (cloud). Gates the VPN feature."""
+        return bool(
+            self.wg_private_key is not None
+            and self.wg_private_key.get_secret_value()
+            and self.wg_endpoint
+            and self.wg_peer_pubkey
+            and self.wg_source_ip
+        )
 
 
 def load_settings() -> Settings:
