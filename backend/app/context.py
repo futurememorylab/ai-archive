@@ -54,6 +54,7 @@ from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.pending_operations import PendingOperationsRepo
 from backend.app.repositories.prefetch_queue import PrefetchQueueRepo
 from backend.app.repositories.prompts import PromptsRepo
+from backend.app.repositories.poster_cache import PosterCacheRepo
 from backend.app.repositories.proxy_cache import ProxyCacheRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.run_telemetry import RunTelemetryRepo
@@ -96,6 +97,7 @@ class CoreCtx:
     ai_store_files_repo: AIStoreFilesRepo = field(default_factory=AIStoreFilesRepo)
     clip_cache_repo: ClipCacheRepo = field(default_factory=ClipCacheRepo)
     clip_list_cache_repo: ClipListCacheRepo = field(default_factory=ClipListCacheRepo)
+    poster_cache_repo: PosterCacheRepo = field(default_factory=PosterCacheRepo)
     field_def_cache_repo: FieldDefCacheRepo = field(default_factory=FieldDefCacheRepo)
     pending_ops_repo: PendingOperationsRepo = field(default_factory=PendingOperationsRepo)
     workspaces_repo: WorkspacesRepo = field(default_factory=WorkspacesRepo)
@@ -276,6 +278,10 @@ class LiveCtx:
     @property
     def clip_list_cache_repo(self) -> ClipListCacheRepo:
         return self.core.clip_list_cache_repo
+
+    @property
+    def poster_cache_repo(self) -> PosterCacheRepo:
+        return self.core.poster_cache_repo
 
     @property
     def field_def_cache_repo(self) -> FieldDefCacheRepo:
@@ -571,6 +577,7 @@ async def _build_archive_subsystem(
         clip_cache_repo=core.clip_cache_repo,
         field_def_cache_repo=core.field_def_cache_repo,
         clip_list_cache_repo=core.clip_list_cache_repo,
+        poster_cache_repo=core.poster_cache_repo,
         db_provider=lambda: core.db,
         is_online_provider=_is_online if use_catdv else None,
     )
@@ -643,6 +650,11 @@ async def _build_archive_subsystem(
 
             durable_thumb_store = GcsThumbnailStore(gcs_service)
 
+        async def _poster_id(clip_id: int) -> int | None:
+            return await core.poster_cache_repo.get_poster_id(
+                core.db, provider_id=archive.id, provider_clip_id=str(clip_id)
+            )
+
         thumbnail_service = ThumbnailService(
             cache_dir=settings.data_dir / "cache" / "thumbs",
             archive=archive,
@@ -650,6 +662,7 @@ async def _build_archive_subsystem(
             is_online_provider=_is_online,
             metadata_cached_provider=_has_clip_metadata,
             durable_store=durable_thumb_store,
+            poster_id_provider=_poster_id,
         )
 
     return _ArchiveSubsystem(
