@@ -21,6 +21,7 @@ from collections.abc import Callable
 import aiosqlite
 
 from backend.app.repositories.prefetch_queue import PrefetchQueueRepo
+from backend.app.services.errors import humanise
 
 log = logging.getLogger(__name__)
 
@@ -108,6 +109,10 @@ class MediaPrefetcher:
             await self._backend.ensure_cached(clip_id_int)
             await self._queue.mark_done(db, rid, bytes_downloaded=0)
         except Exception as exc:  # noqa: BLE001
-            log.warning("prefetch failed for clip %s: %s", clip_id_int, exc)
-            await self._queue.mark_error(db, rid, str(exc))
+            # humanise(), not str(exc): a stalled-tunnel ReadTimeout has an
+            # empty str(), which left the toast + sync drawer blank. exc_info
+            # keeps the type/traceback in the log for diagnosis.
+            msg = humanise(exc)
+            log.warning("prefetch failed for clip %s: %s", clip_id_int, msg, exc_info=True)
+            await self._queue.mark_error(db, rid, msg)
         return clip_id_int
