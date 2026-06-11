@@ -17,6 +17,7 @@
     </thead>
     <tbody>
       {% for layer in status.layers %}
+        {% if not (media_cache == 'ai_store' and layer.layer == 'media-local') %}
         <tr class="layer-row layer-{{ layer.layer }}">
           <td>{{ layer.layer }}</td>
           <td>{{ layer.size_bytes if layer.present else "—" }}</td>
@@ -39,6 +40,7 @@
             {% endif %}
           </td>
         </tr>
+        {% endif %}
       {% endfor %}
     </tbody>
   </table>

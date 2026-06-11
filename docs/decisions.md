@@ -80,3 +80,4 @@ available number. See any existing ADR for the template.
 | 0070 | 2026-06-10 | [GCS proxy upload is content-aware, not presence-only](./adr/0070-gcs-content-aware-upload.md) |
 | 0071 | 2026-06-11 | [Durable GCS-backed thumbnail cache](./adr/0071-durable-thumbnail-cache.md) |
 | 0072 | 2026-06-11 | [Thumbnail poster cache + bounded download concurrency](./adr/0072-thumbnail-poster-cache.md) |
+| 0073 | 2026-06-11 | [Cloud cache UI: hide local-media layer, act on the ai-store](./adr/0073-cloud-cache-ui-ai-store-only.md) |

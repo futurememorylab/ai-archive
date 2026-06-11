@@ -61,6 +61,12 @@ async def lifespan(app: FastAPI):
     core, live = await build_context(settings, init_external=init_external)
     app.state.core_ctx = core
     app.state.live_ctx = live
+    # Expose the media-cache backend to every template render (full pages and
+    # HTMX fragments) so the cache badge / controls can hide the unused
+    # local-media layer when running cloud-backed (media_cache="ai_store").
+    from backend.app.routes.pages.templates import templates as _templates
+
+    _templates.env.globals["media_cache"] = settings.media_cache
     seed_path = SEEDS / "default_template.json"
     if seed_path.exists():
         await seed_default_prompt(core.db, seed_path=seed_path)

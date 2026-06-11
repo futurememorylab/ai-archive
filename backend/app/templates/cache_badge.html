@@ -20,8 +20,10 @@
       hx-trigger="click">
   <span class="glyph metadata {% if md.present %}{% if md.evictable %}present-fresh{% else %}present-pinned{% endif %}{% else %}absent{% endif %}"
         title="metadata: {% if md.present %}{{ md.size_bytes }} bytes{% if md.pinned_by_workspaces %} pinned by {{ md.pinned_by_workspaces|length }} workspace(s){% endif %}{% else %}absent{% endif %}">●</span>
+  {% if media_cache != 'ai_store' %}
   <span class="glyph media-local {% if ml.present %}{% if ml.evictable %}present-fresh{% else %}present-pinned{% endif %}{% else %}absent{% endif %}"
         title="media-local: {% if ml.present %}{{ ml.size_bytes }} bytes{% if ml.pinned_by_workspaces %} pinned by {{ ml.pinned_by_workspaces|length }} workspace(s){% endif %}{% else %}absent{% endif %}">▣</span>
+  {% endif %}
   <span class="glyph media-ai {% if ai.present %}{% if ai.evictable %}present-fresh{% else %}present-pinned{% endif %}{% else %}absent{% endif %}"
         title="media-ai: {% if ai.present %}{{ ai.size_bytes }} bytes{% else %}absent{% endif %}">▲</span>
 </span>

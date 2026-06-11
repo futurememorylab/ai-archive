@@ -25,20 +25,7 @@
         <span class="clip-title">{{ clip.name }}</span>
         <span class="meta mono">{{ clip.format or "" }}</span>
         <span class="cache-actions">
-          {% with cache = clip.cache %}
-            {% include "pages/_cache_badge.html" %}
-          {% endwith %}
-          {% if not host_local_proxies %}
-            {% if clip.cache and clip.cache.media_local.present %}
-              <button type="button"
-                      class="btn danger"
-                      onclick="evictLocal({{ clip.id }})">Evict local</button>
-            {% elif mode == "online" %}
-              <button type="button"
-                      class="btn"
-                      onclick="cacheClip({{ clip.id }})">⬇ Cache {{ "image" if clip.kind == "image" else "video" }}</button>
-            {% endif %}
-          {% endif %}
+          {% include "pages/_cache_actions.html" %}
           {% if mode == "online" or (clip.cache and clip.cache.media_local.present) %}
             {% include "pages/_annotate_dropdown.html" %}
           {% endif %}
@@ -173,28 +160,4 @@
     </div>
   </aside>
 </div>
-<script>
-  async function cacheClip(clipId) {
-    const r = await fetch('/api/cache/prefetch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clip_keys: [['catdv', String(clipId)]] }),
-    });
-    if (r.ok) {
-      window.location.reload();
-    }
-  }
-  async function evictLocal(clipId) {
-    if (!confirm('Evict the local proxy for this clip?')) return;
-    const r = await fetch(
-      `/api/cache/clip/catdv/${clipId}/evict`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ layers: ['media-local'], force: false }),
-      },
-    );
-    if (r.ok) window.location.reload();
-  }
-</script>
 {% endblock %}
