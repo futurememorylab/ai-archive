@@ -121,3 +121,32 @@ async def test_healthy_reflects_probe():
     assert sup.status().healthy is True
     await sup.aclose()
     assert sup.status().healthy is False
+
+
+async def test_enable_disable_enable_roundtrip():
+    """Enable → disable → enable should work cleanly with a fresh proc each time."""
+    sup, state, spawned = _make(desired="off")
+    await sup.start()
+
+    # First enable
+    await sup.enable()
+    await asyncio.sleep(0.02)
+    assert sup.status().process_running is True
+    assert sup.status().desired == "on"
+    first_proc_count = len(spawned)
+    assert first_proc_count >= 1
+
+    # Disable
+    await sup.disable()
+    assert sup.status().process_running is False
+    assert sup.status().desired == "off"
+
+    # Second enable — must spawn a fresh proc
+    await sup.enable()
+    await asyncio.sleep(0.02)
+    assert sup.status().process_running is True
+    assert sup.status().desired == "on"
+    assert len(spawned) > first_proc_count  # a fresh proc was spawned
+
+    await sup.aclose()
+    assert sup.status().process_running is False

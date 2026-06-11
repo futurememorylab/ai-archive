@@ -58,11 +58,12 @@ class VpnSupervisor:
         self._kill_timeout = kill_timeout_s
         self._health_interval = health_interval_s
         self._proc: _Proc | None = None
-        self._supervise_task: asyncio.Task | None = None
-        self._health_task: asyncio.Task | None = None
+        self._supervise_task: asyncio.Task[None] | None = None
+        self._health_task: asyncio.Task[None] | None = None
         self._desired = "off"
         self._healthy = False
         self._stop = asyncio.Event()
+        self._lock = asyncio.Lock()
 
     async def start(self) -> None:
         """Lifespan startup: adopt the persisted desired state."""
@@ -71,17 +72,19 @@ class VpnSupervisor:
             self._spin_up()
 
     async def enable(self) -> VpnStatus:
-        await self._set_desired("on")
-        self._desired = "on"
-        if self._supervise_task is None or self._supervise_task.done():
-            self._spin_up()
-        return self.status()
+        async with self._lock:
+            await self._set_desired("on")
+            self._desired = "on"
+            if self._supervise_task is None or self._supervise_task.done():
+                self._spin_up()
+            return self.status()
 
     async def disable(self) -> VpnStatus:
-        await self._set_desired("off")
-        self._desired = "off"
-        await self._spin_down()
-        return self.status()
+        async with self._lock:
+            await self._set_desired("off")
+            self._desired = "off"
+            await self._spin_down()
+            return self.status()
 
     def status(self) -> VpnStatus:
         running = self._proc is not None
@@ -93,7 +96,8 @@ class VpnSupervisor:
         )
 
     async def aclose(self) -> None:
-        await self._spin_down()
+        async with self._lock:
+            await self._spin_down()
 
     # --- internals --------------------------------------------------
 
@@ -104,7 +108,7 @@ class VpnSupervisor:
 
     async def _spin_down(self) -> None:
         self._stop.set()
-        await self._kill_proc()          # unblocks _supervise's proc.wait()
+        await self._kill_proc()          # terminate any live proc; _supervise also exits via the _stop flag
         for t in (self._supervise_task, self._health_task):
             if t is not None:
                 try:
@@ -151,4 +155,5 @@ class VpnSupervisor:
             await asyncio.wait_for(proc.wait(), timeout=self._kill_timeout)
         except asyncio.TimeoutError:
             proc.kill()
+            await proc.wait()
         self._proc = None
