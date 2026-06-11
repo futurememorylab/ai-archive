@@ -28,6 +28,7 @@ from backend.app.routes.review import router as review_router
 from backend.app.routes.studio import router as studio_router
 from backend.app.routes.sync import router as sync_router
 from backend.app.routes.ui import router as ui_router
+from backend.app.routes.vpn import router as vpn_router
 from backend.app.routes.workspaces import router as workspaces_router
 from backend.app.seed import seed_default_prompt, seed_live_system_instruction
 from backend.app.services.connection_monitor import ConnectionState
@@ -106,6 +107,7 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(studio_router)
     app.include_router(sync_router)
     app.include_router(ui_router)
+    app.include_router(vpn_router)
     app.include_router(cache_api_router)
     app.include_router(cache_page_router)
     app.include_router(cache_ui_router)
