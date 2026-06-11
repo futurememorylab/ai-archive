@@ -3,6 +3,8 @@ import hashlib
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
+
 from backend.app.services.gcs import GcsService
 
 
@@ -126,3 +128,21 @@ def test_upload_thumb_overwrites_unconditionally(tmp_path: Path):
     blob.upload_from_filename.assert_called_once_with(str(local), content_type="image/jpeg")
     assert uri == "gs://test-bucket/thumbs/7.jpg"
     bucket.blob.assert_called_with("thumbs/7.jpg")
+
+
+def test_download_thumb_cleans_up_partial_file_on_error(tmp_path: Path):
+    bucket = MagicMock(); bucket.name = "test-bucket"
+    blob = MagicMock()
+    dest = tmp_path / "7.jpg"
+
+    def side_effect(p, **k):
+        Path(p).write_bytes(b"partial")   # simulate partial write before error
+        raise RuntimeError("network error")
+
+    blob.download_to_filename.side_effect = side_effect
+    bucket.get_blob.return_value = blob
+    service = GcsService.__new__(GcsService); service._bucket = bucket
+
+    with pytest.raises(RuntimeError, match="network error"):
+        service.download_thumb(7, dest)
+    assert not dest.exists()

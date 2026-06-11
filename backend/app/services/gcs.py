@@ -69,7 +69,7 @@ class GcsService:
         try:
             blob.download_to_filename(str(dest))
         except Exception:
-            Path(dest).unlink(missing_ok=True)
+            dest.unlink(missing_ok=True)
             raise
         if dest.exists() and dest.stat().st_size > 0:
             return True
@@ -83,7 +83,7 @@ class GcsService:
         an md5 compare. Blocking — call via asyncio.to_thread."""
         blob = self._bucket.blob(f"thumbs/{clip_id}.jpg")
         blob.upload_from_filename(str(local_path), content_type="image/jpeg")
-        return f"gs://{self._bucket.name}/thumbs/{clip_id}.jpg"
+        return self.thumb_uri(clip_id)
 
     def signed_url(self, gs_uri: str, *, expires_s: int = 3600) -> str:
         """V4 signed URL for a gs:// handle (e.g. an UploadedRef.handle).
