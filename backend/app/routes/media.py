@@ -34,18 +34,27 @@ def _thumb_404(detail: str) -> Response:
 @router.get("/{clip_id}/thumb")
 async def stream_thumbnail(request: Request, clip_id: int):
     if is_uploaded(clip_id):
-        # Uploaded posters are pre-stored at ingest in the DB-first thumb
-        # cache; serve them via the core ctx so uploads thumbnail fully
-        # offline (no live CatDV/Gemini wiring required).
         core = get_core_ctx(request)
         path = core.settings.data_dir / "cache" / "thumbs" / f"{clip_id}.jpg"
-        if not path.exists() or path.stat().st_size == 0:  # sync-io-ok: uploaded poster lookup, tracked for the tier-4 async-io pass
-            return _thumb_404("no thumbnail")
-        return FileResponse(
-            path,
-            media_type="image/jpeg",
-            headers={"Cache-Control": "public, max-age=86400"},
-        )
+        if path.exists() and path.stat().st_size > 0:  # sync-io-ok: uploaded poster lookup, tracked for the tier-4 async-io pass
+            return FileResponse(
+                path,
+                media_type="image/jpeg",
+                headers={"Cache-Control": "public, max-age=86400"},
+            )
+        # /data miss (e.g. tmpfs wiped by a restart): fall through to the
+        # durable GCS-backed store via the live thumbnail service, if wired.
+        # GCS access doesn't need CatDV, so this works while disconnected.
+        live = request.app.state.live_ctx
+        if live is not None and live.thumbnail_service is not None:
+            durable_path = await live.thumbnail_service.get_or_fetch(clip_id)
+            if durable_path is not None:
+                return FileResponse(
+                    durable_path,
+                    media_type="image/jpeg",
+                    headers={"Cache-Control": "public, max-age=86400"},
+                )
+        return _thumb_404("no thumbnail")
     ctx = get_live_ctx(request)
     svc = ctx.thumbnail_service
     if svc is None:
