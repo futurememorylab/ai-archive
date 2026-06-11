@@ -178,3 +178,54 @@ def test_upload_in_local_mode_does_not_call_ensure_uploaded(monkeypatch, tmp_pat
         assert r.status_code == 201, r.text
 
     fake_ai_store.ensure_uploaded.assert_not_called()
+
+
+def test_upload_poster_ai_store_pushes_durable(monkeypatch, tmp_path):
+    app, data_dir = _make_app_ai_store(monkeypatch, tmp_path)
+    fake_thumb = MagicMock()
+    fake_thumb.push_durable = AsyncMock()
+    fake_ai_store = MagicMock()
+    fake_ai_store.ensure_uploaded = AsyncMock(return_value=MagicMock())
+
+    with TestClient(app) as client:
+        install_live_ctx(client.app, ai_store=fake_ai_store, thumbnail_service=fake_thumb)
+        r = client.post(
+            "/api/studio/uploads",
+            files={
+                "file": ("clip.mp4", b"mp4-content", "video/mp4"),
+                "poster": ("p.jpg", b"\xff\xd8jpg", "image/jpeg"),
+            },
+        )
+        assert r.status_code == 201, r.text
+        clip_id = r.json()["clip_id"]
+
+    fake_thumb.push_durable.assert_called_once()
+    args = fake_thumb.push_durable.call_args.args
+    assert args[0] == clip_id
+    assert Path(args[1]) == data_dir / "cache" / "thumbs" / f"{clip_id}.jpg"
+
+
+def test_upload_poster_local_mode_no_durable_push(monkeypatch, tmp_path):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("APP_ENV", "dev")
+    monkeypatch.delenv("MEDIA_CACHE", raising=False)
+    monkeypatch.delenv("CATDV_PASSWORD", raising=False)
+    from backend.app import main as main_mod
+    importlib.reload(main_mod)
+    app = main_mod.app
+
+    fake_thumb = MagicMock()
+    fake_thumb.push_durable = AsyncMock()
+
+    with TestClient(app) as client:
+        install_live_ctx(client.app, thumbnail_service=fake_thumb)
+        r = client.post(
+            "/api/studio/uploads",
+            files={
+                "file": ("clip.mp4", b"mp4-content", "video/mp4"),
+                "poster": ("p.jpg", b"\xff\xd8jpg", "image/jpeg"),
+            },
+        )
+        assert r.status_code == 201, r.text
+
+    fake_thumb.push_durable.assert_not_called()

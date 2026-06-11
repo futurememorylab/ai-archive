@@ -220,6 +220,14 @@ async def upload_clip(
 
         await asyncio.to_thread(_write_poster)
 
+        if s.media_cache == "ai_store":
+            # Cloud: /data is ephemeral — mirror the poster into the durable
+            # GCS store so it survives instance restarts (parallels the proxy
+            # push above). Additive to the local write.
+            live = request.app.state.live_ctx
+            if live is not None and live.thumbnail_service is not None:
+                await live.thumbnail_service.push_durable(clip_id, thumb_dest)
+
     await ctx.studio_sets_repo.add_clips(ctx.db, set_id, clip_ids=[clip_id])
 
     if hx_request == "true":
