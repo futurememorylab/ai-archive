@@ -50,6 +50,8 @@ class ThumbnailService:
             Callable[[int], bool] | Callable[[int], Awaitable[bool]] | None
         ) = None,
         durable_store: ThumbnailStore | None = None,
+        poster_id_provider: Callable[[int], Awaitable[int | None]] | None = None,
+        download_concurrency: int = 3,
     ) -> None:
         self._cache_dir = cache_dir
         self._cache_dir.mkdir(parents=True, exist_ok=True)
@@ -68,6 +70,12 @@ class ThumbnailService:
         # the CatDV is_online() closure, so cached thumbs serve offline and
         # across restarts. None in local/dev mode → behavior unchanged.
         self._durable = durable_store
+        # Fallback poster-id source for clips that are listed but not in
+        # clip_cache: lets the thumb fetch proceed without get_clip (ADR 0072).
+        self._poster_id_provider = poster_id_provider
+        # Bound concurrent CatDV thumbnail downloads so a list-load's burst of
+        # <img> requests doesn't stampede the seat-limited server.
+        self._download_sem = asyncio.Semaphore(download_concurrency)
 
     def path_for(self, clip_id: int) -> Path:
         return self._cache_dir / f"{clip_id}.jpg"
@@ -94,8 +102,9 @@ class ThumbnailService:
             if inspect.isawaitable(result):
                 result = await result
             if not result:
-                # No clip_cache row → posterID is unknowable; skip CatDV.
-                return None
+                # No clip_cache row. Try the lightweight poster cache populated
+                # when listing — gives posterID without a get_clip (ADR 0072).
+                return await self._fetch_via_poster_cache(clip_id, dest)
 
         try:
             clip = await self._archive.get_clip(str(clip_id))
@@ -110,14 +119,25 @@ class ThumbnailService:
         if not thumb_id:
             return await self._build_image_poster(clip_id, clip, dest)
 
-        try:
-            await self._catdv.download_thumbnail(int(thumb_id), dest)
-        except Exception as exc:  # noqa: BLE001 — transport / auth / 404
-            _log.debug("thumb: download(%s) failed: %s", clip_id, exc)
-            if dest.exists() and dest.stat().st_size == 0:  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
-                dest.unlink(missing_ok=True)  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
-            return None
+        return await self._download_and_store(int(thumb_id), clip_id, dest)
 
+    async def _fetch_via_poster_cache(self, clip_id: int, dest: Path) -> Path | None:
+        if self._poster_id_provider is None:
+            return None
+        poster_id = await self._poster_id_provider(clip_id)
+        if not poster_id:
+            return None
+        return await self._download_and_store(int(poster_id), clip_id, dest)
+
+    async def _download_and_store(self, thumb_id: int, clip_id: int, dest: Path) -> Path | None:
+        async with self._download_sem:
+            try:
+                await self._catdv.download_thumbnail(thumb_id, dest)
+            except Exception as exc:  # noqa: BLE001 — transport / auth / 404
+                _log.debug("thumb: download(%s) failed: %s", clip_id, exc)
+                if dest.exists() and dest.stat().st_size == 0:  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
+                    dest.unlink(missing_ok=True)  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
+                return None
         if dest.exists() and dest.stat().st_size > 0:  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
             if self._durable is not None:
                 await self._durable.put(clip_id, dest)
