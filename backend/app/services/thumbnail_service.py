@@ -22,6 +22,7 @@ from backend.app.uploaded_ids import is_uploaded
 if TYPE_CHECKING:
     from backend.app.archive.provider import ArchiveProvider
     from backend.app.services.catdv_client import CatdvClient
+    from backend.app.services.thumbnail_store import ThumbnailStore
 
 _log = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ class ThumbnailService:
         metadata_cached_provider: (
             Callable[[int], bool] | Callable[[int], Awaitable[bool]] | None
         ) = None,
+        durable_store: ThumbnailStore | None = None,
     ) -> None:
         self._cache_dir = cache_dir
         self._cache_dir.mkdir(parents=True, exist_ok=True)
@@ -61,6 +63,11 @@ class ThumbnailService:
         # without a clip_cache row we can't know posterID, so calling
         # CatDV just wastes a 60 s timeout per orphan thumb on /cache.
         self._metadata_cached = metadata_cached_provider
+        # Durable GCS-backed tier (cloud only). When set, a /data miss falls
+        # through to GCS *before* giving up — and GCS access is NOT gated by
+        # the CatDV is_online() closure, so cached thumbs serve offline and
+        # across restarts. None in local/dev mode → behavior unchanged.
+        self._durable = durable_store
 
     def path_for(self, clip_id: int) -> Path:
         return self._cache_dir / f"{clip_id}.jpg"
@@ -68,6 +75,9 @@ class ThumbnailService:
     async def get_or_fetch(self, clip_id: int) -> Path | None:
         dest = self.path_for(clip_id)
         if dest.exists() and dest.stat().st_size > 0:  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
+            return dest
+        if self._durable is not None and await self._durable.get(clip_id, dest):
+            # GCS hit — works even when CatDV is offline or this is an upload.
             return dest
         if is_uploaded(clip_id):
             # Uploaded posters are pre-stored at path_for(clip_id) during
@@ -98,7 +108,7 @@ class ThumbnailService:
             ids = clip.provider_data.get("thumbnailIDs") or []
             thumb_id = ids[0] if ids else None
         if not thumb_id:
-            return await self._build_image_poster(clip, dest)
+            return await self._build_image_poster(clip_id, clip, dest)
 
         try:
             await self._catdv.download_thumbnail(int(thumb_id), dest)
@@ -109,10 +119,18 @@ class ThumbnailService:
             return None
 
         if dest.exists() and dest.stat().st_size > 0:  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
+            if self._durable is not None:
+                await self._durable.put(clip_id, dest)
             return dest
         return None
 
-    async def _build_image_poster(self, clip, dest: Path) -> Path | None:
+    async def push_durable(self, clip_id: int, src: Path) -> None:
+        """Mirror a poster already written to /data into the durable GCS
+        store. No-op when no durable store is wired (local/dev mode)."""
+        if self._durable is not None:
+            await self._durable.put(clip_id, src)
+
+    async def _build_image_poster(self, clip_id: int, clip, dest: Path) -> Path | None:
         """For a still with no CatDV poster: fetch the original and downscale
         it to a cached JPEG poster. Returns None (→ placeholder) for non-image
         clips or any decode failure."""
@@ -136,5 +154,7 @@ class ThumbnailService:
         finally:
             tmp.unlink(missing_ok=True)  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
         if dest.exists() and dest.stat().st_size > 0:  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
+            if self._durable is not None:
+                await self._durable.put(clip_id, dest)
             return dest
         return None

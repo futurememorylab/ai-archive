@@ -180,3 +180,110 @@ async def test_metadata_cached_proceeds_to_network(tmp_path: Path):
     out = await svc.get_or_fetch(42)
     assert out == tmp_path / "42.jpg"
     assert catdv.calls == [9000]
+
+
+class _FakeDurable:
+    def __init__(self, has: set[int] | None = None):
+        self.has = has or set()
+        self.get_calls: list[int] = []
+        self.put_calls: list[int] = []
+
+    async def get(self, clip_id, dest):
+        self.get_calls.append(clip_id)
+        if clip_id in self.has:
+            Path(dest).write_bytes(b"\xff\xd8GCS")
+            return True
+        return False
+
+    async def put(self, clip_id, src):
+        self.put_calls.append(clip_id)
+
+
+@pytest.mark.asyncio
+async def test_durable_hit_serves_offline_without_catdv(tmp_path: Path):
+    # /data miss + GCS hit while CatDV OFFLINE -> served from GCS, no CatDV call.
+    catdv = _FakeCatdv()
+    durable = _FakeDurable(has={42})
+    svc = ThumbnailService(
+        cache_dir=tmp_path, archive=_FakeArchive({"posterID": 9000}),
+        catdv=catdv, is_online_provider=lambda: False, durable_store=durable,
+    )
+    out = await svc.get_or_fetch(42)
+    assert out == tmp_path / "42.jpg"
+    assert out.read_bytes() == b"\xff\xd8GCS"
+    assert catdv.calls == []
+    assert durable.get_calls == [42]
+
+
+@pytest.mark.asyncio
+async def test_durable_miss_online_fetches_and_puts(tmp_path: Path):
+    catdv = _FakeCatdv()
+    durable = _FakeDurable(has=set())
+    svc = ThumbnailService(
+        cache_dir=tmp_path, archive=_FakeArchive({"posterID": 9000}),
+        catdv=catdv, durable_store=durable,
+    )
+    out = await svc.get_or_fetch(42)
+    assert out == tmp_path / "42.jpg"
+    assert catdv.calls == [9000]
+    assert durable.put_calls == [42]
+
+
+@pytest.mark.asyncio
+async def test_durable_miss_offline_returns_none(tmp_path: Path):
+    catdv = _FakeCatdv()
+    durable = _FakeDurable(has=set())
+    svc = ThumbnailService(
+        cache_dir=tmp_path, archive=_FakeArchive({"posterID": 9000}),
+        catdv=catdv, is_online_provider=lambda: False, durable_store=durable,
+    )
+    assert await svc.get_or_fetch(42) is None
+    assert catdv.calls == []
+    assert durable.put_calls == []
+
+
+@pytest.mark.asyncio
+async def test_data_hit_skips_durable(tmp_path: Path):
+    (tmp_path / "42.jpg").write_bytes(b"local")
+    durable = _FakeDurable(has={42})
+    svc = ThumbnailService(
+        cache_dir=tmp_path, archive=_FakeArchive({"posterID": 9000}),
+        catdv=_FakeCatdv(), durable_store=durable,
+    )
+    out = await svc.get_or_fetch(42)
+    assert out.read_bytes() == b"local"
+    assert durable.get_calls == []
+
+
+@pytest.mark.asyncio
+async def test_no_durable_store_unchanged_behavior(tmp_path: Path):
+    catdv = _FakeCatdv()
+    svc = ThumbnailService(
+        cache_dir=tmp_path, archive=_FakeArchive({"posterID": 9000}),
+        catdv=catdv, is_online_provider=lambda: False,
+    )
+    assert await svc.get_or_fetch(42) is None
+
+
+@pytest.mark.asyncio
+async def test_uploaded_clip_served_from_durable(tmp_path: Path):
+    from backend.app.uploaded_ids import to_clip_id
+    cid = to_clip_id(3)
+    durable = _FakeDurable(has={cid})
+    svc = ThumbnailService(
+        cache_dir=tmp_path, archive=_FakeArchive({}), catdv=None, durable_store=durable,
+    )
+    out = await svc.get_or_fetch(cid)
+    assert out == svc.path_for(cid)
+    assert durable.get_calls == [cid]
+
+
+@pytest.mark.asyncio
+async def test_push_durable_forwards(tmp_path: Path):
+    durable = _FakeDurable()
+    svc = ThumbnailService(
+        cache_dir=tmp_path, archive=_FakeArchive({}), catdv=None, durable_store=durable,
+    )
+    p = tmp_path / "x.jpg"; p.write_bytes(b"jpg")
+    await svc.push_durable(99, p)
+    assert durable.put_calls == [99]
