@@ -240,6 +240,7 @@ async def test_durable_miss_offline_returns_none(tmp_path: Path):
     assert await svc.get_or_fetch(42) is None
     assert catdv.calls == []
     assert durable.put_calls == []
+    assert durable.get_calls == [42]
 
 
 @pytest.mark.asyncio

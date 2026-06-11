@@ -126,7 +126,8 @@ class ThumbnailService:
 
     async def push_durable(self, clip_id: int, src: Path) -> None:
         """Mirror a poster already written to /data into the durable GCS
-        store. No-op when no durable store is wired (local/dev mode)."""
+        store. Called by the studio upload-ingest path after writing the
+        local copy. No-op when no durable store is wired (local/dev mode)."""
         if self._durable is not None:
             await self._durable.put(clip_id, src)
 
