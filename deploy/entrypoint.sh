@@ -15,6 +15,12 @@ UVICORN="python -m uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT --ti
 
 if [ -n "${WG_PRIVATE_KEY:-}" ]; then
   ( while true; do
+      # MTU is set via ONETUN_MTU in deploy/cloudrun.env.yaml (onetun reads
+      # the env var when --max-transmission-unit is not passed). It lives in
+      # the env-vars-file, not as a flag here, because the deploy uses
+      # --env-vars-file (which replaces all env) and a baked-in flag would
+      # shadow that file, making MTU un-retunable without an image rebuild.
+      # See ADR 0074.
       onetun --private-key "$WG_PRIVATE_KEY" \
              --endpoint-addr "$WG_ENDPOINT" \
              --endpoint-public-key "$WG_PEER_PUBKEY" \

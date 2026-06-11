@@ -81,3 +81,4 @@ available number. See any existing ADR for the template.
 | 0071 | 2026-06-11 | [Durable GCS-backed thumbnail cache](./adr/0071-durable-thumbnail-cache.md) |
 | 0072 | 2026-06-11 | [Thumbnail poster cache + bounded download concurrency](./adr/0072-thumbnail-poster-cache.md) |
 | 0073 | 2026-06-11 | [Cloud cache UI: hide local-media layer, act on the ai-store](./adr/0073-cloud-cache-ui-ai-store-only.md) |
+| 0074 | 2026-06-11 | [Cloud CatDV writeback: MTU hygiene, and the real cause (WireGuard peer-key collision)](./adr/0074-onetun-mtu-1380-gcp-writeback.md) |
