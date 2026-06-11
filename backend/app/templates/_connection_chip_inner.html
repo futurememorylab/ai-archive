@@ -44,7 +44,8 @@
       <span class="dot dot--yellow" aria-hidden="true" title="Tunnel process up but not reaching CatDV">●</span><span>VPN on · unreachable</span>
       <button type="button" class="btn link"
               hx-post="/api/vpn/disable" hx-confirm="Turn the VPN off? This drops the CatDV connection and cedes the tunnel."
-              hx-target="#connection-chip" hx-swap="innerHTML">Turn off</button>
+              hx-target="#connection-chip" hx-swap="innerHTML"
+              title="Drop the tunnel and release the CatDV seat">Turn off</button>
     {% endif %}
   </span>
 {% endif %}
@@ -57,7 +58,7 @@
   {% elif mode == "disconnected" %}
     <span class="dot dot--grey" aria-hidden="true">○</span><span>Disconnected</span>
     {% if vpn and vpn.managed and vpn.desired == "off" %}
-      <span class="btn link" aria-disabled="true"
+      <span class="btn link disabled" aria-disabled="true"
             title="Turn the VPN on first">Connect</span>
     {% else %}
       <button type="button" class="btn link" hx-post="/api/connection/connect"
