@@ -382,6 +382,9 @@ class CatdvArchiveAdapter:
     def _list_cache_enabled(self) -> bool:
         return self._clip_list_cache is not None and self._db_provider is not None
 
+    def _poster_cache_enabled(self) -> bool:
+        return self._poster_cache is not None and self._db_provider is not None
+
     async def _read_list_from_cache(self, catalog: str, query: ClipQuery) -> ClipPage | None:
         if not self._list_cache_enabled():
             return None
@@ -428,11 +431,12 @@ class CatdvArchiveAdapter:
         )
 
     async def _write_poster_cache(self, raw_items: list[dict[str, Any]]) -> None:
-        if self._poster_cache is None:
+        if not self._poster_cache_enabled():
             return
         entries = [
             (int(raw["ID"]), int(raw["posterID"]))
             for raw in raw_items
+            # skip clips with no poster (CatDV uses posterID 0 / absent)
             if raw.get("ID") is not None and raw.get("posterID")
         ]
         if not entries:
