@@ -45,6 +45,9 @@ async def stream_thumbnail(request: Request, clip_id: int):
         # /data miss (e.g. tmpfs wiped by a restart): fall through to the
         # durable GCS-backed store via the live thumbnail service, if wired.
         # GCS access doesn't need CatDV, so this works while disconnected.
+        # Read app.state.live_ctx directly (not get_live_ctx) so a missing /
+        # offline live context degrades to 404 rather than 503 — an uploaded
+        # poster is a known asset; "GCS unavailable" is not a server error.
         live = request.app.state.live_ctx
         if live is not None and live.thumbnail_service is not None:
             durable_path = await live.thumbnail_service.get_or_fetch(clip_id)
