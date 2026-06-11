@@ -8,9 +8,17 @@
 function reviewMixin(clipId) {
   return {
     reviewQueue: [],
+    // Writeback state surfaced in the draft message: the upstream apply runs
+    // asynchronously in the SyncEngine, so we poll /api/sync/clip/{id}/status
+    // to learn when it lands (or fails) and refresh Published without a reload.
+    syncState: "idle",   // idle | syncing | synced | failed
+    syncProblems: 0,
     _reviewInit() {
       try { this.reviewQueue = JSON.parse(sessionStorage.getItem("catdv:reviewQueue") || "[]"); }
       catch (e) { this.reviewQueue = []; }
+      // Reloading a page whose draft was already applied must not show a stale
+      // "syncing…" forever — reconcile the message against the real queue once.
+      if (this.appliedCount > 0) this._checkSyncOnce();
     },
     // ── counts ────────────────────────────────────────────────────
     _allDraft() { return [...this.draftMarkers, ...this.draftFields, ...this.draftNotes]; },
@@ -162,8 +170,13 @@ function reviewMixin(clipId) {
         await Promise.allSettled([...this._inflight]);
         const r = await fetch(`/api/review/clips/${clipId}/apply`, { method: "POST" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        let queued = 0;
+        try { queued = (await r.json()).queued || 0; } catch (e) { /* non-JSON body */ }
         Alpine.store("toast").push("Accepted proposals applied.", { level: "success" });
         await this.refreshDraft();
+        // Hand off to the async writeback: poll until it reaches CatDV, then
+        // resolve the message + refresh Published. No-op if nothing enqueued.
+        if (queued > 0) { this.syncState = "syncing"; this._pollSync(); }
       } catch (e) {
         Alpine.store("toast").push(`Apply failed: ${e.message || e}. Nothing was applied.`, { level: "error" });
       }
@@ -183,6 +196,77 @@ function reviewMixin(clipId) {
         this.appliedCount = d.applied_count;
         this.editingItemId = null;
         this._editSnapshot = null;
+      } catch (e) { /* keep current view */ }
+    },
+    // ── async writeback status surfacing ─────────────────────────
+    // Message shown once the draft is fully applied; reflects whether the
+    // upstream CatDV writeback has actually landed, is still syncing, or failed.
+    appliedMessage() {
+      const n = this.appliedCount, s = (k) => (k === 1 ? "" : "s");
+      if (this.syncState === "synced")
+        return `${n} proposal${s(n)} applied and synced to CatDV ✓ — see Published.`;
+      if (this.syncState === "failed")
+        return `${n} applied, but ${this.syncProblems} change${s(this.syncProblems)} didn't reach CatDV — retry from the Sync drawer.`;
+      return `${n} proposal${s(n)} applied — syncing to CatDV; visible under Published once synced.`;
+    },
+    async _checkSyncOnce() {
+      // One-shot reconciliation on page load (no toasts): set the message to
+      // match the real queue, and start polling if a writeback is still mid-flight.
+      try {
+        const r = await fetch(`/api/sync/clip/${clipId}/status`);
+        if (!r.ok) return;
+        const st = await r.json();
+        if (st.problems > 0) { this.syncState = "failed"; this.syncProblems = st.problems; }
+        else if (st.unfinished > 0) { this.syncState = "syncing"; this._pollSync(); }
+        else if (st.applied > 0) { this.syncState = "synced"; }
+      } catch (e) { /* leave state as-is */ }
+    },
+    async _pollSync() {
+      // Poll until the writeback settles, then resolve the message and refresh
+      // the Published panel + timeline. Bounded (~90s) so a permanently-offline
+      // tunnel leaves an honest "syncing…" rather than spinning forever.
+      for (let i = 0; i < 45; i++) {
+        await new Promise((res) => setTimeout(res, 2000));
+        let st;
+        try {
+          const r = await fetch(`/api/sync/clip/${clipId}/status`);
+          if (!r.ok) continue;
+          st = await r.json();
+        } catch (e) { continue; }
+        if (st.unfinished > 0) { this.syncState = "syncing"; continue; }
+        if (st.problems > 0) {
+          this.syncState = "failed";
+          this.syncProblems = st.problems;
+          Alpine.store("toast").push(
+            `${st.problems} change${st.problems === 1 ? "" : "s"} didn't reach CatDV. Open the Sync drawer to retry.`,
+            { level: "error" });
+          return;
+        }
+        // Settled with nothing unfinished and no problems → applied upstream.
+        this.syncState = "synced";
+        await this._refreshPublished();
+        Alpine.store("toast").push("Synced to CatDV — Published updated.", { level: "success" });
+        return;
+      }
+    },
+    async _refreshPublished() {
+      // Swap the server-rendered Published panel in place and refresh the
+      // player's published-marker timeline from the partial's JSON island.
+      try {
+        const r = await fetch(`/clips/${clipId}/published`);
+        if (!r.ok) return;
+        const html = await r.text();
+        const cur = document.getElementById("published-panels");
+        if (!cur) return;
+        cur.outerHTML = html;
+        window.htmxAlpine?.reinit(document.getElementById("published-panels"));
+        const island = document.getElementById("published-markers-data");
+        if (island) {
+          try {
+            const ms = JSON.parse(island.textContent);
+            this.markers.splice(0, this.markers.length, ...ms);
+          } catch (e) { /* keep current markers */ }
+        }
       } catch (e) { /* keep current view */ }
     },
   };

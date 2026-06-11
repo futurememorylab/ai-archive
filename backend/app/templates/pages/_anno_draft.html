@@ -17,7 +17,8 @@
 
 <template x-if="totalCount() === 0 && appliedCount > 0">
   <p class="muted" style="padding:14px"
-     x-text="appliedCount + ' proposal' + (appliedCount === 1 ? '' : 's') + ' applied — syncing to CatDV; visible under Published once synced.'"></p>
+     :class="{ 'sync-failed': syncState === 'failed', 'sync-ok': syncState === 'synced' }"
+     x-text="appliedMessage()"></p>
 </template>
 <template x-if="totalCount() === 0 && appliedCount === 0 && deletedTotal() === 0">
   <p class="muted" style="padding:14px">No proposals to review.</p>

@@ -307,6 +307,32 @@ class PendingOperationsRepo:
                 bucket["pending"] += n
         return out
 
+    async def status_counts_for_clip(
+        self,
+        conn: aiosqlite.Connection,
+        *,
+        provider_id: str,
+        provider_clip_id: str,
+    ) -> dict[str, int]:
+        """Per-status row counts for one clip's writeback ops.
+
+        Returns `{status: count}` for every status that has at least one row
+        (e.g. `{"pending": 1, "failed": 2, "applied": 8}`). Backs the
+        per-clip sync-status poll the draft UI uses to learn when a writeback
+        has finished (or failed) without a page reload. One grouped query —
+        bounded by the handful of ops a clip can have.
+        """
+        cur = await conn.execute(
+            """
+            SELECT status, COUNT(*)
+              FROM pending_operations
+             WHERE provider_id = ? AND provider_clip_id = ?
+             GROUP BY status
+            """,
+            (provider_id, provider_clip_id),
+        )
+        return {status: n for status, n in await cur.fetchall()}
+
     async def list_with_clip_names(
         self,
         conn: aiosqlite.Connection,

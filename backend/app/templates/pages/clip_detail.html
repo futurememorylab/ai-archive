@@ -145,14 +145,7 @@
       {% if annotation_cost_usd is not none %}
       <div class="anno-cost muted mono">Cost: {{ annotation_cost_usd|usd }}</div>
       {% endif %}
-      {% with panels = {
-          "markers": clip.markers,
-          "fields":  clip.fields,
-          "notes":   clip.notes,
-          "big_notes": clip.big_notes,
-         } %}
-        {% include "pages/_anno_panels.html" %}
-      {% endwith %}
+      {% include "pages/_published_refreshable.html" %}
     </div>
 
     <div class="anno-scoped" id="draft-aside" x-show="scope === 'draft'" x-cloak>
