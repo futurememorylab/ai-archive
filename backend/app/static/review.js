@@ -201,13 +201,14 @@ function reviewMixin(clipId) {
     // ── async writeback status surfacing ─────────────────────────
     // Message shown once the draft is fully applied; reflects whether the
     // upstream CatDV writeback has actually landed, is still syncing, or failed.
+    _plural(n) { return n === 1 ? "" : "s"; },
     appliedMessage() {
-      const n = this.appliedCount, s = (k) => (k === 1 ? "" : "s");
+      const n = this.appliedCount;
       if (this.syncState === "synced")
-        return `${n} proposal${s(n)} applied and synced to CatDV ✓ — see Published.`;
+        return `${n} proposal${this._plural(n)} applied and synced to CatDV ✓ — see Published.`;
       if (this.syncState === "failed")
-        return `${n} applied, but ${this.syncProblems} change${s(this.syncProblems)} didn't reach CatDV — retry from the Sync drawer.`;
-      return `${n} proposal${s(n)} applied — syncing to CatDV; visible under Published once synced.`;
+        return `${n} applied, but ${this.syncProblems} change${this._plural(this.syncProblems)} didn't reach CatDV — retry from the Sync drawer.`;
+      return `${n} proposal${this._plural(n)} applied — syncing to CatDV; visible under Published once synced.`;
     },
     async _checkSyncOnce() {
       // One-shot reconciliation on page load (no toasts): set the message to
@@ -238,7 +239,7 @@ function reviewMixin(clipId) {
           this.syncState = "failed";
           this.syncProblems = st.problems;
           Alpine.store("toast").push(
-            `${st.problems} change${st.problems === 1 ? "" : "s"} didn't reach CatDV. Open the Sync drawer to retry.`,
+            `${st.problems} change${this._plural(st.problems)} didn't reach CatDV. Open the Sync drawer to retry.`,
             { level: "error" });
           return;
         }

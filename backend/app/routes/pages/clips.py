@@ -564,8 +564,9 @@ async def clip_published_partial(request: Request, clip_id: int):
         clip = await ctx.archive.get_clip(str(clip_id))
     except ProviderError as exc:
         raise HTTPException(404, f"clip not found: {exc}") from exc
-    cache_status = await ctx.cache_inspector.status_for_clip(clip.key)
-    ctx_dict = clip_detail(clip, cache_status=cache_status)
+    # The published panels only read markers/fields/notes — not the cache badge —
+    # so skip the cache_inspector lookup that clip_detail_page needs.
+    ctx_dict = clip_detail(clip)
     return templates.TemplateResponse(
         request, "pages/_published_refreshable.html", {"clip": ctx_dict["clip"]}
     )
