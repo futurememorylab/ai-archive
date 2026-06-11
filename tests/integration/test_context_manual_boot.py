@@ -29,12 +29,30 @@ async def test_manual_mode_does_not_login_at_boot(monkeypatch, tmp_path):
     login_calls = {"n": 0}
 
     from backend.app.services import catdv_client as cc
+    from backend.app.services import gcs as gcs_mod
+    from backend.app.services import gemini as gemini_mod
 
     async def fake_login(self):
         login_calls["n"] += 1
         self._logged_in = True
 
     monkeypatch.setattr(cc.CatdvClient, "login", fake_login)
+
+    # The init_external=True path constructs GcsService/GeminiService, whose
+    # __init__ eagerly builds real google clients (storage.Client() /
+    # genai.Client) that call google.auth.default(). CI has no GCP credentials,
+    # so stub both — the same pattern as test_context.py / test_context_boot_recovery.
+    class _StubGcs:
+        def __init__(self, *args, **kwargs):
+            self.bucket_name = "b"
+            self._bucket = type("FakeBucket", (), {"exists": staticmethod(lambda: True)})()
+
+    class _StubGemini:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr(gcs_mod, "GcsService", _StubGcs)
+    monkeypatch.setattr(gemini_mod, "GeminiService", _StubGemini)
 
     from backend.app import context as ctx_mod
 
