@@ -352,8 +352,10 @@ class LiveCtx:
     async def aclose(self) -> None:
         # Stop the live services in the documented order, then close the
         # core (DB). Order matches the pre-split teardown exactly.
-        if self.vpn_supervisor is not None:
-            await self.vpn_supervisor.aclose()
+        # IMPORTANT: vpn_supervisor is torn down AFTER catdv.__aexit__ so
+        # that the DELETE /session logout travels over a live tunnel and the
+        # CatDV seat is actually released. Mirrors the /api/vpn disable
+        # master-switch order (see ADR 0075).
         if self.media_prefetcher is not None:
             await self.media_prefetcher.stop()
         if self.lru_eviction is not None:
@@ -366,6 +368,8 @@ class LiveCtx:
             await self.connection_monitor.stop()
         if self.catdv is not None:
             await self.catdv.__aexit__(None, None, None)
+        if self.vpn_supervisor is not None:
+            await self.vpn_supervisor.aclose()
         await self.core.aclose()
 
 
