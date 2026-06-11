@@ -29,3 +29,28 @@ async def get_or_create_install_id(conn: aiosqlite.Connection) -> str:
     row = await cur.fetchone()
     assert row is not None
     return row[0]
+
+
+_VPN_DESIRED_KEY = "vpn_desired"
+_VPN_VALUES = ("on", "off")
+
+
+async def get_vpn_desired(conn: aiosqlite.Connection) -> str:
+    """Return the persisted desired VPN state, defaulting to 'off' (opt-in;
+    keeps the cloud from grabbing the shared WG peer key on boot)."""
+    cur = await conn.execute(
+        "SELECT value FROM app_meta WHERE key = ?", (_VPN_DESIRED_KEY,)
+    )
+    row = await cur.fetchone()
+    return row[0] if row is not None and row[0] in _VPN_VALUES else "off"
+
+
+async def set_vpn_desired(conn: aiosqlite.Connection, value: str) -> None:
+    if value not in _VPN_VALUES:
+        raise ValueError(f"vpn_desired must be 'on'|'off', got {value!r}")
+    await conn.execute(
+        "INSERT INTO app_meta(key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (_VPN_DESIRED_KEY, value),
+    )
+    await conn.commit()
