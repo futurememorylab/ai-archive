@@ -153,6 +153,35 @@ async def test_count_pending_by_clip(db):
 
 
 @pytest.mark.asyncio
+async def test_status_counts_for_clip(db):
+    repo = PendingOperationsRepo()
+    a = {**_row(), "provider_clip_id": "7"}
+    b = {**_row(), "provider_clip_id": "7"}
+    c = {**_row(), "provider_clip_id": "7"}
+    other = {**_row(), "provider_clip_id": "8"}
+    ids = await repo.insert_many(db, rows=[a, b, c, other])
+    await repo.mark_applied(db, [ids[0]])
+    await repo.mark_failed(db, [ids[1]], error="boom")
+    # ids[2] stays pending; `other` belongs to a different clip
+    counts = await repo.status_counts_for_clip(
+        db, provider_id="catdv", provider_clip_id="7"
+    )
+    assert counts == {"pending": 1, "applied": 1, "failed": 1}
+    # absent statuses simply don't appear
+    assert "conflict" not in counts
+    assert "in_flight" not in counts
+
+
+@pytest.mark.asyncio
+async def test_status_counts_for_clip_empty_when_no_ops(db):
+    repo = PendingOperationsRepo()
+    counts = await repo.status_counts_for_clip(
+        db, provider_id="catdv", provider_clip_id="999"
+    )
+    assert counts == {}
+
+
+@pytest.mark.asyncio
 async def test_list_with_clip_names_joins_clip_cache(db):
     from datetime import UTC, datetime
 

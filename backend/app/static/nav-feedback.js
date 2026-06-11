@@ -30,21 +30,33 @@
     b.classList.add("done");
   }
 
-  function isBackgroundPoller(detail) {
+  function skipProgressBar(detail) {
     var elt = detail && detail.elt;
-    var trg = elt && elt.getAttribute ? elt.getAttribute("hx-trigger") : null;
-    return !!trg && trg.indexOf("every") !== -1;
+    if (!elt || !elt.getAttribute) return false;
+    // Background pollers (hx-trigger="every ...") run constantly; they must
+    // not drive the global bar.
+    var trg = elt.getAttribute("hx-trigger");
+    if (trg && trg.indexOf("every") !== -1) return true;
+    // The connection chip swaps its own innerHTML, which removes the
+    // triggering Connect/Disconnect/Retry button. htmx then fires
+    // htmx:afterRequest on that now-detached node, so it never bubbles to
+    // this body listener → the paired done() is missed and the bar leaks
+    // (stuck "loading"). The chip shows its own state via the swap, so opt
+    // it out of the global bar entirely (start AND done both skipped, so the
+    // counter stays balanced).
+    if (elt.closest && elt.closest("#connection-chip")) return true;
+    return false;
   }
 
   // htmx requests (tabs, version pickers, bulk refresh). htmx already adds the
   // built-in `.htmx-request` class to the requesting element for the dim/cursor
   // styles — we only manage the progress bar here.
   document.body.addEventListener("htmx:beforeRequest", function (e) {
-    if (isBackgroundPoller(e.detail)) return;
+    if (skipProgressBar(e.detail)) return;
     start();
   });
   document.body.addEventListener("htmx:afterRequest", function (e) {
-    if (isBackgroundPoller(e.detail)) return;
+    if (skipProgressBar(e.detail)) return;
     done();
   });
 

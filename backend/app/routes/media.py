@@ -1,14 +1,13 @@
 """Media routes — HTTP endpoints under /api/media for HTTP Range
-streaming of proxy files resolved by ProxyResolver."""
+streaming of media located by MediaCacheBackend (local proxy cache or GCS signed URL)."""
 
 import mimetypes
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
 
 from backend.app.deps import get_core_ctx, get_live_ctx
-
+from backend.app.services.media_locator import RemoteUrl
 from backend.app.uploaded_ids import is_uploaded
 
 router = APIRouter(prefix="/api/media", tags=["media"])
@@ -35,18 +34,30 @@ def _thumb_404(detail: str) -> Response:
 @router.get("/{clip_id}/thumb")
 async def stream_thumbnail(request: Request, clip_id: int):
     if is_uploaded(clip_id):
-        # Uploaded posters are pre-stored at ingest in the DB-first thumb
-        # cache; serve them via the core ctx so uploads thumbnail fully
-        # offline (no live CatDV/Gemini wiring required).
         core = get_core_ctx(request)
         path = core.settings.data_dir / "cache" / "thumbs" / f"{clip_id}.jpg"
-        if not path.exists() or path.stat().st_size == 0:  # sync-io-ok: uploaded poster lookup, tracked for the tier-4 async-io pass
-            return _thumb_404("no thumbnail")
-        return FileResponse(
-            path,
-            media_type="image/jpeg",
-            headers={"Cache-Control": "public, max-age=86400"},
-        )
+        if path.exists() and path.stat().st_size > 0:  # sync-io-ok: uploaded poster lookup, tracked for the tier-4 async-io pass
+            return FileResponse(
+                path,
+                media_type="image/jpeg",
+                headers={"Cache-Control": "public, max-age=86400"},
+            )
+        # /data miss (e.g. tmpfs wiped by a restart): fall through to the
+        # durable GCS-backed store via the live thumbnail service, if wired.
+        # GCS access doesn't need CatDV, so this works while disconnected.
+        # Read app.state.live_ctx directly (not get_live_ctx) so a missing /
+        # offline live context degrades to 404 rather than 503 — an uploaded
+        # poster is a known asset; "GCS unavailable" is not a server error.
+        live = request.app.state.live_ctx
+        if live is not None and live.thumbnail_service is not None:
+            durable_path = await live.thumbnail_service.get_or_fetch(clip_id)
+            if durable_path is not None:
+                return FileResponse(
+                    durable_path,
+                    media_type="image/jpeg",
+                    headers={"Cache-Control": "public, max-age=86400"},
+                )
+        return _thumb_404("no thumbnail")
     ctx = get_live_ctx(request)
     svc = ctx.thumbnail_service
     if svc is None:
@@ -63,24 +74,18 @@ async def stream_thumbnail(request: Request, clip_id: int):
 
 @router.get("/{clip_id}")
 async def stream_media(request: Request, clip_id: int):
-    if is_uploaded(clip_id):
-        # Uploaded clips are pre-seeded into the proxy cache at ingest and
-        # served DB-first via the core ctx — playable fully offline.
-        core = get_core_ctx(request)
-        row = await core.proxy_cache_repo.get(core.db, clip_id)
-        if row is None:
-            raise HTTPException(404, f"uploaded clip {clip_id} not in local cache")
-        path = Path(row["file_path"])
-        if not path.exists() or path.stat().st_size == 0:  # sync-io-ok: uploaded proxy lookup, tracked for the tier-4 async-io pass
-            raise HTTPException(404, f"uploaded clip {clip_id} file missing: {path}")
-    else:
-        ctx = get_live_ctx(request)
-        if ctx.proxy_resolver is None:
-            raise HTTPException(503, "proxy resolver not initialized")
-        try:
-            path = await ctx.proxy_resolver.path_for_clip_id(clip_id)
-        except Exception as exc:
-            raise HTTPException(404, f"proxy unavailable: {exc}") from exc
+    ctx = get_live_ctx(request)
+    backend = ctx.media_cache_backend
+    if backend is None:
+        raise HTTPException(503, "media cache backend unavailable")
+    located = await backend.locate(clip_id)
+    if located is None:
+        raise HTTPException(404, f"clip {clip_id} not available")
+    if isinstance(located, RemoteUrl):
+        # Browser follows to GCS; range requests for seeking go
+        # straight to the signed URL, bytes never transit this app.
+        return RedirectResponse(located.url, status_code=307)
+    path = located.path
 
     mime = mimetypes.guess_type(str(path))[0] or "video/quicktime"
     size = path.stat().st_size  # sync-io-ok: pre-existing, single metadata call on the stream-response path

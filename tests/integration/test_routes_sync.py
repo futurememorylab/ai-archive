@@ -147,6 +147,52 @@ def test_run_drain_invokes_engine(monkeypatch, tmp_path: Path):
         assert r.json() == []
 
 
+def test_clip_status_reports_counts(monkeypatch, tmp_path: Path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ids = _enqueue_one(client, clip_id="55")
+        _enqueue_one(client, clip_id="55")
+        ctx = client.app.state.core_ctx
+        import asyncio
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(ctx.pending_ops_repo.mark_failed(ctx.db, ids, error="x"))
+        finally:
+            loop.close()
+        r = client.get("/api/sync/clip/55/status")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["clip_id"] == 55
+        assert body["failed"] == 1
+        assert body["pending"] == 1
+        # unfinished = pending + in_flight; problems = failed + conflict
+        assert body["unfinished"] == 1
+        assert body["problems"] == 1
+        assert body["done"] is False
+
+
+def test_clip_status_done_when_all_applied(monkeypatch, tmp_path: Path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ids = _enqueue_one(client, clip_id="56")
+        ctx = client.app.state.core_ctx
+        import asyncio
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(ctx.pending_ops_repo.mark_applied(ctx.db, ids))
+        finally:
+            loop.close()
+        r = client.get("/api/sync/clip/56/status")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["applied"] == 1
+        assert body["unfinished"] == 0
+        assert body["problems"] == 0
+        assert body["done"] is True
+
+
 def test_retry_404_when_missing(monkeypatch, tmp_path: Path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:

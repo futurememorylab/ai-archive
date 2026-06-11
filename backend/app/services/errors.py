@@ -32,11 +32,21 @@ def humanise(exc: BaseException) -> str:
             body = body[:_MAX_BODY_CHARS] + "…(truncated)"
         return f"HTTP {exc.response.status_code} from {exc.request.url}: {body}" if body \
             else f"HTTP {exc.response.status_code} from {exc.request.url}"
+    # Transport errors: httpx timeout/connect exceptions frequently carry no
+    # message (str(exc) == ""), e.g. ReadTimeout on a stalled tunnel stream.
+    # Always name the failure mode AND the concrete type so the string is
+    # actionable even when the body is empty — no dangling "timeout: ".
     if isinstance(exc, httpx.TimeoutException):
-        return f"transport timeout: {exc}"
+        return _transport_phrase("transport timeout", exc)
     if isinstance(exc, httpx.ConnectError):
-        return f"connect failed: {exc}"
+        return _transport_phrase("connect failed", exc)
     if isinstance(exc, httpx.RequestError):
-        return f"transport error ({type(exc).__name__}): {exc}"
+        return _transport_phrase("transport error", exc)
     s = str(exc).strip()
     return s if s else type(exc).__name__
+
+
+def _transport_phrase(phrase: str, exc: httpx.RequestError) -> str:
+    detail = str(exc).strip()
+    base = f"{phrase} ({type(exc).__name__})"
+    return f"{base}: {detail}" if detail else base

@@ -15,8 +15,10 @@ import json
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from backend.app.deps import get_core_ctx
+from backend.app.deps import get_core_ctx, get_live_ctx
 from backend.app.routes.pages.templates import templates as _templates
+from backend.app.services.catdv_client import CatdvAuthError, CatdvBusyError
+from backend.app.services.errors import humanise
 from backend.app.shutdown import schedule_graceful_shutdown
 
 router = APIRouter(prefix="/api/connection", tags=["connection"])
@@ -29,13 +31,52 @@ def _mode(monitor) -> str:
         return "forced_offline"
     from backend.app.services.connection_monitor import ConnectionState
 
-    return "online" if monitor.current_state() == ConnectionState.online else "offline"
+    state = monitor.current_state()
+    if state == ConnectionState.online:
+        return "online"
+    if state == ConnectionState.disconnected:
+        return "disconnected"
+    return "offline"
 
 
 def _monitor(request: Request):
     """The connection monitor lives on the LiveCtx; None when offline."""
     live = request.app.state.live_ctx
     return live.connection_monitor if live is not None else None
+
+
+async def _pill_or_json(request: Request, monitor, *, status_code: int = 200,
+                        headers: dict[str, str] | None = None):
+    if request.headers.get("HX-Request") == "true":
+        # The topbar chip is the live control surface; return it when the
+        # chip targets us. (The connection pill is an alternate surface and
+        # is returned otherwise.) The chip computes its own mode from the
+        # request, so no context is needed.
+        if request.headers.get("HX-Target") == "connection-chip":
+            # Return the inner partial — it swaps into the stable
+            # #connection-chip container's innerHTML.
+            return _templates.TemplateResponse(
+                request, "_connection_chip_inner.html", {},
+                status_code=status_code, headers=headers,
+            )
+        from backend.app.routes.ui import _pill_context
+
+        # Include pending_count so the swapped-in pill's "Sync now (N)"
+        # button renders correctly instead of flashing "Sync now ()" until
+        # the next /ui/connection-pill poll (mirrors that handler).
+        ctx = get_core_ctx(request)
+        context = _pill_context(request)
+        rows = await ctx.pending_ops_repo.list_pending(ctx.db)
+        context["pending_count"] = len(rows)
+        return _templates.TemplateResponse(
+            request, "connection_pill.html", context,
+            status_code=status_code, headers=headers,
+        )
+    body = {"state": str(monitor.current_state().value) if monitor else "online",
+            "mode": _mode(monitor)}
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(body, status_code=status_code, headers=headers)
 
 
 @router.get("/state")
@@ -53,10 +94,15 @@ async def get_state(request: Request) -> dict:
 async def retry_now(request: Request):
     monitor = _monitor(request)
     is_htmx = request.headers.get("HX-Request") == "true"
+    # The pill (manual mode) and the chip (auto mode) both re-probe via this
+    # endpoint; each wants its own partial back. Route by the HTMX target.
+    wants_pill = request.headers.get("HX-Target") == "connection-pill"
 
     if monitor is None:
         body = {"state": "online", "mode": "online"}
     elif getattr(monitor, "is_forced", False) or getattr(monitor, "_forced_offline", False):
+        if wants_pill:
+            return await _pill_or_json(request, monitor, status_code=409)
         if is_htmx:
             return _templates.TemplateResponse(
                 request,
@@ -69,10 +115,13 @@ async def retry_now(request: Request):
         state = await monitor.retry_now()
         body = {"state": str(state.value), "mode": _mode(monitor)}
 
+    if wants_pill:
+        return await _pill_or_json(request, monitor)
     if is_htmx:
+        # Inner partial → swaps into the stable #connection-chip container.
         return _templates.TemplateResponse(
             request,
-            "_connection_chip.html",
+            "_connection_chip_inner.html",
             {"mode": body["mode"]},
         )
     return body
@@ -115,6 +164,43 @@ async def set_online(request: Request) -> dict:
         return {"state": "online"}
     monitor.set_manual_offline(False)
     return {"state": str(monitor.current_state().value)}
+
+
+def _toast_header(message: str, level: str = "error") -> dict[str, str]:
+    return {"HX-Trigger": json.dumps({"toast": {"message": message, "level": level}})}
+
+
+@router.post("/connect")
+async def connect(request: Request):
+    live = get_live_ctx(request)  # 503 if fully offline
+    monitor = _monitor(request)
+    if live.catdv is None:
+        raise HTTPException(status_code=409, detail="CatDV not configured")
+    try:
+        await live.catdv.login()
+    except CatdvBusyError as exc:
+        return await _pill_or_json(request, monitor, status_code=409,
+                                   headers=_toast_header(f"CatDV seat busy: {humanise(exc)}"))
+    except CatdvAuthError as exc:
+        return await _pill_or_json(request, monitor, status_code=401,
+                                   headers=_toast_header(f"CatDV login rejected: {humanise(exc)}"))
+    except Exception as exc:  # noqa: BLE001 — transport / unreachable
+        return await _pill_or_json(request, monitor, status_code=502,
+                                   headers=_toast_header(f"CatDV unreachable: {humanise(exc)}"))
+    if monitor is not None:
+        await monitor.probe_once()
+    return await _pill_or_json(request, monitor)
+
+
+@router.post("/disconnect")
+async def disconnect(request: Request):
+    live = get_live_ctx(request)
+    monitor = _monitor(request)
+    if live.catdv is not None:
+        await live.catdv.logout()
+    if monitor is not None:
+        await monitor.probe_once()
+    return await _pill_or_json(request, monitor)
 
 
 @router.get("/events")

@@ -17,6 +17,11 @@ TEMPLATES_DIR = Path(__file__).resolve().parents[2] / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 templates.env.globals["smpte"] = secs_to_smpte
 templates.env.globals["diff_html"] = diff_html
+# Media-cache backend ("local" dev proxy cache vs "ai_store" cloud/GCS).
+# Templates branch on this to hide the unused local-media layer in cloud.
+# Seeded to the safe default here; the app lifespan overrides it from
+# settings.media_cache at startup so HTMX fragment renders see the real value.
+templates.env.globals["media_cache"] = "local"
 
 
 def _bytes_human(n: int | None) -> str:

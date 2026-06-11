@@ -81,7 +81,12 @@ async def test_catdv_unreachable_at_startup_boots_offline(tmp_path, monkeypatch)
     """
     # base URL points at 127.0.0.1:1 → connection refused; force CATDV_OFFLINE=false
     # so the offline mode comes from the unreachable upstream, not the forced flag.
-    _env(monkeypatch, tmp_path, CATDV_OFFLINE="false")
+    # Pin CONNECT_MODE=auto: this asserts the synchronous startup-login-failure
+    # → offline path (ADR 0023). The default "manual" mode defers login, so the
+    # client never logs in at boot and the monitor starts "disconnected" (the
+    # unreachable upstream is then found asynchronously by the probe — a
+    # different path, covered by test_connection_monitor_manual.py).
+    _env(monkeypatch, tmp_path, CATDV_OFFLINE="false", CATDV_CONNECT_MODE="auto")
 
     app = _reload_app()
     with TestClient(app) as c:

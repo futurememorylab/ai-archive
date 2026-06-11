@@ -1,32 +1,50 @@
 {# Connection pill (top-right). HTMX polls /ui/connection-pill every 5s.
-   Clicking expands the menu (handled by the parent HTMX target). #}
+   In manual connect_mode the primary action is Connect/Disconnect; the
+   in-flight POST shows a spinner via hx-indicator. #}
 <div id="connection-pill"
      class="connection-pill state-{{ state }}"
      hx-get="/ui/connection-pill"
      hx-trigger="every 5s"
      hx-swap="outerHTML">
   {% if state == "online" %}
-    <span class="dot">●</span> online
+    <span class="dot">●</span> Connected
+  {% elif state == "disconnected" %}
+    <span class="dot">○</span> Disconnected
   {% elif state == "degraded" %}
     <span class="dot">◐</span> degraded
-  {% elif state == "offline" %}
-    <span class="dot">○</span> offline
-  {% else %}
+  {% elif state == "syncing" %}
     <span class="dot">↻</span> syncing
+  {% else %}
+    <span class="dot">○</span> Unreachable
   {% endif %}
+  <span class="htmx-indicator" aria-hidden="true">↻</span>
 
   <div class="menu">
-    {% if state == "offline" %}
-      <button hx-post="/api/connection/online"
-              hx-target="#connection-pill"
-              hx-swap="outerHTML">Work online</button>
+    {% if connect_mode == "manual" %}
+      {% if state == "online" %}
+        <button hx-post="/api/connection/disconnect"
+                hx-target="#connection-pill" hx-swap="outerHTML"
+                hx-indicator="#connection-pill">Disconnect</button>
+      {% elif state == "disconnected" %}
+        <button hx-post="/api/connection/connect"
+                hx-target="#connection-pill" hx-swap="outerHTML"
+                hx-indicator="#connection-pill">Connect</button>
+      {% else %}{# offline / unreachable — re-probe the tunnel #}
+        <button hx-post="/api/connection/retry"
+                hx-target="#connection-pill" hx-swap="outerHTML"
+                hx-indicator="#connection-pill"
+                title="VPN tunnel unreachable — click to re-check">Retry</button>
+      {% endif %}
     {% else %}
-      <button hx-post="/api/connection/offline"
-              hx-target="#connection-pill"
-              hx-swap="outerHTML">Work offline</button>
+      {% if state == "offline" %}
+        <button hx-post="/api/connection/online"
+                hx-target="#connection-pill" hx-swap="outerHTML">Work online</button>
+      {% else %}
+        <button hx-post="/api/connection/offline"
+                hx-target="#connection-pill" hx-swap="outerHTML">Work offline</button>
+      {% endif %}
     {% endif %}
     <button hx-post="/api/sync/run"
-            hx-target="#sync-drawer"
-            hx-swap="outerHTML">Sync now ({{ pending_count }})</button>
+            hx-target="#sync-drawer" hx-swap="outerHTML">Sync now ({{ pending_count }})</button>
   </div>
 </div>

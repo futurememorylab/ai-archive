@@ -1,34 +1,9 @@
-{# Topbar connection chip. Reads mode from request.app.state.live_ctx so it
-   works as both an embedded include and a standalone HTMX swap target. #}
-{%- if mode is not defined -%}
-  {%- set _live = request.app.state.live_ctx if request is defined else None -%}
-  {%- set _monitor = _live.connection_monitor if _live else None -%}
-  {%- if _monitor is none -%}
-    {%- set mode = "online" -%}
-  {%- elif _monitor.is_forced -%}
-    {%- set mode = "forced_offline" -%}
-  {%- elif _monitor.current_state().value == "online" -%}
-    {%- set mode = "online" -%}
-  {%- else -%}
-    {%- set mode = "offline" -%}
-  {%- endif -%}
-{%- endif -%}
-<div id="connection-chip" class="conn-chip conn-chip--{{ mode }}">
-  {% if mode == "online" %}
-    <span class="dot dot--green" aria-hidden="true">●</span>
-    <span>Online</span>
-  {% elif mode == "offline" %}
-    <button
-      type="button"
-      hx-post="/api/connection/retry"
-      hx-target="#connection-chip"
-      hx-swap="outerHTML"
-      title="Click to try reconnecting">
-      <span class="dot dot--yellow" aria-hidden="true">●</span>
-      <span>Offline — click to reconnect</span>
-    </button>
-  {% else %}{# forced_offline #}
-    <span class="dot dot--red" aria-hidden="true" title="Set CATDV_OFFLINE=false and restart to reconnect">●</span>
-    <span>Offline (forced)</span>
-  {% endif %}
-</div>
+{# Topbar connection control + indicator. STABLE container: the 5s poll and
+   the Connect/Disconnect/Retry actions swap its innerHTML (not the div
+   itself), so the polling element is never destroyed — an outerHTML
+   self-swap of a polling element throws htmx swapError. The label + action
+   live in _connection_chip_inner.html. `mode` (from layout.html) and
+   `connect_mode` flow into the include. #}
+<div id="connection-chip" class="conn-chip"
+     hx-get="/ui/connection-chip" hx-trigger="every 5s"
+     hx-target="this" hx-swap="innerHTML">{% include "_connection_chip_inner.html" %}</div>

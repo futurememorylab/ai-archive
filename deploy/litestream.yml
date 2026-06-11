@@ -1,0 +1,9 @@
+# Litestream config baked into the image. Both values come from env
+# (cloudrun.env.yaml): DB_PATH=/data/app.db (must equal
+# settings.data_dir / "app.db"), LITESTREAM_REPLICA_URL=
+# gcs://catdav-annotator-db/litestream. GCS auth is ADC via the
+# runtime service account.
+dbs:
+  - path: ${DB_PATH}
+    replicas:
+      - url: ${LITESTREAM_REPLICA_URL}

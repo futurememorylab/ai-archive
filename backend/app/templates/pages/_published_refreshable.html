@@ -1,0 +1,21 @@
+{# Refreshable published-annotation panels.
+
+   Rendered both inside clip_detail.html (initial page load) and standalone by
+   GET /clips/{id}/published. After an apply, review.js polls the per-clip sync
+   status; once the writeback lands it fetches this partial and swaps
+   `#published-panels` in place — so applied markers / fields / notes appear
+   without a full page reload. The JSON island lets the JS also refresh the
+   player's published-marker timeline from the same fresh data.
+
+   Inputs: clip — the clip-detail view model (markers/fields/notes/big_notes). #}
+<div id="published-panels">
+  {% with panels = {
+      "markers": clip.markers,
+      "fields":  clip.fields,
+      "notes":   clip.notes,
+      "big_notes": clip.big_notes,
+     } %}
+    {% include "pages/_anno_panels.html" %}
+  {% endwith %}
+  <script type="application/json" id="published-markers-data">{{ clip.markers|tojson }}</script>
+</div>

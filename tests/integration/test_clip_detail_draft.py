@@ -226,3 +226,26 @@ def test_clips_draft_partial_returns_404_when_clip_missing(monkeypatch, tmp_path
         install_live_ctx(client.app, archive=FakeArchive(()))
         r = client.get("/clips/999999/draft")
         assert r.status_code == 404
+
+
+def test_clips_published_partial_renders_refreshable_panels(monkeypatch, tmp_path):
+    # GET /clips/{id}/published returns just the refreshable published panels
+    # (the swap target review.js replaces after a writeback), with the markers
+    # JSON island for the player timeline. It must be a partial, not a full page.
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(101),)))
+        r = client.get("/clips/101/published")
+        assert r.status_code == 200
+        assert 'id="published-panels"' in r.text
+        assert 'id="published-markers-data"' in r.text  # JSON island for timeline
+        assert "anno-tabs" in r.text  # the panels themselves rendered
+        assert "<html" not in r.text.lower()  # partial, not full layout
+
+
+def test_clips_published_partial_404_when_clip_missing(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        install_live_ctx(client.app, archive=FakeArchive(()))
+        r = client.get("/clips/999999/published")
+        assert r.status_code == 404

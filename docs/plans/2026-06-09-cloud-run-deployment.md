@@ -24,12 +24,12 @@
 - Delete: `backend/app/secrets.py`
 - Modify: `pyproject.toml` (remove `google-cloud-secret-manager` from `dependencies`)
 
-- [ ] **Step 1: Verify nothing imports it**
+- [x] **Step 1: Verify nothing imports it**
 
 Run: `grep -rn "app.secrets\|google.cloud import secretmanager\|secret_manager" backend/ tests/ --include="*.py" | grep -v "backend/app/secrets.py"`
 Expected: no output (already verified during planning; re-verify in case of drift).
 
-- [ ] **Step 2: Delete the module and the dependency**
+- [x] **Step 2: Delete the module and the dependency**
 
 ```bash
 git rm backend/app/secrets.py
@@ -41,12 +41,12 @@ In `pyproject.toml`, delete the line:
   "google-cloud-secret-manager>=2.20",
 ```
 
-- [ ] **Step 3: Reinstall and run the full suite**
+- [x] **Step 3: Reinstall and run the full suite**
 
 Run: `.venv/bin/pip install -q -e ".[dev]" && .venv/bin/python -m pytest`
 Expected: all tests pass (the module had zero callers).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add -A
@@ -63,7 +63,7 @@ Proves the Cloud Run config path: a container has no `.env`, everything arrives 
 **Files:**
 - Test: `tests/unit/test_settings_pure_env.py` (create)
 
-- [ ] **Step 1: Write the failing-or-passing test (regression guard)**
+- [x] **Step 1: Write the failing-or-passing test (regression guard)**
 
 ```python
 """Settings must resolve from OS env alone — the Cloud Run container has
@@ -101,12 +101,12 @@ def test_settings_resolve_from_pure_env(monkeypatch, tmp_path):
     assert s.google_application_credentials is None  # ADC in cloud
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_settings_pure_env.py -v`
 Expected: PASS (pydantic-settings already prefers OS env and tolerates a missing env_file). If it fails, the failure is the bug to fix — do not weaken the test.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/unit/test_settings_pure_env.py
@@ -123,7 +123,7 @@ All three runtime processes wired now, env-gated so phase 1 deploys run plain uv
 - Create: `Dockerfile` (repo root)
 - Create: `.dockerignore` (repo root)
 
-- [ ] **Step 1: Write `deploy/entrypoint.sh`**
+- [x] **Step 1: Write `deploy/entrypoint.sh`**
 
 ```sh
 #!/bin/sh
@@ -162,7 +162,7 @@ fi
 exec $UVICORN
 ```
 
-- [ ] **Step 2: Write `deploy/litestream.yml`**
+- [x] **Step 2: Write `deploy/litestream.yml`**
 
 ```yaml
 # Litestream config baked into the image. Both values come from env
@@ -176,7 +176,7 @@ dbs:
       - url: ${LITESTREAM_REPLICA_URL}
 ```
 
-- [ ] **Step 3: Write `Dockerfile`**
+- [x] **Step 3: Write `Dockerfile`**
 
 ```dockerfile
 FROM python:3.13-slim
@@ -203,7 +203,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh && mkdir -p /data
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 ```
 
-- [ ] **Step 4: Write `.dockerignore`**
+- [x] **Step 4: Write `.dockerignore`**
 
 ```
 .env
@@ -225,7 +225,7 @@ __pycache__/
 
 `.env`, `data/`, `.secret/` are the load-bearing lines — local credentials and state must never enter an image layer.
 
-- [ ] **Step 5: Syntax-check the entrypoint**
+- [x] **Step 5: Syntax-check the entrypoint**
 
 Run: `sh -n deploy/entrypoint.sh && echo OK`
 Expected: `OK`
@@ -246,7 +246,7 @@ curl -fsS http://127.0.0.1:18765/api/health
 
 Expected: `{"status":"ok","mode":...}`. Stop the container with `docker stop` (SIGTERM — never `kill -9`, same seat discipline as dev). If Docker is not installed on this machine, note it and rely on the first Cloud Run deploy (Task 6) as the smoke test.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add Dockerfile .dockerignore deploy/entrypoint.sh deploy/litestream.yml
@@ -260,7 +260,7 @@ git commit -m "Container: Dockerfile + entrypoint (uvicorn/litestream/onetun, en
 - Create: `deploy/README.md`
 - Modify: `docs/DEPLOY.md` (add a pointer)
 
-- [ ] **Step 1: Write `deploy/cloudrun.env.yaml`**
+- [x] **Step 1: Write `deploy/cloudrun.env.yaml`**
 
 Copy `CATDV_USERNAME`'s value from the local `.env` (it is not a secret; the password is).
 
@@ -288,7 +288,7 @@ AI_INPUT_STORE: "gcs"
 
 (Replace `<copy from local .env>` with the actual username before committing — it is non-secret.)
 
-- [ ] **Step 2: Write `deploy/README.md` — the one-time GCP setup**
+- [x] **Step 2: Write `deploy/README.md` — the one-time GCP setup**
 
 ```markdown
 # Cloud Run deployment — one-time GCP setup
@@ -405,7 +405,7 @@ its public key, and the tunnel IP assigned to the new peer.
 
 Replace `<github-org>/<repo>` with the actual GitHub `owner/name` of this repository (check `git remote -v`).
 
-- [ ] **Step 3: Add a pointer in `docs/DEPLOY.md`**
+- [x] **Step 3: Add a pointer in `docs/DEPLOY.md`**
 
 At the top of `docs/DEPLOY.md`, after the intro line, add:
 
@@ -415,7 +415,7 @@ At the top of `docs/DEPLOY.md`, after the intro line, add:
 > below describe the original Mac-dev / CatDV-server systemd deploy.
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add deploy/cloudrun.env.yaml deploy/README.md docs/DEPLOY.md
@@ -427,7 +427,7 @@ git commit -m "Deploy: Cloud Run env file + one-time GCP setup runbook"
 **Files:**
 - Create: `.github/workflows/deploy.yml`
 
-- [ ] **Step 1: Write the workflow**
+- [x] **Step 1: Write the workflow**
 
 ```yaml
 name: Deploy to Cloud Run
@@ -502,13 +502,13 @@ jobs:
           curl -fsS -H "Authorization: Bearer $TOKEN" "$URL/api/health"
 ```
 
-- [ ] **Step 2: Validate YAML locally**
+- [x] **Step 2: Validate YAML locally**
 
 Run: `.venv/bin/python -c "import yaml,sys; yaml.safe_load(open('.github/workflows/deploy.yml')); print('OK')"`
 (If `yaml` is missing, `pip install pyyaml` into the venv first.)
 Expected: `OK`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add .github/workflows/deploy.yml
@@ -534,7 +534,7 @@ No code. Operator runs `deploy/README.md` steps 1–7, sets the two GitHub secre
 **Files:**
 - Test: `tests/unit/test_db_wal_pragma.py` (create)
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 ```python
 """Litestream (deploy/litestream.yml) requires WAL journaling; open_db
@@ -550,12 +550,12 @@ async def test_open_db_sets_wal(tmp_path):
     assert row[0].lower() == "wal"
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_db_wal_pragma.py -v`
 Expected: PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/unit/test_db_wal_pragma.py
@@ -571,7 +571,7 @@ The entrypoint and `litestream.yml` already exist (Task 3); this turns them on.
 - Create: `docs/adr/0066-cloud-run-single-instance-litestream.md` (use the next free number if 0066 is taken by then)
 - Modify: `docs/decisions.md` (index row)
 
-- [ ] **Step 1: Add to `deploy/cloudrun.env.yaml`**
+- [x] **Step 1: Add to `deploy/cloudrun.env.yaml`**
 
 ```yaml
 # Phase 2: SQLite persistence. DB_PATH must equal
@@ -580,7 +580,7 @@ DB_PATH: "/data/app.db"
 LITESTREAM_REPLICA_URL: "gcs://catdav-annotator-db/litestream"
 ```
 
-- [ ] **Step 2: Write the ADR**
+- [x] **Step 2: Write the ADR**
 
 `docs/adr/0066-cloud-run-single-instance-litestream.md`, MADR-lite format (match any existing ADR):
 
@@ -627,7 +627,7 @@ SIGTERM) are fine; traffic-split canaries are forbidden.
 
 Add the row to the index table in `docs/decisions.md`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add deploy/cloudrun.env.yaml docs/adr/0066-cloud-run-single-instance-litestream.md docs/decisions.md
@@ -650,7 +650,7 @@ Run the "Phase 2" block in `deploy/README.md`, push, then spec flow 3: create a 
 - Modify: `backend/app/services/catdv_client.py:103`
 - Test: `tests/unit/test_catdv_logout_timeout.py` (create)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 """Shutdown budget: Cloud Run grants 10s after SIGTERM, shared by the
@@ -681,12 +681,12 @@ async def test_logout_uses_short_timeout(monkeypatch):
     assert captured.get("timeout") == 3.0
 ```
 
-- [ ] **Step 2: Run it — must fail**
+- [x] **Step 2: Run it — must fail**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_catdv_logout_timeout.py -v`
 Expected: FAIL — `captured.get("timeout")` is `None`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `logout()`, change line 103 from:
 
@@ -703,12 +703,12 @@ to:
             await self.http.delete(f"{self._base}/catdv/api/9/session", timeout=3.0)
 ```
 
-- [ ] **Step 4: Run the test and the full suite**
+- [x] **Step 4: Run the test and the full suite**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_catdv_logout_timeout.py tests/unit/test_aclose_ordering.py -v && .venv/bin/python -m pytest`
 Expected: all PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/services/catdv_client.py tests/unit/test_catdv_logout_timeout.py
@@ -723,7 +723,7 @@ git commit -m "Bound CatDV logout to 3s (Cloud Run shutdown-grace budget)"
 
 - [ ] **Step 1 (operator): WG peer + secret** — run the "Phase 3" block in `deploy/README.md`.
 
-- [ ] **Step 2: Update `deploy/cloudrun.env.yaml`**
+- [x] **Step 2: Update `deploy/cloudrun.env.yaml`**
 
 Flip `CATDV_OFFLINE` and add the tunnel config (values from the office WG server):
 
@@ -737,7 +737,7 @@ WG_SOURCE_IP: "<tunnel IP assigned to the cloud peer, e.g. 10.6.0.9>"
 
 (All three are non-secret; only the private key lives in Secret Manager.)
 
-- [ ] **Step 3: Add the secret to the deploy step**
+- [x] **Step 3: Add the secret to the deploy step**
 
 In `.github/workflows/deploy.yml`, change the `--set-secrets` line to:
 
@@ -765,7 +765,7 @@ Then spec flow 4: UI shows CatDV online; disable the office peer → offline ban
 - Modify: `tests/unit/test_settings_pure_env.py` (add a test)
 - Modify: `.env.example`
 
-- [ ] **Step 1: Write the failing test** (append to `tests/unit/test_settings_pure_env.py`)
+- [x] **Step 1: Write the failing test** (append to `tests/unit/test_settings_pure_env.py`)
 
 ```python
 def test_playback_source_defaults_local_overridable(monkeypatch, tmp_path):
@@ -778,12 +778,12 @@ def test_playback_source_defaults_local_overridable(monkeypatch, tmp_path):
     assert Settings().playback_source == "gcs"
 ```
 
-- [ ] **Step 2: Run it — must fail**
+- [x] **Step 2: Run it — must fail**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_settings_pure_env.py -v`
 Expected: FAIL — `Settings` has no `playback_source`.
 
-- [ ] **Step 3: Implement** — in `backend/app/settings.py`, after the `clip_list_cache_ttl_minutes` line, add:
+- [x] **Step 3: Implement** — in `backend/app/settings.py`, after the `clip_list_cache_ttl_minutes` line, add:
 
 ```python
     # Playback byte-source preference (NOT exclusive): MediaLocator tries
@@ -793,7 +793,7 @@ Expected: FAIL — `Settings` has no `playback_source`.
     playback_source: Literal["local", "gcs"] = "local"
 ```
 
-- [ ] **Step 4: Run tests, document, commit**
+- [x] **Step 4: Run tests, document, commit**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_settings_pure_env.py -v`
 Expected: PASS
@@ -819,7 +819,7 @@ git commit -m "Settings: playback_source preference (local|gcs)"
 - Modify: `backend/app/services/gcs.py`
 - Test: `tests/unit/test_gcs_signed_url.py` (create)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 """signed_url must parse any gs:// handle (not assume the default
@@ -863,12 +863,12 @@ def test_signed_url_parses_gs_uri(monkeypatch):
     assert captured["version"] == "v4"
 ```
 
-- [ ] **Step 2: Run it — must fail**
+- [x] **Step 2: Run it — must fail**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_gcs_signed_url.py -v`
 Expected: FAIL — no attribute `signed_url`.
 
-- [ ] **Step 3: Implement** — in `backend/app/services/gcs.py`, add imports at the top:
+- [x] **Step 3: Implement** — in `backend/app/services/gcs.py`, add imports at the top:
 
 ```python
 from datetime import timedelta
@@ -907,7 +907,7 @@ and this method on `GcsService`:
             )
 ```
 
-- [ ] **Step 4: Run tests and commit**
+- [x] **Step 4: Run tests and commit**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_gcs_signed_url.py -v && .venv/bin/python -m pytest`
 Expected: PASS
@@ -923,7 +923,7 @@ git commit -m "GcsService.signed_url: V4 signed URLs with IAM-signBlob fallback"
 - Create: `backend/app/services/media_locator.py`
 - Test: `tests/unit/test_media_locator.py` (create)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 """MediaLocator ordering matrix. playback_source is a preference order,
@@ -1026,12 +1026,12 @@ async def test_none_resolver_is_a_miss_not_a_crash():
         await make(None, store, "local").locate(7)
 ```
 
-- [ ] **Step 2: Run them — must fail**
+- [x] **Step 2: Run them — must fail**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_media_locator.py -v`
 Expected: FAIL — module does not exist.
 
-- [ ] **Step 3: Implement `backend/app/services/media_locator.py`**
+- [x] **Step 3: Implement `backend/app/services/media_locator.py`**
 
 ```python
 """MediaLocator -- decides where playback bytes for a clip come from.
@@ -1131,7 +1131,7 @@ class MediaLocator:
 
 Notes for the implementer: the broad `except Exception` here is the deliberate "try the other layer" semantic, recorded in the miss list and surfaced in `MediaNotAvailable` — no caller infers absence from it (ADR 0042 discipline). The clip-key shape `("catdv", str(clip_id))` matches `services/annotator.py` (`clip_key=("catdv", str(clip_id))`). `signed_url` is wrapped in `asyncio.to_thread` because its IAM fallback does network I/O.
 
-- [ ] **Step 4: Run tests and commit**
+- [x] **Step 4: Run tests and commit**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_media_locator.py -v && .venv/bin/python -m pytest`
 Expected: PASS
@@ -1148,7 +1148,7 @@ git commit -m "MediaLocator: ordered two-layer playback source (local cache / GC
 - Modify: `backend/app/routes/media.py:64-83` (the non-uploaded branch of `stream_media`)
 - Test: `tests/unit/test_stream_media_locator.py` (create)
 
-- [ ] **Step 1: Write the failing route tests**
+- [x] **Step 1: Write the failing route tests**
 
 ```python
 """stream_media must serve LocalFile via the existing file path and
@@ -1229,12 +1229,12 @@ async def test_miss_is_404():
     assert "local cache" in resp.text
 ```
 
-- [ ] **Step 2: Run them — must fail**
+- [x] **Step 2: Run them — must fail**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_stream_media_locator.py -v`
 Expected: FAIL — `StubLive` has `media_locator` but the route still calls `ctx.proxy_resolver`.
 
-- [ ] **Step 3: Add the `media_locator` property to `LiveCtx`**
+- [x] **Step 3: Add the `media_locator` property to `LiveCtx`**
 
 In `backend/app/context.py`, add to the imports section:
 
@@ -1258,7 +1258,7 @@ and add this property on the `LiveCtx` class (next to the other delegation prope
         )
 ```
 
-- [ ] **Step 4: Rewrite the non-uploaded branch of `stream_media`**
+- [x] **Step 4: Rewrite the non-uploaded branch of `stream_media`**
 
 In `backend/app/routes/media.py`: add imports
 
@@ -1286,12 +1286,12 @@ and replace the `else:` branch of `stream_media` (currently lines 76–83, the `
 
 (The `if ctx.proxy_resolver is None: raise HTTPException(503, ...)` guard is removed — the locator treats a missing resolver as a layer miss, and a both-miss is a 404, which is the truthful answer.)
 
-- [ ] **Step 5: Run the new tests and the full suite**
+- [x] **Step 5: Run the new tests and the full suite**
 
 Run: `.venv/bin/python -m pytest tests/unit/test_stream_media_locator.py -v && .venv/bin/python -m pytest && .venv/bin/lint-imports`
 Expected: all PASS, import contracts green (locator import in routes is services-from-routes, which is allowed).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/context.py backend/app/routes/media.py tests/unit/test_stream_media_locator.py
@@ -1303,14 +1303,14 @@ git commit -m "stream_media: locate via MediaLocator; 307 to GCS signed URLs"
 **Files:**
 - Modify: `deploy/cloudrun.env.yaml`
 
-- [ ] **Step 1: Add to `deploy/cloudrun.env.yaml`**
+- [x] **Step 1: Add to `deploy/cloudrun.env.yaml`**
 
 ```yaml
 # Phase 4: playback prefers GCS signed URLs (local disk is ephemeral).
 PLAYBACK_SOURCE: "gcs"
 ```
 
-- [ ] **Step 2: Commit and push**
+- [x] **Step 2: Commit and push**
 
 ```bash
 git add deploy/cloudrun.env.yaml

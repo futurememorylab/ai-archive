@@ -5,7 +5,7 @@ cache caps, provider selection, etc.)."""
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     ai_input_store: str = "gcs"
     clip_cache_ttl_hours: int = 168
     clip_list_cache_ttl_minutes: int = 10
+    # Proxy-media cache + playback backend. "local" (dev): download to
+    # the local proxy cache and serve from disk, GCS as read fallback.
+    # "ai_store" (cloud, ephemeral disk): cache writes upload to GCS and
+    # playback redirects to signed URLs; the local proxy cache is unused.
+    # See docs/specs/2026-06-10-cloud-media-cache-ai-store-design.md.
+    media_cache: Literal["local", "ai_store"] = "local"
 
     # Prompt Studio uploads (Spec B). Web-safe only; no server-side
     # transcode, so the allowlist is browser-playable container/codecs.
@@ -58,9 +64,35 @@ class Settings(BaseSettings):
     # Reconnect button / the background probe). Kept short so dev restarts are
     # snappy; distinct from the 60s client timeout used for real downloads.
     catdv_startup_login_timeout_s: float = 2.0
+    # CatDV connection lifecycle. "manual" (default): build the client but
+    # do NOT log in at boot — the operator clicks Connect to spend a seat
+    # and Disconnect to release it (the Cloud Run instance is always-on, so
+    # auto-login would hold a seat 24/7). "auto": log in at startup (legacy
+    # behavior, for local dev). CATDV_OFFLINE=true still wins (no client).
+    catdv_connect_mode: Literal["auto", "manual"] = "manual"
+    # Auto-disconnect (logout, freeing the seat) after this many seconds
+    # with no operator-driven CatDV API call. The 5s pill poll and the
+    # background health probe do NOT count as activity.
+    catdv_idle_logout_s: int = 900
     # set by run.sh when launching uvicorn with --reload; disables the
     # in-app shutdown button (the reloader supervisor may respawn the worker)
     dev_reload: bool = False
+
+    # WireGuard / onetun (cloud only). Today consumed by entrypoint.sh; now
+    # read here so the app can supervise onetun and expose a status/toggle.
+    # vpn_managed (all four present) gates the whole VPN feature — true on
+    # Cloud Run, false in local dev (no tunnel). WG_PRIVATE_KEY is a secret.
+    wg_private_key: SecretStr | None = None
+    wg_endpoint: str | None = None
+    wg_peer_pubkey: str | None = None
+    wg_source_ip: str | None = None
+    wg_keepalive_s: int = 25
+    # onetun tunnel MTU. 1000 (~1060B WireGuard wire packet) is verified to clear
+    # the Cloud Run -> gateway path MTU; 1380 black-holed outbound multi-segment
+    # requests (the writeback PUT). Prod overrides via ONETUN_MTU. See ADR 0076
+    # (corrects ADR 0074).
+    onetun_mtu: int = 1000
+    onetun_local_forward: str = "127.0.0.1:18080:192.168.1.41:8080:TCP"
 
     # sync engine
     sync_retry_base_s: int = 2
@@ -86,6 +118,17 @@ class Settings(BaseSettings):
             if empty:
                 raise ValueError("FS_ROOT is required when ARCHIVE_PROVIDER=fs")
         return self
+
+    @property
+    def vpn_managed(self) -> bool:
+        """True when WireGuard is configured (cloud). Gates the VPN feature."""
+        return bool(
+            self.wg_private_key is not None
+            and self.wg_private_key.get_secret_value()
+            and self.wg_endpoint
+            and self.wg_peer_pubkey
+            and self.wg_source_ip
+        )
 
 
 def load_settings() -> Settings:

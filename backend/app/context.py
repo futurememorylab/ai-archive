@@ -23,9 +23,12 @@ Build returns a ``CoreCtx`` always and a ``LiveCtx | None`` (None when
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
+
+import asyncio
 
 import aiosqlite
 
@@ -45,6 +48,7 @@ from backend.app.migrations_runner import apply_migrations
 from backend.app.models.telemetry import TelemetryCtx
 from backend.app.repositories.ai_store_files import AIStoreFilesRepo
 from backend.app.repositories.annotations import AnnotationsRepo
+from backend.app.repositories import app_meta as app_meta_repo
 from backend.app.repositories.app_meta import get_or_create_install_id
 from backend.app.repositories.cache_actions_log import CacheActionsLogRepo
 from backend.app.repositories.clip_cache import ClipCacheRepo
@@ -54,11 +58,12 @@ from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.pending_operations import PendingOperationsRepo
 from backend.app.repositories.prefetch_queue import PrefetchQueueRepo
 from backend.app.repositories.prompts import PromptsRepo
+from backend.app.repositories.poster_cache import PosterCacheRepo
 from backend.app.repositories.proxy_cache import ProxyCacheRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.run_telemetry import RunTelemetryRepo
-from backend.app.repositories.studio_sets import StudioSetsRepo
 from backend.app.repositories.studio_runs import StudioRunsRepo
+from backend.app.repositories.studio_sets import StudioSetsRepo
 from backend.app.repositories.uploaded_clips import UploadedClipsRepo
 from backend.app.repositories.workspaces import WorkspacesRepo
 from backend.app.repositories.write_log import WriteLogRepo
@@ -66,10 +71,13 @@ from backend.app.services.cache_actions import CacheActions
 from backend.app.services.cache_inspector import CacheInspector
 from backend.app.services.connection_monitor import ConnectionMonitor
 from backend.app.services.events import EventBus
+from backend.app.services.idle_disconnector import IdleDisconnector
 from backend.app.services.lru_eviction import LruEviction
+from backend.app.services.media_cache import MediaCacheBackend, build_media_cache_backend
 from backend.app.services.media_prefetcher import MediaPrefetcher
 from backend.app.services.proxy_cache_reconciler import ProxyCacheReconciler
 from backend.app.services.sync_engine import SyncEngine
+from backend.app.services.vpn_supervisor import VpnSupervisor
 from backend.app.services.workspace_manager import WorkspaceManager
 from backend.app.services.write_queue import WriteQueue
 from backend.app.settings import Settings
@@ -94,6 +102,7 @@ class CoreCtx:
     ai_store_files_repo: AIStoreFilesRepo = field(default_factory=AIStoreFilesRepo)
     clip_cache_repo: ClipCacheRepo = field(default_factory=ClipCacheRepo)
     clip_list_cache_repo: ClipListCacheRepo = field(default_factory=ClipListCacheRepo)
+    poster_cache_repo: PosterCacheRepo = field(default_factory=PosterCacheRepo)
     field_def_cache_repo: FieldDefCacheRepo = field(default_factory=FieldDefCacheRepo)
     pending_ops_repo: PendingOperationsRepo = field(default_factory=PendingOperationsRepo)
     workspaces_repo: WorkspacesRepo = field(default_factory=WorkspacesRepo)
@@ -218,7 +227,10 @@ class LiveCtx:
     catdv: CatdvClient | None = None
     proxy_resolver: ProxyResolver | None = None
     thumbnail_service: ThumbnailService | None = None
+    media_cache_backend: MediaCacheBackend | None = None
     media_prefetcher: MediaPrefetcher | None = None
+    idle_disconnector: IdleDisconnector | None = None
+    vpn_supervisor: VpnSupervisor | None = None
 
     # --- thin delegators to the composed CoreCtx -------------------
     # Live-route handlers touch both core fields (db, repos) and live
@@ -272,6 +284,10 @@ class LiveCtx:
     @property
     def clip_list_cache_repo(self) -> ClipListCacheRepo:
         return self.core.clip_list_cache_repo
+
+    @property
+    def poster_cache_repo(self) -> PosterCacheRepo:
+        return self.core.poster_cache_repo
 
     @property
     def field_def_cache_repo(self) -> FieldDefCacheRepo:
@@ -336,16 +352,24 @@ class LiveCtx:
     async def aclose(self) -> None:
         # Stop the live services in the documented order, then close the
         # core (DB). Order matches the pre-split teardown exactly.
+        # IMPORTANT: vpn_supervisor is torn down AFTER catdv.__aexit__ so
+        # that the DELETE /session logout travels over a live tunnel and the
+        # CatDV seat is actually released. Mirrors the /api/vpn disable
+        # master-switch order (see ADR 0075).
         if self.media_prefetcher is not None:
             await self.media_prefetcher.stop()
         if self.lru_eviction is not None:
             await self.lru_eviction.stop()
         if self.sync_engine is not None:
             await self.sync_engine.stop()
+        if self.idle_disconnector is not None:
+            await self.idle_disconnector.stop()
         if self.connection_monitor is not None:
             await self.connection_monitor.stop()
         if self.catdv is not None:
             await self.catdv.__aexit__(None, None, None)
+        if self.vpn_supervisor is not None:
+            await self.vpn_supervisor.aclose()
         await self.core.aclose()
 
 
@@ -359,6 +383,7 @@ class _OnlineFlags(NamedTuple):
 
     forced_offline: bool
     login_failed: bool
+    manual: bool = False
 
 
 class _ArchiveSubsystem(NamedTuple):
@@ -455,6 +480,8 @@ async def _build_archive_subsystem(
     settings = core.settings
     use_catdv = settings.archive_provider == "catdv"
     forced_offline = bool(getattr(settings, "catdv_offline", False)) and use_catdv
+    connect_mode = getattr(settings, "catdv_connect_mode", "manual")
+    manual = use_catdv and not forced_offline and connect_mode == "manual"
     login_failed = False
     catdv: CatdvClient | None = None
 
@@ -482,61 +509,64 @@ async def _build_archive_subsystem(
             password=settings.catdv_password or "",
         )
         await catdv.__aenter__()
-        # CatdvClient.__aenter__ only opens the httpx pool; auth is
-        # lazy. Force one round-trip so an unreachable host or bad
-        # credentials degrade us to offline cleanly at startup
-        # instead of half-booting and tripping the first request.
-        #
-        # Bound this probe with catdv_startup_login_timeout_s: the client's
-        # own 60s timeout is sized for large downloads, but a silently
-        # unreachable host (VPN drop, server off) would otherwise stall every
-        # restart for that full window. A timeout here is transport-like, so
-        # it lands in the generic `except` below — client kept alive, booted
-        # offline, recoverable via the Reconnect button.
-        try:
-            await asyncio.wait_for(
-                catdv.login(),
-                timeout=settings.catdv_startup_login_timeout_s,
-            )
-        except CatdvAuthError as exc:
-            # Bad credentials — retry won't help. Tear down the client
-            # so the monitor cannot misread "client present" as
-            # "reauthable" later.
-            from backend.app.services.errors import humanise
+        if connect_mode == "auto":
+            # CatdvClient.__aenter__ only opens the httpx pool; auth is
+            # lazy. Force one round-trip so an unreachable host or bad
+            # credentials degrade us to offline cleanly at startup
+            # instead of half-booting and tripping the first request.
+            #
+            # Bound this probe with catdv_startup_login_timeout_s: the client's
+            # own 60s timeout is sized for large downloads, but a silently
+            # unreachable host (VPN drop, server off) would otherwise stall every
+            # restart for that full window. A timeout here is transport-like, so
+            # it lands in the generic `except` below — client kept alive, booted
+            # offline, recoverable via the Reconnect button.
+            try:
+                await asyncio.wait_for(
+                    catdv.login(),
+                    timeout=settings.catdv_startup_login_timeout_s,
+                )
+            except CatdvAuthError as exc:
+                # Bad credentials — retry won't help. Tear down the client
+                # so the monitor cannot misread "client present" as
+                # "reauthable" later.
+                from backend.app.services.errors import humanise
 
-            logging.getLogger(__name__).warning(
-                "CatDV login rejected at startup (%s); booting offline",
-                humanise(exc),
-            )
-            await catdv.__aexit__(None, None, None)
-            catdv = None
-            login_failed = True
-        except CatdvBusyError as exc:
-            # Seat limit reached — recoverable. Keep the client alive so
-            # ConnectionMonitor.retry_now() can re-probe once the stale
-            # session times out or the admin frees the seat.
-            from backend.app.services.errors import humanise
+                logging.getLogger(__name__).warning(
+                    "CatDV login rejected at startup (%s); booting offline",
+                    humanise(exc),
+                )
+                await catdv.__aexit__(None, None, None)
+                catdv = None
+                login_failed = True
+            except CatdvBusyError as exc:
+                # Seat limit reached — recoverable. Keep the client alive so
+                # ConnectionMonitor.retry_now() can re-probe once the stale
+                # session times out or the admin frees the seat.
+                from backend.app.services.errors import humanise
 
-            logging.getLogger(__name__).warning(
-                "CatDV seat limit reached at startup (%s); booting offline — "
-                "click Reconnect once a seat frees up",
-                humanise(exc),
-            )
-            login_failed = True
-        except Exception as exc:  # noqa: BLE001 — transport / DNS / parse
-            # Network-side failure. Could be VPN flap, server stop, or a
-            # non-JSON 5xx body (the seat-limit web servlet sometimes
-            # answers with HTML). Keep the client alive for retry.
-            # Route through humanise() so httpx exceptions with empty
-            # str() (e.g. ConnectError on VPN down) don't log as "()".
-            from backend.app.services.errors import humanise
+                logging.getLogger(__name__).warning(
+                    "CatDV seat limit reached at startup (%s); booting offline — "
+                    "click Reconnect once a seat frees up",
+                    humanise(exc),
+                )
+                login_failed = True
+            except Exception as exc:  # noqa: BLE001 — transport / DNS / parse
+                # Network-side failure. Could be VPN flap, server stop, or a
+                # non-JSON 5xx body (the seat-limit web servlet sometimes
+                # answers with HTML). Keep the client alive for retry.
+                # Route through humanise() so httpx exceptions with empty
+                # str() (e.g. ConnectError on VPN down) don't log as "()".
+                from backend.app.services.errors import humanise
 
-            logging.getLogger(__name__).warning(
-                "CatDV unreachable at startup (%s); booting offline — "
-                "click Reconnect once the server is reachable",
-                humanise(exc),
-            )
-            login_failed = True
+                logging.getLogger(__name__).warning(
+                    "CatDV unreachable at startup (%s); booting offline — "
+                    "click Reconnect once the server is reachable",
+                    humanise(exc),
+                )
+                login_failed = True
+        # Manual mode: client is built but stays logged out until the
+        # operator clicks Connect (POST /api/connection/connect).
 
     # The is_online provider reads the monitor's state once the sync
     # subsystem constructs it (via the shared holder). We delegate to the
@@ -559,6 +589,7 @@ async def _build_archive_subsystem(
         clip_cache_repo=core.clip_cache_repo,
         field_def_cache_repo=core.field_def_cache_repo,
         clip_list_cache_repo=core.clip_list_cache_repo,
+        poster_cache_repo=core.poster_cache_repo,
         db_provider=lambda: core.db,
         is_online_provider=_is_online if use_catdv else None,
     )
@@ -625,12 +656,25 @@ async def _build_archive_subsystem(
             )
             return row is not None
 
+        durable_thumb_store = None
+        if settings.media_cache == "ai_store":
+            from backend.app.services.thumbnail_store import GcsThumbnailStore
+
+            durable_thumb_store = GcsThumbnailStore(gcs_service)
+
+        async def _poster_id(clip_id: int) -> int | None:
+            return await core.poster_cache_repo.get_poster_id(
+                core.db, provider_id=archive.id, provider_clip_id=str(clip_id)
+            )
+
         thumbnail_service = ThumbnailService(
             cache_dir=settings.data_dir / "cache" / "thumbs",
             archive=archive,
             catdv=catdv,
             is_online_provider=_is_online,
             metadata_cached_provider=_has_clip_metadata,
+            durable_store=durable_thumb_store,
+            poster_id_provider=_poster_id,
         )
 
     return _ArchiveSubsystem(
@@ -641,7 +685,9 @@ async def _build_archive_subsystem(
         catdv=catdv,
         proxy_resolver=proxy_resolver,
         thumbnail_service=thumbnail_service,
-        flags=_OnlineFlags(forced_offline=forced_offline, login_failed=login_failed),
+        flags=_OnlineFlags(
+            forced_offline=forced_offline, login_failed=login_failed, manual=manual
+        ),
     )
 
 
@@ -660,6 +706,13 @@ async def _build_sync_subsystem(
     cap_bytes = int(settings.media_cache_cap_gb) * 1024**3
     flags = arch.flags
 
+    if flags.manual:
+        initial_state = ConnectionState.disconnected
+    elif flags.login_failed:
+        initial_state = ConnectionState.offline
+    else:
+        initial_state = ConnectionState.online
+
     connection_monitor = ConnectionMonitor(
         provider=arch.archive,
         db_provider=lambda: core.db,
@@ -667,7 +720,9 @@ async def _build_sync_subsystem(
         timeout_s=float(settings.health_probe_timeout_s),
         event_bus=core.event_bus,
         forced_offline=flags.forced_offline,
-        initial_state=(ConnectionState.offline if flags.login_failed else ConnectionState.online),
+        initial_state=initial_state,
+        manual=flags.manual,
+        logged_in=(lambda: arch.catdv.logged_in) if arch.catdv is not None else None,
     )
     # Publish the monitor so the archive subsystem's is_online closure can
     # read it (defer-read; the closure was installed before this point).
@@ -698,16 +753,82 @@ async def _build_sync_subsystem(
         media_cache_cap_bytes=cap_bytes,
         tick_interval_s=float(settings.lru_tick_interval_s),
     )
+    media_cache_backend: MediaCacheBackend | None = None
+    if arch.proxy_resolver is not None:
+        media_cache_backend = build_media_cache_backend(
+            media_cache=settings.media_cache,
+            resolver=arch.proxy_resolver,
+            ai_store=arch.ai_store,
+            gcs=arch.gcs_service,
+            proxy_cache_repo=core.proxy_cache_repo,
+            db_provider=lambda: core.db,
+        )
+
     media_prefetcher: MediaPrefetcher | None = None
     _inner_resolver = getattr(arch.proxy_resolver, "inner", arch.proxy_resolver)
-    if arch.proxy_resolver is not None and not isinstance(
-        _inner_resolver, LocalCacheOnlyResolver
+    if (
+        arch.proxy_resolver is not None
+        and media_cache_backend is not None
+        and not isinstance(_inner_resolver, LocalCacheOnlyResolver)
     ):
         media_prefetcher = MediaPrefetcher(
             queue_repo=core.prefetch_queue_repo,
-            resolver=arch.proxy_resolver,
+            backend=media_cache_backend,
             db_provider=lambda: core.db,
             tick_interval_s=float(settings.prefetch_tick_interval_s),
+        )
+
+    idle_disconnector = None
+    if flags.manual and arch.catdv is not None:
+        from backend.app.services.idle_disconnector import IdleDisconnector
+
+        idle_disconnector = IdleDisconnector(
+            client=arch.catdv,
+            monitor=connection_monitor,
+            idle_timeout_s=float(settings.catdv_idle_logout_s),
+        )
+
+    vpn_supervisor = None
+    if settings.vpn_managed:
+        def _make_spawn():
+            async def _spawn():
+                env = {
+                    **os.environ,
+                    # Pass the key via env, not argv — avoids leaking it in
+                    # `ps` and onetun's "private key on CLI" warning.
+                    "ONETUN_PRIVATE_KEY": settings.wg_private_key.get_secret_value(),
+                }
+                return await asyncio.create_subprocess_exec(
+                    "onetun",
+                    "--endpoint-addr", settings.wg_endpoint,
+                    "--endpoint-public-key", settings.wg_peer_pubkey,
+                    "--source-peer-ip", settings.wg_source_ip,
+                    "--keep-alive", str(settings.wg_keepalive_s),
+                    "--max-transmission-unit", str(settings.onetun_mtu),
+                    settings.onetun_local_forward,
+                    env=env,
+                )
+            return _spawn
+
+        async def _probe_tunnel() -> bool:
+            # Unauthenticated GET /catdv/api/info through the tunnel — tests
+            # the tunnel without spending a seat. Bounded by the health probe
+            # timeout so a dead tunnel returns False fast.
+            if arch.catdv is None:
+                return False
+            try:
+                await asyncio.wait_for(
+                    arch.catdv.health(), timeout=float(settings.health_probe_timeout_s)
+                )
+                return True
+            except Exception:  # noqa: BLE001 — any failure ⇒ tunnel not healthy
+                return False
+
+        vpn_supervisor = VpnSupervisor(
+            spawn=_make_spawn(),
+            get_desired=lambda: app_meta_repo.get_vpn_desired(core.db),
+            set_desired=lambda v: app_meta_repo.set_vpn_desired(core.db, v),
+            probe_health=_probe_tunnel,
         )
 
     return LiveCtx(
@@ -723,5 +844,8 @@ async def _build_sync_subsystem(
         catdv=arch.catdv,
         proxy_resolver=arch.proxy_resolver,
         thumbnail_service=arch.thumbnail_service,
+        media_cache_backend=media_cache_backend,
         media_prefetcher=media_prefetcher,
+        idle_disconnector=idle_disconnector,
+        vpn_supervisor=vpn_supervisor,
     )

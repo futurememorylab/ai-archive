@@ -1,11 +1,10 @@
 """MediaPrefetcher: one-at-a-time background download worker.
 
 Drains `prefetch_queue` in FIFO order. Each row is processed by calling
-`resolver.path_for_clip_id(int(clip_id))` -- the same call the on-demand
-`/api/media/{id}` route makes. The resolver is in charge of de-dup
-(file exists on disk -> skip download) and of recording the result into
-`proxy_cache`; the prefetcher just sequences the work and records the
-queue-row outcome.
+`backend.ensure_cached(int(clip_id))` -- the cache backend owns de-dup,
+sizing, and recording the result (local proxy cache or GCS upload); the
+prefetcher just sequences the work and records the queue-row outcome
+(bytes=0, because the backend does not surface a size here).
 
 Designed for the WireGuard pipe to Pragafilm: only one row is
 in-flight at a time, by construction (a single coroutine + sequential
@@ -22,6 +21,7 @@ from collections.abc import Callable
 import aiosqlite
 
 from backend.app.repositories.prefetch_queue import PrefetchQueueRepo
+from backend.app.services.errors import humanise
 
 log = logging.getLogger(__name__)
 
@@ -31,12 +31,12 @@ class MediaPrefetcher:
         self,
         *,
         queue_repo: PrefetchQueueRepo,
-        resolver,
+        backend,
         db_provider: Callable[[], aiosqlite.Connection],
         tick_interval_s: float = 2.0,
     ) -> None:
         self._queue = queue_repo
-        self._resolver = resolver
+        self._backend = backend
         self._db_provider = db_provider
         self._tick_interval_s = tick_interval_s
         self._stop_evt: asyncio.Event = asyncio.Event()
@@ -106,10 +106,13 @@ class MediaPrefetcher:
             return clip_id_int if clip_id_str.isdigit() else 0
 
         try:
-            path = await self._resolver.path_for_clip_id(clip_id_int)
-            size = path.stat().st_size if path.exists() else 0  # noqa: ASYNC240
-            await self._queue.mark_done(db, rid, bytes_downloaded=size)
+            await self._backend.ensure_cached(clip_id_int)
+            await self._queue.mark_done(db, rid, bytes_downloaded=0)
         except Exception as exc:  # noqa: BLE001
-            log.warning("prefetch failed for clip %s: %s", clip_id_int, exc)
-            await self._queue.mark_error(db, rid, str(exc))
+            # humanise(), not str(exc): a stalled-tunnel ReadTimeout has an
+            # empty str(), which left the toast + sync drawer blank. exc_info
+            # keeps the type/traceback in the log for diagnosis.
+            msg = humanise(exc)
+            log.warning("prefetch failed for clip %s: %s", clip_id_int, msg, exc_info=True)
+            await self._queue.mark_error(db, rid, msg)
         return clip_id_int

@@ -549,6 +549,29 @@ async def clip_draft_partial(request: Request, clip_id: int):
     )
 
 
+@router.get("/clips/{clip_id}/published", response_class=HTMLResponse)
+async def clip_published_partial(request: Request, clip_id: int):
+    """Re-render the published annotation panels from fresh provider data.
+
+    review.js fetches this after a writeback finishes (driven by the per-clip
+    sync-status poll) and swaps `#published-panels` in place, so applied
+    markers / fields / notes show without a full page reload. The provider's
+    published cache is invalidated by a successful `apply_changes`, so this
+    `get_clip` returns the just-written annotation.
+    """
+    ctx = get_live_ctx(request)
+    try:
+        clip = await ctx.archive.get_clip(str(clip_id))
+    except ProviderError as exc:
+        raise HTTPException(404, f"clip not found: {exc}") from exc
+    # The published panels only read markers/fields/notes — not the cache badge —
+    # so skip the cache_inspector lookup that clip_detail_page needs.
+    ctx_dict = clip_detail(clip)
+    return templates.TemplateResponse(
+        request, "pages/_published_refreshable.html", {"clip": ctx_dict["clip"]}
+    )
+
+
 @router.get("/clips/{clip_id}/live-history", response_class=HTMLResponse)
 async def clip_live_history(request: Request, clip_id: int):
     ctx = get_core_ctx(request)

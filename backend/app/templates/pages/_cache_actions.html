@@ -1,0 +1,43 @@
+{# Per-clip cache control: badge + Cache / Purge / Evict buttons.
+
+   Rendered inline on the clip detail page and re-fetched standalone via
+   GET /ui/cache-actions/{clip_id} after a cache/purge lands (the
+   cacheActions Alpine component swaps this whole node).
+
+   Expects:
+     clip               — {id, kind, cache} (cache = cache_status_view dict)
+     mode               — "online" | "offline" | "disconnected" | "forced_offline"
+     host_local_proxies — bool (host serves proxies from its own filesystem)
+     media_cache        — Jinja global: "local" | "ai_store"
+
+   Which media layer is authoritative depends on media_cache: in cloud
+   ("ai_store") the clip's bytes live in the GCS ai-store, so Cache/Purge
+   act on media_ai; in local dev they act on the downloaded proxy
+   (media_local). The unused layer's controls are never shown.
+#}
+<span class="cache-ctl" id="cache-ctl-{{ clip.id }}"
+      x-data="cacheActions({ id: {{ clip.id }}, kind: '{{ clip.kind }}' })">
+  <span class="cache-badge-host">
+    {% with cache = clip.cache %}{% include "pages/_cache_badge.html" %}{% endwith %}
+  </span>
+  <span class="ca-running" x-show="busy" x-cloak>
+    <span class="ca-spinner ca-spinner-inline" aria-hidden="true"></span>
+    <span class="muted" x-text="busyLabel">Working…</span>
+  </span>
+  <span x-show="!busy" x-cloak>
+    {% set label = "image" if clip.kind == "image" else "video" %}
+    {% if media_cache == 'ai_store' %}
+      {% if clip.cache and clip.cache.media_ai.present %}
+        <button type="button" class="btn danger" @click="purge()">Purge cache</button>
+      {% elif mode == "online" %}
+        <button type="button" class="btn" @click="cacheNow()">⬇ Cache {{ label }}</button>
+      {% endif %}
+    {% elif not host_local_proxies %}
+      {% if clip.cache and clip.cache.media_local.present %}
+        <button type="button" class="btn danger" @click="evictLocal()">Evict local</button>
+      {% elif mode == "online" %}
+        <button type="button" class="btn" @click="cacheNow()">⬇ Cache {{ label }}</button>
+      {% endif %}
+    {% endif %}
+  </span>
+</span>

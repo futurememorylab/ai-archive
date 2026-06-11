@@ -73,3 +73,14 @@ available number. See any existing ADR for the template.
 | 0063 | 2026-06-09 | [One modal vocabulary: ui.modal shell + canonical .modal-* classes](./adr/0063-one-modal-vocabulary-ui-modal.md) |
 | 0064 | 2026-06-09 | [Clip card consolidation (Candidate D) explored and declined](./adr/0064-clip-card-consolidation-declined.md) |
 | 0065 | 2026-06-09 | [Thumbnail service short-circuits when clip has no cached metadata](./adr/0065-thumbnail-service-skips-network-without-clip-cache.md) |
+| 0066 | 2026-06-09 | [Cloud Run pinned to one instance; SQLite persisted via Litestream](./adr/0066-cloud-run-single-instance-litestream.md) |
+| 0067 | 2026-06-10 | [onetun packaged from its GitHub release binary, not a container image](./adr/0067-onetun-packaged-from-release-binary.md) |
+| 0068 | 2026-06-10 | [CatDV connection is manual on-demand on Cloud Run](./adr/0068-catdv-manual-connect.md) |
+| 0069 | 2026-06-10 | [Cloud media cache: AI-store-only on GCP](./adr/0069-cloud-media-cache-ai-store.md) |
+| 0070 | 2026-06-10 | [GCS proxy upload is content-aware, not presence-only](./adr/0070-gcs-content-aware-upload.md) |
+| 0071 | 2026-06-11 | [Durable GCS-backed thumbnail cache](./adr/0071-durable-thumbnail-cache.md) |
+| 0072 | 2026-06-11 | [Thumbnail poster cache + bounded download concurrency](./adr/0072-thumbnail-poster-cache.md) |
+| 0073 | 2026-06-11 | [Cloud cache UI: hide local-media layer, act on the ai-store](./adr/0073-cloud-cache-ui-ai-store-only.md) |
+| 0074 | 2026-06-11 | [Cloud CatDV writeback: MTU hygiene, and the real cause (WireGuard peer-key collision)](./adr/0074-onetun-mtu-1380-gcp-writeback.md) — *root cause partially superseded by 0076* |
+| 0075 | 2026-06-11 | [onetun is app-supervised (VPN status + toggle), default off](./adr/0075-onetun-app-supervised.md) |
+| 0076 | 2026-06-11 | [Cloud CatDV writeback: root cause corrected — outbound path-MTU black-hole, not a peer-key collision](./adr/0076-cloud-writeback-root-cause-corrected-path-mtu.md) |

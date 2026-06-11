@@ -54,6 +54,7 @@ class CatdvArchiveAdapter:
         clip_cache_repo: Any = None,
         field_def_cache_repo: Any = None,
         clip_list_cache_repo: Any = None,
+        poster_cache_repo: Any = None,
         db_provider: Callable[[], Any] | None = None,
         clip_cache_ttl_hours: int = 168,
         clip_list_cache_ttl_minutes: int = 10,
@@ -65,6 +66,7 @@ class CatdvArchiveAdapter:
         self._clip_cache = clip_cache_repo
         self._field_def_cache = field_def_cache_repo
         self._clip_list_cache = clip_list_cache_repo
+        self._poster_cache = poster_cache_repo
         self._db_provider = db_provider
         self._ttl = timedelta(hours=clip_cache_ttl_hours)
         self._list_ttl = timedelta(minutes=clip_list_cache_ttl_minutes)
@@ -88,14 +90,14 @@ class CatdvArchiveAdapter:
         # we'd always answer "offline" and the monitor would stay
         # offline forever. Only the absent-client case short-circuits.
         if self._client is None:
-            return ProviderHealth(ok=False, detail="offline")
+            return ProviderHealth(ok=False, reachable=False, detail="offline")
         t0 = perf_counter()
         try:
             await self._client.health()
         except CatdvAuthError as exc:
-            return ProviderHealth(ok=False, detail=f"auth: {exc}")
+            return ProviderHealth(ok=False, reachable=True, detail=f"auth: {exc}")
         except CatdvBusyError as exc:
-            return ProviderHealth(ok=False, detail=f"busy: {exc}")
+            return ProviderHealth(ok=False, reachable=True, detail=f"busy: {exc}")
         except CatdvError as exc:
             # health() has a return-type contract (always ProviderHealth);
             # the other five except-CatdvError blocks raise NotFoundError on
@@ -104,7 +106,7 @@ class CatdvArchiveAdapter:
             # (which on the /api/info endpoint means misconfigured base URL,
             # not a missing clip) — into ok=False so ConnectionMonitor can
             # report offline cleanly.
-            return ProviderHealth(ok=False, detail=str(exc))
+            return ProviderHealth(ok=False, reachable=False, detail=str(exc))
         latency_ms = (perf_counter() - t0) * 1000.0
         return ProviderHealth(ok=True, latency_ms=latency_ms)
 
@@ -146,6 +148,7 @@ class CatdvArchiveAdapter:
             limit=query.limit,
         )
         await self._write_list_through(catalog, query, page, fetched_at=now)
+        await self._write_poster_cache(raw_items or [])
         return page
 
     async def _list_clips_from_cache(self, catalog: str, query: ClipQuery) -> ClipPage:
@@ -379,6 +382,9 @@ class CatdvArchiveAdapter:
     def _list_cache_enabled(self) -> bool:
         return self._clip_list_cache is not None and self._db_provider is not None
 
+    def _poster_cache_enabled(self) -> bool:
+        return self._poster_cache is not None and self._db_provider is not None
+
     async def _read_list_from_cache(self, catalog: str, query: ClipQuery) -> ClipPage | None:
         if not self._list_cache_enabled():
             return None
@@ -422,6 +428,21 @@ class CatdvArchiveAdapter:
             total=page.total,
             items=page.items,
             fetched_at_iso=fetched_at.isoformat(),
+        )
+
+    async def _write_poster_cache(self, raw_items: list[dict[str, Any]]) -> None:
+        if not self._poster_cache_enabled():
+            return
+        entries = [
+            (int(raw["ID"]), int(raw["posterID"]))
+            for raw in raw_items
+            # skip clips with no poster (CatDV uses posterID 0 / absent)
+            if raw.get("ID") is not None and raw.get("posterID")
+        ]
+        if not entries:
+            return
+        await self._poster_cache.upsert_many(
+            self._db_provider(), provider_id=self.id, entries=entries
         )
 
     def _is_expired(self, fetched_at_iso: str | None, *, ttl: timedelta | None = None) -> bool:

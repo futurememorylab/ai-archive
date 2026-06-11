@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
+from backend.app.services.media_locator import LocalFile
 from tests._helpers.live_ctx import install_live_ctx
 
 
@@ -32,13 +33,13 @@ def test_media_streams_full_file(monkeypatch, tmp_path):
         proxy = tmp_path / "42.mov"
         proxy.write_bytes(b"V" * 1000)
 
-        async def path_for_clip_id(clip_id):
+        async def locate(clip_id):
             assert clip_id == 42
-            return proxy
+            return LocalFile(proxy)
 
         install_live_ctx(
             client.app,
-            proxy_resolver=MagicMock(path_for_clip_id=path_for_clip_id),
+            media_cache_backend=MagicMock(locate=locate),
         )
 
         r = client.get("/api/media/42")
@@ -53,12 +54,12 @@ def test_media_serves_range(monkeypatch, tmp_path):
         proxy = tmp_path / "42.mov"
         proxy.write_bytes(b"X" * 100 + b"Y" * 100)
 
-        async def path_for_clip_id(clip_id):
-            return proxy
+        async def locate(clip_id):
+            return LocalFile(proxy)
 
         install_live_ctx(
             client.app,
-            proxy_resolver=MagicMock(path_for_clip_id=path_for_clip_id),
+            media_cache_backend=MagicMock(locate=locate),
         )
 
         r = client.get("/api/media/42", headers={"Range": "bytes=100-199"})

@@ -267,6 +267,39 @@ async def cache_popover(request: Request, provider_id: str, clip_id: str) -> HTM
     )
 
 
+@ui_router.get("/cache-actions/{clip_id}", response_class=HTMLResponse)
+async def cache_actions(
+    request: Request, clip_id: int, kind: str = "video"
+) -> HTMLResponse:
+    """Re-render the per-clip cache control (badge + Cache/Purge/Evict).
+
+    The cacheActions Alpine component fetches this after a cache or purge
+    lands and swaps the node in place — no full-page reload (CLAUDE.md
+    "never location.reload() after a CRUD action"). Mode + host-local are
+    resolved the same way the clip-detail page and popover do.
+    """
+    from backend.app.routes.connection import _mode
+
+    ctx = get_core_ctx(request)
+    status = await ctx.cache_inspector.status_for_clip(("catdv", str(clip_id)))
+    live = request.app.state.live_ctx
+    return templates.TemplateResponse(
+        request,
+        "pages/_cache_actions.html",
+        {
+            "clip": {
+                "id": clip_id,
+                "kind": kind,
+                "cache": cache_status_view(status),
+            },
+            "mode": _mode(getattr(live, "connection_monitor", None)),
+            "host_local_proxies": getattr(
+                getattr(live, "proxy_resolver", None), "is_host_local", False
+            ),
+        },
+    )
+
+
 @ui_router.get("/cache/queue", response_class=HTMLResponse)
 async def cache_queue_panel(request: Request) -> HTMLResponse:
     ctx = get_core_ctx(request)

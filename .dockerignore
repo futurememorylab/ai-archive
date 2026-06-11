@@ -1,0 +1,15 @@
+.env
+.secret/
+.venv/
+.git/
+.github/
+.claude/
+data/
+logs/
+docs/
+tests/
+tools/
+scripts/
+*.egg-info/
+__pycache__/
+**/__pycache__/

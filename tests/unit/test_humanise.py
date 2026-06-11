@@ -47,6 +47,19 @@ def test_humanise_handles_timeout_error():
     assert "timed out" in msg.lower()
 
 
+def test_humanise_handles_timeout_with_empty_message():
+    # httpx.ReadTimeout often carries no message — str(exc) == "". The
+    # prefetch/writeback stalls over the WireGuard tunnel surface exactly
+    # this, and a bare "transport timeout: " (dangling colon, no info) is
+    # what users were seeing. humanise must name the failure mode + type.
+    exc = httpx.ReadTimeout("")
+    assert str(exc) == ""
+    msg = humanise(exc)
+    assert "timeout" in msg.lower()
+    assert "ReadTimeout" in msg
+    assert not msg.rstrip().endswith(":")
+
+
 def test_humanise_handles_arbitrary_exception_with_str():
     exc = RuntimeError("specific failure mode")
     msg = humanise(exc)

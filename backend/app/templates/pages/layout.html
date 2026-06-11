@@ -24,6 +24,7 @@
   <script defer src="/static/nav-feedback.js"></script>
   <script defer src="/static/row_select.js"></script>
   <script defer src="/static/review.js"></script>
+  <script defer src="/static/cacheActions.js"></script>
   <script defer src="/static/toast.js"></script>
   <script defer src="/static/vendor/alpine.min.js"></script>
 </head>
@@ -37,6 +38,8 @@
     {%- set mode = "forced_offline" -%}
   {%- elif _monitor.current_state().value == "online" -%}
     {%- set mode = "online" -%}
+  {%- elif _monitor.current_state().value == "disconnected" -%}
+    {%- set mode = "disconnected" -%}
   {%- else -%}
     {%- set mode = "offline" -%}
   {%- endif -%}

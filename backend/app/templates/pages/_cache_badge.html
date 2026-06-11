@@ -3,13 +3,15 @@
 #}
 {% if cache %}
 <span class="cache-badge"
-      title="metadata: {% if cache.metadata.present %}present{% else %}absent{% endif %} ·
-             local: {% if cache.media_local.present %}{{ cache.media_local.size_mb }} MB{% if cache.media_local.pinned %} (pinned){% endif %}{% else %}absent{% endif %} ·
+      title="metadata: {% if cache.metadata.present %}present{% else %}absent{% endif %}{% if media_cache != 'ai_store' %} ·
+             local: {% if cache.media_local.present %}{{ cache.media_local.size_mb }} MB{% if cache.media_local.pinned %} (pinned){% endif %}{% else %}absent{% endif %}{% endif %} ·
              ai: {% if cache.media_ai.present %}{{ cache.media_ai.size_mb }} MB{% else %}absent{% endif %}">
   <span class="glyph metadata
                {% if cache.metadata.present %}{% if cache.metadata.evictable %}present-fresh{% else %}present-pinned{% endif %}{% else %}absent{% endif %}">●</span>
+  {% if media_cache != 'ai_store' %}
   <span class="glyph media-local
                {% if cache.media_local.present %}{% if cache.media_local.pinned %}present-pinned{% else %}present-fresh{% endif %}{% else %}absent{% endif %}">▣</span>
+  {% endif %}
   <span class="glyph media-ai
                {% if cache.media_ai.present %}{% if cache.media_ai.evictable %}present-fresh{% else %}present-pinned{% endif %}{% else %}absent{% endif %}">▲</span>
 </span>

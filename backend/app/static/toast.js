@@ -59,3 +59,14 @@ function escapeHtml(s) {
   div.textContent = String(s);
   return div.innerHTML;
 }
+
+/* HTMX bridge: a response carrying `HX-Trigger: {"toast": {...}}` fires a
+ * DOM event named "toast" with the payload in event.detail. Forward it to
+ * the Alpine store so server-driven actions (e.g. failed Connect) toast
+ * without bespoke per-button JS. */
+document.body.addEventListener('toast', (e) => {
+  const d = e.detail || {};
+  if (d && d.message) {
+    Alpine.store('toast').push(d.message, { level: d.level || 'info' });
+  }
+});
