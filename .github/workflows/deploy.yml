@@ -66,5 +66,10 @@ jobs:
         run: |
           URL=$(gcloud run services describe "$SERVICE" --region="$REGION" \
             --format='value(status.url)')
-          TOKEN=$(gcloud auth print-identity-token)
+          # Keyless WIF credentials can't mint an ID token directly; force the
+          # impersonation path with the service URL as audience (Cloud Run is
+          # --no-allow-unauthenticated, so it requires an email-verified ID token).
+          TOKEN=$(gcloud auth print-identity-token \
+            --impersonate-service-account="${{ secrets.GCP_DEPLOYER_SA }}" \
+            --audiences="$URL" --include-email)
           curl -fsS -H "Authorization: Bearer $TOKEN" "$URL/api/health"
