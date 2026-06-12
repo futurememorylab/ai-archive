@@ -296,7 +296,10 @@ JS swaps the partial in place and pushes a success toast.
 For UI bugs in Alpine.js/HTMX, verify reactivity scoping (`$root` vs
 component scope, getters vs methods) and account for browser caching
 before declaring a fix complete. Prefer methods over getters when they
-gate button enabling.
+gate button enabling. Check CSS specificity / `flex-shrink` when a
+visibility or layout fix works in one place but not another. Test the
+fix in BOTH draft and published views — a fix that holds in one view
+frequently breaks in the other.
 
 ## Shell Environment
 
