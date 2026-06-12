@@ -1,7 +1,10 @@
 # Cloud Run scale-to-zero with graceful seat + VPN release
 
 **Date:** 2026-06-12
-**Status:** Draft (brainstorm output, pending review)
+**Status:** Implemented (see ADR 0077). Durability + wall-clock budget are
+verified via the manual acceptance flows rather than CI tests — the timeout
+budget is guarded by asserting the trimmed constants (a timing test would be
+flaky) and the Litestream round-trip needs the real binary + GCS.
 **Scope:** Cloud Run deployment only (`APP_ENV=prod`). Local dev and the
 `--reload` dev server are unaffected.
 

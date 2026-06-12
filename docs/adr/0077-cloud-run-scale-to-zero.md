@@ -37,7 +37,13 @@ Set `--min-instances=0`, keep `--max-instances=1` and `--no-cpu-throttling`.
 Hide the in-app Shut-down button and reject `POST /api/connection/shutdown`
 with 403 when `app_env == "prod"` (Cloud Run owns the lifecycle). Trim the
 teardown budget so the final WAL sync has headroom: onetun kill 5s→2s,
-CatDV logout 3s→2s (≈4s of aclose work, ≈6s left of the 10s grace).
+CatDV logout 3s→2s (≈4s of `aclose()` work). The full sequence after
+`SIGTERM` is uvicorn's `--timeout-graceful-shutdown 3` drain → `aclose()`
+(~4s) → Litestream final sync. On the scale-to-zero path the drain is
+~0s (no in-flight requests, since scale-down happens *because* traffic
+stopped), leaving ≈6s for Litestream; in the worst case (a rolling deploy
+draining live requests) the drain can take its full 3s, so 3 + 4 = 7s and
+~3s remains — still comfortably inside the fixed 10s grace.
 
 ## Consequences
 
@@ -55,3 +61,9 @@ CatDV logout 3s→2s (≈4s of aclose work, ≈6s left of the 10s grace).
   `tests/unit/test_vpn_supervisor.py` + `tests/unit/test_catdv_logout_timeout.py`
   (timeout budget), `tests/integration/test_topbar_shutdown_visibility.py` +
   `tests/integration/test_routes_shutdown.py` (button hidden / route 403).
+  The timeout-budget guards assert the two trimmed constants directly (a
+  wall-clock teardown timing test would be flaky); the existing
+  `tests/unit/test_aclose_ordering.py` already pins the seat→VPN→DB order.
+  Litestream final-flush durability needs the real `litestream` binary + GCS,
+  so it is not CI-automatable — it is verified by manual acceptance flow #2 in
+  the spec (write a row → scale to zero → cold start → row survives).
