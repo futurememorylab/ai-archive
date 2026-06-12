@@ -15,7 +15,11 @@
             :title="hasErrors() ? 'Dismiss' : 'Cancel batch'">✕</button>
   </span>
   {% include "_connection_chip.html" %}
-  {% if _settings.dev_reload %}
+  {% if _settings.app_env == "prod" %}
+    {# Cloud Run owns the lifecycle (scale-to-zero releases the seat + VPN on
+       SIGTERM). A manual shutdown here would only force a cold start, so the
+       control is hidden. The route also rejects it (403). #}
+  {% elif _settings.dev_reload %}
     <button type="button" class="shutdown-btn" disabled
             title="Reload mode — stop with Ctrl-C in the terminal">
       {% include "icons/_power.svg" %}<span>Shut down</span>
