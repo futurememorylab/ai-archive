@@ -8,9 +8,11 @@ from types import SimpleNamespace
 from backend.app.routes.pages.templates import templates
 
 
-def _vpn(managed=True, desired="on", healthy=True, process_running=True):
+def _vpn(managed=True, desired="on", healthy=True, process_running=True,
+         connecting=False):
     return SimpleNamespace(managed=managed, desired=desired,
-                           healthy=healthy, process_running=process_running)
+                           healthy=healthy, process_running=process_running,
+                           connecting=connecting)
 
 
 def _render(mode="disconnected", vpn=None, connect_mode="manual"):
@@ -157,3 +159,28 @@ def test_inner_partial_has_no_shadow_xdata():
     # the parent popover scope and break toggle()/open across polls.
     html = _render(mode="disconnected", vpn=_vpn(desired="off", healthy=False))
     assert html.count('x-data=') == 1   # only the container's x-data="popover()"
+
+
+# ---- VPN connecting phase (amber transition, not red Unreachable) ----
+
+def test_pill_connecting_when_vpn_coming_up():
+    html = _render(mode="disconnected", vpn=_vpn(desired="on", healthy=False, connecting=True))
+    assert "Connecting" in html
+    assert "is-connecting" in html
+    assert "Connecting VPN" in html          # weakest-link subtext
+    assert "is-error" not in html            # NOT shown as red/unreachable
+
+
+def test_vpn_row_connecting_shows_amber_not_unreachable():
+    html = _render(mode="disconnected", vpn=_vpn(desired="on", healthy=False, connecting=True))
+    assert "Connecting" in html
+    assert "s-dot work" in html              # amber state dot
+    assert "Unreachable" not in html         # not the red error row
+    assert "/api/vpn/retry" not in html      # Retry is for the unreachable state
+
+
+def test_vpn_row_unreachable_only_when_not_connecting():
+    # connecting=False + unhealthy → the red Unreachable + Retry path still works.
+    html = _render(mode="disconnected", vpn=_vpn(desired="on", healthy=False, connecting=False))
+    assert "Unreachable" in html
+    assert "/api/vpn/retry" in html

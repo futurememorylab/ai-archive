@@ -24,10 +24,11 @@ def _supervisor(request: Request):
 def _status_dict(sup) -> dict:
     if sup is None:
         return {"managed": False, "desired": "off",
-                "process_running": False, "healthy": False}
+                "process_running": False, "healthy": False, "connecting": False}
     s = sup.status()
     return {"managed": s.managed, "desired": s.desired,
-            "process_running": s.process_running, "healthy": s.healthy}
+            "process_running": s.process_running, "healthy": s.healthy,
+            "connecting": s.connecting}
 
 
 def _toast(message: str, level: str = "success") -> dict[str, str]:

@@ -31,14 +31,17 @@
 
 {# ── derivations ─────────────────────────────────────────────────────── #}
 {%- set vpn_managed = vpn and vpn.managed -%}
+{%- set vpn_connecting = vpn_managed and vpn.connecting -%}
 {%- set vpn_up = (not vpn_managed) or (vpn.desired == "on" and vpn.healthy) -%}
 {%- set vpn_off = vpn_managed and vpn.desired == "off" -%}
-{%- set vpn_err = vpn_managed and vpn.desired == "on" and not vpn.healthy -%}
+{%- set vpn_err = vpn_managed and vpn.desired == "on" and not vpn.healthy and not vpn.connecting -%}
 {%- set catdv_online = mode == "online" -%}
 {%- set catdv_err = mode == "offline" or mode == "forced_offline" -%}
 
 {%- if vpn_up and catdv_online -%}
   {%- set ov_key, ov_label, ov_state = "online", "Online", "is-online" -%}
+{%- elif vpn_connecting -%}
+  {%- set ov_key, ov_label, ov_state = "connecting", "Connecting", "is-connecting" -%}
 {%- elif vpn_err -%}
   {%- set ov_key, ov_label, ov_state = "error", "Offline", "is-error" -%}
 {%- elif vpn_off -%}
@@ -50,6 +53,7 @@
 {%- endif -%}
 
 {%- if vpn_off -%}{%- set ov_sub = "VPN off" -%}
+{%- elif vpn_connecting -%}{%- set ov_sub = "Connecting VPN…" -%}
 {%- elif vpn_err -%}{%- set ov_sub = "VPN unreachable" -%}
 {%- elif mode == "forced_offline" -%}{%- set ov_sub = "Offline (forced)" -%}
 {%- elif catdv_online -%}{%- set ov_sub = "All connected" -%}
@@ -79,17 +83,22 @@
         if request is defined and request else None -%}
 
   {% if vpn_managed %}
-  <div class="conn-svc{% if vpn.healthy %} on{% elif vpn_err %} err{% endif %}">
+  <div class="conn-svc{% if vpn.healthy %} on{% elif vpn_connecting %} work{% elif vpn_err %} err{% endif %}">
     <span class="conn-svc-ic">{% include "icons/_shield.svg" ignore missing %}</span>
     <div class="conn-svc-body">
       <div class="conn-svc-name">VPN tunnel</div>
       <div class="conn-svc-state">
         {% if vpn_off %}<span class="s-dot off"></span>Off
+        {% elif vpn_connecting %}<span class="s-dot work"></span>Connecting…
         {% elif vpn.healthy %}<span class="s-dot on"></span>Connected
         {% else %}<span class="s-dot err"></span>Unreachable{% endif %}
       </div>
     </div>
-    {% if vpn_err %}
+    {% if vpn_connecting %}{# coming up — switch shows on (amber); click cancels #}
+      <button type="button" role="switch" aria-checked="true" class="conn-switch work"
+              hx-post="/api/vpn/disable" hx-target="#connection-chip" hx-swap="innerHTML"
+              hx-indicator="#connection-chip" aria-label="Cancel VPN connection"></button>
+    {% elif vpn_err %}
       <button type="button" class="btn ghost sm conn-retry"
               hx-post="/api/vpn/retry" hx-target="#connection-chip" hx-swap="innerHTML"
               hx-indicator="#connection-chip" title="Re-check the tunnel now">Retry</button>
