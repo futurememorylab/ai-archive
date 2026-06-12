@@ -50,3 +50,16 @@ def test_shutdown_refused_in_reload_mode(monkeypatch, tmp_path):
         r = client.post("/api/connection/shutdown")
     assert r.status_code == 409
     assert calls == []
+
+
+def test_shutdown_refused_in_cloud(monkeypatch, tmp_path):
+    # Build the seat-safe dev app, then flip the live setting to prod so the
+    # route guard fires without booting prod externals.
+    monkeypatch.delenv("DEV_RELOAD", raising=False)
+    app = _make_app(monkeypatch, tmp_path)
+    calls = _patch_trigger(monkeypatch)
+    with TestClient(app) as client:
+        client.app.state.core_ctx.settings.app_env = "prod"
+        r = client.post("/api/connection/shutdown")
+    assert r.status_code == 403
+    assert calls == []

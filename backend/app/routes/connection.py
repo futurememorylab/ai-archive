@@ -137,6 +137,11 @@ async def shutdown(request: Request):
     be re-grabbed. Refused under --reload (the reloader may respawn us).
     """
     ctx = get_core_ctx(request)
+    if getattr(ctx.settings, "app_env", "dev") == "prod":
+        raise HTTPException(
+            status_code=403,
+            detail="shutdown is managed by Cloud Run; the instance scales to zero on idle",
+        )
     if getattr(ctx.settings, "dev_reload", False):
         raise HTTPException(
             status_code=409,
