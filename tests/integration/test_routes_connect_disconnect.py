@@ -140,6 +140,8 @@ def test_connect_success_emits_toast(monkeypatch, tmp_path):
         assert r.status_code == 200
         assert "HX-Trigger" in r.headers
         assert "CatDV connected" in r.headers["HX-Trigger"]
+        import json
+        assert json.loads(r.headers["HX-Trigger"])["toast"]["level"] == "success"
 
 
 def test_disconnect_success_emits_toast(monkeypatch, tmp_path):
@@ -152,6 +154,8 @@ def test_disconnect_success_emits_toast(monkeypatch, tmp_path):
         assert r.status_code == 200
         assert "HX-Trigger" in r.headers
         assert "CatDV disconnected" in r.headers["HX-Trigger"]
+        import json
+        assert json.loads(r.headers["HX-Trigger"])["toast"]["level"] == "info"
 
 
 def test_htmx_pill_response_includes_pending_count(monkeypatch, tmp_path):
