@@ -69,7 +69,11 @@
 
   {# ─── Tabs ─────────────────────────────────────────────────────── #}
   <div class="cache-tabs">
-    {% for t, label in [("all","All"),("queue","Queue"),("local","Local cache"),("ai","AI cache")] %}
+    {# No local proxy cache in cloud (ai_store) — drop the Local-cache tab. #}
+    {% set _tabs = [("all","All"),("queue","Queue"),("ai","AI cache")]
+                   if media_cache == 'ai_store'
+                   else [("all","All"),("queue","Queue"),("local","Local cache"),("ai","AI cache")] %}
+    {% for t, label in _tabs %}
       <a class="ctab{% if tab == t %} active{% endif %}"
          href="/cache?tab={{ t }}"
          hx-get="/cache?tab={{ t }}"

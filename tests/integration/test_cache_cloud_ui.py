@@ -127,3 +127,63 @@ def test_cache_actions_ai_absent_shows_cache_not_purge(monkeypatch, tmp_path: Pa
     assert r.status_code == 200
     assert "Cache video" in r.text
     assert "Purge cache" not in r.text
+
+
+# ── "Local" filter option is removed everywhere in ai_store (cloud) mode ──
+# There is no local proxy cache in the cloud (media lives only in GCS), so a
+# "Local" cache filter / tab matches nothing and only confuses. Hide it
+# wherever media_cache == "ai_store"; keep it in local (dev) mode.
+
+
+def test_clips_cache_filter_hides_local_option_in_ai_store_mode(monkeypatch, tmp_path: Path):
+    from tests._helpers.live_ctx import install_live_ctx
+    from tests.integration.test_clip_detail_draft import FakeArchive, _canonical
+
+    app = _make_app(monkeypatch, tmp_path, media_cache="ai_store")
+    with TestClient(app) as client:
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(101),)))
+        r = client.get("/")
+    assert r.status_code == 200
+    assert 'value="ai"' in r.text  # the AI filter stays
+    assert 'value="local"' not in r.text  # the Local filter is gone in cloud
+
+
+def test_clips_cache_filter_keeps_local_option_in_local_mode(monkeypatch, tmp_path: Path):
+    from tests._helpers.live_ctx import install_live_ctx
+    from tests.integration.test_clip_detail_draft import FakeArchive, _canonical
+
+    app = _make_app(monkeypatch, tmp_path, media_cache="local")
+    with TestClient(app) as client:
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(101),)))
+        r = client.get("/")
+    assert r.status_code == 200
+    assert 'value="local"' in r.text
+
+
+def test_clip_picker_hides_local_option_in_ai_store_mode(monkeypatch, tmp_path: Path):
+    app = _make_app(monkeypatch, tmp_path, media_cache="ai_store")
+    with TestClient(app) as client:
+        r = client.get("/batches")  # includes _clip_picker_main.html
+    assert r.status_code == 200
+    assert 'value="ai"' in r.text
+    assert 'value="local"' not in r.text
+
+
+def test_cache_page_hides_local_tab_in_ai_store_mode(monkeypatch, tmp_path: Path):
+    app = _make_app(monkeypatch, tmp_path, media_cache="ai_store")
+    with TestClient(app) as client:
+        r = client.get("/cache?tab=all")
+    assert r.status_code == 200
+    assert "AI cache" in r.text  # the AI tab stays
+    # No Local-cache *tab* in cloud. (The "Local cache" storage metric card in
+    # the summary strip is a separate dashboard element, not a filter, and is
+    # intentionally left in place.)
+    assert "tab=local" not in r.text
+
+
+def test_cache_page_keeps_local_tab_in_local_mode(monkeypatch, tmp_path: Path):
+    app = _make_app(monkeypatch, tmp_path, media_cache="local")
+    with TestClient(app) as client:
+        r = client.get("/cache?tab=all")
+    assert r.status_code == 200
+    assert "Local cache" in r.text

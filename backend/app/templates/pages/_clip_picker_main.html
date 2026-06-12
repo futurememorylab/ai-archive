@@ -10,7 +10,10 @@
     </label>
     <select x-model="cacheF" @change="resetAndFetch()" title="Cache state">
       <option value="any">Any cache</option>
+      {# No local proxy cache in cloud (ai_store) — media lives only in GCS. #}
+      {% if media_cache != 'ai_store' %}
       <option value="local">Local</option>
+      {% endif %}
       <option value="ai">AI store</option>
       <option value="none">Not cached</option>
     </select>

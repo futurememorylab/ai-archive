@@ -52,7 +52,10 @@
         <select name="cache" onchange="this.form.requestSubmit()">
           <option value="any"   {% if cache_filter == 'any'   %}selected{% endif %}>Any</option>
           <option value="none"  {% if cache_filter == 'none'  %}selected{% endif %}>None</option>
+          {# No local proxy cache in cloud (ai_store) — media lives only in GCS. #}
+          {% if media_cache != 'ai_store' %}
           <option value="local" {% if cache_filter == 'local' %}selected{% endif %}>Local</option>
+          {% endif %}
           <option value="ai"    {% if cache_filter == 'ai'    %}selected{% endif %}>AI</option>
         </select>
       </label>
