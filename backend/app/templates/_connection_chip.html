@@ -1,10 +1,10 @@
-{# Topbar connection control. STABLE container: the 5s poll and the
-   Connect/Disconnect/Retry/VPN actions swap its innerHTML (the pill trigger +
-   dropdown panel live in _connection_chip_inner.html), so the polling element
-   is never destroyed. It owns x-data="popover()" so the dropdown's `open`
-   state survives every innerHTML swap; Alpine's MutationObserver re-binds the
-   swapped pill/panel directives (do NOT add an explicit initTree for this
-   subtree — it double-binds @click; see static/htmxAlpine.js). #}
-<div id="connection-chip" class="conn-chip popover" x-data="popover()"
-     hx-get="/ui/connection-chip" hx-trigger="every 5s"
-     hx-target="this" hx-swap="innerHTML">{% include "_connection_chip_inner.html" %}</div>
+{# Topbar connection control. STABLE container: the Connect/Disconnect/Retry/VPN
+   actions (and a self-rescheduling poll that runs ONLY while the VPN is coming
+   up — see _connection_chip_inner.html) swap its innerHTML, so the container is
+   never destroyed. There is deliberately NO constant background poll: re-rendering
+   every few seconds flickered the pill + dropdown and pulsed the dot on every
+   request. It owns x-data="popover()" so the dropdown's `open` state survives
+   every innerHTML swap; Alpine's MutationObserver re-binds the swapped pill/panel
+   directives (do NOT add an explicit initTree for this subtree — it double-binds
+   @click; see static/htmxAlpine.js). #}
+<div id="connection-chip" class="conn-chip popover" x-data="popover()">{% include "_connection_chip_inner.html" %}</div>

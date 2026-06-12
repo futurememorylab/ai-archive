@@ -79,9 +79,6 @@
     <span class="conn-head-s">{{ ov_label }}</span>
   </div>
 
-  {%- set _catalog = request.app.state.core_ctx.settings.catdv_catalog_id
-        if request is defined and request else None -%}
-
   {% if vpn_managed %}
   <div class="conn-svc{% if vpn.healthy %} on{% elif vpn_connecting %} work{% elif vpn_err %} err{% endif %}">
     <span class="conn-svc-ic">{% include "icons/_shield.svg" ignore missing %}</span>
@@ -105,9 +102,7 @@
     {% elif vpn.healthy %}
       <button type="button" role="switch" aria-checked="true" class="conn-switch on"
               hx-post="/api/vpn/disable" hx-target="#connection-chip" hx-swap="innerHTML"
-              hx-indicator="#connection-chip"
-              hx-confirm="Turn the VPN off? This drops the CatDV connection and cedes the tunnel."
-              aria-label="Turn VPN off"></button>
+              hx-indicator="#connection-chip" aria-label="Turn VPN off"></button>
     {% else %}{# VPN off (desired=off) → offer Enable #}
       <button type="button" role="switch" aria-checked="false" class="conn-switch"
               hx-post="/api/vpn/enable" hx-target="#connection-chip" hx-swap="innerHTML"
@@ -149,11 +144,12 @@
   {% if catdv_gated %}
   <div class="conn-hint">CatDV can only connect once the VPN tunnel is up.</div>
   {% endif %}
-
-  <div class="conn-foot">
-    <span class="conn-foot-meta">
-      {% if _catalog %}CATALOG {{ _catalog }} · {% endif %}READ-ONLY
-    </span>
-    <span class="conn-foot-mode">{{ "live" if (vpn_up and catdv_online) else "cached" }}</span>
-  </div>
 </div>
+
+{# Background heartbeat — ONLY while the tunnel is coming up. This hidden poller
+   re-fetches the chip every 2s so "Connecting…" resolves to Connected (or, after
+   the grace window, Unreachable) without the user clicking. It lives inside the
+   swapped innerHTML, so once a stable state renders (no vpn_connecting) the
+   poller is gone and the chip stops refreshing — no constant flicker. #}
+{% if vpn_connecting %}<span hidden hx-get="/ui/connection-chip"
+      hx-trigger="every 2s" hx-target="#connection-chip" hx-swap="innerHTML"></span>{% endif %}

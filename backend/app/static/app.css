@@ -2519,8 +2519,3 @@ body.studio-resizing {
 
 .conn-retry { gap: 5px; }
 .conn-hint { font-size: 11px; color: var(--text-3); padding: 2px 8px 6px; }
-.conn-foot { display: flex; align-items: center; justify-content: space-between;
-  padding: 8px; margin-top: 4px; border-top: 1px solid var(--line); }
-.conn-foot-meta { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .04em; color: var(--text-3); text-transform: uppercase; }
-.conn-foot-mode { font-family: var(--f-mono); font-size: 10.5px; color: var(--text-3); }
-.conn-dropdown.is-online .conn-foot-mode { color: var(--good); }

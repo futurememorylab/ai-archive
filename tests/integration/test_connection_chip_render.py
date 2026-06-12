@@ -65,8 +65,19 @@ def test_pill_is_popover_trigger():
     assert '@click="toggle()"' in html
 
 
-def test_chip_self_polls():
-    assert 'hx-get="/ui/connection-chip"' in _render()
+def test_stable_chip_does_not_poll():
+    # No constant background poll when stable — that constant innerHTML swap was
+    # the source of the pill/dropdown flicker.
+    html = _render(mode="disconnected", vpn=_vpn(desired="off", healthy=False))
+    assert 'hx-get="/ui/connection-chip"' not in html
+
+
+def test_connecting_chip_polls_in_background():
+    # While the VPN is coming up, a hidden poller refreshes the chip every 2s so
+    # "Connecting…" resolves on its own; it disappears once the state is stable.
+    html = _render(mode="disconnected", vpn=_vpn(desired="on", healthy=False, connecting=True))
+    assert 'hx-get="/ui/connection-chip"' in html
+    assert 'hx-trigger="every 2s"' in html
 
 
 # ---- VPN row ----
@@ -124,17 +135,20 @@ def test_catdv_row_gated_when_vpn_unreachable():
     assert "Requires VPN" in html
 
 
-# ---- footer ----
+# ---- dropdown chrome ----
 
-def test_footer_shows_catalog_and_readonly():
+def test_dropdown_has_no_footer():
+    # The CATALOG · READ-ONLY footer was removed from the dropdown.
     html = _render(mode="online", vpn=_vpn(healthy=True))
-    assert "READ-ONLY" in html
-    assert "live" in html
+    assert "conn-foot" not in html
+    assert "READ-ONLY" not in html
 
 
-def test_footer_cached_when_offline():
-    html = _render(mode="disconnected", vpn=_vpn(desired="off", healthy=False))
-    assert "cached" in html
+def test_vpn_disable_has_no_confirm():
+    # Turning the VPN off no longer pops a confirmation dialog.
+    html = _render(mode="online", vpn=_vpn(desired="on", healthy=True))
+    assert "/api/vpn/disable" in html
+    assert "hx-confirm" not in html
 
 
 def test_catdv_row_forced_offline_shows_disabled_switch():
