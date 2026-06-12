@@ -26,10 +26,15 @@
         <span class="meta mono">{{ clip.format or "" }}</span>
         <span class="cache-actions">
           {% include "pages/_cache_actions.html" %}
-          {% if mode == "online" or (clip.cache and clip.cache.media_local.present) %}
+          {#- Media is annotatable if CatDV is online (can fetch on demand) or the
+              proxy is already cached — locally (dev) OR in the AI store / GCS
+              (cloud, tunnel-independent). Don't gate on media_local alone or the
+              button vanishes in cloud where media lives only in GCS. -#}
+          {% set media_ready = mode == "online" or (clip.cache and (clip.cache.media_local.present or clip.cache.media_ai.present)) %}
+          {% if media_ready %}
             {% include "pages/_annotate_dropdown.html" %}
           {% endif %}
-          {% if (mode == "online" or (clip.cache and clip.cache.media_local.present)) and clip.duration_secs %}
+          {% if media_ready and clip.duration_secs %}
             <button type="button" class="btn good"
                     @click="liveSession.start()">🎤 Live</button>
           {% endif %}

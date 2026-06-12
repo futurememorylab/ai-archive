@@ -249,3 +249,76 @@ def test_clips_published_partial_404_when_clip_missing(monkeypatch, tmp_path):
         install_live_ctx(client.app, archive=FakeArchive(()))
         r = client.get("/clips/999999/published")
         assert r.status_code == 404
+
+
+class _OfflineMonitor:
+    """Connection monitor stub reporting CatDV offline (the scale-to-zero
+    cloud boot state: tunnel/CatDV not connected). layout.html derives
+    mode == "offline" from this, so the `mode == "online"` template branch
+    is false — mirroring the cloud condition the operator hit."""
+
+    is_forced = False
+    _forced_offline = False
+
+    def current_state(self):
+        from backend.app.services.connection_monitor import ConnectionState
+
+        return ConnectionState.offline
+
+
+async def _seed_ai_store_row(ctx, clip_id: int = 101) -> None:
+    """Record an AI-store (GCS) upload for the clip so media_ai.present=True
+    while media_local stays absent — the cloud media layout."""
+    await ctx.ai_store_files_repo.upsert(
+        ctx.db,
+        store_id="gcs:catdav-proxies",
+        clip_id=clip_id,
+        gcs_uri=f"gs://catdav-proxies/clips/{clip_id}.mov",
+        mime_type="video/quicktime",
+        size_bytes=1000,
+        sha256="deadbeef",
+    )
+    await ctx.db.commit()
+
+
+# `runningPromptName` is unique to _annotate_dropdown.html, so it is a precise
+# probe for whether the Annotate dropdown rendered (the shared "popover-panel
+# menu" string also appears in unrelated topbar menus).
+_ANNOTATE_MARKER = "runningPromptName"
+
+
+def test_annotate_available_offline_when_media_in_ai_store(monkeypatch, tmp_path):
+    """Cloud parity: CatDV offline (mode != online) but the clip's proxy is
+    already in the AI store (GCS) → the Annotate button must still render.
+    The annotator reads bytes from GCS, which is tunnel-independent, so
+    annotation works offline for any clip already uploaded."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.core_ctx
+        install_live_ctx(
+            client.app,
+            archive=FakeArchive((_canonical(101),)),
+            connection_monitor=_OfflineMonitor(),
+        )
+        _run(_seed_ai_store_row(ctx, clip_id=101))
+        r = client.get("/clips/101")
+        assert r.status_code == 200
+        assert _ANNOTATE_MARKER in r.text, (
+            "Annotate dropdown must render offline when the clip's media is in GCS"
+        )
+
+
+def test_annotate_hidden_offline_when_no_media_anywhere(monkeypatch, tmp_path):
+    """Guard: offline AND no media in any cache layer → no Annotate button.
+    With no proxy locally or in GCS and CatDV unreachable, a run could not
+    fetch the media, so offering the button would only produce an error."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        install_live_ctx(
+            client.app,
+            archive=FakeArchive((_canonical(101),)),
+            connection_monitor=_OfflineMonitor(),
+        )
+        r = client.get("/clips/101")
+        assert r.status_code == 200
+        assert _ANNOTATE_MARKER not in r.text
