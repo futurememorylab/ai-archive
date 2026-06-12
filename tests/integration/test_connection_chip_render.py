@@ -27,6 +27,14 @@ def test_pill_online_when_vpn_healthy_and_catdv_online():
     assert "is-online" in html
 
 
+def test_pill_online_local_dev_no_vpn():
+    # No WireGuard locally (vpn=None) → VPN layer is absent; CatDV online → Online.
+    html = _render(mode="online", vpn=None)
+    assert "is-online" in html
+    assert "Online" in html
+    assert "All connected" in html
+
+
 def test_pill_offline_vpn_off():
     html = _render(mode="disconnected", vpn=_vpn(desired="off", healthy=False))
     assert "VPN off" in html
