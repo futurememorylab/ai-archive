@@ -131,6 +131,29 @@ def test_connect_targeting_chip_returns_chip(monkeypatch, tmp_path):
         assert "/api/connection/disconnect" in r.text and "Disconnect" in r.text
 
 
+def test_connect_success_emits_toast(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        c = FakeClient()
+        _install(client.app, c)
+        r = client.post("/api/connection/connect")
+        assert r.status_code == 200
+        assert "HX-Trigger" in r.headers
+        assert "CatDV connected" in r.headers["HX-Trigger"]
+
+
+def test_disconnect_success_emits_toast(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        c = FakeClient()
+        c._logged_in = True
+        _install(client.app, c)
+        r = client.post("/api/connection/disconnect")
+        assert r.status_code == 200
+        assert "HX-Trigger" in r.headers
+        assert "CatDV disconnected" in r.headers["HX-Trigger"]
+
+
 def test_htmx_pill_response_includes_pending_count(monkeypatch, tmp_path):
     # The swapped-in pill must render "Sync now (N)" with a real count, not a
     # blank "Sync now ()" flash until the next poll.
