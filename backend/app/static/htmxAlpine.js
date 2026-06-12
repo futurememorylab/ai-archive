@@ -35,6 +35,16 @@ window.htmxAlpine = {
 };
 
 document.body.addEventListener('htmx:afterSwap', (evt) => {
+  // Connection chip: the stable #connection-chip container owns
+  // x-data="popover()"; its innerHTML (pill trigger + dropdown panel) is
+  // swapped by the 5s poll and by connect/disconnect/vpn/retry actions.
+  // Re-init the swapped subtree so @click="toggle()" / x-show="open" rebind;
+  // the parent popover scope (and its `open` flag) is preserved because
+  // initTree skips already-initialized roots.
+  if (evt.target && evt.target.id === 'connection-chip') {
+    window.Alpine?.initTree(evt.target);
+  }
+
   const page = window.Alpine?.store('studio');
   if (!page) return;
 

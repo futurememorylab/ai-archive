@@ -142,3 +142,10 @@ def test_catdv_row_forced_offline_shows_disabled_switch():
     assert "conn-switch dis" in html
     assert "/api/connection/connect" not in html
     assert "/api/connection/disconnect" not in html
+
+
+def test_container_is_popover_with_xdata():
+    html = _render(mode="disconnected", vpn=_vpn(desired="off", healthy=False))
+    assert 'x-data="popover()"' in html
+    assert "popover" in html            # container carries the popover class
+    assert 'x-show="open"' in html      # panel binds to the parent popover scope
