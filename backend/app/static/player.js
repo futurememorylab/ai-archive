@@ -8,6 +8,9 @@ document.addEventListener("alpine:init", () => {
     duration: duration || 0,
     current: 0,
     playing: false,
+    // Buffering spinner: true while the browser is fetching/decoding media and
+    // playback can't proceed — wired to native media events in init().
+    buffering: false,
     markers: Array.isArray(markers) ? markers : [],
     draftMarkers: Array.isArray(draftMarkers) ? draftMarkers : [],
 
@@ -35,6 +38,23 @@ document.addEventListener("alpine:init", () => {
       });
       v.addEventListener("play",  () => { this.playing = true; });
       v.addEventListener("pause", () => { this.playing = false; });
+
+      // Buffering spinner. Under preload="none" the first play (or a seek to a
+      // point/marker the browser hasn't fetched yet — common on the cloud GCS
+      // proxy) needs a network round-trip before a frame is ready. Show the
+      // spinner while data is pending; clear it as soon as playback can present
+      // a frame or continue, and on terminal states so it never spins forever.
+      const buffOn = () => { this.buffering = true; };
+      const buffOff = () => { this.buffering = false; };
+      v.addEventListener("loadstart", buffOn);  // first play kicks off the fetch
+      v.addEventListener("waiting",   buffOn);  // stalled mid-playback, needs data
+      v.addEventListener("seeking",   buffOn);  // jumped to a new point/marker
+      v.addEventListener("playing",   buffOff); // resumed actual playback
+      v.addEventListener("canplay",   buffOff); // enough data to present a frame
+      v.addEventListener("seeked",    buffOff); // landed on the seek target
+      v.addEventListener("pause",     buffOff);
+      v.addEventListener("error",     buffOff);
+      v.addEventListener("ended",     buffOff);
     },
 
     // ─── timeline marker drag (review draft markers, edit-activated) ─

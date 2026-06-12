@@ -41,6 +41,14 @@
       / <span x-text="frameStr(duration)">0</span>
     </div>
   </div>
+  {% if clip_kind != "image" %}
+  {# Buffering spinner — shown while the video is fetching/decoding (play
+     pressed, or timeline/marker jump to an un-cached point). Driven by the
+     player component's `buffering` state. #}
+  <div class="player-spinner" x-show="buffering" x-cloak aria-hidden="true">
+    <span class="player-spinner-ring"></span>
+  </div>
+  {% endif %}
 </div>
 
 {% if duration_secs %}
