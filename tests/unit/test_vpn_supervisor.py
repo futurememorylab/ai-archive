@@ -150,3 +150,14 @@ async def test_enable_disable_enable_roundtrip():
 
     await sup.aclose()
     assert sup.status().process_running is False
+
+
+def test_default_kill_timeout_fits_grace():
+    # 2s onetun kill + 2s CatDV logout (see catdv_client.LOGOUT_TIMEOUT_S)
+    # leaves ~6s of Cloud Run's 10s SIGTERM grace for Litestream's final sync.
+    import inspect
+
+    from backend.app.services.vpn_supervisor import VpnSupervisor
+
+    default = inspect.signature(VpnSupervisor).parameters["kill_timeout_s"].default
+    assert default == 2.0

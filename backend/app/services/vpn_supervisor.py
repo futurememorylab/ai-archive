@@ -47,7 +47,10 @@ class VpnSupervisor:
         set_desired: SetFn,
         probe_health: ProbeFn,
         restart_backoff_s: float = 2.0,
-        kill_timeout_s: float = 5.0,
+        # Bounded so the SIGTERM teardown fits Cloud Run's 10s grace and
+        # leaves room for Litestream's final WAL sync. onetun has no state to
+        # preserve (the seat-release DELETE already went out first).
+        kill_timeout_s: float = 2.0,
         health_interval_s: float = 15.0,
     ) -> None:
         self._spawn = spawn
