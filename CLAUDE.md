@@ -62,9 +62,10 @@ The CatDV REST API binds the session to `JSESSIONID` and the seat is held *serve
 
 ## Server & Network Operations
 
-Never wait/retry on hung network ops (`git fetch`, `pip`, `ping`). If
-zero network activity is detected within a few seconds, treat it as a
-network failure and pivot to inspecting code logic instead of waiting.
+Never wait/retry on hung network ops (`git fetch`, `pip`, `ping`).
+Check activity first with a fast, bounded command; if a process shows
+no traffic within ~2s, treat it as a network failure and pivot to
+inspecting code logic instead of retrying.
 
 ## Frontend: explore before implementing
 
