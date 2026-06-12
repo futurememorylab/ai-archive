@@ -133,3 +133,12 @@ def test_footer_shows_catalog_and_readonly():
 def test_footer_cached_when_offline():
     html = _render(mode="disconnected", vpn=_vpn(desired="off", healthy=False))
     assert "cached" in html
+
+
+def test_catdv_row_forced_offline_shows_disabled_switch():
+    # CATDV_OFFLINE=true → CatDV row is non-actionable (disabled span, no connect/disconnect).
+    html = _render(mode="forced_offline", vpn=_vpn(healthy=True))
+    assert "Offline (forced)" in html
+    assert "conn-switch dis" in html
+    assert "/api/connection/connect" not in html
+    assert "/api/connection/disconnect" not in html

@@ -94,13 +94,13 @@
               hx-post="/api/vpn/retry" hx-target="#connection-chip" hx-swap="innerHTML"
               hx-indicator="#connection-chip" title="Re-check the tunnel now">Retry</button>
     {% elif vpn.healthy %}
-      <button type="button" class="conn-switch on"
+      <button type="button" role="switch" aria-checked="true" class="conn-switch on"
               hx-post="/api/vpn/disable" hx-target="#connection-chip" hx-swap="innerHTML"
               hx-indicator="#connection-chip"
               hx-confirm="Turn the VPN off? This drops the CatDV connection and cedes the tunnel."
               aria-label="Turn VPN off"></button>
-    {% else %}
-      <button type="button" class="conn-switch"
+    {% else %}{# VPN off (desired=off) → offer Enable #}
+      <button type="button" role="switch" aria-checked="false" class="conn-switch"
               hx-post="/api/vpn/enable" hx-target="#connection-chip" hx-swap="innerHTML"
               hx-indicator="#connection-chip" aria-label="Turn VPN on"></button>
     {% endif %}
@@ -127,11 +127,11 @@
               hx-post="/api/connection/retry" hx-target="#connection-chip" hx-swap="innerHTML"
               hx-indicator="#connection-chip" title="Re-probe CatDV now">Retry</button>
     {% elif catdv_online %}
-      <button type="button" class="conn-switch on"
+      <button type="button" role="switch" aria-checked="true" class="conn-switch on"
               hx-post="/api/connection/disconnect" hx-target="#connection-chip" hx-swap="innerHTML"
               hx-indicator="#connection-chip" aria-label="Disconnect CatDV"></button>
     {% else %}
-      <button type="button" class="conn-switch"
+      <button type="button" role="switch" aria-checked="false" class="conn-switch"
               hx-post="/api/connection/connect" hx-target="#connection-chip" hx-swap="innerHTML"
               hx-indicator="#connection-chip" aria-label="Connect CatDV"></button>
     {% endif %}
