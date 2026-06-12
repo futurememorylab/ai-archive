@@ -73,3 +73,14 @@ async def disable(request: Request):
     live.connection_monitor.set_manual_offline(True)
     await sup.disable()
     return await _reply(request, sup, headers=_toast("VPN tunnel disabled."))
+
+
+@router.post("/retry")
+async def retry(request: Request):
+    sup = _supervisor(request)
+    if sup is None:
+        raise HTTPException(409, "VPN not managed on this deployment")
+    st = await sup.probe_now()
+    msg = "VPN reachable." if st.healthy else "VPN still unreachable."
+    level = "success" if st.healthy else "error"
+    return await _reply(request, sup, headers=_toast(msg, level))
