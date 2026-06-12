@@ -6,8 +6,8 @@ from pathlib import Path
 import aiosqlite
 import pytest
 
-from backend.app.archive.providers.catdv.adapter import CatdvArchiveAdapter
 from backend.app.archive.model import ClipQuery
+from backend.app.archive.providers.catdv.adapter import CatdvArchiveAdapter
 from backend.app.migrations_runner import apply_migrations
 from backend.app.repositories.poster_cache import PosterCacheRepo
 

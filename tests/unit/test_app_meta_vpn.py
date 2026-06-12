@@ -1,5 +1,6 @@
 import aiosqlite
 import pytest
+
 from backend.app.repositories.app_meta import get_vpn_desired, set_vpn_desired
 
 

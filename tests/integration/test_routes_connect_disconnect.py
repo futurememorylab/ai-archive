@@ -4,7 +4,6 @@ login failures map to status codes + an HX-Trigger toast, never a seat."""
 
 import importlib
 
-import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.services.catdv_client import CatdvBusyError

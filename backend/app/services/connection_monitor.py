@@ -40,7 +40,7 @@ class ConnectionMonitor:
         forced_offline: bool = False,
         initial_state: ConnectionState = ConnectionState.online,
         manual: bool = False,
-        logged_in: "Callable[[], bool] | None" = None,
+        logged_in: Callable[[], bool] | None = None,
     ) -> None:
         self._provider = provider
         self._db_provider = db_provider

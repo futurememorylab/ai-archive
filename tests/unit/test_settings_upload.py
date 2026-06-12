@@ -1,6 +1,4 @@
-import os
 
-import pytest
 
 
 def _mk(monkeypatch):

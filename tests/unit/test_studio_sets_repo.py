@@ -8,8 +8,7 @@ import pytest
 
 from backend.app.db import open_db
 from backend.app.migrations_runner import apply_migrations
-from backend.app.repositories.studio_sets import StudioSetsRepo
-from backend.app.repositories.studio_sets import DEFAULT_UPLOADED_SET_NAME
+from backend.app.repositories.studio_sets import DEFAULT_UPLOADED_SET_NAME, StudioSetsRepo
 
 
 @pytest.fixture

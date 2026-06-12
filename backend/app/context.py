@@ -23,12 +23,11 @@ Build returns a ``CoreCtx`` always and a ``LiveCtx | None`` (None when
 
 from __future__ import annotations
 
+import asyncio
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
-
-import asyncio
 
 import aiosqlite
 
@@ -46,9 +45,9 @@ from backend.app.archive.registry import build_archive_provider
 from backend.app.db import open_db
 from backend.app.migrations_runner import apply_migrations
 from backend.app.models.telemetry import TelemetryCtx
+from backend.app.repositories import app_meta as app_meta_repo
 from backend.app.repositories.ai_store_files import AIStoreFilesRepo
 from backend.app.repositories.annotations import AnnotationsRepo
-from backend.app.repositories import app_meta as app_meta_repo
 from backend.app.repositories.app_meta import get_or_create_install_id
 from backend.app.repositories.cache_actions_log import CacheActionsLogRepo
 from backend.app.repositories.clip_cache import ClipCacheRepo
@@ -56,9 +55,9 @@ from backend.app.repositories.clip_list_cache import ClipListCacheRepo
 from backend.app.repositories.field_def_cache import FieldDefCacheRepo
 from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.pending_operations import PendingOperationsRepo
+from backend.app.repositories.poster_cache import PosterCacheRepo
 from backend.app.repositories.prefetch_queue import PrefetchQueueRepo
 from backend.app.repositories.prompts import PromptsRepo
-from backend.app.repositories.poster_cache import PosterCacheRepo
 from backend.app.repositories.proxy_cache import ProxyCacheRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.run_telemetry import RunTelemetryRepo

@@ -35,7 +35,6 @@ from backend.app.archive.model import (
 )
 from tests._helpers.live_ctx import install_live_ctx
 
-
 # ---------------------------------------------------------------------------
 # Test environment setup (mirrors test_cache_page_perf.py pattern)
 # ---------------------------------------------------------------------------

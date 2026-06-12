@@ -1,4 +1,3 @@
-import pytest
 from backend.app.settings import Settings
 
 _BASE = dict(

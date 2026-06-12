@@ -1,5 +1,5 @@
 import asyncio
-import pytest
+
 from backend.app.services.vpn_supervisor import VpnSupervisor
 
 

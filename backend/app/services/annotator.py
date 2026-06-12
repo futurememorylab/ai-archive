@@ -35,13 +35,13 @@ from backend.app.services.events import EventBus
 from backend.app.services.pricing import compute_cost
 from backend.app.services.proxy_resolver import ProxyNotFound
 from backend.app.services.target_map import expand
-from backend.app.uploaded_ids import is_uploaded
 from backend.app.services.telemetry_capture import (
     extract_finish_reason,
     extract_usage,
     prompt_hash,
     schema_hash,
 )
+from backend.app.uploaded_ids import is_uploaded
 
 log = logging.getLogger(__name__)
 

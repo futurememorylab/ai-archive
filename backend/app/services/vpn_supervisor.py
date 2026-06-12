@@ -129,7 +129,7 @@ class VpnSupervisor:
             logger.warning("onetun exited rc=%s; restarting in %ss", rc, self._backoff)
             try:
                 await asyncio.wait_for(self._stop.wait(), timeout=self._backoff)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
 
     async def _health_loop(self) -> None:
@@ -143,7 +143,7 @@ class VpnSupervisor:
                 self._healthy = False
             try:
                 await asyncio.wait_for(self._stop.wait(), timeout=self._health_interval)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
 
     async def _kill_proc(self) -> None:
@@ -153,7 +153,7 @@ class VpnSupervisor:
         proc.terminate()
         try:
             await asyncio.wait_for(proc.wait(), timeout=self._kill_timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             await proc.wait()
         self._proc = None

@@ -5,7 +5,7 @@ import importlib
 
 from fastapi.testclient import TestClient
 
-from backend.app.services.connection_monitor import ConnectionMonitor, ConnectionState
+from backend.app.services.connection_monitor import ConnectionState
 from tests._helpers.live_ctx import install_live_ctx
 
 

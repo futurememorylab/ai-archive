@@ -1,6 +1,6 @@
 import pytest
 
-from backend.app.archive.errors import FatalProviderError, NotFoundError
+from backend.app.archive.errors import NotFoundError
 from backend.app.archive.model import (
     AddMarkers,
     ChangeSet,
