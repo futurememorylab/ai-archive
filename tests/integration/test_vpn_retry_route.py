@@ -52,6 +52,10 @@ def test_retry_managed_reprobes_and_returns_chip(monkeypatch, tmp_path):
         assert sup.probe_called is True
         assert "HX-Trigger" in r.headers              # toast bridge
         assert "VPN" in r.text
+        import json
+        trigger = json.loads(r.headers["HX-Trigger"])
+        assert trigger["toast"]["level"] == "success"
+        assert "reachable" in trigger["toast"]["message"]
 
 
 def test_retry_still_unreachable_toasts(monkeypatch, tmp_path):
@@ -63,3 +67,8 @@ def test_retry_still_unreachable_toasts(monkeypatch, tmp_path):
         assert r.status_code == 200
         assert sup.probe_called is True
         assert "HX-Trigger" in r.headers
+        assert "VPN" in r.text
+        import json
+        trigger = json.loads(r.headers["HX-Trigger"])
+        assert trigger["toast"]["level"] == "error"
+        assert "still unreachable" in trigger["toast"]["message"]
