@@ -84,3 +84,4 @@ available number. See any existing ADR for the template.
 | 0074 | 2026-06-11 | [Cloud CatDV writeback: MTU hygiene, and the real cause (WireGuard peer-key collision)](./adr/0074-onetun-mtu-1380-gcp-writeback.md) — *root cause partially superseded by 0076* |
 | 0075 | 2026-06-11 | [onetun is app-supervised (VPN status + toggle), default off](./adr/0075-onetun-app-supervised.md) |
 | 0076 | 2026-06-11 | [Cloud CatDV writeback: root cause corrected — outbound path-MTU black-hole, not a peer-key collision](./adr/0076-cloud-writeback-root-cause-corrected-path-mtu.md) |
+| 0077 | 2026-06-12 | [Cloud Run scale-to-zero with graceful seat + VPN release](./adr/0077-cloud-run-scale-to-zero.md) |
