@@ -49,16 +49,19 @@ jobs:
           docker push "$IMAGE:${{ github.sha }}"
           docker push "$IMAGE:latest"
       - name: Deploy
-        # min/max-instances=1 is correctness, not cost: one CatDV seat,
-        # one Litestream writer, one in-process write queue. Never raise
-        # it; never traffic-split. See spec + ADR.
+        # max-instances=1 is correctness, not cost: one CatDV seat, one
+        # Litestream writer, one in-process write queue. Never raise it;
+        # never traffic-split. min-instances=0 (scale-to-zero) IS cost: the
+        # instance releases the seat + VPN on SIGTERM and stops when idle.
+        # Keep --no-cpu-throttling so Litestream + background loops run
+        # between requests and the teardown gets CPU. See ADR 0077.
         run: |
           gcloud run deploy "$SERVICE" \
             --image="$IMAGE:${{ github.sha }}" \
             --region="$REGION" \
             --service-account=catdv-annotator@${PROJECT_ID}.iam.gserviceaccount.com \
             --no-allow-unauthenticated \
-            --min-instances=1 --max-instances=1 --no-cpu-throttling \
+            --min-instances=0 --max-instances=1 --no-cpu-throttling \
             --memory=1Gi --cpu=1 \
             --env-vars-file=deploy/cloudrun.env.yaml \
             --set-secrets="CATDV_PASSWORD=catdv-password:latest,GEMINI_API_KEY=gemini-api-key:latest,WG_PRIVATE_KEY=wg-private-key:latest"
