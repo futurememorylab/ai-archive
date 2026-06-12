@@ -70,7 +70,81 @@
 <div class="popover-panel conn-dropdown align-right {{ ov_state }}"
      x-show="open" x-cloak
      @click.outside="close()" @keydown.escape.window="close()">
-  {# DROPDOWN BODY — filled in Task 5 #}
-  <div class="conn-head"><span class="conn-head-t">Connection</span>
-    <span class="conn-head-s">{{ ov_label }}</span></div>
+  <div class="conn-head">
+    <span class="conn-head-t">Connection</span>
+    <span class="conn-head-s">{{ ov_label }}</span>
+  </div>
+
+  {%- set _catalog = request.app.state.core_ctx.settings.catdv_catalog_id
+        if request is defined and request else None -%}
+
+  {% if vpn_managed %}
+  <div class="conn-svc{% if vpn.healthy %} on{% elif vpn_err %} err{% endif %}">
+    <span class="conn-svc-ic">{% include "icons/_shield.svg" ignore missing %}</span>
+    <div class="conn-svc-body">
+      <div class="conn-svc-name">VPN tunnel</div>
+      <div class="conn-svc-state">
+        {% if vpn_off %}<span class="s-dot off"></span>Off
+        {% elif vpn.healthy %}<span class="s-dot on"></span>Connected
+        {% else %}<span class="s-dot err"></span>Unreachable{% endif %}
+      </div>
+    </div>
+    {% if vpn_err %}
+      <button type="button" class="btn ghost sm conn-retry"
+              hx-post="/api/vpn/retry" hx-target="#connection-chip" hx-swap="innerHTML"
+              hx-indicator="#connection-chip" title="Re-check the tunnel now">Retry</button>
+    {% elif vpn.healthy %}
+      <button type="button" class="conn-switch on"
+              hx-post="/api/vpn/disable" hx-target="#connection-chip" hx-swap="innerHTML"
+              hx-indicator="#connection-chip"
+              hx-confirm="Turn the VPN off? This drops the CatDV connection and cedes the tunnel."
+              aria-label="Turn VPN off"></button>
+    {% else %}
+      <button type="button" class="conn-switch"
+              hx-post="/api/vpn/enable" hx-target="#connection-chip" hx-swap="innerHTML"
+              hx-indicator="#connection-chip" aria-label="Turn VPN on"></button>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {%- set catdv_gated = vpn_managed and not vpn_up -%}
+  <div class="conn-svc dep{% if vpn_up and catdv_online %} linked{% endif %}{% if catdv_online %} on{% elif catdv_err %} err{% endif %}{% if catdv_gated %} disabled{% endif %}">
+    <span class="conn-svc-ic">{% include "icons/_server.svg" ignore missing %}</span>
+    <div class="conn-svc-body">
+      <div class="conn-svc-name">CatDV Annotator</div>
+      <div class="conn-svc-state">
+        {% if catdv_gated %}<span class="s-dot off"></span>Requires VPN
+        {% elif mode == "forced_offline" %}<span class="s-dot err"></span>Offline (forced)
+        {% elif catdv_online %}<span class="s-dot on"></span>Connected
+        {% elif catdv_err %}<span class="s-dot err"></span>Unreachable
+        {% else %}<span class="s-dot off"></span>Disconnected{% endif %}
+      </div>
+    </div>
+    {% if catdv_gated or mode == "forced_offline" %}
+      <span class="conn-switch dis" aria-disabled="true"></span>
+    {% elif catdv_err %}
+      <button type="button" class="btn ghost sm conn-retry"
+              hx-post="/api/connection/retry" hx-target="#connection-chip" hx-swap="innerHTML"
+              hx-indicator="#connection-chip" title="Re-probe CatDV now">Retry</button>
+    {% elif catdv_online %}
+      <button type="button" class="conn-switch on"
+              hx-post="/api/connection/disconnect" hx-target="#connection-chip" hx-swap="innerHTML"
+              hx-indicator="#connection-chip" aria-label="Disconnect CatDV"></button>
+    {% else %}
+      <button type="button" class="conn-switch"
+              hx-post="/api/connection/connect" hx-target="#connection-chip" hx-swap="innerHTML"
+              hx-indicator="#connection-chip" aria-label="Connect CatDV"></button>
+    {% endif %}
+  </div>
+
+  {% if catdv_gated %}
+  <div class="conn-hint">CatDV can only connect once the VPN tunnel is up.</div>
+  {% endif %}
+
+  <div class="conn-foot">
+    <span class="conn-foot-meta">
+      {% if _catalog %}CATALOG {{ _catalog }} · {% endif %}READ-ONLY
+    </span>
+    <span class="conn-foot-mode">{{ "live" if (vpn_up and catdv_online) else "cached" }}</span>
+  </div>
 </div>

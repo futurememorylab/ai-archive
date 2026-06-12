@@ -65,3 +65,71 @@ def test_pill_is_popover_trigger():
 
 def test_chip_self_polls():
     assert 'hx-get="/ui/connection-chip"' in _render()
+
+
+# ---- VPN row ----
+
+def test_vpn_row_off_offers_enable_switch():
+    html = _render(mode="disconnected", vpn=_vpn(desired="off", healthy=False))
+    assert "VPN tunnel" in html
+    assert "/api/vpn/enable" in html
+
+
+def test_vpn_row_on_offers_disable_switch():
+    html = _render(mode="online", vpn=_vpn(desired="on", healthy=True))
+    assert "/api/vpn/disable" in html
+
+
+def test_vpn_row_unreachable_offers_retry():
+    html = _render(mode="disconnected", vpn=_vpn(desired="on", healthy=False))
+    assert "/api/vpn/retry" in html
+    assert "Retry" in html
+
+
+def test_vpn_row_hidden_when_unmanaged():
+    html = _render(mode="disconnected", vpn=None)
+    assert "VPN tunnel" not in html
+    assert "CatDV Annotator" in html
+
+
+# ---- CatDV row ----
+
+def test_catdv_row_connected_offers_disconnect():
+    html = _render(mode="online", vpn=_vpn(healthy=True))
+    assert "/api/connection/disconnect" in html
+
+
+def test_catdv_row_disconnected_offers_connect():
+    html = _render(mode="disconnected", vpn=_vpn(healthy=True))
+    assert "/api/connection/connect" in html
+
+
+def test_catdv_row_unreachable_offers_retry():
+    html = _render(mode="offline", vpn=_vpn(healthy=True))
+    assert "/api/connection/retry" in html
+    assert "Retry" in html
+
+
+def test_catdv_row_gated_when_vpn_off():
+    html = _render(mode="disconnected", vpn=_vpn(desired="off", healthy=False))
+    assert "Requires VPN" in html
+    assert "can only connect once the VPN tunnel is up" in html
+    assert "/api/connection/connect" not in html
+
+
+def test_catdv_row_gated_when_vpn_unreachable():
+    html = _render(mode="disconnected", vpn=_vpn(desired="on", healthy=False))
+    assert "Requires VPN" in html
+
+
+# ---- footer ----
+
+def test_footer_shows_catalog_and_readonly():
+    html = _render(mode="online", vpn=_vpn(healthy=True))
+    assert "READ-ONLY" in html
+    assert "live" in html
+
+
+def test_footer_cached_when_offline():
+    html = _render(mode="disconnected", vpn=_vpn(desired="off", healthy=False))
+    assert "cached" in html
