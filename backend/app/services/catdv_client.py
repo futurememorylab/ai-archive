@@ -18,6 +18,11 @@ _DEFAULT_CHUNK = 1 << 16
 
 _QUERY_ALLOWLIST = re.compile(r"[^\w\s\-.]", re.UNICODE)
 
+# Logout DELETE timeout. On shutdown this shares Cloud Run's fixed 10s
+# SIGTERM grace with onetun teardown (2s) and Litestream's final WAL sync,
+# so keep it tight — a dead tunnel must not starve the sync. See ADR 0077.
+LOGOUT_TIMEOUT_S = 2.0
+
 
 def _sanitise_query(q: str) -> str:
     """Strip any character not in the conservative allowlist
@@ -113,10 +118,9 @@ class CatdvClient:
         if self._client is None or not self._logged_in:
             return
         try:
-            # Bounded: on shutdown this shares Cloud Run's 10s SIGTERM
-            # grace with Litestream's final WAL sync; a dead tunnel must
-            # not starve it. 3s matches uvicorn --timeout-graceful-shutdown.
-            await self.http.delete(f"{self._base}/catdv/api/9/session", timeout=3.0)
+            await self.http.delete(
+                f"{self._base}/catdv/api/9/session", timeout=LOGOUT_TIMEOUT_S
+            )
         except Exception:
             logging.getLogger(__name__).warning(
                 "CatDV logout (DELETE /session) failed; the license seat may "
