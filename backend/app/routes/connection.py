@@ -106,7 +106,7 @@ async def retry_now(request: Request):
         if is_htmx:
             return _templates.TemplateResponse(
                 request,
-                "_connection_chip.html",
+                "_connection_chip_inner.html",
                 {"mode": "forced_offline"},
                 status_code=409,
             )

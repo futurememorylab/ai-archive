@@ -169,3 +169,37 @@ def test_htmx_pill_response_includes_pending_count(monkeypatch, tmp_path):
         assert r.status_code == 200
         assert "Sync now (0)" in r.text
         assert "Sync now ()" not in r.text
+
+
+def test_retry_forced_offline_returns_inner_partial_not_outer(monkeypatch, tmp_path):
+    # Regression: the forced-offline retry branch must return the INNER chip
+    # partial, never the outer _connection_chip.html (which carries
+    # x-data="popover()" and would nest a second Alpine scope on swap).
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        c = FakeClient()
+        ctx = client.app.state.core_ctx
+
+        class P:
+            async def health(self):
+                class H:
+                    ok = False
+                    reachable = True
+                return H()
+
+        monitor = ConnectionMonitor(
+            provider=P(), db_provider=lambda: ctx.db, interval_s=99999.0,
+            event_bus=ctx.event_bus, manual=True, logged_in=lambda: c.logged_in,
+            initial_state=ConnectionState.offline, forced_offline=True,
+        )
+        install_live_ctx(client.app, connection_monitor=monitor, catdv=c)
+
+        r = client.post(
+            "/api/connection/retry",
+            headers={"HX-Request": "true", "HX-Target": "connection-chip"},
+        )
+        # Must be the inner partial: no nested popover scope, no polling wrapper.
+        assert 'x-data="popover()"' not in r.text
+        assert 'hx-get="/ui/connection-chip"' not in r.text
+        # It should still render the chip's pill markup.
+        assert "conn-pill" in r.text
