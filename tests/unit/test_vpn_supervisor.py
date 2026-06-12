@@ -161,3 +161,46 @@ def test_default_kill_timeout_fits_grace():
 
     default = inspect.signature(VpnSupervisor).parameters["kill_timeout_s"].default
     assert default == 2.0
+
+
+async def test_probe_now_running_sets_healthy_from_probe():
+    sup, state, spawned = _make(desired="on", probe_ok=True)
+    await sup.start()
+    await asyncio.sleep(0.02)
+    st = await sup.probe_now()
+    assert st.healthy is True
+    assert sup.status().healthy is True
+    await sup.aclose()
+
+
+async def test_probe_now_running_probe_false_marks_unhealthy():
+    sup, state, spawned = _make(desired="on", probe_ok=False)
+    await sup.start()
+    await asyncio.sleep(0.02)
+    st = await sup.probe_now()
+    assert st.healthy is False
+    assert st.process_running is True   # proc still up; only the probe failed
+    await sup.aclose()
+
+
+async def test_probe_now_not_running_is_unhealthy_noop():
+    sup, state, spawned = _make(desired="off")
+    await sup.start()
+    st = await sup.probe_now()
+    assert st.process_running is False
+    assert st.healthy is False
+    await sup.aclose()
+
+
+async def test_probe_now_swallows_probe_exception():
+    sup, state, spawned = _make(desired="on")
+    await sup.start()
+    await asyncio.sleep(0.02)
+
+    async def boom():
+        raise RuntimeError("probe blew up")
+
+    sup._probe_health = boom            # same best-effort contract as _health_loop
+    st = await sup.probe_now()
+    assert st.healthy is False
+    await sup.aclose()

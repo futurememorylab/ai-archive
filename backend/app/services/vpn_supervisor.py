@@ -89,6 +89,25 @@ class VpnSupervisor:
             await self._spin_down()
             return self.status()
 
+    async def probe_now(self) -> VpnStatus:
+        """Force an immediate health re-probe (user-driven 'Retry').
+
+        The health loop already re-probes every ``health_interval_s`` and
+        ``_supervise`` auto-respawns a dead proc; this exposes the same probe
+        on demand so the UI Retry isn't a no-op. Does NOT bounce the tunnel —
+        a wedged proc is auto-respawned; a deliberate fresh tunnel is
+        disable()+enable(). Best-effort, mirroring ``_health_loop``.
+        """
+        async with self._lock:
+            if self._proc is not None:
+                try:
+                    self._healthy = await self._probe_health()
+                except Exception:  # noqa: BLE001 — probe is best-effort
+                    self._healthy = False
+            else:
+                self._healthy = False
+            return self.status()
+
     def status(self) -> VpnStatus:
         running = self._proc is not None
         return VpnStatus(
