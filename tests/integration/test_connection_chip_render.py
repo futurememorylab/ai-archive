@@ -149,3 +149,11 @@ def test_container_is_popover_with_xdata():
     assert 'x-data="popover()"' in html
     assert "popover" in html            # container carries the popover class
     assert 'x-show="open"' in html      # panel binds to the parent popover scope
+
+
+def test_inner_partial_has_no_shadow_xdata():
+    # The popover scope lives ONLY on the stable container; the swapped inner
+    # partial must NOT declare its own x-data (hosted mode), or it would shadow
+    # the parent popover scope and break toggle()/open across polls.
+    html = _render(mode="disconnected", vpn=_vpn(desired="off", healthy=False))
+    assert html.count('x-data=') == 1   # only the container's x-data="popover()"

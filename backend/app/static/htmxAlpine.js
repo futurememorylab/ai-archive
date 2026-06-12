@@ -42,6 +42,8 @@ document.body.addEventListener('htmx:afterSwap', (evt) => {
   // the parent popover scope (and its `open` flag) is preserved because
   // initTree skips already-initialized roots.
   if (evt.target && evt.target.id === 'connection-chip') {
+    // initTree only (not htmx.process): htmx performed this swap and re-wires
+    // its own hx-* attributes, so only the Alpine bindings need rebinding.
     window.Alpine?.initTree(evt.target);
   }
 
