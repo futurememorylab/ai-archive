@@ -2,8 +2,9 @@
    Connect/Disconnect/Retry/VPN actions swap its innerHTML (the pill trigger +
    dropdown panel live in _connection_chip_inner.html), so the polling element
    is never destroyed. It owns x-data="popover()" so the dropdown's `open`
-   state survives every innerHTML swap; htmxAlpine re-inits the swapped subtree
-   (see static/htmxAlpine.js htmx:afterSwap branch) so @click/x-show rebind. #}
+   state survives every innerHTML swap; Alpine's MutationObserver re-binds the
+   swapped pill/panel directives (do NOT add an explicit initTree for this
+   subtree — it double-binds @click; see static/htmxAlpine.js). #}
 <div id="connection-chip" class="conn-chip popover" x-data="popover()"
      hx-get="/ui/connection-chip" hx-trigger="every 5s"
      hx-target="this" hx-swap="innerHTML">{% include "_connection_chip_inner.html" %}</div>

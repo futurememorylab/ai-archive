@@ -35,17 +35,15 @@ window.htmxAlpine = {
 };
 
 document.body.addEventListener('htmx:afterSwap', (evt) => {
-  // Connection chip: the stable #connection-chip container owns
-  // x-data="popover()"; its innerHTML (pill trigger + dropdown panel) is
-  // swapped by the 5s poll and by connect/disconnect/vpn/retry actions.
-  // Re-init the swapped subtree so @click="toggle()" / x-show="open" rebind;
-  // the parent popover scope (and its `open` flag) is preserved because
-  // initTree skips already-initialized roots.
-  if (evt.target && evt.target.id === 'connection-chip') {
-    // initTree only (not htmx.process): htmx performed this swap and re-wires
-    // its own hx-* attributes, so only the Alpine bindings need rebinding.
-    window.Alpine?.initTree(evt.target);
-  }
+  // Connection chip: do NOT call Alpine.initTree() on #connection-chip here.
+  // The chip's innerHTML (pill trigger + dropdown panel) is hosted-mode — the
+  // pill/panel have no x-data of their own, only directives (@click="toggle()",
+  // x-show="open") bound to the stable container's popover() scope. Alpine's
+  // MutationObserver already re-binds those directives when htmx swaps the
+  // innerHTML. An explicit initTree() would bind them a SECOND time on top of
+  // the observer's binding, so every click fired toggle() twice (open→close)
+  // and the dropdown could never be opened. The container's x-data (and its
+  // `open` flag) persists across swaps because the container is never replaced.
 
   const page = window.Alpine?.store('studio');
   if (!page) return;
