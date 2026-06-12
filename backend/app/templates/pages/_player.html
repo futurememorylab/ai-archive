@@ -48,6 +48,14 @@
   <div class="player-spinner" x-show="buffering" x-cloak aria-hidden="true">
     <span class="player-spinner-ring"></span>
   </div>
+  {# Offline gate — shown when the operator is offline AND this clip's media
+     isn't cached anywhere, so the <video> can't fetch. Hints that reconnecting
+     restores playback. Driven by the player component's `canPlay` flag. #}
+  <div class="player-offline" x-show="!canPlay" x-cloak>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 1l22 22"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.58 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+    <span class="player-offline-title">Reconnect to play</span>
+    <span class="player-offline-hint">This clip isn’t cached for offline playback.</span>
+  </div>
   {% endif %}
 </div>
 
@@ -69,8 +77,9 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>
       </button>
       <button type="button" class="btn play"
+              :disabled="!canPlay"
               @click="togglePlay()"
-              title="play/pause (Space)">
+              :title="canPlay ? 'play/pause (Space)' : 'Reconnect to play this clip'">
         <svg x-show="!playing" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg>
         <svg x-show="playing"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
       </button>

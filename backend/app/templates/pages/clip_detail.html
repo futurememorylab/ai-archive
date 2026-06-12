@@ -4,6 +4,12 @@
 {% block title %}{{ clip.name }} · CatDV Annotator{% endblock %}
 {% block crumb %}{{ ui.breadcrumb([('All clips', '/'), (clip.name, None)]) }}{% endblock %}
 {% block body %}
+{#- Media is playable/annotatable if CatDV is online (can fetch on demand) or
+    the proxy is already cached — locally (dev) OR in the AI store / GCS (cloud,
+    tunnel-independent). One condition feeds both the player's `canPlay` gate
+    (injected into the Alpine scope below) and the Annotate/Live `media_ready`
+    gate in the header. -#}
+{% set can_play = mode == "online" or (clip.cache and (clip.cache.media_local.present or clip.cache.media_ai.present)) %}
 <script>localStorage.setItem("catdv:lastClipId", "{{ clip.id }}");</script>
 <div class="detail"
      :class="{ 'is-draft': scope === 'draft', 'live-active': liveSession.state !== 'idle' }"
@@ -14,6 +20,7 @@
        { scope: "{{ 'draft' if review_mode else 'published' }}", tab: "{{ 'fields' if clip.kind == 'image' else 'markers' }}",
          draftFields: {{ draft_arrays.fields|tojson }}, draftNotes: {{ draft_arrays.notes|tojson }},
          draftDeleted: {{ draft_arrays.deleted|tojson }}, appliedCount: {{ draft_arrays.applied_count }},
+         canPlay: {{ 'true' if can_play else 'false' }},
          liveSession: liveSession({{ clip.id }}, { inactivityS: {{ gemini_live_inactivity_s|default(60) }} })
        }
      )'
@@ -26,11 +33,10 @@
         <span class="meta mono">{{ clip.format or "" }}</span>
         <span class="cache-actions">
           {% include "pages/_cache_actions.html" %}
-          {#- Media is annotatable if CatDV is online (can fetch on demand) or the
-              proxy is already cached — locally (dev) OR in the AI store / GCS
-              (cloud, tunnel-independent). Don't gate on media_local alone or the
-              button vanishes in cloud where media lives only in GCS. -#}
-          {% set media_ready = mode == "online" or (clip.cache and (clip.cache.media_local.present or clip.cache.media_ai.present)) %}
+          {#- Same online-or-cached gate as the player's `can_play` (set at the
+              top of this block) — don't gate on media_local alone or the button
+              vanishes in cloud where media lives only in GCS. -#}
+          {% set media_ready = can_play %}
           {% if media_ready %}
             {% include "pages/_annotate_dropdown.html" %}
           {% endif %}

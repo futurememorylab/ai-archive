@@ -11,6 +11,12 @@ document.addEventListener("alpine:init", () => {
     // Buffering spinner: true while the browser is fetching/decoding media and
     // playback can't proceed — wired to native media events in init().
     buffering: false,
+    // Playback gate. False only when the operator is offline AND the clip's
+    // media isn't cached anywhere (local proxy or AI store / GCS) — the
+    // <video> would just fail to fetch. clip_detail.html overrides this from
+    // the same online-or-cached condition that gates Annotate/Live. Defaults
+    // true so the online/cached cases and the studio player are unaffected.
+    canPlay: true,
     markers: Array.isArray(markers) ? markers : [],
     draftMarkers: Array.isArray(draftMarkers) ? draftMarkers : [],
 
@@ -132,12 +138,13 @@ document.addEventListener("alpine:init", () => {
     togglePlay() {
       const v = this.$refs.video;
       if (!v) return;
+      if (!this.canPlay) return;   // offline + uncached: nothing to play
       if (v.paused) v.play().catch(() => {}); else v.pause();
     },
 
     play() {
       const v = this.$refs.video;
-      if (v) v.play().catch(() => {});
+      if (v && this.canPlay) v.play().catch(() => {});
     },
 
     pause() {
@@ -164,7 +171,7 @@ document.addEventListener("alpine:init", () => {
       if (!v) return;
       const clamped = Math.max(0, Math.min(secs, v.duration || this.duration || secs));
       v.currentTime = clamped;
-      if (play) v.play().catch(() => {});
+      if (play && this.canPlay) v.play().catch(() => {});
     },
 
     seekFromEvent(e) {
