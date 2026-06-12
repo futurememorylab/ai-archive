@@ -2443,10 +2443,10 @@ body.studio-resizing {
      online → --good, connecting → --accent, error → --bad, offline → --text-3
    ============================================================ */
 .conn-chip { position: relative; display: inline-flex; }
-.conn-chip.is-online    { --c: var(--good); }
-.conn-chip.is-connecting{ --c: var(--accent); }
-.conn-chip.is-error     { --c: var(--bad); }
-.conn-chip.is-offline   { --c: var(--text-3); }
+.conn-pill.is-online,     .conn-dropdown.is-online     { --c: var(--good); }
+.conn-pill.is-connecting, .conn-dropdown.is-connecting { --c: var(--accent); }
+.conn-pill.is-error,      .conn-dropdown.is-error      { --c: var(--bad); }
+.conn-pill.is-offline,    .conn-dropdown.is-offline    { --c: var(--text-3); }
 
 .conn-pill {
   display: inline-flex; align-items: center; gap: 8px;
@@ -2465,7 +2465,7 @@ body.studio-resizing {
 
 /* connecting pulse on the dot — driven only while a POST is in flight */
 .conn-pill .conn-spin { display: none; }
-.conn-pill.htmx-request .conn-dot::after {
+.conn-chip.htmx-request .conn-pill .conn-dot::after {
   content: ''; position: absolute; inset: -4px; border-radius: 50%;
   background: var(--accent); opacity: .5; animation: connPing 1.2s ease-out infinite;
 }
