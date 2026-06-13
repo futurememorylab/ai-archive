@@ -259,7 +259,8 @@ def test_cache_page_full_render(monkeypatch, tmp_path: Path):
     assert "Orphans" in body
     # Shell shows pillset (PR1/2) and rail-cache-active
     assert "rail-btn active" in body
-    assert "CATALOG 881507" in body
+    # (The standalone CATALOG env-pill and the connection-dropdown footer that
+    # used to surface the catalog id in the shell were both removed by design.)
 
 
 def test_cache_page_orphans_tile(monkeypatch, tmp_path: Path):

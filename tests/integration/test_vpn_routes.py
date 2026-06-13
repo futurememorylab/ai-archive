@@ -49,3 +49,10 @@ def test_disable_unmanaged_409(monkeypatch, tmp_path):
     with TestClient(app) as client:
         r = client.post("/api/vpn/disable")
     assert r.status_code == 409
+
+
+def test_retry_unmanaged_409(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        r = client.post("/api/vpn/retry")
+    assert r.status_code == 409
