@@ -257,3 +257,41 @@ Injected via `--set-secrets` from Secret Manager — never in
 
 Locally these live in `.env` (`CATDV_PASSWORD`, optional `GEMINI_API_KEY`);
 there is no local WireGuard, so `WG_PRIVATE_KEY` stays unset.
+
+## Staging (`catdv-annotator-staging`)
+
+A persistent, scale-to-zero **second** Cloud Run service for testing cloud + IAP
+behaviour from any branch **without pushing to `main`** and **without touching
+production**. The image is built from the current working tree via Cloud Build
+(no local Docker). Config: [`deploy/staging.env.yaml`](staging.env.yaml);
+deploy: [`deploy/deploy-staging.sh`](deploy-staging.sh); agent path: the
+`deploy-staging` skill.
+
+```bash
+gcloud auth login            # run as a project Owner, NOT the runtime SA
+./deploy/deploy-staging.sh   # build current tree → deploy to staging
+./deploy/deploy-staging.sh --init-iap   # first deploy only: enable IAP + invoker grant
+# then grant testers:
+gcloud iap web add-iam-policy-binding --resource-type=cloud-run \
+  --service=catdv-annotator-staging --region=europe-west3 \
+  --member=user:YOU@example.com --role=roles/iap.httpsResourceAccessor
+```
+
+**Isolation from prod (do not break — these protect production):**
+
+- `CATDV_OFFLINE=true` — CatDV's single *global* license seat must not be
+  contended. Staging can't test live CatDV reads/writes; do those locally.
+- **No `LITESTREAM_REPLICA_URL`** — staging uses an ephemeral DB (resets on cold
+  start). It must never point at prod's `gs://catdv-annotator-db` path: two
+  Litestream writers on one path corrupts the DB.
+- Don't run jobs on staging that write blobs into prod's `gs://catdv-proxies`.
+
+**Cost:** scales to zero → ~nothing when idle; per-deploy = one Cloud Build
+(same as a `main` deploy) + a few cents of image storage.
+
+**IAP audience:** the direct-Cloud-Run-IAP JWT audience is not authoritatively
+documented, so it is *discovered* from a live token on staging (sign in with
+`AUTH_BACKEND=iap` + `IAP_AUDIENCE` unset, read the token's `aud`), then set in
+`staging.env.yaml`. See ADR 0078.
+
+**Teardown:** `gcloud run services delete catdv-annotator-staging --region europe-west3`.
