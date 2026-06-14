@@ -45,11 +45,27 @@ def test_missing_assertion_header_fails_closed():
         iap.current_user(_request(), _settings())
 
 
-def test_unconfigured_audience_fails_closed():
+def test_unconfigured_audience_fails_closed(monkeypatch):
     # Verifying against an empty audience is a verification bypass — refuse it.
+    # (verify_token is mocked so the discovery decode stays offline.)
+    monkeypatch.setattr(iap.id_token, "verify_token", lambda *a, **k: {"aud": "a", "email": "e"})
     s = _settings(iap_audience=None)
     with pytest.raises(RuntimeError):
         iap.current_user(_request({iap.IAP_JWT_HEADER: "h.p.s"}), s)
+
+
+def test_unset_audience_logs_discovered_aud_then_fails_closed(monkeypatch, caplog):
+    # The one-time discovery aid: signature-only decode logs the aud claim so the
+    # operator can set IAP_AUDIENCE, but we STILL fail closed (never admit).
+    monkeypatch.setattr(
+        iap.id_token, "verify_token",
+        lambda *a, **k: {"aud": "DISCOVERED-AUD", "email": "x@y.com"},
+    )
+    s = _settings(iap_audience=None)
+    with caplog.at_level("WARNING"):
+        with pytest.raises(RuntimeError):
+            iap.current_user(_request({iap.IAP_JWT_HEADER: "h.p.s"}), s)
+    assert "DISCOVERED-AUD" in caplog.text
 
 
 def test_valid_assertion_returns_user(monkeypatch):

@@ -54,7 +54,9 @@ def test_iap_backend_fails_closed_when_audience_unconfigured():
     closed rather than verify against an empty audience. Full IAP verification
     paths live in test_iap_adapter.py."""
     s = _settings(auth_backend="iap")  # iap_audience defaults to None
-    req = _request({"x-goog-iap-jwt-assertion": "header.payload.sig"})
+    # No assertion header → the adapter's one-time aud-discovery decode is skipped
+    # (it's offline-only here); dispatch still fails closed with RuntimeError.
+    req = _request()
     with pytest.raises(RuntimeError):
         resolve_user(req, s)
 
