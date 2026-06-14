@@ -66,6 +66,9 @@
 """ADMIN_EMAILS is a comma-separated env string parsed into a normalized list
 (lowercased, trimmed, de-duped) — the deploy-time root of trust for the first
 admins (spec 2026-06-14-iap-roles-admin-console-design.md)."""
+import pytest
+from pydantic import ValidationError
+
 from backend.app.settings import Settings
 
 
@@ -87,6 +90,13 @@ def test_admin_email_list_empty_by_default():
 def test_admin_email_list_parses_and_normalizes():
     s = _settings(admin_emails="  Maya@X.com , elena@x.com ,maya@x.com")
     assert s.admin_email_list == ["maya@x.com", "elena@x.com"]
+
+
+def test_prod_refuses_non_iap_backend():
+    """Cloud (app_env=prod) must run gated: refuse to boot with the dev backend,
+    which would treat every IAP-admitted user as implicit admin."""
+    with pytest.raises(ValidationError):
+        _settings(app_env="prod", auth_backend="dev")
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
@@ -120,16 +130,28 @@ Add the property next to `vpn_managed` (after line 145):
         return list(seen)
 ```
 
+Add a cross-field validator next to the existing `_validate_fs_archive` (~line 128) so the cloud can never accidentally run **ungated** — `app_env=prod` must use the IAP backend, otherwise every IAP-admitted user would be treated as implicit admin (the dev shortcut):
+
+```python
+    @model_validator(mode="after")
+    def _validate_prod_auth(self) -> "Settings":
+        if self.app_env == "prod" and self.auth_backend != "iap":
+            raise ValueError(
+                "APP_ENV=prod requires AUTH_BACKEND=iap — refusing to run ungated in cloud."
+            )
+        return self
+```
+
 - [ ] **Step 4: Run to verify pass**
 
 Run: `python -m pytest tests/unit/test_settings_admin_emails.py -q`
-Expected: PASS (2 passed).
+Expected: PASS (3 passed).
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add backend/app/settings.py tests/unit/test_settings_admin_emails.py
-git commit -m "feat(auth): ADMIN_EMAILS setting + normalized admin_email_list
+git commit -m "feat(auth): ADMIN_EMAILS + prod-requires-iap guard (no ungated cloud)
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
