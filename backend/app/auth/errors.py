@@ -8,7 +8,7 @@ class NotAuthenticated(Exception):
     assertion was missing, malformed, or failed verification.
 
     Distinct from a *configuration* error (e.g. ``AUTH_BACKEND=iap`` without an
-    ``IAP_AUDIENCE``), which raises ``RuntimeError``. The gating layer (PR2b)
-    maps ``NotAuthenticated`` to a denial; PR2a's display middleware treats it
-    as anonymous.
+    ``IAP_AUDIENCE``), which raises ``RuntimeError``. The ``_auth_gate``
+    middleware maps both to a fail-closed denial on non-allow-listed paths
+    (ADR 0079).
     """

@@ -8,9 +8,11 @@ may touch IAP/OAuth specifics (enforced by
 ``tests/unit/test_auth_seam_boundary.py``). This one seam is what keeps the
 IAP↔app-OAuth and cloud↔local choices swappable with bounded effort (ADR 0078).
 
-PR1 ships the seam + the ``dev`` adapter; the ``iap`` adapter is a fail-closed
-placeholder until PR2. The dependency is **not yet wired into any route** —
-PR1 is behaviour-neutral.
+The ``iap`` adapter cryptographically verifies the signed IAP assertion; the
+``dev`` adapter returns a single local operator. Enforcement is centralised in
+the ``_auth_gate`` middleware (``main.py``), which calls ``resolve_user`` and
+denies fail-closed; ``get_current_user`` remains available as a per-route
+dependency. See ADR 0079.
 """
 
 from __future__ import annotations
