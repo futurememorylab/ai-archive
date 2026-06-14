@@ -32,13 +32,16 @@ async def _members_ctx(request: Request, *, role=None, status=None, query=None) 
     members = await ctx.user_roles_repo.list_members(
         ctx.db, role=role or None, status=status or None, query=query or None
     )
-    admins = sum(1 for m in members if m["role"] == "admin")
-    pending = sum(1 for m in members if m["status"] == "requested")
+    # Counts must reflect global totals, not the filtered set — fetch an
+    # unfiltered list so that filtering by role/status doesn't skew the stats.
+    all_members = await ctx.user_roles_repo.list_members(ctx.db)
+    admins = sum(1 for m in all_members if m["role"] == "admin")
+    pending = sum(1 for m in all_members if m["status"] == "requested")
     me = request.state.current_user.email
     return {
         "members": members,
         "me": me,
-        "counts": {"members": len(members), "admins": admins, "pending": pending},
+        "counts": {"members": len(all_members), "admins": admins, "pending": pending},
         "role_order": ROLE_ORDER,
         "role_meta": ROLE_META,
         "role_caps": ROLE_CAPS,
@@ -68,8 +71,12 @@ async def add_member(
         raise HTTPException(400, "invalid email")
     ctx = get_core_ctx(request)
     existing = await ctx.user_roles_repo.get(ctx.db, email)
-    # An access-request becomes a real grant; a brand-new email becomes 'invited'.
-    status = "active" if existing and existing["status"] == "requested" else "invited"
+    if existing is None:
+        status = "invited"           # brand-new email: pre-assigned, awaiting first sign-in
+    elif existing["status"] == "requested":
+        status = "active"            # an access request becomes a real grant
+    else:
+        status = existing["status"]  # preserve active/invited — never downgrade
     await ctx.user_roles_repo.upsert_role(
         ctx.db, email, role, status=status, granted_by=request.state.current_user.email,
         display_name=display_name or None,

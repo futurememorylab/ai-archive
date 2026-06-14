@@ -74,3 +74,96 @@ def test_last_admin_guard(monkeypatch, tmp_path: Path):
         holder["email"] = "a2@x.com"
         r = client.patch("/admin/users/a2@x.com", data={"role": "viewer"})
         assert r.status_code == 403  # self-protection also stops the last-admin self-demote
+
+
+# --- Issue 1: add_member must not downgrade an active member ---
+
+def test_add_member_preserves_active_status(monkeypatch, tmp_path: Path):
+    """Re-POSTing an already-active member with a different role must change the
+    role but keep status='active'; it must NOT regress them to 'invited'."""
+    import asyncio
+
+    holder = {"email": "boss@x.com"}
+    main_mod = _app(monkeypatch, tmp_path, holder)
+    with TestClient(main_mod.app) as client:
+        ctx = main_mod.app.state.core_ctx
+
+        # Step 1: invite the member as annotator
+        r = client.post("/admin/users",
+                        data={"email": "alice@x.com", "role": "annotator", "display_name": "Alice"})
+        assert r.status_code in (200, 201)
+
+        # Step 2: simulate first sign-in — mark_seen flips invited→active
+        asyncio.run(ctx.user_roles_repo.mark_seen(ctx.db, "alice@x.com"))
+        row = asyncio.run(ctx.user_roles_repo.get(ctx.db, "alice@x.com"))
+        assert row["status"] == "active", "precondition: mark_seen should have flipped to active"
+
+        # Step 3: admin re-adds alice with a different role
+        r2 = client.post("/admin/users",
+                         data={"email": "alice@x.com", "role": "viewer", "display_name": ""})
+        assert r2.status_code in (200, 201)
+
+        # Step 4: status must still be 'active'; role must have changed
+        updated = asyncio.run(ctx.user_roles_repo.get(ctx.db, "alice@x.com"))
+        assert updated["status"] == "active", "active member must not be downgraded to invited on re-add"
+        assert updated["role"] == "viewer", "role must be updated by re-add"
+
+
+# --- Issue 2: PATCH and DELETE must surface a success toast (HTML attribute check) ---
+
+def test_patch_and_delete_carry_toast_handler(monkeypatch, tmp_path: Path):
+    """The rendered members table must include @htmx:after-request toast handlers
+    on both the role-change (hx-patch) and revoke (hx-delete) elements."""
+    holder = {"email": "boss@x.com"}
+    main_mod = _app(monkeypatch, tmp_path, holder)
+    with TestClient(main_mod.app) as client:
+        # Add a second member so the table has non-self rows with actions
+        client.post("/admin/users",
+                    data={"email": "bob@x.com", "role": "viewer", "display_name": "Bob"})
+        html = client.get("/admin").text
+
+    # The hx-patch items (role change menu items) must carry the toast handler
+    assert "@htmx:after-request" in html, \
+        "expected @htmx:after-request toast handler in rendered admin HTML"
+    # Both role-change and revoke flavours of the toast text must appear
+    assert "Role updated" in html, \
+        "expected 'Role updated' toast text in hx-patch handler"
+    assert "Access revoked" in html, \
+        "expected 'Access revoked' toast text in hx-delete handler"
+
+
+# --- Issue 3: stat counts must reflect totals, not the filtered set ---
+
+def test_stat_counts_reflect_unfiltered_totals(monkeypatch, tmp_path: Path):
+    """When a role filter is applied, the stat cards must still show global
+    totals, not just the count of the filtered rows.
+
+    Setup: boss (admin, seeded) + viewer + annotator = 3 members, 1 admin.
+    When filtering ?role=viewer the page returns 1 row, but the Members stat
+    card must still read 3 and the Admins stat card must still read 1.
+    """
+    holder = {"email": "boss@x.com"}
+    main_mod = _app(monkeypatch, tmp_path, holder)
+    with TestClient(main_mod.app) as client:
+        # Add members: 1 admin (boss, seeded) + 1 viewer + 1 annotator = 3 total
+        client.post("/admin/users", data={"email": "v@x.com", "role": "viewer", "display_name": ""})
+        client.post("/admin/users", data={"email": "ann@x.com", "role": "annotator", "display_name": ""})
+
+        # Filter to viewers only — only 1 row appears in the table
+        html = client.get("/admin?role=viewer").text
+
+    # The .admin-stats block renders:
+    #   <span class="n">{{ counts.members }}</span><span class="l">Members</span>
+    #   <span class="n">{{ counts.admins }}</span><span class="l">Admins</span>
+    # If counts come from the filtered list we'd get "1 Members / 0 Admins";
+    # with the fix we must get "3 Members / 1 Admins".
+    import re
+    # Extract the Members stat value: text between class="n" span before "Members"
+    members_match = re.search(r'<span class="n">(\d+)</span><span class="l">Members</span>', html)
+    admins_match = re.search(r'<span class="n">(\d+)</span><span class="l">Admins</span>', html)
+    assert members_match, "Members stat not found in admin page HTML"
+    assert admins_match, "Admins stat not found in admin page HTML"
+    assert members_match.group(1) == "3", \
+        f"Members stat must be 3 (global total), got {members_match.group(1)}"
+    assert admins_match.group(1) == "1", \
+        f"Admins stat must be 1 (global total), got {admins_match.group(1)}"

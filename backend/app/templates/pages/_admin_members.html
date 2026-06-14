@@ -26,7 +26,7 @@
                             trigger_cls=('role-pill ' ~ ('admin' if m.role=='admin' else ''))) %}
               {% for r in role_order %}
                 {{ ui.menu_item(role_meta[r].label, desc=role_meta[r].desc, current=(r==m.role),
-                   attrs='hx-patch="/admin/users/' ~ m.email ~ '" hx-vals=\'{"role":"' ~ r ~ '"}\' hx-target="#members" hx-swap="outerHTML"') }}
+                   attrs='hx-patch="/admin/users/' ~ m.email ~ '" hx-vals=\'{"role":"' ~ r ~ '"}\' hx-target="#members" hx-swap="outerHTML" @htmx:after-request="if ($event.detail.successful) $store.toast.push(\'Role updated\', {level:\'success\'})"') }}
               {% endfor %}
             {% endcall %}
           {% endif %}
@@ -38,7 +38,7 @@
           {% if m.email != me %}
           {% call ui.menu(label='⋯', variant='ghost', size='sm', align='right') %}
             {{ ui.menu_item('Revoke access', danger=True,
-               attrs='hx-delete="/admin/users/' ~ m.email ~ '" hx-target="#members" hx-swap="outerHTML" hx-confirm="Revoke access for ' ~ m.email ~ '?"') }}
+               attrs='hx-delete="/admin/users/' ~ m.email ~ '" hx-target="#members" hx-swap="outerHTML" hx-confirm="Revoke access for ' ~ m.email ~ '?" @htmx:after-request="if ($event.detail.successful) $store.toast.push(\'Access revoked\', {level:\'success\'})"') }}
           {% endcall %}
           {% endif %}
         </td>
