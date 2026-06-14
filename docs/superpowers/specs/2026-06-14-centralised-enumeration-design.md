@@ -100,12 +100,20 @@ CREATE TABLE enum_values (
   value      TEXT NOT NULL,                -- 'gemini-2.5-flash'
   label      TEXT,                         -- optional display name
   enabled    INTEGER NOT NULL DEFAULT 1,
+  is_default INTEGER NOT NULL DEFAULT 0,   -- 1 = the default pick for this enum
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   PRIMARY KEY (enum_key, value)
 );
 CREATE INDEX idx_enum_values_key ON enum_values(enum_key, sort_order);
+-- at most one default per enum
+CREATE UNIQUE INDEX idx_enum_values_default
+  ON enum_values(enum_key) WHERE is_default = 1;
 ```
+
+The default must always be an **enabled** value (the service enforces this). A
+partial unique index makes "one default per enum" a DB invariant, not just app
+logic.
 
 **Seeded in the same migration** (one-time, so later user edits persist and are
 never clobbered):
@@ -116,7 +124,8 @@ never clobbered):
   (`gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`,
   `gemini-3-flash-preview`, `gemini-3.1-pro-preview`, `gemini-3.1-flash-lite`,
   `gemini-3.1-flash-lite-preview`, `gemini-3.5-flash`) with ascending
-  `sort_order`, all `enabled = 1`.
+  `sort_order`, all `enabled = 1`. `gemini-2.5-flash-lite` is seeded with
+  `is_default = 1` (matching today's `settings.gemini_model`).
 
 Constant defaults also live in code (`backend/app/enums/defaults.py`) as the
 authoritative seed source the migration is generated from, and for tests.
@@ -134,6 +143,9 @@ Methods:
 - `definition(enum_key: str) -> EnumDefinition | None`
 - `add_value(enum_key, value, label, *, commit)` — raises on PK conflict.
 - `set_enabled(enum_key, value, enabled, *, commit)`
+- `set_default(enum_key, value, *, commit)` — clears the prior default and sets
+  this one in a single statement pair (the partial unique index guarantees one).
+- `default_value(enum_key) -> EnumValue | None`
 - `remove_value(enum_key, value, *, commit)`
 - `count_enabled(enum_key) -> int`
 
@@ -143,16 +155,24 @@ Single-key reads; no list-of-keys fan-out, so no `chunked_in_clause` needed.
 
 The single source of truth for reads and the gatekeeper for writes. Pydantic
 models `EnumDefinition` and `EnumValue` (`value`, `label`, `enabled`,
-`sort_order`).
+`is_default`, `sort_order`).
 
 - `generation_models(enabled_only: bool = True) -> list[EnumValue]` — convenience
   wrapper over `values("gemini_generation_model", ...)`.
+- `generation_default() -> str` — the `value` flagged `is_default` for the model
+  enum (falls back to the first enabled entry only if no default is set, which
+  the seed + guards make impossible in practice).
 - `definitions(editable_only=False)` / `values(key, ...)` — generic reads used by
   the console and the JSON API.
-- `add_value(key, value, label=None)` / `set_enabled(...)` / `remove_value(...)`:
+- `add_value(key, value, label=None)` / `set_enabled(...)` / `set_default(...)` /
+  `remove_value(...)`:
   - Refuse the write with a clear error when the definition's `editable = 0`.
   - **Last-enabled guard:** refuse a remove/disable that would drop the enabled
     count to zero (the consuming dropdown must never be empty).
+  - **Default integrity:** `set_default` requires the target be enabled and
+    auto-clears the prior default; refuse to **disable or remove the current
+    default** with a clear error ("set another value as default first"), so the
+    default always points at a live, enabled value.
   - Surface duplicate-add (PK conflict) as a clean "already in the list" error.
 - Errors raised here are rendered to users via
   `backend/app/services/errors.py::humanise`.
@@ -167,10 +187,11 @@ via `Depends(get_core_ctx)` and it works when CatDV/GCS are offline. No new
   prompt-new route passes `generation_models = ctx.enum_service.generation_models()`
   into the template context, and the `<select>` loops over it (`value` +
   `label or value`).
-- **Default model fallback** — `routes/pages/prompts.py` (lines ~66/82) uses the
-  first enabled catalog entry from `EnumService` instead of the hardcoded
-  `"gemini-2.5-flash-lite"`. `settings.gemini_model` remains the env-level
-  override but is no longer the dropdown's source.
+- **Default model fallback** — `routes/pages/prompts.py` (lines ~66/82) uses
+  `EnumService.generation_default()` (the `is_default`-flagged value) instead of
+  the hardcoded `"gemini-2.5-flash-lite"`, and the dropdown pre-selects it.
+  `settings.gemini_model` remains the env-level override but is no longer the
+  dropdown's source.
 - **JSON API** — `GET /api/enums/{key}` returns the enabled values as JSON for
   any frontend/JS consumer that needs the canonical list.
 
@@ -190,6 +211,7 @@ bottom-group column. `.active` highlight via `rail_active = "admin"`.
 - `GET /admin/enums/{key}` → the values-table partial for one enum (HTMX target).
 - `POST /admin/enums/{key}/values` → add a value.
 - `POST /admin/enums/{key}/values/{value}/enabled` → toggle enabled.
+- `POST /admin/enums/{key}/values/{value}/default` → make this the default.
 - `DELETE /admin/enums/{key}/values/{value}` → remove a value.
 
 All mutating routes return the **updated values-table partial** on
@@ -204,9 +226,10 @@ from the shared UI library (`design-language.md`): `ui.page_header`,
 `*-btn` / `modal-*` / `*-menu` vocabulary (guarded by
 `tests/unit/test_design_language_guard.py`).
 
-**Per-row affordances:** value, label, enabled toggle, delete. A subtle
-"no rate card" badge shows when a model id is absent from `pricing.py`'s rate map
-(so the user knows cost tracking will be incomplete for it).
+**Per-row affordances:** value, label, enabled toggle, a **default** marker
+(radio/star — exactly one row active per enum), delete. A subtle "no rate card"
+badge shows when a model id is absent from `pricing.py`'s rate map (so the user
+knows cost tracking will be incomplete for it).
 
 ### 6. CLAUDE.md — new "Enumerations" section
 
@@ -241,8 +264,9 @@ a refactor-only, behaviour-preserving change.
 3. **Admin edit** — user opens `/admin`, the console lists editable enums from
    `definitions(editable_only=True)`; add/toggle/remove → HTMX → repo write →
    updated partial + toast. Next prompt-new render reflects it.
-4. **Default fallback** — `prompts.py` resolves the default model from the first
-   enabled catalog entry.
+4. **Default fallback** — `prompts.py` resolves the default model from the
+   `is_default`-flagged catalog entry (`generation_default()`), and the New-prompt
+   dropdown pre-selects it.
 
 ## Error handling
 
@@ -250,6 +274,8 @@ a refactor-only, behaviour-preserving change.
   toast. (Defence in depth; the console only exposes editable enums.)
 - **Remove/disable the last enabled value** → refused with a clear toast; the
   consuming dropdown can never be emptied.
+- **Disable/remove the current default** → refused with a clear toast ("set
+  another value as default first"); the default always resolves to a live value.
 - **Duplicate add** → PK conflict surfaced as "That value is already in the list."
 - **Offline** (CatDV/GCS down) → console and edits still work; `EnumService` is
   DB-only on `CoreCtx`.
@@ -264,8 +290,11 @@ Write the failing test first for each unit.
   filter, sort order, PK-conflict raises, `count_enabled`,
   `definitions(editable_only=True)`.
 - **Service** (`tests/unit/test_enum_service.py`): `generation_models` returns
-  enabled+sorted; write refused when `editable = 0`; last-enabled guard on both
-  remove and disable; duplicate-add error; seed values present after migration.
+  enabled+sorted; `generation_default` returns the flagged value; `set_default`
+  clears the prior default (one-default invariant) and rejects a disabled target;
+  disable/remove of the current default refused; write refused when
+  `editable = 0`; last-enabled guard on both remove and disable; duplicate-add
+  error; seed values + seeded default present after migration.
 - **Routes** (`tests/integration/test_admin_enums.py`): `/admin` renders the
   Models tab; `HX-Request` add/toggle/delete return the **partial**, not the full
   page; remove-last-enabled returns an error (no mutation); JSON
@@ -297,6 +326,10 @@ Write the failing test first for each unit.
    selectable in New-prompt.
 6. **Offline.** With CatDV and GCS unreachable, reload `/admin`. *Expected:* the
    console still loads and an add/remove still persists (DB-only path).
-7. **Default model.** With the catalog edited, create a new prompt without picking
-   a model. *Expected:* the default is the first enabled catalog entry, not a
-   stale hardcoded id.
+7. **Set the default.** In the console, mark `gemini-2.5-flash` as default.
+   *Expected:* the marker moves off the previous default (exactly one stays
+   active). Open **Prompts → New** without choosing a model — `gemini-2.5-flash`
+   is pre-selected.
+8. **Default integrity.** Try to disable or delete the row currently marked
+   default. *Expected:* blocked with a clear toast prompting you to pick another
+   default first.
