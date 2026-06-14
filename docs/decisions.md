@@ -86,3 +86,4 @@ available number. See any existing ADR for the template.
 | 0076 | 2026-06-11 | [Cloud CatDV writeback: root cause corrected — outbound path-MTU black-hole, not a peer-key collision](./adr/0076-cloud-writeback-root-cause-corrected-path-mtu.md) |
 | 0077 | 2026-06-12 | [Cloud Run scale-to-zero with graceful seat + VPN release](./adr/0077-cloud-run-scale-to-zero.md) |
 | 0078 | 2026-06-12 | [Connection pill redesign + on-demand VPN re-probe](./adr/0078-vpn-on-demand-reprobe-and-connection-pill.md) |
+| 0079 | 2026-06-14 | [GitHub Flow: kanban board + gh-design / gh-handoff skills](./adr/0079-github-flow-board.md) |
