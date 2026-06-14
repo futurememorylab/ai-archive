@@ -1,23 +1,19 @@
 {% import "components/_ui.html" as ui %}
 <!doctype html>
-{# Standalone access-control page — the app-rendered states (3 "Access not
-   granted", 4 "Error") of the IAP login design. Deliberately does NOT extend
-   pages/layout.html: an unauthorized user must not see the nav rail / topbar.
-   Sign-in + redirect are owned by Google IAP upstream. See spec
-   docs/specs/2026-06-13-iap-access-control-design.md. #}
+{# Standalone access-control page (no nav/topbar — an unauthorized user must
+   not see app chrome). states: denied | requested | error. Sign-in/redirect
+   are owned by Google IAP. Spec 2026-06-14-iap-roles-admin-console-design.md. #}
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% if state == 'error' %}Sign-in error{% else %}Access not granted{% endif %} · Archive AI</title>
+  <title>{% if state == 'error' %}Sign-in error{% else %}No access{% endif %} · CatDV Annotator</title>
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
+  <header class="auth-topbar"><span class="brand-dot"></span> CatDV Annotator</header>
   <main class="auth-screen">
     <div class="auth-panel">
-      <div class="auth-brand">Archive AI</div>
-      <div class="auth-tagline">Analyze your videos with AI-powered insights</div>
-
       {% if state == 'error' %}
       <div class="auth-body">
         <div class="auth-icon err">&times;</div>
@@ -28,15 +24,35 @@
       </div>
       {% else %}
       <div class="auth-body">
-        <div class="auth-icon warn">!</div>
-        <div class="auth-title">Access not granted</div>
-        <div class="auth-msg">
-          {% if email %}<span class="auth-email">{{ email }}</span> isn't on the approved list for Archive AI.
-          {% else %}Your account isn't on the approved list for Archive AI.{% endif %}
+        <div class="auth-title">No access to this catalog</div>
+        <div class="auth-msg">You're signed in, but your account isn't on the access list yet. An administrator needs to grant you a role.</div>
+
+        {% if email %}
+        <div class="auth-identity">
+          <span class="avatar">{{ email[:2] | upper }}</span>
+          <span class="auth-email">{{ email }}</span>
+          <span class="pill ok"><span class="led"></span>Signed in</span>
         </div>
-        {# IAP sign-out: clearing the IAP cookie forces a fresh Google sign-in. #}
-        <div class="auth-actions">{{ ui.button('Use a different account', href='?gcp-iap-mode=CLEAR_LOGIN_COOKIE', variant='ghost') }}</div>
-        <div class="auth-foot">Need access? Contact your workspace admin.</div>
+        {% endif %}
+
+        <div id="access-action">
+          {% if state == 'requested' %}
+          <div class="auth-sent"><span class="pill ok"><span class="led"></span></span>
+            Request sent. An admin will review it.</div>
+          {% else %}
+          {# Plain form POST (no JS): the standalone denial page stays robust
+             even with no scripts/offline. The POST re-renders this page with
+             state='requested'. #}
+          <form method="post" action="/access/request">
+            {{ ui.button('Request access', variant='primary', type='submit') }}
+          </form>
+          {% endif %}
+          <div class="auth-actions">
+            {{ ui.button('Try again', href='/', variant='ghost') }}
+            {{ ui.button('Use a different account', href='?gcp-iap-mode=CLEAR_LOGIN_COOKIE', variant='ghost') }}
+          </div>
+        </div>
+        <div class="auth-foot">Need access sooner? Contact your workspace admin.</div>
       </div>
       {% endif %}
     </div>

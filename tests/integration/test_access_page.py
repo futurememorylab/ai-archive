@@ -1,6 +1,5 @@
-"""The IAP access-control pages — the app-rendered states (3 "Access not
-granted", 4 "Error") of the login design (spec
-2026-06-13-iap-access-control-design.md).
+"""The IAP access-control pages — the app-rendered states (denied, requested,
+error) of the login design (spec 2026-06-14-iap-roles-admin-console-design.md).
 
 Under IAP, Google owns the sign-in + redirect states; the app only renders
 the denial and error cards, standalone (no nav rail / topbar — an unauthorized
@@ -38,8 +37,11 @@ def test_access_denied_renders(monkeypatch, tmp_path: Path):
     with TestClient(app) as client:
         r = client.get("/access?state=denied&email=f.miller@gmail.com")
     assert r.status_code == 200
-    assert "Access not granted" in r.text
-    assert "Archive AI" in r.text
+    # Rebranded to "CatDV Annotator" (not "Archive AI")
+    assert "CatDV Annotator" in r.text
+    # New heading for the denied state
+    assert "No access" in r.text
+    # Email shown in identity card
     assert "f.miller@gmail.com" in r.text
     # "Use a different account" → IAP cookie clear (re-auth as someone else)
     assert "Use a different account" in r.text
@@ -66,4 +68,4 @@ def test_access_defaults_to_denied(monkeypatch, tmp_path: Path):
     with TestClient(app) as client:
         r = client.get("/access")
     assert r.status_code == 200
-    assert "Access not granted" in r.text
+    assert "No access" in r.text
