@@ -88,19 +88,22 @@ plan must already be committed on `<N>-<slug>` by `gh-design`.
    ```
    Use `CronCreate` (recurring, session-only, an off-minute interval like
    `*/7 * * * *`) to re-run that check; when a PR shows up, report its number +
-   URL to the user and `CronDelete` the watch. The trigger prompt pushes after
-   **each task**, so surface incremental progress: list the implementation
-   commits on the branch beyond the design commits, map each to its plan task,
-   and report `N/<total> — latest: <task>`. Tell the user this watch is
-   session-local (in memory, not in GitHub, gone if Claude exits) — for a
-   portable notification they can instead subscribe to the issue / Watch the repo
-   on github.com.
+   URL to the user, **move the issue to `Test` yourself** with `set_status N Test`,
+   and `CronDelete` the watch. Do the board move locally because the cloud routine
+   **cannot** — its identity lacks GitHub Projects write scope, so its own step-7
+   move silently no-ops and the issue is left stranded in Implementation. The local
+   operator's `gh` has Projects scope, so the watch is the reliable place to do it.
+   The trigger prompt pushes after **each task**, so surface incremental progress:
+   list the implementation commits on the branch beyond the design commits, map
+   each to its plan task, and report `N/<total> — latest: <task>`. Tell the user
+   this watch is session-local (in memory, not in GitHub, gone if Claude exits) —
+   for a portable notification they can instead subscribe to the issue / Watch the
+   repo on github.com.
 
 6. **Report and stop.** Tell the user the watch is running and that the rest is
-   hands-off: when the cloud session opens the PR it moves the issue to **Test**
-   (step 7 of the trigger prompt); they test manually and squash-merge, and
-   `Closes #N` closes the issue so the built-in *Item closed* workflow moves it
-   to **Done**.
+   hands-off: when the PR appears the watch moves the issue to **Test** (step 5);
+   they test manually and squash-merge, and `Closes #N` closes the issue so the
+   built-in *Item closed* workflow moves it to **Done**.
 
 ## Guardrails
 
