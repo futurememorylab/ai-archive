@@ -219,6 +219,7 @@ a { color: inherit; text-decoration: none; }
   background: var(--accent);
   border-radius: 1px;
 }
+.rail-btn-bottom { margin-top: auto; margin-bottom: 8px; }
 
 /* ─── shared page layout ─────────────────────────────────────────────── */
 .page { display: flex; flex-direction: column; height: 100%; }
