@@ -1,4 +1,3 @@
-# backend/app/auth/roles.py
 """The single source of truth for the role model (spec
 2026-06-14-iap-roles-admin-console-design.md). Imported by the gate, the
 CurrentUser capability helpers, the admin console UI, and the guards — so the

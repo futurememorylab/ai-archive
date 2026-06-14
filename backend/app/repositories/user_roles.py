@@ -1,4 +1,3 @@
-# backend/app/repositories/user_roles.py
 """user_roles persistence — the app-side authorization layer.
 
 Google IAP owns the gate; this table owns roles (spec
@@ -14,8 +13,6 @@ from typing import Any
 import aiosqlite
 
 _COLS = ("email", "role", "status", "display_name", "granted_by", "granted_at", "last_seen_at")
-# Roles that admit at the gate. 'requested' is intentionally excluded.
-_ACTIVE = ("active", "invited")
 
 
 def _norm(email: str) -> str:

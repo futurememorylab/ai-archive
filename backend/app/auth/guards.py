@@ -1,4 +1,3 @@
-# backend/app/auth/guards.py
 """Route-level authorization guards. The gate middleware already enforces
 "must have an active role" app-wide; these add the finer checks (admin-only
 console, run-capable AI endpoints). Both read the CurrentUser the gate stashed

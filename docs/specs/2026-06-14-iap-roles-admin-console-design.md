@@ -176,10 +176,12 @@ Small fail-closed helpers (FastAPI dependencies or inline guards, matching the i
 
 - `require_role("admin")` — on the admin console page + every role-write endpoint.
 - `require_permission("run")` — on the AI-run surfaces:
+  - `POST /api/jobs` (`routes/jobs.py`) — the annotate-job trigger (runs Gemini)
   - `POST /studio/runs` (`routes/studio.py`)
-  - `POST /sync/run` (`routes/sync.py`)
   - `GET /live/session-config` (`routes/live.py`) — this is the route that ships the Gemini
     key to the browser, so it is gated as a run capability.
+  - (`POST /sync/run` is the writeback-queue *drain* — a publish action, deferred to the
+    publish fast-follow, not an AI run.)
 
 Each helper denies (403) on missing capability and on any error.
 
@@ -301,7 +303,7 @@ mapping is direct.
 7. **Last-admin guard.** Setup: exactly one admin. Action: try to demote/revoke that admin.
    Expected: refused (409 + clear message); at least one admin always remains.
 8. **AI-run capability.** Setup: sign in as a **Viewer** or **Publisher**. Action: attempt a
-   Studio run / `POST /sync/run` / fetch `/live/session-config`. Expected: 403 — no run
+   Studio run / `POST /api/jobs` / fetch `/live/session-config`. Expected: 403 — no run
    starts, no Gemini key is served, the CatDV seat is untouched. As **Annotator/Admin**: the
    run proceeds.
 9. **No forgotten protected route.** Action: with no active role, hit a representative
