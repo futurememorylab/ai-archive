@@ -123,14 +123,66 @@ class EnumService:
         await conn.commit()
 
     # ---- writes (implemented in Task 4) ----
+    def _require_editable(self, key: str) -> EnumSpec:
+        spec = self._spec(key)
+        if not spec.editable:
+            raise EnumError(f"enum {key!r} is not editable")
+        return spec
+
+    async def _ensure_materialised(self, key: str) -> None:
+        """Editable writes operate on DB rows; if the table is empty (never
+        reconciled) materialise the seed first so edits have rows to act on."""
+        conn = self._db()
+        if not await self._repo.all_rows(conn, key):
+            spec = self._spec(key)
+            for i, v in enumerate(spec.values):
+                await self._repo.upsert_seed(conn, key, v, sort_order=i, commit=False)
+            await conn.commit()
+
     async def add_value(self, key: str, value: str, *, label: str | None = None) -> None:
-        raise NotImplementedError
+        self._require_editable(key)
+        await self._ensure_materialised(key)
+        conn = self._db()
+        existing = await self._repo.get(conn, key, value)
+        if existing is not None and existing.removed == 0:
+            raise EnumError(f"{value!r} is already in the list")
+        try:
+            await self._repo.add_value(conn, key, value, label=label, commit=True)
+        except aiosqlite.IntegrityError as exc:  # pragma: no cover - guarded above
+            raise EnumError(f"{value!r} is already in the list") from exc
 
     async def set_enabled(self, key: str, value: str, *, enabled: bool) -> None:
-        raise NotImplementedError
+        self._require_editable(key)
+        await self._ensure_materialised(key)
+        conn = self._db()
+        if not enabled:
+            row = await self._repo.get(conn, key, value)
+            if row is not None and row.is_default:
+                raise EnumError("set another value as default first")
+            if await self._repo.count_enabled(conn, key) <= 1:
+                raise EnumError("cannot disable the last enabled value")
+        await self._repo.set_enabled(conn, key, value, enabled=enabled, commit=True)
 
     async def set_default(self, key: str, value: str) -> None:
-        raise NotImplementedError
+        self._require_editable(key)
+        await self._ensure_materialised(key)
+        conn = self._db()
+        row = await self._repo.get(conn, key, value)
+        if row is None or row.removed == 1:
+            raise EnumError(f"unknown value {value!r}")
+        if not row.enabled:
+            raise EnumError("enable the value before making it the default")
+        await self._repo.set_default(conn, key, value, commit=True)
 
     async def remove_value(self, key: str, value: str) -> None:
-        raise NotImplementedError
+        self._require_editable(key)
+        await self._ensure_materialised(key)
+        conn = self._db()
+        row = await self._repo.get(conn, key, value)
+        if row is None or row.removed == 1:
+            raise EnumError(f"unknown value {value!r}")
+        if row.is_default:
+            raise EnumError("set another value as default first")
+        if row.enabled and await self._repo.count_enabled(conn, key) <= 1:
+            raise EnumError("cannot remove the last enabled value")
+        await self._repo.soft_delete(conn, key, value, commit=True)

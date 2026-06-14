@@ -6,7 +6,7 @@ import pytest
 from backend.app.db import open_db
 from backend.app.migrations_runner import apply_migrations
 from backend.app.repositories.enum_values import EnumValuesRepo
-from backend.app.services.enum_service import EnumService
+from backend.app.services.enum_service import EnumError, EnumService
 
 
 @pytest.fixture
@@ -65,3 +65,68 @@ async def test_definitions_editable_only(db):
     svc = _svc(db)
     keys = {d.key for d in await svc.definitions(editable_only=True)}
     assert keys == {"gemini_generation_model"}
+
+
+@pytest.mark.asyncio
+async def test_add_and_remove_value(db):
+    svc = _svc(db)
+    await svc.reconcile_seeds()
+    await svc.add_value("gemini_generation_model", "gemini-4.0-pro")
+    assert "gemini-4.0-pro" in {v.value for v in await svc.generation_models()}
+    await svc.remove_value("gemini_generation_model", "gemini-4.0-pro")
+    assert "gemini-4.0-pro" not in {v.value for v in await svc.generation_models()}
+
+
+@pytest.mark.asyncio
+async def test_write_to_fixed_enum_refused(db):
+    svc = _svc(db)
+    with pytest.raises(EnumError):
+        await svc.add_value("toast_level", "warning")
+
+
+@pytest.mark.asyncio
+async def test_cannot_disable_last_enabled(db):
+    svc = _svc(db)
+    await svc.reconcile_seeds()
+    models = [v.value for v in await svc.generation_models()]
+    # move the default to models[0] so the loop can disable models[1:] freely
+    await svc.set_default("gemini_generation_model", models[0])
+    # disable all but one
+    for m in models[1:]:
+        await svc.set_enabled("gemini_generation_model", m, enabled=False)
+    with pytest.raises(EnumError):
+        await svc.set_enabled("gemini_generation_model", models[0], enabled=False)
+
+
+@pytest.mark.asyncio
+async def test_set_default_clears_prior_and_requires_enabled(db):
+    svc = _svc(db)
+    await svc.reconcile_seeds()
+    await svc.set_default("gemini_generation_model", "gemini-2.5-flash")
+    assert await svc.generation_default() == "gemini-2.5-flash"
+    # only one default remains
+    defaults = [v for v in await svc.generation_models() if v.is_default]
+    assert len(defaults) == 1
+    # cannot set a disabled value as default
+    await svc.set_enabled("gemini_generation_model", "gemini-2.5-pro", enabled=False)
+    with pytest.raises(EnumError):
+        await svc.set_default("gemini_generation_model", "gemini-2.5-pro")
+
+
+@pytest.mark.asyncio
+async def test_cannot_remove_or_disable_current_default(db):
+    svc = _svc(db)
+    await svc.reconcile_seeds()
+    cur = await svc.generation_default()
+    with pytest.raises(EnumError):
+        await svc.remove_value("gemini_generation_model", cur)
+    with pytest.raises(EnumError):
+        await svc.set_enabled("gemini_generation_model", cur, enabled=False)
+
+
+@pytest.mark.asyncio
+async def test_duplicate_add_raises_enum_error(db):
+    svc = _svc(db)
+    await svc.reconcile_seeds()
+    with pytest.raises(EnumError):
+        await svc.add_value("gemini_generation_model", "gemini-2.5-pro")
