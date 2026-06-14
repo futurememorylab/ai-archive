@@ -50,6 +50,9 @@
       {% block crumb %}{% endblock %}
       <span class="grow"></span>
       {% block topbar_pills %}{% include "pages/_topbar_pills.html" %}{% endblock %}
+      {% if request.state.current_user and request.state.current_user.is_authenticated %}
+      <span class="topbar-user" title="Signed in">{{ request.state.current_user.email }}</span>
+      {% endif %}
     </header>
     <aside class="rail">{% include "pages/_rail.html" %}</aside>
     <main class="main">{% block body %}{% endblock %}</main>
