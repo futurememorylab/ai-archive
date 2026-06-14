@@ -35,13 +35,22 @@ IAP_CERTS_URL = "https://www.gstatic.com/iap/verify/public_key"
 def current_user(request: Request, settings: Settings) -> CurrentUser:
     audience = settings.iap_audience
     if not audience:
-        # One-time discovery aid: the exact JWT audience for direct Cloud Run IAP
-        # is not authoritatively documented, so it is discovered from a live token
-        # (ADR 0078/0079). Signature-only decode (audience check skipped) to LOG
-        # the aud claim so the operator can set IAP_AUDIENCE, then fail closed —
-        # we never ADMIT against an unconfigured audience.
+        # One-time discovery aid (ADR 0078/0079): the exact JWT audience for
+        # direct Cloud Run IAP is not authoritatively documented, so it is
+        # discovered from a live token. Signature-only decode (audience check
+        # skipped) to LOG the aud, then fail closed — never ADMIT against an
+        # unconfigured audience. Diagnostic: also surface a missing/renamed
+        # header or a decode failure, since the IAP verify path runs for real.
         assertion = request.headers.get(IAP_JWT_HEADER)
-        if assertion:
+        if not assertion:
+            goog = [k for k in request.headers.keys() if k.lower().startswith("x-goog")]
+            log.warning(
+                "IAP_AUDIENCE unset and no %s header on the request; "
+                "x-goog-* headers present: %s",
+                IAP_JWT_HEADER,
+                goog,
+            )
+        else:
             try:
                 claims = id_token.verify_token(
                     assertion, google_requests.Request(), certs_url=IAP_CERTS_URL
@@ -52,8 +61,12 @@ def current_user(request: Request, settings: Settings) -> CurrentUser:
                     "(ADR 0079).",
                     claims.get("aud"),
                 )
-            except Exception:  # noqa: BLE001 — discovery is best-effort; still fail closed
-                pass
+            except Exception as exc:  # noqa: BLE001 — best-effort; still fail closed
+                log.warning(
+                    "IAP_AUDIENCE unset; assertion present but signature-only "
+                    "decode failed: %r",
+                    exc,
+                )
         raise RuntimeError(
             "AUTH_BACKEND=iap but IAP_AUDIENCE is not configured — refusing to "
             "verify the IAP assertion against an empty audience."
