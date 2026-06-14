@@ -86,3 +86,4 @@ available number. See any existing ADR for the template.
 | 0076 | 2026-06-11 | [Cloud CatDV writeback: root cause corrected — outbound path-MTU black-hole, not a peer-key collision](./adr/0076-cloud-writeback-root-cause-corrected-path-mtu.md) |
 | 0077 | 2026-06-12 | [Cloud Run scale-to-zero with graceful seat + VPN release](./adr/0077-cloud-run-scale-to-zero.md) |
 | 0078 | 2026-06-13 | [Access control via Google Cloud IAP + an app-side roles layer (not app-level OAuth)](./adr/0078-iap-access-control.md) |
+| 0079 | 2026-06-14 | [App-side roles + admin console on top of IAP (4-role model, default-deny gate, app-never-touches-the-Group)](./adr/0079-iap-roles-admin-console.md) |
