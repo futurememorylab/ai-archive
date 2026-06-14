@@ -8,13 +8,15 @@
 
 Value lists that mean one thing are duplicated across the codebase, in Python
 **and** in the frontend. The worst offender is the **Gemini generation-model
-list**, which lives independently in three places that drift out of sync:
+list**, which lives independently in four places that drift out of sync:
 
 - `backend/app/settings.py` — `gemini_model` default (`"gemini-2.5-flash-lite"`).
 - `backend/app/services/pricing.py` — per-model rate cards (only covers the
   `gemini-2.5-*` family; the `gemini-3.*` models in the dropdown have no rates).
 - `backend/app/templates/pages/_prompt_new.html` — a hardcoded Jinja list of 8
-  model IDs rendered into the `<select>`.
+  model IDs rendered into the New-prompt `<select>`.
+- `backend/app/static/promptEditor.js:34` — the same 8 IDs again as an Alpine
+  `MODELS` array, powering the Edit-prompt model picker.
 
 Fixed enums leak the same way: toast levels, job/item statuses and cache/anno
 filters are restated in JS and templates with no shared source. The issue asks
@@ -224,18 +226,25 @@ Reconcile:
   `generation_default()` instead of the hardcoded `"gemini-2.5-flash-lite"`.
   `settings.gemini_model` stays an env override but is no longer the dropdown's
   source.
+- **Edit-prompt model picker** — `promptEditor.js` drops its hardcoded `MODELS`
+  array; the picker reads the list the prompt-detail route injects into the
+  Alpine component (`MODELS: {{ model_options | tojson }}`).
 - **Orphaned-reference handling (data correctness).** `PromptVersion.model` is a
   denormalised string (`prompt.py:59`) with no FK, so deleting/disabling a
   catalog model does not alter saved prompts — but the **Edit form must still
   render the prompt's current model even when it is absent/disabled/removed from
   the catalog**, flagged "unavailable", so editing never silently switches the
-  model to the first option. Implemented by unioning the saved value into the
-  option list when missing.
-- **Frontend fixed enums** — `layout.html` injects a small
-  `window.APP_ENUMS = {{ enum_bootstrap | tojson }}` blob (built by `EnumService`)
-  so JS reads canonical values synchronously; `toast.js` consumes
-  `APP_ENUMS.toast_level` instead of its inline comment-list. `GET /api/enums/{key}`
-  serves the same data for dynamic needs.
+  model to the first option. Implemented **server-side**: the prompt-detail route
+  builds `model_options` as the enabled catalog **unioned with the version's saved
+  model** when missing, so the union (and the orphan flag) is computed once in
+  Python, not duplicated in JS.
+- **Frontend fixed enums** — fixed enums are static (registry, no DB), so
+  `layout.html` injects them once as a Jinja-global blob:
+  `window.APP_ENUMS = {{ app_enums_json | safe }}` (built at startup from the
+  registry). `toast.js` consumes `APP_ENUMS.toast_level` instead of its inline
+  comment-list. Editable lists are **not** in this static blob (they change at
+  runtime); they reach the frontend via route context (above) and, for any future
+  dynamic consumer, `GET /api/enums/{key}`.
 
 ### 6. Admin console
 
