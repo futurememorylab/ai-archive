@@ -1,0 +1,23 @@
+{# backend/app/templates/pages/_admin_enum_table.html #}
+<div class="admin-enum" data-key="{{ key }}">
+  <p class="meta">{{ definition.description }}</p>
+  <table class="admin-table">
+    <thead>
+      <tr><th>Value</th><th>Label</th><th>Default</th><th>Enabled</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td class="mono-cell">
+          {{ r.value }}
+          {% if r.no_rate_card %}<span class="pill warn" title="No pricing rate card; cost will not be tracked">no rate card</span>{% endif %}
+        </td>
+        <td>{{ r.label or '' }}</td>
+        <td>{% if r.is_default %}★{% endif %}</td>
+        <td>{{ 'on' if r.enabled else 'off' }}</td>
+        <td></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
