@@ -55,7 +55,7 @@ plan must already be committed on `<N>-<slug>` by `gh-design`.
      "name": "implement-issue",
      "repositories": ["futurememorylab/ai-archive"],
      "trigger": { "type": "api" },
-     "prompt": "You are implementing a pre-written plan. First read the run context (the `text` field, e.g. `issue=#<N> branch=<branch>`) to get the issue number and branch. Steps: 1) `git fetch origin <branch> && git checkout <branch>`. 2) Read the implementation plan under docs/superpowers/plans/ on that branch. 3) Use the superpowers:subagent-driven-development skill to implement the plan task by task. 4) Commit and push to the SAME branch <branch>. 5) Open a pull request to main whose body contains `Closes #<N>`. 6) Comment the PR URL back on issue #<N>. 7) Move issue #<N> to the `Test` column of the `AI-Archive Flow` project board, using the `set_status` helper documented in .claude/skills/gh-design/SKILL.md. Do not merge."
+     "prompt": "You are implementing a pre-written plan. First read the run context (the `text` field, e.g. `issue=#<N> branch=<branch>`) to get the issue number and branch. Steps: 1) `git fetch origin <branch> && git checkout <branch>`. 2) Read the implementation plan under docs/superpowers/plans/ on that branch. 3) Use the superpowers:subagent-driven-development skill to implement the plan task by task, in order. 4) After EACH task: make the task's commit, then immediately `git push origin <branch>`. Push after every task — not once at the end — so progress is visible remotely and committed work survives if the session restarts. Each task's tests must be green before you commit it. 5) When all tasks are done, open a pull request to main whose body contains `Closes #<N>`. 6) Comment the PR URL back on issue #<N>. 7) Move issue #<N> to the `Test` column of the `AI-Archive Flow` project board, using the `set_status` helper documented in .claude/skills/gh-design/SKILL.md. Do not merge."
    }
    ```
    Capture the returned `trigger_id`.
@@ -88,11 +88,13 @@ plan must already be committed on `<N>-<slug>` by `gh-design`.
    ```
    Use `CronCreate` (recurring, session-only, an off-minute interval like
    `*/7 * * * *`) to re-run that check; when a PR shows up, report its number +
-   URL to the user and `CronDelete` the watch. Optionally surface interim
-   progress by checking for real implementation commits on the branch beyond the
-   `docs(#N)` design commits. Tell the user this watch is session-local (in
-   memory, not in GitHub, gone if Claude exits) — for a portable notification
-   they can instead subscribe to the issue / Watch the repo on github.com.
+   URL to the user and `CronDelete` the watch. The trigger prompt pushes after
+   **each task**, so surface incremental progress: list the implementation
+   commits on the branch beyond the design commits, map each to its plan task,
+   and report `N/<total> — latest: <task>`. Tell the user this watch is
+   session-local (in memory, not in GitHub, gone if Claude exits) — for a
+   portable notification they can instead subscribe to the issue / Watch the repo
+   on github.com.
 
 6. **Report and stop.** Tell the user the watch is running and that the rest is
    hands-off: when the cloud session opens the PR it moves the issue to **Test**
