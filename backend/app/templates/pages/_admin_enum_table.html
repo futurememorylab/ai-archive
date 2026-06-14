@@ -1,9 +1,10 @@
 {# backend/app/templates/pages/_admin_enum_table.html #}
+{% import "components/_ui.html" as ui %}
 <div class="admin-enum" data-key="{{ key }}">
   <p class="meta">{{ definition.description }}</p>
   <table class="admin-table">
     <thead>
-      <tr><th>Value</th><th>Label</th><th>Default</th><th>Enabled</th><th></th></tr>
+      <tr><th>Value</th><th>Label</th><th>Default</th><th>Enabled</th><th></th><th></th></tr>
     </thead>
     <tbody>
       {% for r in rows %}
@@ -15,9 +16,30 @@
         <td>{{ r.label or '' }}</td>
         <td>{% if r.is_default %}★{% endif %}</td>
         <td>{{ 'on' if r.enabled else 'off' }}</td>
-        <td></td>
+        <td>
+          <button class="btn sm ghost"
+                  hx-post="/admin/enums/{{ key }}/values/{{ r.value }}/default"
+                  hx-target="#admin-enum-region" hx-swap="innerHTML"
+                  {% if r.is_default %}disabled{% endif %}>Make default</button>
+          <form class="inline" hx-post="/admin/enums/{{ key }}/values/{{ r.value }}/enabled"
+                hx-target="#admin-enum-region" hx-swap="innerHTML">
+            <input type="hidden" name="enabled" value="{{ 'false' if r.enabled else 'true' }}">
+            <button class="btn sm ghost" type="submit">{{ 'Disable' if r.enabled else 'Enable' }}</button>
+          </form>
+        </td>
+        <td>
+          <button class="btn sm ghost danger"
+                  hx-delete="/admin/enums/{{ key }}/values/{{ r.value }}"
+                  hx-target="#admin-enum-region" hx-swap="innerHTML">Delete</button>
+        </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  <form class="admin-add-row" hx-post="/admin/enums/{{ key }}/values"
+        hx-target="#admin-enum-region" hx-swap="innerHTML"
+        hx-on::after-request="if(event.detail.successful) this.reset()">
+    {{ ui.field('Add value', 'value', input_attrs='placeholder="model-id"') }}
+    <button class="btn primary" type="submit">Add</button>
+  </form>
 </div>

@@ -1,10 +1,12 @@
 """Admin console: data-driven editing of editable enumerations (issue #13)."""
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from backend.app.deps import get_core_ctx
 from backend.app.routes.pages.templates import templates
+from backend.app.services.enum_service import EnumError
+from backend.app.services.errors import humanise
 from backend.app.services.pricing import RATE_CARDS
 
 router = APIRouter(tags=["pages"])
@@ -52,3 +54,60 @@ async def admin_enum_table(request: Request, key: str):
     ctx = get_core_ctx(request)
     view = await _enum_view(ctx, key)
     return templates.TemplateResponse(request, "pages/_admin_enum_table.html", view)
+
+
+async def _table_response(request: Request, ctx, key: str, *, status_code: int = 200):
+    view = await _enum_view(ctx, key)
+    return templates.TemplateResponse(
+        request, "pages/_admin_enum_table.html", view, status_code=status_code
+    )
+
+
+@router.post("/admin/enums/{key}/values", response_class=HTMLResponse)
+async def admin_add_value(
+    request: Request,
+    key: str,
+    value: str = Form(...),
+    label: str | None = Form(None),
+):
+    ctx = get_core_ctx(request)
+    try:
+        await ctx.enum_service.add_value(key, value.strip(), label=(label or None))
+    except EnumError as exc:
+        raise HTTPException(400, humanise(exc)) from exc
+    return await _table_response(request, ctx, key)
+
+
+@router.post("/admin/enums/{key}/values/{value}/enabled", response_class=HTMLResponse)
+async def admin_toggle_enabled(
+    request: Request,
+    key: str,
+    value: str,
+    enabled: bool = Form(...),
+):
+    ctx = get_core_ctx(request)
+    try:
+        await ctx.enum_service.set_enabled(key, value, enabled=enabled)
+    except EnumError as exc:
+        raise HTTPException(400, humanise(exc)) from exc
+    return await _table_response(request, ctx, key)
+
+
+@router.post("/admin/enums/{key}/values/{value}/default", response_class=HTMLResponse)
+async def admin_set_default(request: Request, key: str, value: str):
+    ctx = get_core_ctx(request)
+    try:
+        await ctx.enum_service.set_default(key, value)
+    except EnumError as exc:
+        raise HTTPException(400, humanise(exc)) from exc
+    return await _table_response(request, ctx, key)
+
+
+@router.delete("/admin/enums/{key}/values/{value}", response_class=HTMLResponse)
+async def admin_remove_value(request: Request, key: str, value: str):
+    ctx = get_core_ctx(request)
+    try:
+        await ctx.enum_service.remove_value(key, value)
+    except EnumError as exc:
+        raise HTTPException(400, humanise(exc)) from exc
+    return await _table_response(request, ctx, key)
