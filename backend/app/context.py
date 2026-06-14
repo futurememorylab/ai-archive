@@ -64,6 +64,7 @@ from backend.app.repositories.run_telemetry import RunTelemetryRepo
 from backend.app.repositories.studio_runs import StudioRunsRepo
 from backend.app.repositories.studio_sets import StudioSetsRepo
 from backend.app.repositories.uploaded_clips import UploadedClipsRepo
+from backend.app.repositories.user_roles import UserRolesRepo
 from backend.app.repositories.workspaces import WorkspacesRepo
 from backend.app.repositories.write_log import WriteLogRepo
 from backend.app.services.cache_actions import CacheActions
@@ -111,6 +112,7 @@ class CoreCtx:
     studio_runs_repo: StudioRunsRepo = field(default_factory=StudioRunsRepo)
     uploaded_clips_repo: UploadedClipsRepo = field(default_factory=UploadedClipsRepo)
     run_telemetry_repo: RunTelemetryRepo = field(default_factory=RunTelemetryRepo)
+    user_roles_repo: UserRolesRepo = field(default_factory=UserRolesRepo)
     telemetry_ctx: TelemetryCtx = field(init=False)
     event_bus: EventBus = field(default_factory=EventBus)
 
@@ -147,6 +149,7 @@ class CoreCtx:
         await conn.commit()
 
         ctx = cls(settings=settings, db=conn, db_cm=cm)
+        await ctx.user_roles_repo.seed_admins(conn, settings.admin_email_list)
         # WriteQueue has no external deps; always available.
         ctx.write_queue = WriteQueue(
             pending_ops_repo=ctx.pending_ops_repo,
@@ -323,6 +326,10 @@ class LiveCtx:
     @property
     def run_telemetry_repo(self) -> RunTelemetryRepo:
         return self.core.run_telemetry_repo
+
+    @property
+    def user_roles_repo(self) -> UserRolesRepo:
+        return self.core.user_roles_repo
 
     @property
     def telemetry_ctx(self) -> TelemetryCtx:
