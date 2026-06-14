@@ -53,12 +53,18 @@ If `item_id` comes back empty the issue is not on the board yet — add it with
               | "#\(.number) \(.title)"'
    ```
 
-2. **Move to Design.** `set_status N Design` and add the label:
-   `gh issue edit N -R futurememorylab/ai-archive --add-label "phase:design"`.
-
-3. **Create the branch.** Slug = kebab-cased title, ~5 words.
+2. **Move to Design, assign yourself.** `set_status N Design`, add the label, and
+   assign the issue to whoever is running this skill (the person taking it from
+   Backlog into Design) so the board shows clear ownership:
    ```bash
-   git switch -c "issue-${N}-${SLUG}" main
+   gh issue edit N -R futurememorylab/ai-archive \
+     --add-label "phase:design" --add-assignee "@me"
+   ```
+
+3. **Create the branch.** Slug = kebab-cased title, ~5 words. The branch name
+   starts with the bare issue number — no `issue-` prefix.
+   ```bash
+   git switch -c "${N}-${SLUG}" main   # e.g. 13-centralised-enumeration
    ```
 
 4. **Brainstorm.** Invoke `superpowers:brainstorming` with the issue body as the
@@ -71,12 +77,12 @@ If `item_id` comes back empty the issue is not on the board yet — add it with
    ```bash
    git add docs/superpowers/specs docs/superpowers/plans
    git commit -m "docs(#${N}): design spec + implementation plan"
-   git push -u origin "issue-${N}-${SLUG}"
+   git push -u origin "${N}-${SLUG}"
    ```
    Then comment the artefacts on the issue:
    ```bash
    gh issue comment N -R futurememorylab/ai-archive --body \
-     "Design ready on branch \`issue-${N}-${SLUG}\`.
+     "Design ready on branch \`${N}-${SLUG}\`.
    - Spec: <spec path>
    - Plan: <plan path>
    Run \`gh-handoff\` to implement in the cloud."
@@ -88,8 +94,8 @@ If `item_id` comes back empty the issue is not on the board yet — add it with
 
 ## Guardrails
 
-- One issue → one branch `issue-<N>-<slug>` → (later) one PR. Never reuse a
-  branch across issues.
+- One issue → one branch `<N>-<slug>` (bare number first, no `issue-` prefix) →
+  (later) one PR. Never reuse a branch across issues.
 - If the branch already exists, check it out instead of recreating it.
 - Honour the repo's git workflow: branch off `main`, never commit design docs
   straight to `main`.
