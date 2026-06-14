@@ -167,3 +167,15 @@ def test_stat_counts_reflect_unfiltered_totals(monkeypatch, tmp_path: Path):
         f"Members stat must be 3 (global total), got {members_match.group(1)}"
     assert admins_match.group(1) == "1", \
         f"Admins stat must be 1 (global total), got {admins_match.group(1)}"
+
+
+def test_admin_link_only_for_admins(monkeypatch, tmp_path: Path):
+    holder = {"email": "boss@x.com"}
+    main_mod = _app(monkeypatch, tmp_path, holder)
+    with TestClient(main_mod.app) as client:
+        # admin: check on /admin page (core-only, renders layout.html)
+        assert 'href="/admin"' in client.get("/admin").text      # admin sees it
+        client.post("/admin/users", data={"email": "v@x.com", "role": "viewer", "display_name": ""})
+        holder["email"] = "v@x.com"
+        # viewer: check on /prompts (core-only, renders layout.html)
+        assert 'href="/admin"' not in client.get("/prompts").text  # viewer does not

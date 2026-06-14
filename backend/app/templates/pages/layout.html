@@ -51,6 +51,9 @@
       <span class="grow"></span>
       {% block topbar_pills %}{% include "pages/_topbar_pills.html" %}{% endblock %}
       {% if request.state.current_user and request.state.current_user.is_authenticated %}
+      {% if request.state.current_user.is_admin %}
+      <a class="btn ghost sm topbar-admin" href="/admin">Admin</a>
+      {% endif %}
       <span class="topbar-user" title="Signed in">{{ request.state.current_user.email }}</span>
       {% endif %}
     </header>
