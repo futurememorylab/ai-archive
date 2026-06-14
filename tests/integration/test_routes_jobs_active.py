@@ -23,6 +23,32 @@ def _make_app(monkeypatch, tmp_path):
     return main_mod.app
 
 
+def _flatten_paths(app):
+    """Collect every effective route path from the app, in match order.
+
+    FastAPI < 0.137 eagerly flattens included routers into ``app.routes`` as
+    ``APIRoute`` objects carrying a ``.path``. FastAPI >= 0.137 instead stores
+    lazy ``_IncludedRouter`` placeholders that resolve their child routes on
+    demand via ``effective_candidates()`` (path resolution is deferred to
+    match time). Walk both shapes so the route-ordering guard below stays
+    independent of the installed FastAPI version.
+    """
+    paths: list[str] = []
+
+    def visit(routes):
+        for route in routes:
+            candidates = getattr(route, "effective_candidates", None)
+            if callable(candidates):  # FastAPI >= 0.137 lazy include placeholder
+                visit(candidates())
+            else:
+                path = getattr(route, "path", None)
+                if path is not None:
+                    paths.append(path)
+
+    visit(app.routes)
+    return paths
+
+
 def test_active_jobs_lists_running_with_progress(monkeypatch, tmp_path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
@@ -81,7 +107,7 @@ def test_create_job_reports_started_flag(monkeypatch, tmp_path):
 def test_jobs_events_route_resolves_before_job_id(monkeypatch, tmp_path):
     """Regression: /api/jobs/events must not be shadowed by /api/jobs/{job_id}."""
     app = _make_app(monkeypatch, tmp_path)
-    paths = [getattr(r, "path", None) for r in app.routes]
+    paths = _flatten_paths(app)
     assert "/api/jobs/events" in paths, "/api/jobs/events route not registered"
     assert "/api/jobs/active" in paths, "/api/jobs/active route not registered"
     # Find the /{job_id} catch-all — it's the one containing {job_id} but not
