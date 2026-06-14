@@ -2483,3 +2483,88 @@ body.studio-resizing {
   color: var(--text-3); font-size: 12px; font-family: var(--f-mono);
   white-space: nowrap; max-width: 240px; overflow: hidden; text-overflow: ellipsis;
 }
+
+/* ── Admin console + access page (spec 2026-06-14) ─────────────────────────
+   Tokens only: no raw hex. Table cell styles scoped under .admin-table so
+   they don't clash with the global .m-name rule (app.css:788). */
+.admin-page { padding: 16px 20px; }
+
+.admin-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 14px 0; }
+.admin-info { border: 1px solid var(--line-2); border-radius: var(--r-3); padding: 12px 14px; background: var(--surface); }
+.admin-info p { color: var(--text-3); font-size: 12.5px; margin: 6px 0 0; }
+
+.admin-stats { display: flex; gap: 12px; margin: 12px 0; }
+.admin-stats .stat { border: 1px solid var(--line-2); border-radius: var(--r-3); padding: 10px 16px; background: var(--surface); }
+.admin-stats .stat .n { display: block; font-size: 22px; font-weight: 700; color: var(--text); }
+.admin-stats .stat .l { display: block; color: var(--text-3); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+
+.admin-filters { display: flex; gap: 12px; align-items: end; margin: 12px 0; }
+
+.admin-members { margin-top: 8px; }
+
+.admin-table { width: 100%; border-collapse: collapse; }
+.admin-table th {
+  text-align: left; color: var(--text-3); font-size: 11px; text-transform: uppercase;
+  letter-spacing: .05em; padding: 8px 10px; border-bottom: 1px solid var(--line);
+}
+.admin-table td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.admin-table .m-id { display: flex; align-items: center; gap: 10px; }
+/* Scoped under .admin-table to avoid collision with global .m-name (line 788). */
+.admin-table .m-name { margin: 0; font-size: 13px; font-weight: 500; color: var(--text); }
+.admin-table .m-email { display: block; color: var(--text-3); font-size: 11.5px; font-family: var(--f-mono); }
+.admin-table .m-actions { text-align: right; }
+
+.avatar {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--surface-2); border: 1px solid var(--line-2);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: var(--text-2); flex-shrink: 0;
+}
+
+.you-chip {
+  font-size: 9px; font-weight: 700; color: var(--accent);
+  border: 1px solid var(--accent-2); border-radius: var(--r-1);
+  padding: 0 4px; margin-left: 6px; vertical-align: middle;
+}
+
+/* Role pill: neutral border by default; amber tint for admin. Used both as a
+   static <span> (self-row) and as the menu trigger_cls on other rows. */
+.role-pill {
+  display: inline-flex; align-items: center; padding: 0 9px;
+  height: var(--btn-h-sm); border-radius: 11px;
+  border: 1px solid var(--line-2); font-size: 12px; font-weight: 500;
+  color: var(--text-2); background: transparent; white-space: nowrap;
+}
+.role-pill.admin { color: var(--accent); border-color: color-mix(in oklab, var(--accent) 35%, transparent); }
+
+/* V·P·A·M permission dots */
+.perm-dots { display: inline-flex; gap: 4px; }
+.perm-dot {
+  width: 18px; height: 18px; border-radius: var(--r-1);
+  font-size: 10px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--surface-2); color: var(--text-3); border: 1px solid var(--line);
+}
+.perm-dot.on {
+  background: color-mix(in oklab, var(--good) 22%, transparent);
+  color: var(--good);
+  border-color: color-mix(in oklab, var(--good) 40%, transparent);
+}
+
+/* Access page additions — auth-topbar, auth-identity, auth-sent.
+   Existing .auth-screen / .auth-panel / .auth-body / .auth-title / .auth-msg /
+   .auth-actions / .auth-foot are defined above (line 2444+).
+   .auth-msg .auth-email already exists (line 2476); .auth-identity .auth-email
+   is a distinct context so the scoped rule below does not duplicate it. */
+.auth-topbar {
+  height: 54px; display: flex; align-items: center; gap: 9px;
+  padding: 0 16px; background: var(--bg-2); border-bottom: 1px solid var(--line);
+  font-weight: 700; font-size: 13px; color: var(--text);
+}
+.auth-identity {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 0; margin: 10px 0;
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+}
+.auth-identity .auth-email { font-family: var(--f-mono); font-size: 12.5px; color: var(--text-2); flex: 1; }
+.auth-sent { display: flex; align-items: center; gap: 8px; color: var(--good); font-size: 13px; margin: 10px 0; }
