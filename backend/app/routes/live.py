@@ -7,6 +7,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from backend.app.auth.guards import require_permission
 from backend.app.deps import get_core_ctx, get_live_ctx
 from backend.app.repositories.live_sessions import LiveSessionsRepo
 from backend.app.repositories.prompts import PromptsRepo
@@ -45,6 +46,7 @@ async def load_draft_for_live(ctx: Any, clip_id: int) -> dict:
 
 @router.get("/session-config")
 async def session_config(request: Request, clip_id: int) -> dict:
+    require_permission(request, "run")
     ctx = get_live_ctx(request)
     settings = ctx.settings
 

@@ -19,6 +19,7 @@ from fastapi import (
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+from backend.app.auth.guards import require_permission
 from backend.app.deps import get_core_ctx
 from backend.app.routes.pages.templates import templates
 from backend.app.services.annotator import run_job
@@ -255,6 +256,7 @@ async def upload_clip(
 
 @router.post("/runs", status_code=status.HTTP_201_CREATED)
 async def create_run(request: Request, body: RunCreate):
+    require_permission(request, "run")
     ctx = get_core_ctx(request)
     try:
         version = await ctx.prompts_repo.get_version(ctx.db, body.prompt_version_id)

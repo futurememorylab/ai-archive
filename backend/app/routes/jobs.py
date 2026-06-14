@@ -7,6 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
+from backend.app.auth.guards import require_permission
 from backend.app.deps import get_core_ctx
 from backend.app.routes.events import _event_generator
 from backend.app.services.annotator import JOBS_TOPIC, run_job
@@ -26,6 +27,7 @@ class JobCreate(BaseModel):
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_job(request: Request, body: JobCreate, background: BackgroundTasks):
+    require_permission(request, "run")
     ctx = get_core_ctx(request)
     job_id = await ctx.jobs_repo.create_job(
         ctx.db,
