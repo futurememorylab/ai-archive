@@ -5,7 +5,7 @@ cache caps, provider selection, etc.)."""
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     bind_host: str = "127.0.0.1"
     bind_port: int = 8765
     data_dir: Path = Field(default=Path("./data"))
+
+    # Mandatory per-deployment identifier. Namespaces uploaded-clip GCS
+    # object keys (instances/{instance_id}/uploads/{clip_id}.mov) so two
+    # instances sharing one bucket cannot overwrite each other's uploads
+    # (issue #55). No default -> the app refuses to boot if it is unset.
+    instance_id: str
 
     catdv_base_url: str
     catdv_username: str | None = None
@@ -110,6 +116,18 @@ class Settings(BaseSettings):
 
     # media prefetch queue
     prefetch_tick_interval_s: int = 2
+
+    @field_validator("instance_id")
+    @classmethod
+    def _instance_id_is_slug(cls, v: str) -> str:
+        import re
+
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", v):
+            raise ValueError(
+                "INSTANCE_ID must be a lowercase slug matching "
+                "[a-z0-9][a-z0-9-]* (e.g. 'prod', 'staging', 'local-pete')"
+            )
+        return v
 
     @model_validator(mode="after")
     def _validate_fs_archive(self) -> "Settings":
