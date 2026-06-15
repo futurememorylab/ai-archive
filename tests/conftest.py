@@ -42,6 +42,7 @@ _TEST_ENV_DEFAULTS = {
     "CATDV_CATALOG_ID": "881507",
     "GCP_PROJECT_ID": "test-project",
     "GCS_BUCKET_NAME": "test-bucket",
+    "INSTANCE_ID": "test-instance",
 }
 
 
