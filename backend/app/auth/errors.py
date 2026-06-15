@@ -10,5 +10,5 @@ class NotAuthenticated(Exception):
     Distinct from a *configuration* error (e.g. ``AUTH_BACKEND=iap`` without an
     ``IAP_AUDIENCE``), which raises ``RuntimeError``. The ``_auth_gate``
     middleware maps both to a fail-closed denial on non-allow-listed paths
-    (ADR 0082).
+    (ADR 0085).
     """

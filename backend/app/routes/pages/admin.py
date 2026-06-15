@@ -2,7 +2,7 @@
 
 Admin-only: the auth gate already requires an active role to reach `/admin`,
 and `require_role("admin")` narrows every handler to the `manage` capability
-(ADR 0082). The Access & Permissions section lives in `admin_access.py`.
+(ADR 0085). The Access & Permissions section lives in `admin_access.py`.
 """
 
 from fastapi import APIRouter, Form, HTTPException, Request

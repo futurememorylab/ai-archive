@@ -88,5 +88,8 @@ available number. See any existing ADR for the template.
 | 0078 | 2026-06-12 | [Connection pill redesign + on-demand VPN re-probe](./adr/0078-vpn-on-demand-reprobe-and-connection-pill.md) |
 | 0079 | 2026-06-14 | [GitHub Flow: kanban board + gh-design / gh-handoff skills](./adr/0079-github-flow-board.md) |
 | 0080 | 2026-06-14 | [Centralised enumeration: code registry + EnumService + editable model catalog](./adr/0080-centralised-enumeration.md) |
-| 0081 | 2026-06-13 | [Access control via Google Cloud IAP + an app-side roles layer (not app-level OAuth)](./adr/0081-iap-access-control.md) |
-| 0082 | 2026-06-14 | [App-side roles + admin console on top of IAP (4-role model, default-deny gate, app-never-touches-the-Group)](./adr/0082-iap-roles-admin-console.md) |
+| 0081 | 2026-06-15 | [Upload orphan-GC on set removal (reference-count)](./adr/0081-upload-orphan-gc-on-set-removal.md) |
+| 0082 | 2026-06-15 | [Studio uploads always pushed to the AI store, not only in cloud mode](./adr/0082-uploads-always-pushed-to-ai-store.md) — *supersedes upload-gating part of 0069* |
+| 0083 | 2026-06-15 | [HTMX-only wiring for fetch-injected subtrees that own an x-data root (compare Diff double-bind fix)](./adr/0083-htmx-only-wiring-for-injected-xdata-roots.md) — *refines 0048* |
+| 0084 | 2026-06-13 | [Access control via Google Cloud IAP + an app-side roles layer (not app-level OAuth)](./adr/0084-iap-access-control.md) |
+| 0085 | 2026-06-14 | [App-side roles + admin console on top of IAP (2 roles admin/member, default-deny gate, app-never-touches-the-Group)](./adr/0085-iap-roles-admin-console.md) |

@@ -6,7 +6,7 @@ Login states 3–4 (the app-rendered cards) are implemented on branch
 `feat/iap-access-control` — see [Implemented so far](#implemented-so-far).
 **Supersedes the "auth is deferred" stance of** `2026-06-09-cloud-run-deployment-design.md`
 (which named this work *"phase 5: multi-user auth (IAP or in-app login)"*).
-**Decision record:** ADR 0081.
+**Decision record:** ADR 0084.
 
 ## Problem
 
@@ -56,7 +56,7 @@ deployment).
 ## Decisions already fixed (cross-cutting)
 
 - **Mechanism: Google Cloud IAP (Option A)**, not app-level OAuth (Option B).
-  Full rationale in **ADR 0081**. In one line: the gate is operated by
+  Full rationale in **ADR 0084**. In one line: the gate is operated by
   Google, independent of our code, so it cannot fail open, survives cold
   starts, and minimizes the security-critical code we own.
 - **Two layers, cleanly separated:**

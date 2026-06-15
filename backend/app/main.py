@@ -210,7 +210,7 @@ async def _auth_gate(request: Request, call_next):
     Fail-closed: any failure to establish a trustworthy identity, or any
     error in the role lookup, denies. Under AUTH_BACKEND=dev the single local
     operator is implicit admin and nothing is gated (local dev stays usable;
-    no IAP path is exercised). See ADR 0081 + spec
+    no IAP path is exercised). See ADR 0084 + spec
     2026-06-14-iap-roles-admin-console-design.md.
     """
     request.state.current_user = None

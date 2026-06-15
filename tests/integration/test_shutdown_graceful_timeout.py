@@ -73,6 +73,7 @@ def test_open_sse_stream_does_not_block_graceful_shutdown(tmp_path):
         "CATDV_CATALOG_ID": "1",
         "GCP_PROJECT_ID": "dummy",
         "GCS_BUCKET_NAME": "dummy",
+        "INSTANCE_ID": "test-instance",
         "DATA_DIR": str(tmp_path / "data"),
     }
     proc = subprocess.Popen(

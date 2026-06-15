@@ -220,6 +220,7 @@ are read by `entrypoint.sh` / `litestream.yml`, not by pydantic Settings.
 | Variable | Local (`.env`) | Cloud (`cloudrun.env.yaml`) | Notes |
 |---|---|---|---|
 | `APP_ENV` | `dev` | `prod` | |
+| `INSTANCE_ID` | `local-dev` / per-dev | `prod` (staging: `staging`) | **Mandatory everywhere** (not cloud-only). Lowercase slug `[a-z0-9-]` unique per running instance. Namespaces uploaded-clip GCS keys (`instances/{INSTANCE_ID}/uploads/{clip_id}.mov`) so instances sharing the `catdv-proxies` bucket cannot overwrite each other's uploads; CatDV clips stay shared at `clips/{clip_id}.mov`. App fails to boot if unset. See issue #55 + `docs/superpowers/specs/2026-06-15-uploads-multi-instance-storage-design.md`. |
 | `DATA_DIR` | `./data` | `/data` | Cloud disk is **ephemeral** — durability comes from Litestream + GCS. |
 | `CATDV_BASE_URL` | `http://192.168.1.41:8080` | `http://127.0.0.1:18080` | Local: direct LAN. Cloud: onetun local forward into the WG tunnel. |
 | `MEDIA_CACHE` | `local` | `ai_store` | Local: disk proxy cache, GCS fallback. Cloud: GCS-only + signed-URL playback (ADR 0069). |
@@ -292,6 +293,6 @@ gcloud iap web add-iam-policy-binding --resource-type=cloud-run \
 **IAP audience:** the direct-Cloud-Run-IAP JWT audience is not authoritatively
 documented, so it is *discovered* from a live token on staging (sign in with
 `AUTH_BACKEND=iap` + `IAP_AUDIENCE` unset, read the token's `aud`), then set in
-`staging.env.yaml`. See ADR 0081.
+`staging.env.yaml`. See ADR 0084.
 
 **Teardown:** `gcloud run services delete catdv-annotator-staging --region europe-west3`.

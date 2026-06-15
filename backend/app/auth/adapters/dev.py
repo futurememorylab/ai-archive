@@ -2,7 +2,7 @@
 
 Returns a single configured operator identity (``settings.dev_user_email``)
 so the app is usable on 127.0.0.1, where Google IAP does not exist. Never the
-backend in cloud (there ``AUTH_BACKEND=iap``). See ADR 0081.
+backend in cloud (there ``AUTH_BACKEND=iap``). See ADR 0084.
 """
 
 from __future__ import annotations

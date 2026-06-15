@@ -30,7 +30,7 @@ def test_signed_url_parses_gs_uri(monkeypatch):
     monkeypatch.setattr(
         "backend.app.services.gcs.storage.Client", lambda: FakeClient()
     )
-    svc = GcsService("default-bucket")
+    svc = GcsService("default-bucket", "test-instance")
     url = svc.signed_url("gs://catdv-proxies/clips/42.mov", expires_s=3600)
 
     assert url == "https://signed.example/x"

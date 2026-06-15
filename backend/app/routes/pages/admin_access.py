@@ -1,5 +1,5 @@
 """Admin → Access & Permissions section (IAP roles). Lives under the admin
-console (spec 2026-06-14-iap-roles-admin-console-design.md, ADR 0082).
+console (spec 2026-06-14-iap-roles-admin-console-design.md, ADR 0085).
 
 Admin-only. Google IAP owns the gate; this section manages the app-side
 user_roles (what a reached user may do). 'Add member' pre-assigns a role

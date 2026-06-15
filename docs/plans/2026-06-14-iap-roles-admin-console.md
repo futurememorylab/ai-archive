@@ -112,7 +112,7 @@ In `backend/app/settings.py`, add the field next to the other auth fields (after
     # Comma-separated deploy-time list of emails seeded as admins at startup
     # (idempotently). The root of trust: the first admin(s) exist before the
     # admin console does, so no one can self-promote from inside the app.
-    # See ADR 0081 / spec 2026-06-14-iap-roles-admin-console-design.md.
+    # See ADR 0084 / spec 2026-06-14-iap-roles-admin-console-design.md.
     admin_emails: str = ""
 ```
 
@@ -846,7 +846,7 @@ async def _auth_gate(request: Request, call_next):
     Fail-closed: any failure to establish a trustworthy identity, or any
     error in the role lookup, denies. Under AUTH_BACKEND=dev the single local
     operator is implicit admin and nothing is gated (local dev stays usable;
-    no IAP path is exercised). See ADR 0081 + spec
+    no IAP path is exercised). See ADR 0084 + spec
     2026-06-14-iap-roles-admin-console-design.md.
     """
     request.state.current_user = None
@@ -1928,7 +1928,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Create: `docs/adr/00NN-iap-roles-admin-console.md` (next free number — verify; parallel branches may collide, per the ADR-collision hazard)
 - Modify: `docs/decisions.md` (index row)
 
-- [ ] **Step 1: Write the ADR** (MADR-lite) recording: the 4-role model (resolving ADR 0081 open #1), the app-never-touches-the-Group decision, "Add member = pre-assign role", the in-console request flow (no email), the default-deny middleware (opt-out) over per-route dependencies, and `dev` operator = implicit admin. Sections: `## Context`, `## Alternatives`, `## Decision`, `## Consequences`. Cross-reference ADR 0081 and the spec.
+- [ ] **Step 1: Write the ADR** (MADR-lite) recording: the 4-role model (resolving ADR 0084 open #1), the app-never-touches-the-Group decision, "Add member = pre-assign role", the in-console request flow (no email), the default-deny middleware (opt-out) over per-route dependencies, and `dev` operator = implicit admin. Sections: `## Context`, `## Alternatives`, `## Decision`, `## Consequences`. Cross-reference ADR 0084 and the spec.
 
 - [ ] **Step 2: Add the index row** to the table in `docs/decisions.md`.
 

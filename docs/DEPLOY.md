@@ -18,7 +18,11 @@ cd catdv-annotator
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 cp .env.example .env
-# Edit .env: at minimum set CATDV_PASSWORD and GOOGLE_APPLICATION_CREDENTIALS
+# Edit .env: at minimum set CATDV_PASSWORD, GOOGLE_APPLICATION_CREDENTIALS,
+# and INSTANCE_ID (mandatory; a lowercase slug unique to this machine,
+# e.g. local-<yourname>). It namespaces uploaded-clip media in the shared
+# GCS bucket so instances never overwrite each other (issue #55). The app
+# refuses to boot if INSTANCE_ID is unset.
 ./run.sh
 ```
 
@@ -91,6 +95,7 @@ cp .env.example .env
 #   PROXY_FS_ROOT=/usr/local/catdvServer/<proxies>
 #   PROXY_PATH_TEMPLATE="{root}/{clip_id}.mov"   # confirm with Honza
 #   GOOGLE_APPLICATION_CREDENTIALS=/etc/catdv-annotator/sa.json
+#   INSTANCE_ID=<unique-slug>   # mandatory; e.g. "prod" — namespaces uploads (issue #55)
 # CATDV_USERNAME / CATDV_PASSWORD come from Secret Manager (do NOT set in .env)
 sudo cp deploy/catdv-annotator.service /etc/systemd/system/
 sudo systemctl enable --now catdv-annotator

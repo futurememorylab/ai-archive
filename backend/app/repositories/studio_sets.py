@@ -125,6 +125,19 @@ class StudioSetsRepo:
         )
         await conn.commit()
 
+    async def count_sets_for_clip(
+        self, conn: aiosqlite.Connection, clip_id: int
+    ) -> int:
+        """How many sets currently reference `clip_id`.
+
+        Used by the upload orphan-GC: an uploaded clip is only safe to
+        delete once it is referenced by zero sets.
+        """
+        cur = await conn.execute(
+            "SELECT COUNT(*) FROM studio_set_clip WHERE clip_id = ?", (clip_id,)
+        )
+        return int((await cur.fetchone())[0])
+
     async def list_clips(
         self, conn: aiosqlite.Connection, set_id: int
     ) -> list[dict[str, Any]]:

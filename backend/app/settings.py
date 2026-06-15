@@ -5,7 +5,7 @@ cache caps, provider selection, etc.)."""
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,24 +17,29 @@ class Settings(BaseSettings):
     bind_port: int = 8765
     data_dir: Path = Field(default=Path("./data"))
 
-    # Identity backend selecting the auth adapter (ADR 0081). "dev": a single
-    # local operator (no IAP) so the app is usable on 127.0.0.1 where Google
-    # IAP does not exist. "iap": verify the Google IAP-signed identity header
-    # (cloud). Default "dev"; cloud flips to "iap" in PR2 once JWT verification
-    # lands. The seam (backend/app/auth) is not yet wired into routes (PR1).
+    # Identity backend selecting the auth adapter (ADR 0084). "dev": a single
+    # local operator (no IAP) so the app is usable on 127.0.0.1 where Google IAP
+    # does not exist. "iap": cryptographically verify the Google IAP-signed
+    # assertion (cloud). The default-deny gate enforces it; APP_ENV=prod requires
+    # "iap" (the validator below refuses to boot otherwise).
     auth_backend: Literal["dev", "iap"] = "dev"
     # Identity returned by the "dev" auth backend.
     dev_user_email: str = "dev@localhost"
     # Audience the IAP-signed assertion is verified against (cloud only). The
     # exact format for *direct* Cloud Run IAP is confirmed against a live token
     # before cutover. Unset/empty makes the iap backend fail closed (it refuses
-    # to verify against an empty audience). See ADR 0081.
+    # to verify against an empty audience). See ADR 0084.
     iap_audience: str | None = None
     # Comma-separated deploy-time list of emails seeded as admins at startup
     # (idempotently). The root of trust: the first admin(s) exist before the
     # admin console does, so no one can self-promote from inside the app.
-    # See ADR 0081 / spec 2026-06-14-iap-roles-admin-console-design.md.
+    # See ADR 0085 / spec 2026-06-14-iap-roles-admin-console-design.md.
     admin_emails: str = ""
+    # Mandatory per-deployment identifier. Namespaces uploaded-clip GCS
+    # object keys (instances/{instance_id}/uploads/{clip_id}.mov) so two
+    # instances sharing one bucket cannot overwrite each other's uploads
+    # (issue #55). No default -> the app refuses to boot if it is unset.
+    instance_id: str
 
     catdv_base_url: str
     catdv_username: str | None = None
@@ -129,6 +134,18 @@ class Settings(BaseSettings):
 
     # media prefetch queue
     prefetch_tick_interval_s: int = 2
+
+    @field_validator("instance_id")
+    @classmethod
+    def _instance_id_is_slug(cls, v: str) -> str:
+        import re
+
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", v):
+            raise ValueError(
+                "INSTANCE_ID must be a lowercase slug matching "
+                "[a-z0-9][a-z0-9-]* (e.g. 'prod', 'staging', 'local-pete')"
+            )
+        return v
 
     @model_validator(mode="after")
     def _validate_fs_archive(self) -> "Settings":

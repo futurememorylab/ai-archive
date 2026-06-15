@@ -111,6 +111,48 @@ def test_draft_model_picker_is_editable_and_card_scoped(client):
     assert 'x-data="modelPicker"' not in r.text
 
 
+def test_model_picker_uses_centralised_enum_not_hardcoded(client):
+    """The model picker offers the centralised enum catalog
+    (gemini_generation_model), not a stale hardcoded Jinja list. The old
+    hardcoded list named gemini-2.0-pro (not in the registry) and omitted
+    every gemini-3.x model — those must now follow the registry."""
+    _, _, v2 = _make_prompt_two_versions(client)
+    r = client.get(f"/studio/_prompt_card?side=cur&prompt_version_id={v2}")
+    assert r.status_code == 200
+    # A registry model that the hardcoded list never had.
+    assert "gemini-3.5-flash" in r.text
+    # The hardcoded entry that was never in the registry must be gone.
+    assert "gemini-2.0-pro" not in r.text
+
+
+def test_model_picker_orphan_safe_offers_saved_model(client):
+    """If the version's saved model is no longer in the catalog, the picker
+    still offers it (orphan safety) — editing must never silently switch
+    models. Mirrors the prompt-screen _model_options behaviour."""
+    from backend.app import main as main_mod
+
+    pid, _, v2 = _make_prompt_two_versions(client)
+    db_path = main_mod.app.state.core_ctx.settings.data_dir / "app.db"
+
+    async def _orphan_model():
+        async with aiosqlite.connect(db_path) as db:
+            await db.execute(
+                "UPDATE prompt_versions SET model = 'gemini-legacy-x' WHERE id = ?",
+                (v2,),
+            )
+            await db.commit()
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(_orphan_model())
+    finally:
+        loop.close()
+
+    r = client.get(f"/studio/_prompt_card?side=cur&prompt_version_id={v2}")
+    assert r.status_code == 200
+    # Must be a selectable picker entry, not merely the x-data seed value.
+    assert "pickModel('gemini-legacy-x')" in r.text
+
+
 def test_card_xdata_seeds_model_and_state(client):
     """The card factory receives the version's model + state so it can gate
     the picker and dirty-track a model change."""
