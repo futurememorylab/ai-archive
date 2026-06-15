@@ -23,6 +23,8 @@ class ThumbnailStore(Protocol):
 
     async def put(self, clip_id: int, src: Path) -> None: ...
 
+    async def delete(self, clip_id: int) -> None: ...
+
 
 class GcsThumbnailStore:
     """GCS-backed ThumbnailStore. All blocking SDK calls run in a worker
@@ -43,3 +45,9 @@ class GcsThumbnailStore:
             await asyncio.to_thread(self._gcs.upload_thumb, clip_id, src)
         except Exception:  # noqa: BLE001 — best-effort; never mask the served thumb
             log.warning("thumb store: put(%s) failed", clip_id, exc_info=True)
+
+    async def delete(self, clip_id: int) -> None:
+        try:
+            await asyncio.to_thread(self._gcs.delete_thumb, clip_id)
+        except Exception:  # noqa: BLE001 — best-effort; a missing/absent blob is fine
+            log.debug("thumb store: delete(%s) failed", clip_id, exc_info=True)

@@ -372,3 +372,24 @@ async def test_download_concurrency_is_bounded(tmp_path: Path):
     outs = await _asyncio.gather(*[svc.get_or_fetch(i) for i in range(10)])
     assert all(o is not None for o in outs)
     assert state["max"] <= 3
+
+
+@pytest.mark.asyncio
+async def test_evict_removes_local_and_durable(tmp_path: Path):
+    from unittest.mock import AsyncMock, MagicMock
+
+    (tmp_path / "42.jpg").write_bytes(b"poster")
+    durable = MagicMock()
+    durable.delete = AsyncMock()
+    svc = ThumbnailService(
+        cache_dir=tmp_path, archive=_FakeArchive({}), durable_store=durable
+    )
+    await svc.evict(42)
+    assert not (tmp_path / "42.jpg").exists()
+    durable.delete.assert_awaited_once_with(42)
+
+
+@pytest.mark.asyncio
+async def test_evict_missing_local_is_not_an_error(tmp_path: Path):
+    svc = ThumbnailService(cache_dir=tmp_path, archive=_FakeArchive({}))
+    await svc.evict(999)  # no local file, no durable store — must not raise
