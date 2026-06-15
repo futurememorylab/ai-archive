@@ -121,3 +121,39 @@ async def test_list_recent_clip_name_null_when_metadata_absent(db):
     recent = await repo.list_recent(db, limit=10)
     assert len(recent) == 1
     assert recent[0]["clip_name"] is None
+
+
+@pytest.mark.asyncio
+async def test_requeue_orphans_resets_downloading_rows(db):
+    # A row left `downloading` when the process died (e.g. SIGKILL or a
+    # crash mid-download) is an orphan: claim_next only picks up `queued`
+    # rows, so it would otherwise hang forever. requeue_orphans flips it
+    # back so the worker re-claims it on the next boot.
+    repo = PrefetchQueueRepo()
+    rid = await repo.enqueue(db, key=("catdv", "888894"), who="request")
+    await repo.claim_next(db)  # -> downloading, started_at set
+    before = await repo.get(db, rid)
+    assert before["status"] == "downloading" and before["started_at"] is not None
+
+    n = await repo.requeue_orphans(db)
+    assert n == 1
+    after = await repo.get(db, rid)
+    assert after["status"] == "queued"
+    assert after["started_at"] is None
+    # It is now claimable again.
+    claimed = await repo.claim_next(db)
+    assert claimed is not None and claimed["id"] == rid
+
+
+@pytest.mark.asyncio
+async def test_requeue_orphans_leaves_terminal_and_queued_rows_untouched(db):
+    repo = PrefetchQueueRepo()
+    queued = await repo.enqueue(db, key=("catdv", "1"), who="request")
+    done = await repo.enqueue(db, key=("catdv", "2"), who="request")
+    await repo.claim_next(db)  # claims `queued` (id 1) -> downloading
+    await repo.mark_done(db, queued, bytes_downloaded=1)
+    # id 2 is still queued; id 1 is now done. No downloading rows remain.
+    n = await repo.requeue_orphans(db)
+    assert n == 0
+    assert (await repo.get(db, queued))["status"] == "done"
+    assert (await repo.get(db, done))["status"] == "queued"

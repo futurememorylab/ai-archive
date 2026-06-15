@@ -16,7 +16,9 @@
    (media_local). The unused layer's controls are never shown.
 #}
 <span class="cache-ctl" id="cache-ctl-{{ clip.id }}"
-      x-data="cacheActions({ id: {{ clip.id }}, kind: '{{ clip.kind }}' })">
+      x-data="cacheActions({ id: {{ clip.id }}, kind: '{{ clip.kind }}' })"
+      @clip-cache-uploading.window="if ($event.detail.id === id) onAnnotateUpload()"
+      @clip-cache-refresh.window="if ($event.detail.id === id) onAnnotateCached()">
   <span class="cache-badge-host">
     {% with cache = clip.cache %}{% include "pages/_cache_badge.html" %}{% endwith %}
   </span>
@@ -33,8 +35,11 @@
         <button type="button" class="btn" @click="cacheNow()">⬇ Cache {{ label }}</button>
       {% endif %}
     {% elif not host_local_proxies %}
-      {% if clip.cache and clip.cache.media_local.present %}
-        <button type="button" class="btn danger" @click="evictLocal()">Evict local</button>
+      {#- A clip can be in the local proxy cache AND the AI store at once, so
+          offer a single Purge whenever either is present — and purge() clears
+          both, so an AI-only leftover is still removable here. -#}
+      {% if clip.cache and (clip.cache.media_local.present or clip.cache.media_ai.present) %}
+        <button type="button" class="btn danger" @click="purge()">Purge cache</button>
       {% elif mode == "online" %}
         <button type="button" class="btn" @click="cacheNow()">⬇ Cache {{ label }}</button>
       {% endif %}

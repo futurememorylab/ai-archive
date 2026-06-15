@@ -131,6 +131,24 @@ class PrefetchQueueRepo:
         # Re-read so callers see the updated status/started_at.
         return await self.get(conn, rid)
 
+    async def requeue_orphans(self, conn: aiosqlite.Connection) -> int:
+        """Reset orphaned `downloading` rows back to `queued`.
+
+        The prefetcher runs a single worker, so at boot nothing is
+        in-flight by construction: any row still `downloading` is an
+        orphan left by a crash / SIGKILL mid-download. `claim_next`
+        only picks up `queued` rows, so without this the orphan hangs
+        forever and `enqueue` keeps de-duping new requests onto it.
+        Call once on worker start. Returns the number of rows requeued.
+        """
+        cur = await conn.execute(
+            "UPDATE prefetch_queue "
+            "   SET status='queued', started_at=NULL "
+            " WHERE status='downloading'"
+        )
+        await conn.commit()
+        return cur.rowcount
+
     async def get(self, conn: aiosqlite.Connection, rid: int) -> dict[str, Any] | None:
         cur = await conn.execute(
             """

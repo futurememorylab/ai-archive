@@ -127,6 +127,34 @@ async def test_loop_processes_one_at_a_time(db):
 
 
 @pytest.mark.asyncio
+async def test_start_recovers_orphaned_downloading_row(db):
+    """A row stuck `downloading` from a previous crashed process must be
+    requeued and drained on the next start() — not hang the queue."""
+    from backend.app.services.media_prefetcher import MediaPrefetcher
+
+    repo = PrefetchQueueRepo()
+    rid = await repo.enqueue(db, key=("catdv", "888894"), who="request")
+    await repo.claim_next(db)  # simulate the orphan: now `downloading`
+    assert (await repo.get(db, rid))["status"] == "downloading"
+
+    backend = _FakeBackend()
+    pf = MediaPrefetcher(
+        queue_repo=repo,
+        backend=backend,
+        db_provider=lambda: db,
+        tick_interval_s=0.01,
+    )
+    await pf.start()
+    for _ in range(50):
+        if (await repo.get(db, rid))["status"] == "done":
+            break
+        await asyncio.sleep(0.05)
+    await pf.stop()
+    assert (await repo.get(db, rid))["status"] == "done"
+    assert backend.calls == [888894]
+
+
+@pytest.mark.asyncio
 async def test_stop_returns_promptly_between_rows(db):
     from backend.app.services.media_prefetcher import MediaPrefetcher
 

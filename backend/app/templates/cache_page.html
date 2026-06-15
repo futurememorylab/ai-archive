@@ -139,13 +139,21 @@
       async bulkEvict(keys) {
         keys = keys || this._selectedKeys();
         if (keys.length === 0) return;
-        if (!confirm(`Purge local media for ${keys.length} clip(s)?`)) return;
+        // Evict the layer matching the active tab. Tab switches are HTMX
+        // swaps of the table region only (cacheSel stays mounted), so read
+        // the current tab live from the URL rather than a render-time value.
+        const tab = new URLSearchParams(location.search).get('tab') || 'all';
+        const plan =
+          tab === 'ai'    ? { layers: ['media-ai'],    what: 'AI-store media' } :
+          tab === 'local' ? { layers: ['media-local'], what: 'local media' } :
+                            { layers: ['media-local', 'media-ai', 'metadata'], what: 'all cache layers' };
+        if (!confirm(`Purge ${plan.what} for ${keys.length} clip(s)?`)) return;
         const r = await fetch('/api/cache/bulk-evict', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             clip_keys: keys,
-            layers: ['media-local'],
+            layers: plan.layers,
             force: false,
           }),
         });
