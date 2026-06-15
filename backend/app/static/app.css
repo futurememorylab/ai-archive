@@ -2495,7 +2495,9 @@ body.studio-resizing {
 .topbar-user {
   color: var(--text-3); font-size: 12px; font-family: var(--f-mono);
   white-space: nowrap; max-width: 240px; overflow: hidden; text-overflow: ellipsis;
+  margin-left: 12px;
 }
+.topbar-logout { margin-left: 10px; margin-right: 2px; }
 
 /* ── Admin console + access page (spec 2026-06-14) ─────────────────────────
    Tokens only: no raw hex. Table cell styles scoped under .admin-table so

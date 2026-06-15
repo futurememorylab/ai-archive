@@ -2,7 +2,7 @@
 {# Access & Permissions section of the admin console (ADR 0082). Loaded into the
    admin region by the "Access & Permissions" tab. Standalone partial — no
    {% extends %}; it carries its own Alpine scope and re-inits after HTMX swap. #}
-<div id="admin-access" class="admin-page" x-data="{ showAdd: false }">
+<div id="admin-access" class="admin-access" x-data="{ showAdd: false }">
 
   {% call ui.page_header('Access & Permissions',
        meta='Manage who can reach CatDV and what each member is allowed to do') %}
