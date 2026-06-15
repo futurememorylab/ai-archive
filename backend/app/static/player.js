@@ -50,9 +50,15 @@ document.addEventListener("alpine:init", () => {
       // proxy) needs a network round-trip before a frame is ready. Show the
       // spinner while data is pending; clear it as soon as playback can present
       // a frame or continue, and on terminal states so it never spins forever.
+      //
+      // #54: deliberately NOT wired to `loadstart`. Under preload="none"
+      // `loadstart` fires during the resource-selection algorithm — i.e. the
+      // moment the clip is selected/rendered, before any play — and the browser
+      // then fires `suspend` rather than `canplay`/`playing`, so a
+      // loadstart-armed spinner would spin forever on a merely-selected clip.
+      // The first-play case is instead armed explicitly in `_requestPlay()`.
       const buffOn = () => { this.buffering = true; };
       const buffOff = () => { this.buffering = false; };
-      v.addEventListener("loadstart", buffOn);  // first play kicks off the fetch
       v.addEventListener("waiting",   buffOn);  // stalled mid-playback, needs data
       v.addEventListener("seeking",   buffOn);  // jumped to a new point/marker
       v.addEventListener("playing",   buffOff); // resumed actual playback
@@ -135,16 +141,28 @@ document.addEventListener("alpine:init", () => {
     },
 
     // ─── transport ────────────────────────────────────────────────
+    // Start playback, arming the buffering spinner only when the browser
+    // doesn't yet have enough data to present a frame (#54). Under
+    // preload="none" the first play kicks off the proxy fetch, so the spinner
+    // shows while that round-trip is in flight; `playing`/`canplay` clear it.
+    // When the clip is already buffered (readyState >= HAVE_FUTURE_DATA) we
+    // don't arm it, avoiding a flash on an instant resume.
+    _requestPlay() {
+      const v = this.$refs.video;
+      if (!v || !this.canPlay) return;   // offline + uncached: nothing to play
+      if (v.readyState < 3) this.buffering = true;
+      v.play().catch(() => { this.buffering = false; });
+    },
+
     togglePlay() {
       const v = this.$refs.video;
       if (!v) return;
       if (!this.canPlay) return;   // offline + uncached: nothing to play
-      if (v.paused) v.play().catch(() => {}); else v.pause();
+      if (v.paused) this._requestPlay(); else v.pause();
     },
 
     play() {
-      const v = this.$refs.video;
-      if (v && this.canPlay) v.play().catch(() => {});
+      this._requestPlay();
     },
 
     pause() {
