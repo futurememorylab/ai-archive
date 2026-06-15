@@ -22,7 +22,8 @@ from pydantic import BaseModel
 from backend.app.deps import get_core_ctx
 from backend.app.routes.pages.templates import templates
 from backend.app.services.annotator import run_job
-from backend.app.uploaded_ids import to_clip_id
+from backend.app.services.upload_cleanup import UploadCleanup
+from backend.app.uploaded_ids import is_uploaded, to_clip_id
 
 router = APIRouter(prefix="/api/studio", tags=["studio"])
 
@@ -129,6 +130,21 @@ async def add_set_clips(
 async def remove_set_clip(request: Request, set_id: int, clip_id: int):
     ctx = get_core_ctx(request)
     await ctx.studio_sets_repo.remove_clip(ctx.db, set_id, clip_id=clip_id)
+
+    # Uploaded clips own their bytes, so removing the last set membership must
+    # GC the upload itself (DB row + local video/poster + GCS blob). Archive
+    # clips are canonical and shared — never GC'd on set removal. See #57.
+    if is_uploaded(clip_id):
+        live = request.app.state.live_ctx
+        cleanup = UploadCleanup(
+            db_provider=lambda: ctx.db,
+            studio_sets_repo=ctx.studio_sets_repo,
+            uploaded_clips_repo=ctx.uploaded_clips_repo,
+            cache_actions=ctx.cache_actions,
+            thumbnail_service=live.thumbnail_service if live is not None else None,
+        )
+        await cleanup.gc_if_orphaned(clip_id)
+
     return Response(status_code=204)
 
 

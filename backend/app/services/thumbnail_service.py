@@ -144,6 +144,18 @@ class ThumbnailService:
             return dest
         return None
 
+    async def evict(self, clip_id: int) -> None:
+        """Remove a clip's poster from the local cache and the durable store.
+
+        Best-effort and offline-safe: a missing local file is not an error,
+        and a durable-store failure (GCS unreachable) is swallowed by the
+        store wrapper so local cleanup still completes. Called by the upload
+        orphan-GC when an uploaded clip leaves its last set."""
+        dest = self.path_for(clip_id)
+        await asyncio.to_thread(dest.unlink, missing_ok=True)
+        if self._durable is not None:
+            await self._durable.delete(clip_id)
+
     async def push_durable(self, clip_id: int, src: Path) -> None:
         """Mirror a poster already written to /data into the durable GCS
         store. Called by the studio upload-ingest path after writing the

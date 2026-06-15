@@ -105,6 +105,22 @@ async def test_delete_set_cascades_clips(db):
 
 
 @pytest.mark.asyncio
+async def test_count_sets_for_clip(db):
+    repo = StudioSetsRepo()
+    a = await repo.create_set(db, name="a")
+    b = await repo.create_set(db, name="b")
+    await repo.add_clips(db, a, clip_ids=[7])
+    await repo.add_clips(db, b, clip_ids=[7])
+    assert await repo.count_sets_for_clip(db, 7) == 2
+    await repo.remove_clip(db, a, clip_id=7)
+    assert await repo.count_sets_for_clip(db, 7) == 1
+    await repo.remove_clip(db, b, clip_id=7)
+    assert await repo.count_sets_for_clip(db, 7) == 0
+    # A clip in no set reads zero.
+    assert await repo.count_sets_for_clip(db, 999) == 0
+
+
+@pytest.mark.asyncio
 async def test_set_id_for_clip(db):
     repo = StudioSetsRepo()
     sid = await repo.create_set(db, name="f1")

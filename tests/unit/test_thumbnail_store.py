@@ -45,3 +45,19 @@ async def test_get_propagates_false_from_gcs(tmp_path: Path):
     gcs.download_thumb.return_value = False  # blob absent / empty body
     store = GcsThumbnailStore(gcs)
     assert await store.get(7, tmp_path / "7.jpg") is False
+
+
+@pytest.mark.asyncio
+async def test_delete_delegates():
+    gcs = MagicMock()
+    store = GcsThumbnailStore(gcs)
+    await store.delete(7)
+    gcs.delete_thumb.assert_called_once_with(7)
+
+
+@pytest.mark.asyncio
+async def test_delete_swallows_exception():
+    gcs = MagicMock()
+    gcs.delete_thumb.side_effect = RuntimeError("gcs down")
+    store = GcsThumbnailStore(gcs)
+    await store.delete(7)  # must NOT raise

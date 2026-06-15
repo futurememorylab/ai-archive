@@ -98,6 +98,12 @@ class GcsService:
         blob.upload_from_filename(str(local_path), content_type="image/jpeg")
         return self.thumb_uri(clip_id)
 
+    def delete_thumb(self, clip_id: int) -> None:
+        """Delete thumbs/{clip_id}.jpg. Raises NotFound if the blob is absent —
+        the GcsThumbnailStore wrapper treats that (and any transient GCS error)
+        as a best-effort miss. Blocking (network) — call via asyncio.to_thread."""
+        self._bucket.blob(f"thumbs/{clip_id}.jpg").delete()
+
     def signed_url(self, gs_uri: str, *, expires_s: int = 3600) -> str:
         """V4 signed URL for a gs:// handle (e.g. an UploadedRef.handle).
 
