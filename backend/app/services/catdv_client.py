@@ -23,6 +23,35 @@ _QUERY_ALLOWLIST = re.compile(r"[^\w\s\-.]", re.UNICODE)
 # so keep it tight — a dead tunnel must not starve the sync. See ADR 0077.
 LOGOUT_TIMEOUT_S = 2.0
 
+# Proxy media is the one large transfer we pull over the cloud WireGuard/onetun
+# tunnel, whose tiny MTU (1000) makes a single sustained stream stall or get cut
+# mid-body. `download_proxy` therefore resumes from the on-disk partial via HTTP
+# Range until the file matches the server's declared total, instead of trusting
+# one stream to finish. Per-read timeout is short so a stall is detected and
+# resumed quickly; we bail only after several *zero-progress* attempts, so a
+# slow-but-advancing tunnel still completes.
+PROXY_STREAM_READ_TIMEOUT_S = 30.0
+PROXY_MAX_STALLED_ATTEMPTS = 4
+
+
+def _content_total_bytes(resp: "httpx.Response", existing: int) -> int | None:
+    """Total size of the proxy from a (possibly partial) response.
+
+    Prefers the `Content-Range: bytes a-b/TOTAL` trailer (206); falls back to
+    `Content-Length` — which is the whole file on a 200, or the remaining
+    `existing + length` on a 206. Returns None when the server declares
+    neither, in which case completeness can't be verified.
+    """
+    cr = resp.headers.get("content-range", "")
+    if "/" in cr:
+        total = cr.rsplit("/", 1)[-1].strip()
+        if total.isdigit():
+            return int(total)
+    cl = resp.headers.get("content-length", "")
+    if cl.isdigit():
+        return (existing + int(cl)) if resp.status_code == 206 else int(cl)
+    return None
+
 
 def _sanitise_query(q: str) -> str:
     """Strip any character not in the conservative allowlist
@@ -200,26 +229,77 @@ class CatdvClient:
         return env
 
     async def download_proxy(self, clip_id: int, dest: Path, chunk_size: int = 1024 * 1024) -> None:
-        """Stream the proxy for a clip to `dest`. Resumes from existing partial file."""
+        """Stream the proxy for a clip to `dest`, resuming across tunnel stalls.
+
+        The cloud pulls proxy media through the low-MTU WireGuard tunnel, where
+        a single stream regularly stalls or is cut mid-body. Rather than trust
+        one stream (and risk uploading a truncated file), we loop: resume from
+        the on-disk partial via HTTP Range until the file reaches the server's
+        declared total. We give up only after `PROXY_MAX_STALLED_ATTEMPTS`
+        consecutive attempts that move zero bytes — a genuinely dead link —
+        so a slow-but-advancing tunnel still completes. See ADR 0087.
+        """
         if not self._logged_in:
             await self.login()
         url = f"{self._base}/catdv/api/9/clips/{clip_id}/media"
-        existing_size = dest.stat().st_size if dest.exists() else 0  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
-        headers: dict[str, str] = {}
-        if existing_size > 0:
-            headers["Range"] = f"bytes={existing_size}-"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        # Short per-read timeout: detect a stall fast and resume, don't wait
+        # out the client's full 60s on every cut. Connect/write keep the
+        # client default.
+        timeout = httpx.Timeout(self._timeout, read=PROXY_STREAM_READ_TIMEOUT_S)
 
-        async with self.http.stream("GET", url, headers=headers) as resp:
-            if resp.status_code == 401 or _is_auth_envelope(resp):
-                await self.login()
-                async with self.http.stream("GET", url, headers=headers) as resp2:
-                    resp2.raise_for_status()
-                    await self._stream_to_file(
-                        resp2, dest, append=existing_size > 0, chunk_size=chunk_size
+        expected_total: int | None = None
+        stalled = 0
+        while True:
+            existing = dest.stat().st_size if dest.exists() else 0  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
+            if expected_total is not None and existing >= expected_total:
+                return  # complete
+            headers = {"Range": f"bytes={existing}-"} if existing > 0 else {}
+            relogged = False
+            finished_stream = False
+            try:
+                async with self.http.stream("GET", url, headers=headers, timeout=timeout) as resp:
+                    if resp.status_code == 401 or _is_auth_envelope(resp):
+                        await self.login()
+                        relogged = True
+                    else:
+                        resp.raise_for_status()
+                        total = _content_total_bytes(resp, existing)
+                        if total is not None:
+                            expected_total = total
+                        # If we asked to resume but got a full 200, the server
+                        # ignored Range — rewrite from byte 0, don't append a
+                        # whole body onto the partial.
+                        append = resp.status_code == 206 and existing > 0
+                        await self._stream_to_file(
+                            resp, dest, append=append, chunk_size=chunk_size
+                        )
+                        finished_stream = True
+            except (httpx.TimeoutException, httpx.TransportError, httpx.RemoteProtocolError):
+                # Stall / cut mid-stream. The partial on disk is intact; the
+                # next iteration resumes from it. (RemoteProtocolError =
+                # peer closed before the declared body completed.)
+                pass
+            if relogged:
+                continue  # re-auth done; retry the same range without counting it
+            now = dest.stat().st_size if dest.exists() else 0  # sync-io-ok
+            if expected_total is not None:
+                if now >= expected_total:
+                    return  # complete — verified against the declared total
+            elif finished_stream:
+                # No declared total to verify against, but the stream ended
+                # cleanly (not a stall/cut) → treat as complete.
+                return
+            if now <= existing:
+                stalled += 1
+                if stalled >= PROXY_MAX_STALLED_ATTEMPTS:
+                    raise httpx.ReadTimeout(
+                        f"proxy download stalled at {now}"
+                        + (f"/{expected_total}" if expected_total else "")
+                        + f" bytes after {stalled} attempts with no progress"
                     )
-                    return
-            resp.raise_for_status()
-            await self._stream_to_file(resp, dest, append=existing_size > 0, chunk_size=chunk_size)
+            else:
+                stalled = 0
 
     async def download_original(
         self, media_id: int, dest: Path, chunk_size: int = 1024 * 1024
