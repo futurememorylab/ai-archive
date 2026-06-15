@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from backend.app.deps import get_core_ctx
+from backend.app.routes.pages.prompts import _model_options
 from backend.app.routes.pages.templates import templates
 from backend.app.uploaded_ids import is_uploaded
 
@@ -120,6 +121,12 @@ async def studio_page(
             "versions": [v.model_dump() for v in versions],
             "active_version": active_version.model_dump() if active_version else None,
             "compare_version": compare_version.model_dump() if compare_version else None,
+            # Centralised model catalog (gemini_generation_model), orphan-safe
+            # against the active version's saved model — the cur card's picker
+            # reads this instead of a hardcoded list. See "Enumerations" in CLAUDE.md.
+            "models": await _model_options(
+                ctx, active_version.model_dump() if active_version else None
+            ),
             "sets": sets,
             "archive_available": archive_available,
             "nav_source": nav_source,
@@ -470,6 +477,8 @@ async def _studio_prompt_card(
             "side": side,
             "active_version": version_dict,
             "version": version_dict,  # consumed by the embedded _studio_run_output include
+            # Centralised, orphan-safe model catalog for the cur card's picker.
+            "models": await _model_options(ctx, version_dict),
             "versions": [v.model_dump() for v in versions],
             "clip_id": clip_id,
             "run": run.model_dump() if run else None,

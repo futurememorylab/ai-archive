@@ -35,7 +35,9 @@
         </button>
         <div class="popover-panel menu align-right" x-show="modelOpen" x-cloak
              @keydown.escape.window="modelOpen = false">
-          {% set models = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-pro'] %}
+          {# Models come from the centralised enum catalog (gemini_generation_model),
+             orphan-safe-unioned with active_version.model — never hardcoded.
+             Built by _model_options() in the route. #}
           {% for m in models %}
             <button class="menu-item" :class="model === '{{ m }}' && 'is-current'"
                     @click="pickModel('{{ m }}')">
