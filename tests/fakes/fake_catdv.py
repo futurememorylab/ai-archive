@@ -26,6 +26,12 @@ class FakeCatdv:
         self.proxies: dict[int, bytes] = {}
         self.thumbnails: dict[int, bytes] = {}
         self.originals: dict[int, bytes] = {}
+        # Fault injection for proxy downloads over a stall-prone tunnel: when
+        # set, get_media serves at most this many bytes per request (from the
+        # requested Range start), as a 206 partial declaring the true total —
+        # so a client must resume across several requests to assemble the file.
+        # 0 simulates a dead link (zero progress per attempt).
+        self.media_chunk_cap: int | None = None
         self.force_auth_until: float = 0.0
         self.put_log: list[tuple[int, dict]] = []
         self.logout_count: int = 0
@@ -124,10 +130,13 @@ class FakeCatdv:
             if blob is None:
                 return Response(status_code=404)
             range_header = request.headers.get("range")
+            cap = self.media_chunk_cap
             if range_header and range_header.startswith("bytes="):
                 start_s, _, end_s = range_header[6:].partition("-")
                 start = int(start_s)
                 end = int(end_s) if end_s else len(blob) - 1
+                if cap is not None:
+                    end = min(end, start + cap - 1)  # serve at most `cap` bytes
                 chunk = blob[start : end + 1]
                 return Response(
                     content=chunk,
@@ -135,6 +144,21 @@ class FakeCatdv:
                     media_type="video/quicktime",
                     headers={
                         "Content-Range": f"bytes {start}-{end}/{len(blob)}",
+                        "Content-Length": str(len(chunk)),
+                        "Accept-Ranges": "bytes",
+                    },
+                )
+            if cap is not None:
+                # No Range header but capping is on → answer a 206 partial from
+                # byte 0 so the client learns the true total and resumes.
+                end = min(len(blob) - 1, cap - 1)
+                chunk = blob[: end + 1]
+                return Response(
+                    content=chunk,
+                    status_code=206,
+                    media_type="video/quicktime",
+                    headers={
+                        "Content-Range": f"bytes 0-{end}/{len(blob)}",
                         "Content-Length": str(len(chunk)),
                         "Accept-Ranges": "bytes",
                     },
