@@ -5,10 +5,12 @@ all route modules reach the same configured `templates` without duplicating
 setup.
 """
 
+import json as _json
 from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
 
+from backend.app.enums.registry import ENUM_REGISTRY
 from backend.app.services.word_diff import diff_html
 from backend.app.timecode import secs_to_smpte
 
@@ -57,3 +59,18 @@ def _usd(x: float | None) -> str:
 templates.env.filters["bytes_human"] = _bytes_human
 templates.env.filters["comma"] = _comma
 templates.env.filters["usd"] = _usd
+
+
+def _fixed_enums_json() -> str:
+    """Static (DB-free) fixed-enum values for window.APP_ENUMS. Editable enums
+    are intentionally excluded — they change at runtime and are delivered via
+    route context / the JSON API."""
+    data = {
+        key: [v.value for v in spec.values]
+        for key, spec in ENUM_REGISTRY.items()
+        if not spec.editable
+    }
+    return _json.dumps(data)
+
+
+templates.env.globals["app_enums_json"] = _fixed_enums_json()

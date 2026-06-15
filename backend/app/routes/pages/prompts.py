@@ -27,16 +27,18 @@ async def prompts_page(request: Request, archived: int = 0):
         first_id = prompts[0].id
         selected, versions = await repo.get_with_versions(ctx.db, first_id)
         selected_version = _pick_default_version(versions)
+    sv_view = _version_view(selected_version) if selected_version else None
     return templates.TemplateResponse(
         request,
         "pages/prompts.html",
         {
             "prompts": [p.model_dump() for p in prompts],
             "selected": selected.model_dump() if selected else None,
-            "selected_version": _version_view(selected_version) if selected_version else None,
+            "selected_version": sv_view,
             "versions": [_version_view(v) for v in versions],
             "archived_view": bool(archived),
             "rail_active": "prompts",
+            "model_options": await _model_options(ctx, sv_view),
         },
     )
 
@@ -50,6 +52,8 @@ async def prompts_archived_page(request: Request):
 async def prompt_new_page(request: Request):
     ctx = get_core_ctx(request)
     prompts = await ctx.prompts_repo.list_active(ctx.db)
+    models = [v.value for v in await ctx.enum_service.generation_models()]
+    default_model = await ctx.enum_service.generation_default()
     return templates.TemplateResponse(
         request,
         "pages/_prompt_new.html",
@@ -57,13 +61,14 @@ async def prompt_new_page(request: Request):
             "prompts": [p.model_dump() for p in prompts],
             "rail_active": "prompts",
             "error": None,
+            "models": models,
             "form": {
                 "name": "",
                 "description": "",
                 "body": "",
                 "target_map_text": "{}",
                 "output_schema_text": "{}",
-                "model": "gemini-2.5-flash-lite",
+                "model": default_model,
                 "media_kind": "any",
             },
         },
@@ -79,7 +84,8 @@ async def action_create_prompt(request: Request):
     body = form.get("body") or ""
     target_map_text = form.get("target_map") or "{}"
     output_schema_text = form.get("output_schema") or "{}"
-    model = form.get("model") or "gemini-2.5-flash-lite"
+    default_model = await ctx.enum_service.generation_default()
+    model = form.get("model") or default_model
     media_kind = str(form.get("media_kind") or "any")
     error = None
     target_map = None
@@ -98,6 +104,7 @@ async def action_create_prompt(request: Request):
         error = "name is required"
     if error:
         prompts = await ctx.prompts_repo.list_active(ctx.db)
+        models = [v.value for v in await ctx.enum_service.generation_models()]
         return templates.TemplateResponse(
             request,
             "pages/_prompt_new.html",
@@ -105,6 +112,7 @@ async def action_create_prompt(request: Request):
                 "prompts": [p.model_dump() for p in prompts],
                 "rail_active": "prompts",
                 "error": error,
+                "models": models,
                 "form": {
                     "name": name,
                     "description": description or "",
@@ -130,6 +138,7 @@ async def action_create_prompt(request: Request):
         )
     except aiosqlite.IntegrityError as exc:
         prompts = await ctx.prompts_repo.list_active(ctx.db)
+        models = [v.value for v in await ctx.enum_service.generation_models()]
         return templates.TemplateResponse(
             request,
             "pages/_prompt_new.html",
@@ -137,6 +146,7 @@ async def action_create_prompt(request: Request):
                 "prompts": [p.model_dump() for p in prompts],
                 "rail_active": "prompts",
                 "error": f"name already exists: {exc}",
+                "models": models,
                 "form": {
                     "name": name,
                     "description": description or "",
@@ -171,16 +181,18 @@ async def prompt_detail_page(request: Request, prompt_id: int, version_id: int |
         if version_id is not None
         else _pick_default_version(versions)
     )
+    sv_view = _version_view(selected_version)
     return templates.TemplateResponse(
         request,
         "pages/prompts.html",
         {
             "prompts": [p.model_dump() for p in prompts],
             "selected": selected.model_dump(),
-            "selected_version": _version_view(selected_version),
+            "selected_version": sv_view,
             "versions": [_version_view(v) for v in versions],
             "archived_view": archived_view,
             "rail_active": "prompts",
+            "model_options": await _model_options(ctx, sv_view),
         },
     )
 
@@ -259,6 +271,18 @@ async def action_restore_prompt(request: Request, prompt_id: int):
     except LookupError as exc:
         raise HTTPException(404, str(exc)) from exc
     return RedirectResponse(f"/prompts/{prompt_id}", status_code=303)
+
+
+async def _model_options(ctx, selected_version) -> list[str]:
+    """Enabled catalog models, unioned with the version's saved model when that
+    model is no longer in the catalog (orphan safety: the Edit picker must still
+    offer the saved value so editing never silently switches models)."""
+    models = [v.value for v in await ctx.enum_service.generation_models()]
+    # selected_version is a dict (produced by _version_view) in these routes
+    saved = selected_version.get("model") if isinstance(selected_version, dict) else getattr(selected_version, "model", None)
+    if saved and saved not in models:
+        models = [*models, saved]
+    return models
 
 
 def _pick_default_version(versions: list) -> object | None:

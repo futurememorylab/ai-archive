@@ -1,0 +1,28 @@
+{# backend/app/templates/pages/admin.html #}
+{% extends "pages/layout.html" %}
+{% import "components/_ui.html" as ui %}
+{% block title %}Admin · CatDV Annotator{% endblock %}
+{% block rail_active %}admin{% endblock %}
+{% block crumb %}{{ ui.breadcrumb([('Admin', None)]) }}{% endblock %}
+{% block body %}
+<div class="page admin-page">
+  {% call ui.page_header('Admin') %}{% endcall %}
+  <div class="cache-tabs">
+    {% for d in definitions %}
+      <a class="ctab{% if d.key == active_key %} active{% endif %}"
+         href="/admin/enums/{{ d.key }}"
+         hx-get="/admin/enums/{{ d.key }}"
+         hx-target="#admin-enum-region"
+         hx-swap="innerHTML"
+         hx-push-url="false">{{ d.name }}</a>
+    {% endfor %}
+  </div>
+  <div id="admin-enum-region">
+    {% if view %}
+      {% with key=view.key, definition=view.definition, rows=view.rows %}
+        {% include "pages/_admin_enum_table.html" %}
+      {% endwith %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

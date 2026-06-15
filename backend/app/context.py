@@ -60,6 +60,7 @@ from backend.app.repositories.prefetch_queue import PrefetchQueueRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.proxy_cache import ProxyCacheRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
+from backend.app.repositories.enum_values import EnumValuesRepo
 from backend.app.repositories.run_telemetry import RunTelemetryRepo
 from backend.app.repositories.studio_runs import StudioRunsRepo
 from backend.app.repositories.studio_sets import StudioSetsRepo
@@ -68,6 +69,7 @@ from backend.app.repositories.workspaces import WorkspacesRepo
 from backend.app.repositories.write_log import WriteLogRepo
 from backend.app.services.cache_actions import CacheActions
 from backend.app.services.cache_inspector import CacheInspector
+from backend.app.services.enum_service import EnumService
 from backend.app.services.connection_monitor import ConnectionMonitor
 from backend.app.services.events import EventBus
 from backend.app.services.idle_disconnector import IdleDisconnector
@@ -111,6 +113,7 @@ class CoreCtx:
     studio_runs_repo: StudioRunsRepo = field(default_factory=StudioRunsRepo)
     uploaded_clips_repo: UploadedClipsRepo = field(default_factory=UploadedClipsRepo)
     run_telemetry_repo: RunTelemetryRepo = field(default_factory=RunTelemetryRepo)
+    enum_values_repo: EnumValuesRepo = field(default_factory=EnumValuesRepo)
     telemetry_ctx: TelemetryCtx = field(init=False)
     event_bus: EventBus = field(default_factory=EventBus)
 
@@ -123,6 +126,7 @@ class CoreCtx:
     # on CoreCtx and are built with possibly-None live deps.
     cache_inspector: CacheInspector = field(init=False)
     cache_actions: CacheActions = field(init=False)
+    enum_service: EnumService = field(init=False)
 
     @classmethod
     async def build(cls, settings: Settings) -> CoreCtx:
@@ -170,6 +174,11 @@ class CoreCtx:
             vertex_project=settings.gcp_project_id,
             vertex_location=settings.gcp_location,
         )
+        ctx.enum_service = EnumService(
+            db_provider=lambda: ctx.db,
+            repo=ctx.enum_values_repo,
+        )
+        await ctx.enum_service.reconcile_seeds()
         return ctx
 
     def _wire_cache_services(
@@ -343,6 +352,14 @@ class LiveCtx:
     @property
     def cache_actions(self) -> CacheActions:
         return self.core.cache_actions
+
+    @property
+    def enum_values_repo(self) -> EnumValuesRepo:
+        return self.core.enum_values_repo
+
+    @property
+    def enum_service(self) -> EnumService:
+        return self.core.enum_service
 
     @property
     def _running_jobs(self) -> dict[int, object]:
