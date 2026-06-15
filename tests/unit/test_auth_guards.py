@@ -14,13 +14,14 @@ def _req(user):
 
 
 def test_require_permission_allows_capable_user():
-    u = CurrentUser(email="a@x.com", role="annotator")
+    u = CurrentUser(email="a@x.com", role="member")
     assert require_permission(_req(u), "run") is u
 
 
 def test_require_permission_denies_incapable_user():
+    # a member lacks the admin-only 'manage' capability
     with pytest.raises(HTTPException) as ei:
-        require_permission(_req(CurrentUser(email="v@x.com", role="viewer")), "run")
+        require_permission(_req(CurrentUser(email="m@x.com", role="member")), "manage")
     assert ei.value.status_code == 403
 
 

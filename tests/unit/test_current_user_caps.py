@@ -9,9 +9,9 @@ def test_admin_has_all_caps_and_is_admin():
     assert u.has("manage") and u.has("run") and u.is_admin
 
 
-def test_viewer_lacks_run_and_manage():
-    u = CurrentUser(email="v@x.com", role="viewer")
-    assert u.has("view") and not u.has("run") and not u.has("manage")
+def test_member_can_use_app_but_lacks_manage():
+    u = CurrentUser(email="m@x.com", role="member")
+    assert u.has("view") and u.has("run") and not u.has("manage")
     assert u.is_admin is False
 
 

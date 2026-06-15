@@ -6,23 +6,21 @@ ladder is defined exactly once.
 
 from __future__ import annotations
 
-# role -> set of capabilities. View(V) Publish(P) Run AI(A) Manage access(M).
+# role -> set of capabilities. Two roles: 'admin' manages access (+ everything a
+# member can do); 'member' is a regular, non-admin user of the app.
+# Capabilities: View, Publish, Run AI, Manage access.
 ROLE_CAPS: dict[str, set[str]] = {
     "admin": {"view", "publish", "run", "manage"},
-    "annotator": {"view", "publish", "run"},
-    "publisher": {"view", "publish"},
-    "viewer": {"view"},
+    "member": {"view", "publish", "run"},
 }
 
-# Display order (privilege descending), used by the table + role pickers.
-ROLE_ORDER: list[str] = ["admin", "annotator", "publisher", "viewer"]
+# Display order (privilege descending), used by the role pickers.
+ROLE_ORDER: list[str] = ["admin", "member"]
 
 # Human labels + one-line descriptions for the role picker / pills.
 ROLE_META: dict[str, dict[str, str]] = {
     "admin": {"label": "Admin", "desc": "Full control — manage members & access"},
-    "annotator": {"label": "Annotator", "desc": "Run AI analysis, publish & view"},
-    "publisher": {"label": "Publisher", "desc": "Publish & view analyses"},
-    "viewer": {"label": "Viewer", "desc": "View analyses only"},
+    "member": {"label": "Member", "desc": "Use the app — view, publish & run AI"},
 }
 
 # Ordered (capability, letter) pairs for the V·P·A·M permission dots.

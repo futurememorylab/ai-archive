@@ -29,7 +29,7 @@ def test_non_admin_cannot_open_console(monkeypatch, tmp_path: Path):
     holder = {"email": "boss@x.com"}
     main_mod = _app(monkeypatch, tmp_path, holder)
     with TestClient(main_mod.app) as client:
-        client.post("/admin/users", data={"email": "v@x.com", "role": "viewer", "display_name": ""})
+        client.post("/admin/users", data={"email": "v@x.com", "role": "member", "display_name": ""})
         holder["email"] = "v@x.com"
         r = client.get("/admin")
     assert r.status_code == 403
@@ -41,7 +41,7 @@ def test_admin_lists_and_adds_member(monkeypatch, tmp_path: Path):
     with TestClient(main_mod.app) as client:
         assert "Access" in client.get("/admin").text and "Permissions" in client.get("/admin").text
         r = client.post("/admin/users",
-                        data={"email": "Annie@x.com", "role": "annotator", "display_name": "Annie"},
+                        data={"email": "Annie@x.com", "role": "member", "display_name": "Annie"},
                         headers={"HX-Request": "true"})
         assert r.status_code in (200, 201)
         assert "annie@x.com" in client.get("/admin/access").text
@@ -52,7 +52,7 @@ def test_self_protection(monkeypatch, tmp_path: Path):
     main_mod = _app(monkeypatch, tmp_path, holder)
     with TestClient(main_mod.app) as client:
         assert client.delete("/admin/users/boss@x.com").status_code == 403
-        assert client.patch("/admin/users/boss@x.com", data={"role": "viewer"}).status_code == 403
+        assert client.patch("/admin/users/boss@x.com", data={"role": "member"}).status_code == 403
 
 
 def test_last_admin_guard(monkeypatch, tmp_path: Path):
@@ -62,7 +62,7 @@ def test_last_admin_guard(monkeypatch, tmp_path: Path):
         # add a second admin, then it's safe to demote them, but never the last one
         client.post("/admin/users", data={"email": "a2@x.com", "role": "admin", "display_name": ""})
         # demote a2 (ok — boss remains)
-        assert client.patch("/admin/users/a2@x.com", data={"role": "viewer"}).status_code in (200, 201)
+        assert client.patch("/admin/users/a2@x.com", data={"role": "member"}).status_code in (200, 201)
         # now boss is the only admin; revoking the only OTHER admin path is covered by self-protection,
         # so simulate: make a2 admin again and try to delete boss-as-only-admin via a2
         client.patch("/admin/users/a2@x.com", data={"role": "admin"})
@@ -72,7 +72,7 @@ def test_last_admin_guard(monkeypatch, tmp_path: Path):
         # so add a fresh admin and have THEM try to demote a2 after deleting boss is impossible.
         # Assert count never reaches zero:
         holder["email"] = "a2@x.com"
-        r = client.patch("/admin/users/a2@x.com", data={"role": "viewer"})
+        r = client.patch("/admin/users/a2@x.com", data={"role": "member"})
         assert r.status_code == 403  # self-protection also stops the last-admin self-demote
 
 
@@ -90,7 +90,7 @@ def test_add_member_preserves_active_status(monkeypatch, tmp_path: Path):
 
         # Step 1: invite the member as annotator
         r = client.post("/admin/users",
-                        data={"email": "alice@x.com", "role": "annotator", "display_name": "Alice"})
+                        data={"email": "alice@x.com", "role": "member", "display_name": "Alice"})
         assert r.status_code in (200, 201)
 
         # Step 2: simulate first sign-in — mark_seen flips invited→active
@@ -100,13 +100,13 @@ def test_add_member_preserves_active_status(monkeypatch, tmp_path: Path):
 
         # Step 3: admin re-adds alice with a different role
         r2 = client.post("/admin/users",
-                         data={"email": "alice@x.com", "role": "viewer", "display_name": ""})
+                         data={"email": "alice@x.com", "role": "admin", "display_name": ""})
         assert r2.status_code in (200, 201)
 
         # Step 4: status must still be 'active'; role must have changed
         updated = asyncio.run(ctx.user_roles_repo.get(ctx.db, "alice@x.com"))
         assert updated["status"] == "active", "active member must not be downgraded to invited on re-add"
-        assert updated["role"] == "viewer", "role must be updated by re-add"
+        assert updated["role"] == "admin", "role must be updated by re-add"
 
 
 # --- Issue 2: PATCH and DELETE must surface a success toast (HTML attribute check) ---
@@ -119,7 +119,7 @@ def test_patch_and_delete_carry_toast_handler(monkeypatch, tmp_path: Path):
     with TestClient(main_mod.app) as client:
         # Add a second member so the table has non-self rows with actions
         client.post("/admin/users",
-                    data={"email": "bob@x.com", "role": "viewer", "display_name": "Bob"})
+                    data={"email": "bob@x.com", "role": "member", "display_name": "Bob"})
         html = client.get("/admin/access").text
 
     # The hx-patch items (role change menu items) must carry the toast handler
@@ -139,18 +139,18 @@ def test_stat_counts_reflect_unfiltered_totals(monkeypatch, tmp_path: Path):
     totals, not just the count of the filtered rows.
 
     Setup: boss (admin, seeded) + viewer + annotator = 3 members, 1 admin.
-    When filtering ?role=viewer the page returns 1 row, but the Members stat
+    When filtering ?role=member the page returns 1 row, but the Members stat
     card must still read 3 and the Admins stat card must still read 1.
     """
     holder = {"email": "boss@x.com"}
     main_mod = _app(monkeypatch, tmp_path, holder)
     with TestClient(main_mod.app) as client:
         # Add members: 1 admin (boss, seeded) + 1 viewer + 1 annotator = 3 total
-        client.post("/admin/users", data={"email": "v@x.com", "role": "viewer", "display_name": ""})
-        client.post("/admin/users", data={"email": "ann@x.com", "role": "annotator", "display_name": ""})
+        client.post("/admin/users", data={"email": "v@x.com", "role": "member", "display_name": ""})
+        client.post("/admin/users", data={"email": "ann@x.com", "role": "member", "display_name": ""})
 
         # Filter to viewers only — only 1 row appears in the table
-        html = client.get("/admin/access?role=viewer").text
+        html = client.get("/admin/access?role=member").text
 
     # The .admin-stats block renders:
     #   <span class="n">{{ counts.members }}</span><span class="l">Members</span>
@@ -175,7 +175,27 @@ def test_admin_link_only_for_admins(monkeypatch, tmp_path: Path):
     with TestClient(main_mod.app) as client:
         # admin: check on /admin page (core-only, renders layout.html)
         assert 'href="/admin"' in client.get("/admin").text      # admin sees it
-        client.post("/admin/users", data={"email": "v@x.com", "role": "viewer", "display_name": ""})
+        client.post("/admin/users", data={"email": "v@x.com", "role": "member", "display_name": ""})
         holder["email"] = "v@x.com"
-        # viewer: check on /prompts (core-only, renders layout.html)
-        assert 'href="/admin"' not in client.get("/prompts").text  # viewer does not
+        # member: check on /prompts (core-only, renders layout.html)
+        assert 'href="/admin"' not in client.get("/prompts").text  # member does not
+
+
+def test_accept_pending_request(monkeypatch, tmp_path: Path):
+    """An admin Accepts a pending access request → the user becomes an active
+    member."""
+    import asyncio
+
+    holder = {"email": "boss@x.com"}
+    main_mod = _app(monkeypatch, tmp_path, holder)
+    with TestClient(main_mod.app) as client:
+        ctx = main_mod.app.state.core_ctx
+        # a reached-but-unroled user records a request from the denial page
+        holder["email"] = "newbie@x.com"
+        assert client.post("/access/request").status_code == 200
+        # admin accepts it
+        holder["email"] = "boss@x.com"
+        r = client.post("/admin/users/newbie@x.com/accept")
+        assert r.status_code in (200, 201)
+        row = asyncio.run(ctx.user_roles_repo.get(ctx.db, "newbie@x.com"))
+    assert row["role"] == "member" and row["status"] == "active"

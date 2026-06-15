@@ -1,8 +1,7 @@
 # tests/integration/test_run_permission.py
-"""Only Annotator+ may trigger AI runs (cost + Gemini key + scarce CatDV seat).
-A Viewer reaching the app is still refused at the run endpoints (spec
-2026-06-14-iap-roles-admin-console-design.md). Drives identity via a mutable
-holder so one app instance can act as two users."""
+"""AI-run endpoints require the 'run' capability. Both roles (admin + member)
+hold it, so any roled user can run; the gate already blocks unroled users.
+Drives identity via a mutable holder so one app instance can act as two users."""
 import importlib
 from pathlib import Path
 
@@ -27,18 +26,18 @@ def _app(monkeypatch, tmp_path, holder):
     return main_mod
 
 
-def test_viewer_cannot_create_job(monkeypatch, tmp_path: Path):
+def test_member_can_create_job(monkeypatch, tmp_path: Path):
     holder = {"email": "boss@x.com"}
     main_mod = _app(monkeypatch, tmp_path, holder)
     with TestClient(main_mod.app) as client:
-        # boss (admin) invites a viewer
+        # boss (admin) invites a member; members hold the 'run' capability
         r = client.post("/admin/users",
-                        data={"email": "viewer@x.com", "role": "viewer", "display_name": ""})
+                        data={"email": "mem@x.com", "role": "member", "display_name": ""})
         assert r.status_code in (200, 201)
-        # become the viewer; the run endpoint must refuse
-        holder["email"] = "viewer@x.com"
+        holder["email"] = "mem@x.com"
         r = client.post("/api/jobs", json={"prompt_version_id": 1, "clip_ids": [1]})
-    assert r.status_code == 403
+    # member has 'run' → not blocked by the run gate (may 4xx later, but NOT 403)
+    assert r.status_code != 403
 
 
 def test_admin_passes_run_gate(monkeypatch, tmp_path: Path):

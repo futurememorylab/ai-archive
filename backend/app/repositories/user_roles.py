@@ -103,7 +103,7 @@ class UserRolesRepo:
             return
         await conn.execute(
             "INSERT INTO user_roles(email, role, status, display_name, granted_by, granted_at) "
-            "VALUES (?, 'viewer', 'requested', ?, NULL, datetime('now'))",
+            "VALUES (?, 'member', 'requested', ?, NULL, datetime('now'))",
             (_norm(email), display_name),
         )
         await conn.commit()

@@ -53,7 +53,7 @@
       {{ ui.field('Display name (optional)', 'display_name', input_attrs='placeholder="e.g. Jordan Lee"') }}
       <label class="field"><span class="field-label">Assign a role</span>
         <select class="txt" name="role">
-          {% for r in role_order %}<option value="{{ r }}" {{ 'selected' if r=='viewer' }}>{{ role_meta[r].label }} — {{ role_meta[r].desc }}</option>{% endfor %}
+          {% for r in role_order %}<option value="{{ r }}" {{ 'selected' if r=='member' }}>{{ role_meta[r].label }} — {{ role_meta[r].desc }}</option>{% endfor %}
         </select>
       </label>
       <p class="field-help">They'll be added to the app's access list. To let them sign in, an admin must also add their email to the Google Group.</p>

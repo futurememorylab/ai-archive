@@ -8,7 +8,7 @@
 -- gate; 'requested' is denied until granted.
 CREATE TABLE user_roles (
   email        TEXT PRIMARY KEY,
-  role         TEXT NOT NULL CHECK (role IN ('admin','annotator','publisher','viewer')),
+  role         TEXT NOT NULL CHECK (role IN ('admin','member')),
   status       TEXT NOT NULL DEFAULT 'active'
                  CHECK (status IN ('active','invited','requested')),
   display_name TEXT,

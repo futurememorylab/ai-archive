@@ -65,6 +65,26 @@ async def access_members(request: Request, role: str = "", status: str = "", q: 
     return templates.TemplateResponse(request, "pages/_admin_members.html", data)
 
 
+@router.post("/admin/users/{email}/accept", response_class=HTMLResponse)
+async def accept_request(request: Request, email: str):
+    """Grant a pending access request: make the user an active member."""
+    require_role(request, "admin")
+    ctx = get_core_ctx(request)
+    target = _norm(email)
+    current = await ctx.user_roles_repo.get(ctx.db, target)
+    if current is None:
+        raise HTTPException(404, "no such request")
+    await ctx.user_roles_repo.upsert_role(
+        ctx.db,
+        target,
+        "member",
+        status="active",
+        granted_by=request.state.current_user.email,
+    )
+    data = await _members_ctx(request)
+    return templates.TemplateResponse(request, "pages/_admin_members.html", data)
+
+
 @router.post("/admin/users", response_class=HTMLResponse)
 async def add_member(
     request: Request,

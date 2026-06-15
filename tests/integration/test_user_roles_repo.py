@@ -47,8 +47,8 @@ async def test_upsert_get_active_role_and_seed(conn):
     assert await repo.count_admins(conn) == 1
 
     # invited admits at the gate; requested does not
-    await repo.upsert_role(conn, "inv@x.com", "viewer", status="invited", granted_by="boss@x.com")
-    assert await repo.get_active_role(conn, "inv@x.com") == "viewer"
+    await repo.upsert_role(conn, "inv@x.com", "member", status="invited", granted_by="boss@x.com")
+    assert await repo.get_active_role(conn, "inv@x.com") == "member"
     await repo.record_request(conn, "req@x.com", display_name="Req")
     assert await repo.get_active_role(conn, "req@x.com") is None  # denied until granted
     row = await repo.get(conn, "req@x.com")
@@ -57,7 +57,7 @@ async def test_upsert_get_active_role_and_seed(conn):
 
 async def test_mark_seen_flips_invited_to_active(conn):
     repo = UserRolesRepo()
-    await repo.upsert_role(conn, "inv@x.com", "annotator", status="invited", granted_by="b@x.com")
+    await repo.upsert_role(conn, "inv@x.com", "member", status="invited", granted_by="b@x.com")
     await repo.mark_seen(conn, "inv@x.com")
     row = await repo.get(conn, "inv@x.com")
     assert row["status"] == "active"
@@ -67,7 +67,7 @@ async def test_mark_seen_flips_invited_to_active(conn):
 async def test_list_filter_and_delete(conn):
     repo = UserRolesRepo()
     await repo.upsert_role(conn, "a@x.com", "admin", status="active", granted_by=None)
-    await repo.upsert_role(conn, "v@x.com", "viewer", status="active", granted_by="a@x.com")
+    await repo.upsert_role(conn, "v@x.com", "member", status="active", granted_by="a@x.com")
     admins = await repo.list_members(conn, role="admin")
     assert [m["email"] for m in admins] == ["a@x.com"]
     found = await repo.list_members(conn, query="v@")
