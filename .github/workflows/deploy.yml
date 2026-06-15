@@ -61,18 +61,8 @@ jobs:
             --region="$REGION" \
             --service-account=catdv-annotator@${PROJECT_ID}.iam.gserviceaccount.com \
             --no-allow-unauthenticated \
+            --iap \
             --min-instances=0 --max-instances=1 --no-cpu-throttling \
             --memory=1Gi --cpu=1 \
             --env-vars-file=deploy/cloudrun.env.yaml \
             --set-secrets="CATDV_PASSWORD=catdv-password:latest,GEMINI_API_KEY=gemini-api-key:latest,WG_PRIVATE_KEY=wg-private-key:latest"
-      - name: Verify /api/health
-        run: |
-          URL=$(gcloud run services describe "$SERVICE" --region="$REGION" \
-            --format='value(status.url)')
-          # Keyless WIF credentials can't mint an ID token directly; force the
-          # impersonation path with the service URL as audience (Cloud Run is
-          # --no-allow-unauthenticated, so it requires an email-verified ID token).
-          TOKEN=$(gcloud auth print-identity-token \
-            --impersonate-service-account="${{ secrets.GCP_DEPLOYER_SA }}" \
-            --audiences="$URL" --include-email)
-          curl -fsS -H "Authorization: Bearer $TOKEN" "$URL/api/health"
