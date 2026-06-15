@@ -35,7 +35,7 @@
         </div>
         {% endif %}
 
-        <div id="access-action">
+        <div id="access-action" class="auth-actions">
           {% if state == 'requested' %}
           <div class="auth-sent"><span class="pill ok"><span class="led"></span></span>
             Request sent. An admin will review it.</div>
@@ -47,10 +47,8 @@
             {{ ui.button('Request access', variant='primary', type='submit') }}
           </form>
           {% endif %}
-          <div class="auth-actions">
-            {{ ui.button('Try again', href='/', variant='ghost') }}
-            {{ ui.button('Use a different account', href='?gcp-iap-mode=CLEAR_LOGIN_COOKIE', variant='ghost') }}
-          </div>
+          {{ ui.button('Try again', href='/', variant='ghost') }}
+          {{ ui.button('Use a different account', href='?gcp-iap-mode=CLEAR_LOGIN_COOKIE', variant='ghost') }}
         </div>
         <div class="auth-foot">Need access sooner? Contact your workspace admin.</div>
       </div>

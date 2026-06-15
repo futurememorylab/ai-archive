@@ -1,11 +1,8 @@
 {% import "components/_ui.html" as ui %}
-{# CAP order shared with roles.py CAP_ORDER; kept inline here (the included
-   _perm_dots.html reads `cap_order` + `caps` from this context). #}
-{% set cap_order = [('view','V'), ('publish','P'), ('run','A'), ('manage','M')] %}
 <div id="members" class="admin-members">
   <table class="admin-table">
     <thead>
-      <tr><th>Member</th><th>Role</th><th>Permissions</th><th>Last sign-in</th><th>Status</th><th></th></tr>
+      <tr><th>Member</th><th>Role</th><th>Last sign-in</th><th>Status</th><th></th></tr>
     </thead>
     <tbody>
       {% for m in members %}
@@ -31,7 +28,6 @@
             {% endcall %}
           {% endif %}
         </td>
-        <td>{% with caps = role_caps[m.role] %}{% include "pages/_perm_dots.html" %}{% endwith %}</td>
         <td class="mono">{{ m.last_seen_at or '—' }}</td>
         <td>{{ ui.status_pill(m.status, 'ok' if m.status=='active' else ('accent' if m.status=='invited' else 'bad')) }}</td>
         <td class="m-actions">

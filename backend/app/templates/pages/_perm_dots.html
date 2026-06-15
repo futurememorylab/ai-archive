@@ -1,8 +1,0 @@
-{# V·P·A·M permission dots derived from a role's capability set. Display-only.
-   Pass `caps` = the set of capabilities for the row's role, and the shared
-   CAP order via `cap_order` (list of (cap, letter)). #}
-<span class="perm-dots" aria-label="permissions">
-  {%- for cap, letter in cap_order -%}
-    <span class="perm-dot{{ ' on' if cap in caps else '' }}" title="{{ cap }}">{{ letter }}</span>
-  {%- endfor -%}
-</span>

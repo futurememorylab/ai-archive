@@ -2485,8 +2485,9 @@ body.studio-resizing {
 .auth-title { margin-top: 18px; font-size: 16px; font-weight: 600; color: var(--text); }
 .auth-msg { margin-top: 9px; font-size: 13px; line-height: 1.55; color: var(--text-3); }
 .auth-msg .auth-email { font-weight: 600; color: var(--text-2); }
-.auth-actions { margin-top: 22px; }
+.auth-actions { margin-top: 22px; display: flex; flex-direction: column; gap: 9px; }
 .auth-actions .btn { width: 100%; justify-content: center; }
+.auth-actions form { display: flex; }
 .auth-foot { margin-top: 16px; font-size: 12px; color: var(--text-4); }
 
 /* Signed-in identity in the topbar ("signed in as …"). See ADR 0081. */
