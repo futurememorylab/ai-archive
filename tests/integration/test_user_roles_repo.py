@@ -55,6 +55,49 @@ async def test_upsert_get_active_role_and_seed(conn):
     assert row["status"] == "requested"
 
 
+async def test_seed_admins_promotes_existing_non_admin_row(conn):
+    """Break-glass: an email in ADMIN_EMAILS must end up active/admin even if it
+    already has a row (e.g. a prior 'requested' from the denial page, or a
+    console demotion). The old INSERT-OR-IGNORE seeding could not promote a stuck
+    row, which locked the owners out of prod with no recovery on reboot."""
+    repo = UserRolesRepo()
+    # A would-be admin clicked "Request access" first → stuck 'requested' row.
+    await repo.record_request(conn, "owner@x.com", display_name="Owner")
+    assert await repo.get_active_role(conn, "owner@x.com") is None  # denied
+    # The deploy seeds them as a bootstrap admin → must take effect.
+    await repo.seed_admins(conn, ["owner@x.com"])
+    assert await repo.get_active_role(conn, "owner@x.com") == "admin"
+    row = await repo.get(conn, "owner@x.com")
+    assert row["status"] == "active"
+    assert row["display_name"] == "Owner"  # human-set fields are preserved
+
+
+async def test_seed_admins_does_not_rewrite_an_already_correct_row(conn):
+    """Steady state: once a listed admin is active/admin, a later boot's re-seed
+    must NOT touch the row. Proven via a sentinel granted_at — if the no-op WHERE
+    guard failed, datetime('now') would overwrite it (= a write on every boot =
+    Litestream churn). The fix is permanent, not per-boot mutation."""
+    repo = UserRolesRepo()
+    await repo.seed_admins(conn, ["owner@x.com"])
+    # Stamp a sentinel; a correct row must survive subsequent boots untouched.
+    await conn.execute(
+        "UPDATE user_roles SET granted_at='2000-01-01 00:00:00' WHERE email='owner@x.com'"
+    )
+    await conn.commit()
+    await repo.seed_admins(conn, ["owner@x.com"])  # a "later boot"
+    row = await repo.get(conn, "owner@x.com")
+    assert row["granted_at"] == "2000-01-01 00:00:00"  # untouched → no write
+    assert row["role"] == "admin" and row["status"] == "active"
+
+
+async def test_seed_admins_leaves_non_listed_rows_untouched(conn):
+    repo = UserRolesRepo()
+    await repo.upsert_role(conn, "m@x.com", "member", status="active", granted_by="a@x.com")
+    await repo.seed_admins(conn, ["owner@x.com"])
+    row = await repo.get(conn, "m@x.com")
+    assert row["role"] == "member" and row["status"] == "active"
+
+
 async def test_mark_seen_flips_invited_to_active(conn):
     repo = UserRolesRepo()
     await repo.upsert_role(conn, "inv@x.com", "member", status="invited", granted_by="b@x.com")

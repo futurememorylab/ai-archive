@@ -137,12 +137,27 @@ class UserRolesRepo:
         return cur.rowcount
 
     async def seed_admins(self, conn: aiosqlite.Connection, emails: list[str]) -> None:
-        """Idempotently seed deploy-time admins. INSERT OR IGNORE never
-        downgrades or duplicates an existing row."""
+        """Guarantee deploy-time admins are active/admin on every boot.
+
+        ADMIN_EMAILS is the break-glass owner list: these accounts must always be
+        able to reach the admin console, so seeding force-upserts them to
+        active/admin even if a row already exists in another status (a prior
+        'requested' from the denial page, or a console demotion). The WHERE guard
+        makes it a no-op write when the row is already correct, so a steady-state
+        boot writes nothing (keeps Litestream churn down). Human-set fields like
+        display_name are left untouched."""
         for e in emails:
             await conn.execute(
-                "INSERT OR IGNORE INTO user_roles(email, role, status, granted_by, granted_at) "
-                "VALUES (?, 'admin', 'active', 'bootstrap', datetime('now'))",
+                """
+                INSERT INTO user_roles(email, role, status, granted_by, granted_at)
+                VALUES (?, 'admin', 'active', 'bootstrap', datetime('now'))
+                ON CONFLICT(email) DO UPDATE SET
+                    role = 'admin',
+                    status = 'active',
+                    granted_by = 'bootstrap',
+                    granted_at = datetime('now')
+                WHERE user_roles.role != 'admin' OR user_roles.status != 'active'
+                """,
                 (_norm(e),),
             )
         await conn.commit()
