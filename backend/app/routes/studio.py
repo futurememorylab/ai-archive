@@ -4,6 +4,7 @@ All under /api/studio. See docs/specs/2026-05-26-prompt-studio-design.md.
 """
 
 import asyncio
+import logging
 
 import aiosqlite
 from fastapi import (
@@ -26,6 +27,8 @@ from backend.app.services.upload_cleanup import UploadCleanup
 from backend.app.uploaded_ids import is_uploaded, to_clip_id
 
 router = APIRouter(prefix="/api/studio", tags=["studio"])
+
+log = logging.getLogger(__name__)
 
 
 # ── request models ──────────────────────────────────────────────────────────
@@ -216,14 +219,27 @@ async def upload_clip(
         provider_clip_id=str(clip_id),
     )
 
-    if s.media_cache == "ai_store":
-        # Cloud: the local upload file is ephemeral. Push it to the AI
-        # store so playback (a GCS signed URL) survives instance restarts.
-        # Additive to the local write above; the local copy is a transient
-        # within-instance convenience, GCS is the durable copy.
-        live = request.app.state.live_ctx
-        if live is not None:
+    # Always push uploaded clips to the AI store when one is available — not
+    # just in ai_store (cloud) mode. The local proxy_cache row is NOT a durable
+    # home: a DB reset / LRU eviction orphans the on-disk file, leaving the
+    # annotator unable to find bytes that are still on disk (the failure this
+    # fixes). GCS gives every upload a durable home that the annotator's
+    # status() fast-path resolves even when the local row is gone or CatDV is
+    # offline. Best-effort: a transient GCS error must not fail the upload
+    # (offline-graceful, CLAUDE.md) — the local file still backs playback and
+    # the annotator retries ensure_uploaded on first run. Supersedes ADR 0069's
+    # ai_store-mode gating; see ADR 0082.
+    live = request.app.state.live_ctx
+    if live is not None and live.ai_store is not None:
+        try:
             await live.ai_store.ensure_uploaded(("uploaded", str(clip_id)), dest, mime)
+        except Exception:  # noqa: BLE001
+            log.warning(
+                "AI-store push failed for uploaded clip %s; local copy retained, "
+                "annotator will retry on first run",
+                clip_id,
+                exc_info=True,
+            )
 
     if poster is not None:
         poster_bytes = await poster.read()

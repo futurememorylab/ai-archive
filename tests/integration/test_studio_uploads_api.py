@@ -229,8 +229,14 @@ def test_upload_in_ai_store_mode_calls_ensure_uploaded(monkeypatch, tmp_path):
     assert mime_arg == "video/mp4", f"Expected mime video/mp4, got {mime_arg!r}"
 
 
-def test_upload_in_local_mode_does_not_call_ensure_uploaded(monkeypatch, tmp_path):
-    """With default media_cache=local, ensure_uploaded must NOT be called."""
+def test_upload_in_local_mode_also_pushes_to_ai_store(monkeypatch, tmp_path):
+    """Uploads must ALWAYS land in the AI store when one is available — even in
+    the default media_cache=local mode. The local proxy_cache row is not a
+    durable home (a DB reset / LRU eviction orphans the on-disk file, so
+    annotation can no longer find bytes that are still on disk). Pushing to the
+    AI store gives every upload a durable home the annotator's status()
+    fast-path resolves regardless of local cache state. Supersedes ADR 0069's
+    ai_store-mode gating."""
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     monkeypatch.setenv("APP_ENV", "dev")
     monkeypatch.delenv("MEDIA_CACHE", raising=False)
@@ -250,8 +256,42 @@ def test_upload_in_local_mode_does_not_call_ensure_uploaded(monkeypatch, tmp_pat
             files={"file": ("clip.mp4", b"mp4-content", "video/mp4")},
         )
         assert r.status_code == 201, r.text
+        clip_id = r.json()["clip_id"]
 
-    fake_ai_store.ensure_uploaded.assert_not_called()
+    fake_ai_store.ensure_uploaded.assert_called_once()
+    key = fake_ai_store.ensure_uploaded.call_args.args[0]
+    assert key == ("uploaded", str(clip_id))
+
+
+def test_upload_ai_store_push_failure_does_not_break_upload(monkeypatch, tmp_path):
+    """The AI-store push is best-effort: a transient GCS error must not fail the
+    upload (offline-graceful, CLAUDE.md). The local file + proxy_cache row still
+    back playback, and the annotator retries ensure_uploaded on first run."""
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("APP_ENV", "dev")
+    monkeypatch.delenv("MEDIA_CACHE", raising=False)
+    monkeypatch.delenv("CATDV_PASSWORD", raising=False)
+    from backend.app import main as main_mod
+    importlib.reload(main_mod)
+    app = main_mod.app
+
+    fake_ai_store = MagicMock()
+    fake_ai_store.ensure_uploaded = AsyncMock(side_effect=RuntimeError("gcs down"))
+
+    with TestClient(app) as client:
+        install_live_ctx(client.app, ai_store=fake_ai_store)
+
+        r = client.post(
+            "/api/studio/uploads",
+            files={"file": ("clip.mp4", b"mp4-content", "video/mp4")},
+        )
+        # Upload still succeeds despite the GCS failure.
+        assert r.status_code == 201, r.text
+        clip_id = r.json()["clip_id"]
+
+    fake_ai_store.ensure_uploaded.assert_called_once()
+    # Local copy retained on disk as the fallback.
+    assert (tmp_path / "cache" / "uploads" / f"{clip_id}.mp4").read_bytes() == b"mp4-content"
 
 
 def test_upload_poster_ai_store_pushes_durable(monkeypatch, tmp_path):
