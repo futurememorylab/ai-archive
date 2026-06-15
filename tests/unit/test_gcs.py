@@ -6,10 +6,65 @@ from unittest.mock import MagicMock
 import pytest
 
 from backend.app.services.gcs import GcsService
+from backend.app.uploaded_ids import UPLOAD_ID_BASE
 
 
 def _md5_b64(data: bytes) -> str:
     return base64.b64encode(hashlib.md5(data).digest()).decode()
+
+
+def _service(instance_id="alpha"):
+    bucket = MagicMock(); bucket.name = "test-bucket"
+    s = GcsService.__new__(GcsService)
+    s._bucket = bucket
+    s._instance_id = instance_id
+    return s, bucket
+
+
+def test_blob_name_catdv_clip_is_shared():
+    s, _ = _service()
+    assert s._blob_name(42) == "clips/42.mov"
+
+
+def test_blob_name_uploaded_clip_is_instance_namespaced():
+    s, _ = _service(instance_id="alpha")
+    up = UPLOAD_ID_BASE + 1
+    assert s._blob_name(up) == f"instances/alpha/uploads/{up}.mov"
+
+
+def test_uploaded_clip_keys_differ_across_instances():
+    up = UPLOAD_ID_BASE + 1  # same synthetic id on both instances
+    a, _ = _service(instance_id="alpha")
+    b, _ = _service(instance_id="beta")
+    assert a._blob_name(up) != b._blob_name(up)
+
+
+def test_gs_uri_namespaces_uploaded_clip():
+    s, _ = _service(instance_id="alpha")
+    up = UPLOAD_ID_BASE + 7
+    assert s.gs_uri(up) == f"gs://test-bucket/instances/alpha/uploads/{up}.mov"
+
+
+def test_upload_if_absent_uploads_uploaded_clip_to_namespaced_path(tmp_path: Path):
+    local = tmp_path / "f.mov"; local.write_bytes(b"data")
+    s, bucket = _service(instance_id="alpha")
+    bucket.get_blob.return_value = None
+    blob = MagicMock(); bucket.blob.return_value = blob
+    up = UPLOAD_ID_BASE + 3
+    uri = s.upload_if_absent(clip_id=up, local_path=local, mime="video/mp4")
+    assert uri == f"gs://test-bucket/instances/alpha/uploads/{up}.mov"
+    bucket.blob.assert_called_with(
+        f"instances/alpha/uploads/{up}.mov", chunk_size=8 * 1024 * 1024
+    )
+
+
+def test_delete_uploaded_clip_targets_namespaced_path():
+    s, bucket = _service(instance_id="alpha")
+    blob = MagicMock(); bucket.blob.return_value = blob
+    up = UPLOAD_ID_BASE + 9
+    s.delete(clip_id=up)
+    bucket.blob.assert_called_with(f"instances/alpha/uploads/{up}.mov")
+    blob.delete.assert_called_once()
 
 
 def _wire_mock_bucket(*, existing_md5: str | None):
