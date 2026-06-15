@@ -52,6 +52,7 @@ from backend.app.repositories.app_meta import get_or_create_install_id
 from backend.app.repositories.cache_actions_log import CacheActionsLogRepo
 from backend.app.repositories.clip_cache import ClipCacheRepo
 from backend.app.repositories.clip_list_cache import ClipListCacheRepo
+from backend.app.repositories.enum_values import EnumValuesRepo
 from backend.app.repositories.field_def_cache import FieldDefCacheRepo
 from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.pending_operations import PendingOperationsRepo
@@ -60,17 +61,17 @@ from backend.app.repositories.prefetch_queue import PrefetchQueueRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.proxy_cache import ProxyCacheRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
-from backend.app.repositories.enum_values import EnumValuesRepo
 from backend.app.repositories.run_telemetry import RunTelemetryRepo
 from backend.app.repositories.studio_runs import StudioRunsRepo
 from backend.app.repositories.studio_sets import StudioSetsRepo
 from backend.app.repositories.uploaded_clips import UploadedClipsRepo
+from backend.app.repositories.user_roles import UserRolesRepo
 from backend.app.repositories.workspaces import WorkspacesRepo
 from backend.app.repositories.write_log import WriteLogRepo
 from backend.app.services.cache_actions import CacheActions
 from backend.app.services.cache_inspector import CacheInspector
-from backend.app.services.enum_service import EnumService
 from backend.app.services.connection_monitor import ConnectionMonitor
+from backend.app.services.enum_service import EnumService
 from backend.app.services.events import EventBus
 from backend.app.services.idle_disconnector import IdleDisconnector
 from backend.app.services.lru_eviction import LruEviction
@@ -113,6 +114,7 @@ class CoreCtx:
     studio_runs_repo: StudioRunsRepo = field(default_factory=StudioRunsRepo)
     uploaded_clips_repo: UploadedClipsRepo = field(default_factory=UploadedClipsRepo)
     run_telemetry_repo: RunTelemetryRepo = field(default_factory=RunTelemetryRepo)
+    user_roles_repo: UserRolesRepo = field(default_factory=UserRolesRepo)
     enum_values_repo: EnumValuesRepo = field(default_factory=EnumValuesRepo)
     telemetry_ctx: TelemetryCtx = field(init=False)
     event_bus: EventBus = field(default_factory=EventBus)
@@ -151,6 +153,7 @@ class CoreCtx:
         await conn.commit()
 
         ctx = cls(settings=settings, db=conn, db_cm=cm)
+        await ctx.user_roles_repo.seed_admins(conn, settings.admin_email_list)
         # WriteQueue has no external deps; always available.
         ctx.write_queue = WriteQueue(
             pending_ops_repo=ctx.pending_ops_repo,
@@ -332,6 +335,10 @@ class LiveCtx:
     @property
     def run_telemetry_repo(self) -> RunTelemetryRepo:
         return self.core.run_telemetry_repo
+
+    @property
+    def user_roles_repo(self) -> UserRolesRepo:
+        return self.core.user_roles_repo
 
     @property
     def telemetry_ctx(self) -> TelemetryCtx:
@@ -701,9 +708,7 @@ async def _build_archive_subsystem(
         catdv=catdv,
         proxy_resolver=proxy_resolver,
         thumbnail_service=thumbnail_service,
-        flags=_OnlineFlags(
-            forced_offline=forced_offline, login_failed=login_failed, manual=manual
-        ),
+        flags=_OnlineFlags(forced_offline=forced_offline, login_failed=login_failed, manual=manual),
     )
 
 
@@ -806,6 +811,7 @@ async def _build_sync_subsystem(
 
     vpn_supervisor = None
     if settings.vpn_managed:
+
         def _make_spawn():
             async def _spawn():
                 env = {
@@ -816,14 +822,20 @@ async def _build_sync_subsystem(
                 }
                 return await asyncio.create_subprocess_exec(
                     "onetun",
-                    "--endpoint-addr", settings.wg_endpoint,
-                    "--endpoint-public-key", settings.wg_peer_pubkey,
-                    "--source-peer-ip", settings.wg_source_ip,
-                    "--keep-alive", str(settings.wg_keepalive_s),
-                    "--max-transmission-unit", str(settings.onetun_mtu),
+                    "--endpoint-addr",
+                    settings.wg_endpoint,
+                    "--endpoint-public-key",
+                    settings.wg_peer_pubkey,
+                    "--source-peer-ip",
+                    settings.wg_source_ip,
+                    "--keep-alive",
+                    str(settings.wg_keepalive_s),
+                    "--max-transmission-unit",
+                    str(settings.onetun_mtu),
                     settings.onetun_local_forward,
                     env=env,
                 )
+
             return _spawn
 
         async def _probe_tunnel() -> bool:

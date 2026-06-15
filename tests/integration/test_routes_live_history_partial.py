@@ -31,7 +31,9 @@ async def test_clip_live_history_partial_renders(tmp_path):
     class _Ctx:
         db = conn
         mode = "online"
-        settings = type("S", (), {})()
+        # auth_backend / dev_user_email are read by the _attach_current_user
+        # middleware on every request.
+        settings = type("S", (), {"auth_backend": "dev", "dev_user_email": "dev@localhost"})()
 
     app.state.core_ctx = _Ctx()
     app.state.live_ctx = None

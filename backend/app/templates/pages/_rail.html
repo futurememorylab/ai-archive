@@ -21,8 +21,10 @@
    href="/batches" title="Batches">{% include "icons/_batches.svg" %}</a>
 <a class="rail-btn{% if _active == 'cache' %} active{% endif %}"
    href="/cache" title="Cache">{% include "icons/_cache.svg" %}</a>
+{% if request.state.current_user and request.state.current_user.is_admin %}
 <a class="rail-btn rail-btn-bottom{% if _active == 'admin' %} active{% endif %}"
    href="/admin" title="Admin">{% include "icons/_admin.svg" %}</a>
+{% endif %}
 <script>
   (function(){
     try {

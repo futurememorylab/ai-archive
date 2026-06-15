@@ -293,6 +293,6 @@ gcloud iap web add-iam-policy-binding --resource-type=cloud-run \
 **IAP audience:** the direct-Cloud-Run-IAP JWT audience is not authoritatively
 documented, so it is *discovered* from a live token on staging (sign in with
 `AUTH_BACKEND=iap` + `IAP_AUDIENCE` unset, read the token's `aud`), then set in
-`staging.env.yaml`. See ADR 0078.
+`staging.env.yaml`. See ADR 0084.
 
 **Teardown:** `gcloud run services delete catdv-annotator-staging --region europe-west3`.

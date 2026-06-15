@@ -39,6 +39,9 @@ async def client_and_db(tmp_path):
                 "gemini_live_voice": "Aoede",
                 "gemini_live_inactivity_s": 60,
                 "gemini_model": "gemini-2.5-flash-lite",
+                # Read by the _attach_current_user middleware on every request.
+                "auth_backend": "dev",
+                "dev_user_email": "dev@localhost",
             },
         )()
 

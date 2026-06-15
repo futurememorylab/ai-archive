@@ -66,3 +66,9 @@ jobs:
             --memory=1Gi --cpu=1 \
             --env-vars-file=deploy/cloudrun.env.yaml \
             --set-secrets="CATDV_PASSWORD=catdv-password:latest,GEMINI_API_KEY=gemini-api-key:latest,WG_PRIVATE_KEY=wg-private-key:latest"
+        # No external /api/health curl: once --iap fronts the URL, an outside
+        # caller would need an IAP-authorized token (undocumented audience), so
+        # we rely on Cloud Run's own revision-readiness gate instead. The deploy
+        # above blocks until the new revision passes the platform startup probe
+        # (internal — bypasses IAP) and won't shift traffic to an unhealthy
+        # revision. See docs/specs/2026-06-13-iap-access-control-design.md (CI).

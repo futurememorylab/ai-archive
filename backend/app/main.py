@@ -8,17 +8,22 @@ from pathlib import Path
 from time import perf_counter
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
 
+from backend.app.auth.errors import NotAuthenticated
+from backend.app.auth.identity import resolve_user
+from backend.app.auth.models import CurrentUser
 from backend.app.context import build_context
 from backend.app.logging_setup import configure_logging
 from backend.app.routes.batches import router as batches_router
 from backend.app.routes.cache import api_router as cache_api_router
 from backend.app.routes.cache import page_router as cache_page_router
 from backend.app.routes.cache import ui_router as cache_ui_router
-from backend.app.routes.enums import router as enums_router
 from backend.app.routes.catdv import router as catdv_router
 from backend.app.routes.connection import router as connection_router
+from backend.app.routes.enums import router as enums_router
 from backend.app.routes.events import router as events_router
 from backend.app.routes.jobs import router as jobs_router
 from backend.app.routes.live import router as live_router
@@ -126,6 +131,37 @@ app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 _timing_log = logging.getLogger("backend.app.timing")
 
 
+# Paths reachable WITHOUT an active role (everything else is default-deny under
+# AUTH_BACKEND=iap). Keep this list tiny and explicit — forgetting a public
+# path is harmless; the opt-out shape means we never forget a protected one.
+_AUTH_ALLOWLIST = ("/static/", "/api/health", "/access", "/favicon.ico")
+
+
+def _is_allowlisted(path: str) -> bool:
+    return any(
+        path == p or path.startswith(p.rstrip("/") + "/") or path == p.rstrip("/")
+        for p in _AUTH_ALLOWLIST
+    )
+
+
+def _deny(request: Request, email: str | None) -> Response:
+    """Fail-closed denial. JSON for HTMX/fetch callers; the access page (403)
+    for a browser navigation."""
+    wants_json = request.headers.get("hx-request") or "application/json" in request.headers.get(
+        "accept", ""
+    )
+    if wants_json:
+        return JSONResponse({"detail": "access not granted"}, status_code=403)
+    from backend.app.routes.pages.templates import templates
+
+    return templates.TemplateResponse(
+        request,
+        "pages/access.html",
+        {"state": "denied", "email": email},
+        status_code=403,
+    )
+
+
 @app.middleware("http")
 async def _request_timing(request: Request, call_next):
     """Measure wall-clock time per request and expose it.
@@ -164,6 +200,61 @@ async def _revalidate_static(request: Request, call_next):
     if request.url.path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-cache"
     return response
+
+
+@app.middleware("http")
+async def _auth_gate(request: Request, call_next):
+    """Resolve identity, attach it (with role) for the layout, and — under
+    AUTH_BACKEND=iap — enforce default-deny on every non-allow-listed path.
+
+    Fail-closed: any failure to establish a trustworthy identity, or any
+    error in the role lookup, denies. Under AUTH_BACKEND=dev the single local
+    operator is implicit admin and nothing is gated (local dev stays usable;
+    no IAP path is exercised). See ADR 0084 + spec
+    2026-06-14-iap-roles-admin-console-design.md.
+    """
+    request.state.current_user = None
+    core = getattr(request.app.state, "core_ctx", None)
+    path = request.url.path
+    if core is None or path.startswith("/static/"):
+        return await call_next(request)
+
+    settings = core.settings
+
+    # Resolve identity — cheap, no DB. Fail-closed → anonymous.
+    try:
+        ident = resolve_user(request, settings)
+    except (NotAuthenticated, RuntimeError):
+        ident = None
+
+    # Dev: the single local operator is implicit admin; nothing is gated.
+    if settings.auth_backend != "iap":
+        if ident is not None:
+            request.state.current_user = CurrentUser(email=ident.email, role="admin")
+        return await call_next(request)
+
+    # IAP: attach identity (role unknown yet) so /access can show who you are.
+    email = ident.email if ident else None
+    if email:
+        request.state.current_user = CurrentUser(email=email, role=None)
+
+    # Allow-list short-circuit BEFORE any DB work (health probes hit this often).
+    if _is_allowlisted(path):
+        return await call_next(request)
+
+    # Authorize: look up the active role (fail-closed on any error).
+    role = None
+    if email:
+        try:
+            role = await core.user_roles_repo.get_active_role(core.db, email)
+        except Exception:  # noqa: BLE001 — any lookup error denies, never admits
+            role = None
+    if role is None:
+        return _deny(request, email)
+
+    request.state.current_user = CurrentUser(email=email, role=role)
+    await core.user_roles_repo.mark_seen(core.db, email)
+    return await call_next(request)
 
 
 @app.get("/api/health")

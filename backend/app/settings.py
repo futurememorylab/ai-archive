@@ -17,6 +17,24 @@ class Settings(BaseSettings):
     bind_port: int = 8765
     data_dir: Path = Field(default=Path("./data"))
 
+    # Identity backend selecting the auth adapter (ADR 0084). "dev": a single
+    # local operator (no IAP) so the app is usable on 127.0.0.1 where Google IAP
+    # does not exist. "iap": cryptographically verify the Google IAP-signed
+    # assertion (cloud). The default-deny gate enforces it; APP_ENV=prod requires
+    # "iap" (the validator below refuses to boot otherwise).
+    auth_backend: Literal["dev", "iap"] = "dev"
+    # Identity returned by the "dev" auth backend.
+    dev_user_email: str = "dev@localhost"
+    # Audience the IAP-signed assertion is verified against (cloud only). The
+    # exact format for *direct* Cloud Run IAP is confirmed against a live token
+    # before cutover. Unset/empty makes the iap backend fail closed (it refuses
+    # to verify against an empty audience). See ADR 0084.
+    iap_audience: str | None = None
+    # Comma-separated deploy-time list of emails seeded as admins at startup
+    # (idempotently). The root of trust: the first admin(s) exist before the
+    # admin console does, so no one can self-promote from inside the app.
+    # See ADR 0085 / spec 2026-06-14-iap-roles-admin-console-design.md.
+    admin_emails: str = ""
     # Mandatory per-deployment identifier. Namespaces uploaded-clip GCS
     # object keys (instances/{instance_id}/uploads/{clip_id}.mov) so two
     # instances sharing one bucket cannot overwrite each other's uploads
@@ -137,6 +155,14 @@ class Settings(BaseSettings):
                 raise ValueError("FS_ROOT is required when ARCHIVE_PROVIDER=fs")
         return self
 
+    @model_validator(mode="after")
+    def _validate_prod_auth(self) -> "Settings":
+        if self.app_env == "prod" and self.auth_backend != "iap":
+            raise ValueError(
+                "APP_ENV=prod requires AUTH_BACKEND=iap — refusing to run ungated in cloud."
+            )
+        return self
+
     @property
     def vpn_managed(self) -> bool:
         """True when WireGuard is configured (cloud). Gates the VPN feature."""
@@ -147,6 +173,16 @@ class Settings(BaseSettings):
             and self.wg_peer_pubkey
             and self.wg_source_ip
         )
+
+    @property
+    def admin_email_list(self) -> list[str]:
+        """ADMIN_EMAILS parsed: trimmed, lowercased, de-duped, order-preserved."""
+        seen: dict[str, None] = {}
+        for raw in self.admin_emails.split(","):
+            e = raw.strip().lower()
+            if e and e not in seen:
+                seen[e] = None
+        return list(seen)
 
 
 def load_settings() -> Settings:

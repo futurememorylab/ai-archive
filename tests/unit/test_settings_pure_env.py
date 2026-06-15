@@ -23,6 +23,7 @@ def test_settings_resolve_from_pure_env(monkeypatch, tmp_path):
     for key, value in _REQUIRED.items():
         monkeypatch.setenv(key, value)
     monkeypatch.setenv("APP_ENV", "prod")
+    monkeypatch.setenv("AUTH_BACKEND", "iap")
     monkeypatch.setenv("DATA_DIR", "/data")
 
     s = Settings()

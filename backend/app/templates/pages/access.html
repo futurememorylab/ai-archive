@@ -1,0 +1,59 @@
+{% import "components/_ui.html" as ui %}
+<!doctype html>
+{# Standalone access-control page (no nav/topbar — an unauthorized user must
+   not see app chrome). states: denied | requested | error. Sign-in/redirect
+   are owned by Google IAP. Spec 2026-06-14-iap-roles-admin-console-design.md. #}
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% if state == 'error' %}Sign-in error{% else %}No access{% endif %} · CatDV Annotator</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="auth-topbar"><span class="brand-dot"></span> CatDV Annotator</header>
+  <main class="auth-screen">
+    <div class="auth-panel">
+      {% if state == 'error' %}
+      <div class="auth-body">
+        <div class="auth-icon err">&times;</div>
+        <div class="auth-title">Couldn't sign you in</div>
+        <div class="auth-msg">Something went wrong during authentication. Please try again.</div>
+        <div class="auth-actions">{{ ui.button('Try again', href='/', variant='ghost') }}</div>
+        <div class="auth-foot">Error code: {{ error_code or 'auth_failed' }}</div>
+      </div>
+      {% else %}
+      <div class="auth-body">
+        <div class="auth-title">No access to this catalog</div>
+        <div class="auth-msg">You're signed in, but your account isn't on the access list yet. An administrator needs to grant you a role.</div>
+
+        {% if email %}
+        <div class="auth-identity">
+          <span class="avatar">{{ email[:2] | upper }}</span>
+          <span class="auth-email">{{ email }}</span>
+          <span class="pill ok"><span class="led"></span>Signed in</span>
+        </div>
+        {% endif %}
+
+        <div id="access-action" class="auth-actions">
+          {% if state == 'requested' %}
+          <div class="auth-sent"><span class="pill ok"><span class="led"></span></span>
+            Request sent. An admin will review it.</div>
+          {% else %}
+          {# Plain form POST (no JS): the standalone denial page stays robust
+             even with no scripts/offline. The POST re-renders this page with
+             state='requested'. #}
+          <form method="post" action="/access/request">
+            {{ ui.button('Request access', variant='primary', type='submit') }}
+          </form>
+          {% endif %}
+          {{ ui.button('Try again', href='/', variant='ghost') }}
+          {{ ui.button('Use a different account', href='?gcp-iap-mode=CLEAR_LOGIN_COOKIE', variant='ghost') }}
+        </div>
+        <div class="auth-foot">Need access sooner? Contact your workspace admin.</div>
+      </div>
+      {% endif %}
+    </div>
+  </main>
+</body>
+</html>

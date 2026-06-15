@@ -1,0 +1,67 @@
+{% import "components/_ui.html" as ui %}
+{# Access & Permissions section of the admin console (ADR 0085). Loaded into the
+   admin region by the "Access & Permissions" tab. Standalone partial — no
+   {% extends %}; it carries its own Alpine scope and re-inits after HTMX swap. #}
+<div id="admin-access" class="admin-access" x-data="{ showAdd: false }">
+
+  {% call ui.page_header('Access & Permissions',
+       meta='Manage who can reach CatDV and what each member is allowed to do') %}
+    {{ ui.button('+ Add member', variant='primary', attrs='@click="showAdd = true"') }}
+  {% endcall %}
+
+  <div class="admin-cards">
+    <div class="admin-info">
+      <strong>Identity-Aware Proxy <span class="pill accent"><span class="led"></span>Enforced</span></strong>
+      <p>Google verifies every visitor's identity at the edge before any request reaches CatDV.</p>
+    </div>
+    <div class="admin-info">
+      <strong>Application roles · IAM</strong>
+      <p>Roles below are stored in the app and control in-app permissions. Adding a member
+         here assigns a role — an admin must also add them to the Google Group to let them in.</p>
+    </div>
+  </div>
+
+  <div class="admin-stats">
+    <div class="stat"><span class="n">{{ counts.members }}</span><span class="l">Members</span></div>
+    <div class="stat"><span class="n">{{ counts.admins }}</span><span class="l">Admins</span></div>
+    <div class="stat"><span class="n">{{ counts.pending }}</span><span class="l">Pending requests</span></div>
+  </div>
+
+  <form class="admin-filters" hx-get="/admin/access/members" hx-target="#members" hx-swap="outerHTML"
+        hx-trigger="input delay:200ms from:input, change from:select">
+    {{ ui.field('Search', 'q', value=filters.query, input_attrs='placeholder="Search by name or email"') }}
+    <label class="field"><span class="field-label">Role</span>
+      <select class="txt" name="role">
+        <option value="">Any</option>
+        {% for r in role_order %}<option value="{{ r }}" {{ 'selected' if filters.role==r }}>{{ role_meta[r].label }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="field"><span class="field-label">Status</span>
+      <select class="txt" name="status">
+        <option value="">Any</option>
+        {% for s in ['active','invited','requested'] %}<option value="{{ s }}" {{ 'selected' if filters.status==s }}>{{ s }}</option>{% endfor %}
+      </select>
+    </label>
+  </form>
+
+  {% include "pages/_admin_members.html" %}
+
+  {% call ui.modal('showAdd', label='Add member', card_cls='sm') %}
+    <form class="modal-body" hx-post="/admin/users" hx-target="#members" hx-swap="outerHTML"
+          @htmx:after-request="if ($event.detail.successful) { showAdd = false; $store.toast.push('Member added', {level:'success'}); }">
+      {{ ui.field('Email address', 'email', input_attrs='placeholder="name@yourco.com" required') }}
+      {{ ui.field('Display name (optional)', 'display_name', input_attrs='placeholder="e.g. Jordan Lee"') }}
+      <label class="field"><span class="field-label">Assign a role</span>
+        <select class="txt" name="role">
+          {% for r in role_order %}<option value="{{ r }}" {{ 'selected' if r=='member' }}>{{ role_meta[r].label }} — {{ role_meta[r].desc }}</option>{% endfor %}
+        </select>
+      </label>
+      <p class="field-help">They'll be added to the app's access list. To let them sign in, an admin must also add their email to the Google Group.</p>
+      <div class="modal-actions">
+        {{ ui.button('Cancel', variant='ghost', attrs='type="button" @click="showAdd = false"') }}
+        {{ ui.button('Send invite', variant='primary', type='submit') }}
+      </div>
+    </form>
+  {% endcall %}
+
+</div>

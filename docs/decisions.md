@@ -91,3 +91,5 @@ available number. See any existing ADR for the template.
 | 0081 | 2026-06-15 | [Upload orphan-GC on set removal (reference-count)](./adr/0081-upload-orphan-gc-on-set-removal.md) |
 | 0082 | 2026-06-15 | [Studio uploads always pushed to the AI store, not only in cloud mode](./adr/0082-uploads-always-pushed-to-ai-store.md) — *supersedes upload-gating part of 0069* |
 | 0083 | 2026-06-15 | [HTMX-only wiring for fetch-injected subtrees that own an x-data root (compare Diff double-bind fix)](./adr/0083-htmx-only-wiring-for-injected-xdata-roots.md) — *refines 0048* |
+| 0084 | 2026-06-13 | [Access control via Google Cloud IAP + an app-side roles layer (not app-level OAuth)](./adr/0084-iap-access-control.md) |
+| 0085 | 2026-06-14 | [App-side roles + admin console on top of IAP (2 roles admin/member, default-deny gate, app-never-touches-the-Group)](./adr/0085-iap-roles-admin-console.md) |

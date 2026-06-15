@@ -1,9 +1,16 @@
-"""Admin console: data-driven editing of editable enumerations (issue #13)."""
+"""Admin console: data-driven editing of editable enumerations (issue #13).
+
+Admin-only: the auth gate already requires an active role to reach `/admin`,
+and `require_role("admin")` narrows every handler to the `manage` capability
+(ADR 0085). The Access & Permissions section lives in `admin_access.py`.
+"""
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
+from backend.app.auth.guards import require_role
 from backend.app.deps import get_core_ctx
+from backend.app.routes.pages.admin_access import _members_ctx as _access_members_ctx
 from backend.app.routes.pages.templates import templates
 from backend.app.services.enum_service import EnumError
 from backend.app.services.errors import humanise
@@ -33,24 +40,23 @@ async def _enum_view(ctx, key: str) -> dict:
 
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
+    require_role(request, "admin")
     ctx = get_core_ctx(request)
     definitions = await ctx.enum_service.definitions(editable_only=True)
-    active_key = definitions[0].key if definitions else None
-    view = await _enum_view(ctx, active_key) if active_key else None
-    return templates.TemplateResponse(
-        request,
-        "pages/admin.html",
-        {
-            "rail_active": "admin",
-            "definitions": definitions,
-            "active_key": active_key,
-            "view": view,
-        },
+    # Default tab = Access & Permissions, rendered server-side. The role pickers
+    # are popover() components + an add-member modal; rendering them on the full
+    # page load lets Alpine init them once (HTMX-injecting double-binds them and
+    # the dropdown sticks open). Enum tabs still load their tables via HTMX.
+    data = await _access_members_ctx(request)
+    data.update(
+        {"rail_active": "admin", "definitions": definitions, "active": "access", "active_key": None}
     )
+    return templates.TemplateResponse(request, "pages/admin.html", data)
 
 
 @router.get("/admin/enums/{key}", response_class=HTMLResponse)
 async def admin_enum_table(request: Request, key: str):
+    require_role(request, "admin")
     ctx = get_core_ctx(request)
     view = await _enum_view(ctx, key)
     return templates.TemplateResponse(request, "pages/_admin_enum_table.html", view)
@@ -70,6 +76,7 @@ async def admin_add_value(
     value: str = Form(...),
     label: str | None = Form(None),
 ):
+    require_role(request, "admin")
     ctx = get_core_ctx(request)
     try:
         await ctx.enum_service.add_value(key, value.strip(), label=(label or None))
@@ -85,6 +92,7 @@ async def admin_toggle_enabled(
     value: str,
     enabled: bool = Form(...),
 ):
+    require_role(request, "admin")
     ctx = get_core_ctx(request)
     try:
         await ctx.enum_service.set_enabled(key, value, enabled=enabled)
@@ -95,6 +103,7 @@ async def admin_toggle_enabled(
 
 @router.post("/admin/enums/{key}/values/{value}/default", response_class=HTMLResponse)
 async def admin_set_default(request: Request, key: str, value: str):
+    require_role(request, "admin")
     ctx = get_core_ctx(request)
     try:
         await ctx.enum_service.set_default(key, value)
@@ -105,6 +114,7 @@ async def admin_set_default(request: Request, key: str, value: str):
 
 @router.delete("/admin/enums/{key}/values/{value}", response_class=HTMLResponse)
 async def admin_remove_value(request: Request, key: str, value: str):
+    require_role(request, "admin")
     ctx = get_core_ctx(request)
     try:
         await ctx.enum_service.remove_value(key, value)

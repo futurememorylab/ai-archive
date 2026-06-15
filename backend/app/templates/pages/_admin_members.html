@@ -1,0 +1,48 @@
+{% import "components/_ui.html" as ui %}
+<div id="members" class="admin-members">
+  <table class="admin-table">
+    <thead>
+      <tr><th>Member</th><th>Role</th><th>Last sign-in</th><th>Status</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for m in members %}
+      <tr>
+        <td class="m-id">
+          <span class="avatar">{{ (m.display_name or m.email)[:2] | upper }}</span>
+          <span class="m-name">
+            {{ m.display_name or m.email.split('@')[0] }}
+            {% if m.email == me %}<span class="you-chip">YOU</span>{% endif %}
+            <span class="m-email">{{ m.email }}</span>
+          </span>
+        </td>
+        <td>
+          {% if m.email == me %}
+            <span class="role-pill {{ 'admin' if m.role=='admin' else '' }}">{{ role_meta[m.role].label }}</span>
+          {% elif m.status == 'requested' %}
+            {{ ui.button('Accept', variant='primary', size='sm',
+               attrs='hx-post="/admin/users/' ~ m.email ~ '/accept" hx-target="#members" hx-swap="outerHTML" @htmx:after-request="if ($event.detail.successful) $store.toast.push(\'Member accepted\', {level:\'success\'})"') }}
+          {% else %}
+            {% call ui.menu(label=role_meta[m.role].label, variant='ghost', size='sm',
+                            trigger_cls=('role-pill ' ~ ('admin' if m.role=='admin' else ''))) %}
+              {% for r in role_order %}
+                {{ ui.menu_item(role_meta[r].label, current=(r==m.role),
+                   attrs='hx-patch="/admin/users/' ~ m.email ~ '" hx-vals=\'{"role":"' ~ r ~ '"}\' hx-target="#members" hx-swap="outerHTML" @htmx:after-request="if ($event.detail.successful) $store.toast.push(\'Role updated\', {level:\'success\'})"') }}
+              {% endfor %}
+            {% endcall %}
+          {% endif %}
+        </td>
+        <td class="mono">{{ m.last_seen_at or '—' }}</td>
+        <td>{{ ui.status_pill(m.status, 'ok' if m.status=='active' else ('accent' if m.status=='invited' else 'bad')) }}</td>
+        <td class="m-actions">
+          {% if m.email != me %}
+          {% call ui.menu(label='⋯', variant='ghost', size='sm', align='right') %}
+            {{ ui.menu_item('Revoke access', danger=True,
+               attrs='hx-delete="/admin/users/' ~ m.email ~ '" hx-target="#members" hx-swap="outerHTML" hx-confirm="Revoke access for ' ~ m.email ~ '?" @htmx:after-request="if ($event.detail.successful) $store.toast.push(\'Access revoked\', {level:\'success\'})"') }}
+          {% endcall %}
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

@@ -9,6 +9,10 @@ import pytest
 
 def _setenv(monkeypatch, tmp_path, connect_mode):
     monkeypatch.setenv("APP_ENV", "prod")
+    # APP_ENV=prod now requires the IAP auth backend (Settings._validate_prod_auth,
+    # spec 2026-06-14-iap-roles-admin-console-design.md). This test boots prod to
+    # exercise CatDV connect-mode, so satisfy the validator.
+    monkeypatch.setenv("AUTH_BACKEND", "iap")
     monkeypatch.setenv("CATDV_BASE_URL", "http://localhost:0")
     monkeypatch.setenv("CATDV_USERNAME", "u")
     monkeypatch.setenv("CATDV_PASSWORD", "p")
