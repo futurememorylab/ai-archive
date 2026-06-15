@@ -17,8 +17,10 @@ def test_admin_lists_editable_enum_with_models(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as client:
         r = client.get("/admin")
         assert r.status_code == 200
-        assert "Gemini generation models" in r.text
-        assert "gemini-2.5-flash-lite" in r.text
+        assert "Gemini generation models" in r.text  # enum tab present
+        # /admin now defaults to the Access & Permissions section; enum VALUES
+        # live behind the enum tab (covered by test_admin_table_partial).
+        assert "Access" in r.text and "Permissions" in r.text
 
 
 def test_admin_table_partial(monkeypatch, tmp_path):

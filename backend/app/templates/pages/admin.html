@@ -8,9 +8,9 @@
 <div class="page admin-page">
   {% call ui.page_header('Admin') %}{% endcall %}
   <div class="cache-tabs">
-    <a class="ctab" href="/admin/access"
-       hx-get="/admin/access" hx-target="#admin-enum-region" hx-swap="innerHTML"
-       hx-push-url="false">Access &amp; Permissions</a>
+    {# Access is the default tab and a full-page link, so its Alpine popovers/modal
+       init cleanly on load (HTMX-injecting them double-binds — the "black box"). #}
+    <a class="ctab{% if active == 'access' %} active{% endif %}" href="/admin">Access &amp; Permissions</a>
     {% for d in definitions %}
       <a class="ctab{% if d.key == active_key %} active{% endif %}"
          href="/admin/enums/{{ d.key }}"
@@ -21,7 +21,9 @@
     {% endfor %}
   </div>
   <div id="admin-enum-region">
-    {% if view %}
+    {% if active == 'access' %}
+      {% include "pages/_admin_access.html" %}
+    {% elif view %}
       {% with key=view.key, definition=view.definition, rows=view.rows %}
         {% include "pages/_admin_enum_table.html" %}
       {% endwith %}

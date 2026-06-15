@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse
 
 from backend.app.auth.guards import require_role
 from backend.app.deps import get_core_ctx
+from backend.app.routes.pages.admin_access import _members_ctx as _access_members_ctx
 from backend.app.routes.pages.templates import templates
 from backend.app.services.enum_service import EnumError
 from backend.app.services.errors import humanise
@@ -42,18 +43,15 @@ async def admin_page(request: Request):
     require_role(request, "admin")
     ctx = get_core_ctx(request)
     definitions = await ctx.enum_service.definitions(editable_only=True)
-    active_key = definitions[0].key if definitions else None
-    view = await _enum_view(ctx, active_key) if active_key else None
-    return templates.TemplateResponse(
-        request,
-        "pages/admin.html",
-        {
-            "rail_active": "admin",
-            "definitions": definitions,
-            "active_key": active_key,
-            "view": view,
-        },
+    # Default tab = Access & Permissions, rendered server-side. The role pickers
+    # are popover() components + an add-member modal; rendering them on the full
+    # page load lets Alpine init them once (HTMX-injecting double-binds them and
+    # the dropdown sticks open). Enum tabs still load their tables via HTMX.
+    data = await _access_members_ctx(request)
+    data.update(
+        {"rail_active": "admin", "definitions": definitions, "active": "access", "active_key": None}
     )
+    return templates.TemplateResponse(request, "pages/admin.html", data)
 
 
 @router.get("/admin/enums/{key}", response_class=HTMLResponse)
