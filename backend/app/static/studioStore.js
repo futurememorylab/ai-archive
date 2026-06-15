@@ -466,10 +466,12 @@ document.addEventListener('alpine:init', () => {
       if (this.focusedClipId) params.set('clip_id', this.focusedClipId);
       const html = await fetch(`/studio/_prompt_card?${params.toString()}`).then(r => r.text());
       slot.innerHTML = html;
-      // Re-init the injected cmp card: Alpine re-scans its directives and
-      // HTMX wires the version-picker hx-* attributes (without process, the
-      // cmp version-pick would be a dead click). htmxAlpine owns both.
-      window.htmxAlpine.reinit(slot);
+      // Wire HTMX only (the version-picker hx-* attrs; without it the cmp
+      // version-pick would be a dead click). The cmp card has its OWN x-data,
+      // so Alpine's MutationObserver inits it on its own — re-running Alpine's
+      // init on it here as well (reinit) double-binds every directive, which
+      // made the Diff toggle fire twice per click and look dead.
+      window.htmxAlpine.wireHtmx(slot);
       this.refreshPlayer();
     },
 

@@ -32,6 +32,26 @@ window.htmxAlpine = {
     window.Alpine?.initTree(el);
     window.htmx?.process(el);
   },
+
+  // Wire ONLY HTMX on a subtree we injected via fetch()+innerHTML whose root
+  // carries its OWN x-data (e.g. the compare card from openCompare). Alpine's
+  // MutationObserver reliably initializes a freshly-inserted x-data root on
+  // its own, so ALSO calling Alpine.initTree() here (as reinit does) binds
+  // every directive on that subtree TWICE — a double-bound @click flips a
+  // toggle back to its original value, so e.g. the compare Diff button looked
+  // dead (the click fired twice). HTMX has no equivalent auto-init for manual
+  // innerHTML, so we still process() it; htmx.process is idempotent.
+  //
+  // Use this for injected content that HAS its own x-data root. Use reinit()
+  // for content with NO x-data root (hosted-mode directives bound to an
+  // ancestor scope) or for subtrees HTMX swapped via hx-swap.
+  wireHtmx(el) {
+    if (!el) {
+      console.warn('htmxAlpine.wireHtmx: null element');
+      return;
+    }
+    window.htmx?.process(el);
+  },
 };
 
 document.body.addEventListener('htmx:afterSwap', (evt) => {

@@ -90,3 +90,4 @@ available number. See any existing ADR for the template.
 | 0080 | 2026-06-14 | [Centralised enumeration: code registry + EnumService + editable model catalog](./adr/0080-centralised-enumeration.md) |
 | 0081 | 2026-06-15 | [Upload orphan-GC on set removal (reference-count)](./adr/0081-upload-orphan-gc-on-set-removal.md) |
 | 0082 | 2026-06-15 | [Studio uploads always pushed to the AI store, not only in cloud mode](./adr/0082-uploads-always-pushed-to-ai-store.md) — *supersedes upload-gating part of 0069* |
+| 0083 | 2026-06-15 | [HTMX-only wiring for fetch-injected subtrees that own an x-data root (compare Diff double-bind fix)](./adr/0083-htmx-only-wiring-for-injected-xdata-roots.md) — *refines 0048* |
