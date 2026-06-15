@@ -136,7 +136,8 @@ def test_remove_last_set_membership_gcs_the_upload(ctx):
     assert video.exists() and thumb.exists()
 
     # Remove from its only set → GC.
-    assert client.delete(f"/api/studio/sets/{set_id}/clips/{clip_id}").status_code == 204
+    del_resp = client.delete(f"/api/studio/sets/{set_id}/clips/{clip_id}")
+    assert del_resp.status_code == 204
 
     # DB row, local video, local thumb, proxy_cache row all gone.
     assert not video.exists()
@@ -168,7 +169,8 @@ def test_remove_from_one_of_two_sets_keeps_upload(ctx):
     )
 
     # Remove from the first set → still referenced by `second`, so no GC.
-    assert client.delete(f"/api/studio/sets/{first_set}/clips/{clip_id}").status_code == 204
+    del_resp = client.delete(f"/api/studio/sets/{first_set}/clips/{clip_id}")
+    assert del_resp.status_code == 204
 
     video = data_dir / "cache" / "uploads" / f"{clip_id}.mp4"
     assert video.exists()
