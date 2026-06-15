@@ -11,13 +11,14 @@ _REQUIRED = {
     "CATDV_CATALOG_ID": "881507",
     "GCP_PROJECT_ID": "catdav",
     "GCS_BUCKET_NAME": "catdav-proxies",
+    "INSTANCE_ID": "prod",
 }
 
 
 def test_settings_resolve_from_pure_env(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)  # no .env in cwd
     for key in list(os.environ):
-        if key.startswith(("CATDV_", "GCP_", "GCS_", "APP_", "DATA_", "GOOGLE_")):
+        if key.startswith(("CATDV_", "GCP_", "GCS_", "APP_", "DATA_", "GOOGLE_", "INSTANCE_")):
             monkeypatch.delenv(key, raising=False)
     for key, value in _REQUIRED.items():
         monkeypatch.setenv(key, value)
@@ -31,6 +32,7 @@ def test_settings_resolve_from_pure_env(monkeypatch, tmp_path):
     assert s.catdv_catalog_id == 881507
     assert str(s.data_dir) == "/data"
     assert s.google_application_credentials is None  # ADC in cloud
+    assert s.instance_id == "prod"
 
 
 def test_media_cache_defaults_local_overridable(monkeypatch, tmp_path):

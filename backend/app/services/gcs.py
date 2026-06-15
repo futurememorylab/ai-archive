@@ -11,6 +11,8 @@ import google.auth
 import google.auth.transport.requests
 from google.cloud import storage  # type: ignore[import-not-found]
 
+from backend.app.uploaded_ids import is_uploaded
+
 _HASH_CHUNK = 8 * 1024 * 1024
 
 
@@ -24,25 +26,36 @@ def _local_md5_b64(path: Path) -> str:
 
 
 class GcsService:
-    def __init__(self, bucket_name: str) -> None:
+    def __init__(self, bucket_name: str, instance_id: str) -> None:
         self._client = storage.Client()
         self._bucket = self._client.bucket(bucket_name)
+        self._instance_id = instance_id
 
     @property
     def bucket_name(self) -> str:
         return self._bucket.name
 
+    def _blob_name(self, clip_id: int) -> str:
+        # Uploaded clips have a synthetic id derived from a *local* SQLite
+        # PK, so two instances collide on the same id. Namespace them per
+        # instance. CatDV clips are globally canonical -> keep them shared
+        # (cross-instance dedup). See issue #55 / the design spec.
+        if is_uploaded(clip_id):
+            return f"instances/{self._instance_id}/uploads/{clip_id}.mov"
+        return f"clips/{clip_id}.mov"
+
     def gs_uri(self, clip_id: int) -> str:
-        return f"gs://{self._bucket.name}/clips/{clip_id}.mov"
+        return f"gs://{self._bucket.name}/{self._blob_name(clip_id)}"
 
     def upload_if_absent(self, clip_id: int, local_path: Path, mime: str) -> str:
-        blob_name = f"clips/{clip_id}.mov"
-        # Blob names are keyed only on clip_id, and a stale/orphan blob can
-        # outlive its DB row (an old GCS object whose uploaded_clips parent is
-        # gone). Presence alone is NOT proof of content: re-uploading a reused
-        # clip_id with different bytes must overwrite, or playback silently
-        # serves the stale media. Compare the stored md5 (a metadata read, no
-        # download) and only skip the upload when the content already matches.
+        blob_name = self._blob_name(clip_id)
+        # Blob names are keyed on clip_id (instance-namespaced for uploads),
+        # and a stale/orphan blob can outlive its DB row (an old GCS object
+        # whose uploaded_clips parent is gone). Presence alone is NOT proof of
+        # content: re-uploading a reused clip_id with different bytes must
+        # overwrite, or playback silently serves the stale media. Compare the
+        # stored md5 (a metadata read, no download) and only skip the upload
+        # when the content already matches.
         existing = self._bucket.get_blob(blob_name)
         if existing is None or existing.md5_hash != _local_md5_b64(local_path):
             # Setting chunk_size flips upload_from_filename into resumable mode,
@@ -53,7 +66,7 @@ class GcsService:
         return f"gs://{self._bucket.name}/{blob_name}"
 
     def delete(self, clip_id: int) -> None:
-        blob = self._bucket.blob(f"clips/{clip_id}.mov")
+        blob = self._bucket.blob(self._blob_name(clip_id))
         blob.delete()
 
     def thumb_uri(self, clip_id: int) -> str:

@@ -609,7 +609,7 @@ async def _build_archive_subsystem(
         db_provider=lambda: core.db,
         is_online_provider=_is_online if use_catdv else None,
     )
-    gcs_service = GcsService(settings.gcs_bucket_name)
+    gcs_service = GcsService(settings.gcs_bucket_name, settings.instance_id)
     ai_store = build_ai_input_store(
         settings,
         gcs_service=gcs_service,
