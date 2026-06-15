@@ -1998,10 +1998,12 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 
 .run-stats { padding: 6px 0; }
 
-/* Insertions: green + underline (Word "new"). Deletions: red + strikethrough.
-   Class-only (global) so the coloring applies wherever the diff renderer emits
-   them — the compare table's .sct-text cells. These classes are only ever
-   produced by services/word_diff.diff_html. */
+/* Insertions: green + underline (Word "new"). Deletions: red fill (no
+   strikethrough — the line-through hurt legibility; the red colour + tinted
+   background already mark a deletion). Class-only (global) so the coloring
+   applies wherever the diff renderer emits them — the compare table's
+   .sct-text cells. These classes are only ever produced by
+   services/word_diff.diff_html. */
 .diff-ins {
   text-decoration: underline;
   color: var(--good);
@@ -2009,7 +2011,9 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   border-radius: 2px;
 }
 .diff-del {
-  text-decoration: line-through;
+  /* Override the browser's UA default `del { text-decoration: line-through }`
+     — the strikethrough hurt legibility; red + tinted background mark it. */
+  text-decoration: none;
   color: var(--bad);
   background: color-mix(in oklab, var(--bad) 16%, transparent);
   border-radius: 2px;
