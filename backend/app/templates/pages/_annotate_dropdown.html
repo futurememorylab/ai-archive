@@ -6,7 +6,8 @@
     <span x-show="!running">Annotate</span>
     <span x-show="running" x-cloak class="ca-running">
       <span class="ca-spinner" aria-hidden="true"></span>
-      Running: <span class="mono" x-text="runningPromptName"></span>
+      <span x-text="phase === 'caching' ? 'Caching' : phase === 'annotating' ? 'Annotating' : 'Starting'"></span>
+      <span class="mono" x-text="runElapsed">0:00</span>
     </span>
   </button>
 

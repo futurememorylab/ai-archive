@@ -20,6 +20,22 @@ document.addEventListener('alpine:init', () => {
     busy: false,
     busyLabel: 'Working…',
 
+    // Annotation of an uncached clip uploads the proxy to the cache as a side
+    // effect (clipAnnotate dispatches these window events). Mirror the cache
+    // button's own feedback: show the busy spinner while it uploads, then pull
+    // the fresh badge so the layer flips to its cached/Purge state.
+    onAnnotateUpload() {
+      if (this.busy) return;
+      this.busy = true;
+      this.busyLabel = 'Caching…';
+    },
+
+    onAnnotateCached() {
+      // _refresh() re-fetches the control and swaps the node (busy resets to
+      // false on the fresh node), or clears busy itself on a fetch failure.
+      this._refresh();
+    },
+
     async cacheNow() {
       if (this.busy) return;
       const toast = Alpine.store('toast');
@@ -47,13 +63,11 @@ document.addEventListener('alpine:init', () => {
     async purge() {
       if (this.busy) return;
       if (!confirm(`Purge the cached ${this.kind} for this clip?`)) return;
-      await this._evict(['media-ai'], 'Purging…', 'Cache purged.', 'Purge');
-    },
-
-    async evictLocal() {
-      if (this.busy) return;
-      if (!confirm('Evict the local proxy for this clip?')) return;
-      await this._evict(['media-local'], 'Evicting…', 'Local proxy evicted.', 'Evict');
+      // Clear BOTH media layers so the clip is genuinely uncached. In local
+      // dev a clip can sit in the local proxy cache AND the AI store at once
+      // (annotation uploads to GCS even in local mode), so evicting only one
+      // leaves the other behind and the clip still counts as cached.
+      await this._evict(['media-local', 'media-ai'], 'Purging…', 'Cache purged.', 'Purge');
     },
 
     async _evict(layers, busyLabel, okMsg, verb) {

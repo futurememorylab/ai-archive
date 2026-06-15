@@ -47,6 +47,17 @@ class MediaPrefetcher:
     async def start(self) -> None:
         if self._task is not None:
             return
+        # Recover orphans first: a row left `downloading` by a previous
+        # process (crash / SIGKILL mid-download) is never re-claimed by
+        # claim_next (which only takes `queued`), so it would hang the UI
+        # spinner forever and de-dupe new requests onto a dead row. By
+        # construction only one worker runs, so nothing is in-flight here.
+        try:
+            requeued = await self._queue.requeue_orphans(self._db_provider())
+            if requeued:
+                log.info("media_prefetcher requeued %d orphaned download(s) on start", requeued)
+        except Exception:  # noqa: BLE001 -- recovery must not block startup
+            log.exception("media_prefetcher orphan recovery failed")
         self._stop_evt.clear()
         self._task = asyncio.create_task(self._loop())
 
