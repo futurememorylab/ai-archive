@@ -24,10 +24,11 @@ def _supervisor(request: Request):
 def _status_dict(sup) -> dict:
     if sup is None:
         return {"managed": False, "desired": "off",
-                "process_running": False, "healthy": False}
+                "process_running": False, "healthy": False, "connecting": False}
     s = sup.status()
     return {"managed": s.managed, "desired": s.desired,
-            "process_running": s.process_running, "healthy": s.healthy}
+            "process_running": s.process_running, "healthy": s.healthy,
+            "connecting": s.connecting}
 
 
 def _toast(message: str, level: str = "success") -> dict[str, str]:
@@ -73,3 +74,14 @@ async def disable(request: Request):
     live.connection_monitor.set_manual_offline(True)
     await sup.disable()
     return await _reply(request, sup, headers=_toast("VPN tunnel disabled."))
+
+
+@router.post("/retry")
+async def retry(request: Request):
+    sup = _supervisor(request)
+    if sup is None:
+        raise HTTPException(409, "VPN not managed on this deployment")
+    st = await sup.probe_now()
+    msg = "VPN reachable." if st.healthy else "VPN still unreachable."
+    level = "success" if st.healthy else "error"
+    return await _reply(request, sup, headers=_toast(msg, level))

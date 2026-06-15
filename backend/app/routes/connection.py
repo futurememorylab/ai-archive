@@ -106,7 +106,7 @@ async def retry_now(request: Request):
         if is_htmx:
             return _templates.TemplateResponse(
                 request,
-                "_connection_chip.html",
+                "_connection_chip_inner.html",
                 {"mode": "forced_offline"},
                 status_code=409,
             )
@@ -194,7 +194,10 @@ async def connect(request: Request):
                                    headers=_toast_header(f"CatDV unreachable: {humanise(exc)}"))
     if monitor is not None:
         await monitor.probe_once()
-    return await _pill_or_json(request, monitor)
+    return await _pill_or_json(
+        request, monitor,
+        headers=_toast_header("CatDV connected — browsing live data.", "success"),
+    )
 
 
 @router.post("/disconnect")
@@ -205,7 +208,10 @@ async def disconnect(request: Request):
         await live.catdv.logout()
     if monitor is not None:
         await monitor.probe_once()
-    return await _pill_or_json(request, monitor)
+    return await _pill_or_json(
+        request, monitor,
+        headers=_toast_header("CatDV disconnected — back to cached clips.", "info"),
+    )
 
 
 @router.get("/events")

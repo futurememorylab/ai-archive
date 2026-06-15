@@ -1,10 +1,9 @@
-{# Inner content of the topbar connection chip — label + the live action.
-   Swapped into the stable #connection-chip container via innerHTML by the
-   5s poll and by the Connect/Disconnect/Retry actions, so the polling
-   container is never destroyed (an outerHTML self-swap of the polling
-   element throws htmx swapError). Buttons target #connection-chip with
-   hx-swap="innerHTML". Rendered standalone it computes its own mode;
-   included by the container it inherits layout.html's `mode`. #}
+{# Inner content of the topbar connection chip: the Status pill trigger +
+   the dropdown panel. Swapped into the stable #connection-chip container's
+   innerHTML by the 5s poll and by connect/disconnect/vpn/retry actions; the
+   container owns x-data="popover()" so `open` survives swaps. Rendered
+   standalone it computes mode/vpn from the request; callers may inject `mode`
+   and `vpn` (a VpnStatus-shaped object or None) to render a specific state. #}
 {%- if connect_mode is not defined -%}
   {%- set connect_mode = request.app.state.core_ctx.settings.catdv_connect_mode
         if request is defined and request else "manual" -%}
@@ -24,66 +23,133 @@
     {%- set mode = "offline" -%}
   {%- endif -%}
 {%- endif -%}
-{%- set _live = request.app.state.live_ctx if request is defined and request else None -%}
-{%- set _sup = _live.vpn_supervisor if _live else None -%}
-{%- set vpn = _sup.status() if _sup else None -%}
-{% if vpn and vpn.managed %}
-  <span class="vpn-row">
-    {% if vpn.desired == "off" %}
-      <span class="dot dot--grey" aria-hidden="true" title="WireGuard tunnel is off">○</span><span>VPN off</span>
-      <button type="button" class="btn link" hx-post="/api/vpn/enable"
-              hx-target="#connection-chip" hx-swap="innerHTML"
-              title="Bring the WireGuard tunnel up">Turn on</button>
+{%- if vpn is not defined -%}
+  {%- set _live2 = request.app.state.live_ctx if request is defined and request else None -%}
+  {%- set _sup = _live2.vpn_supervisor if _live2 else None -%}
+  {%- set vpn = _sup.status() if _sup else None -%}
+{%- endif -%}
+
+{# ── derivations ─────────────────────────────────────────────────────── #}
+{%- set vpn_managed = vpn and vpn.managed -%}
+{%- set vpn_connecting = vpn_managed and vpn.connecting -%}
+{%- set vpn_up = (not vpn_managed) or (vpn.desired == "on" and vpn.healthy) -%}
+{%- set vpn_off = vpn_managed and vpn.desired == "off" -%}
+{%- set vpn_err = vpn_managed and vpn.desired == "on" and not vpn.healthy and not vpn.connecting -%}
+{%- set catdv_online = mode == "online" -%}
+{%- set catdv_err = mode == "offline" or mode == "forced_offline" -%}
+
+{%- if vpn_up and catdv_online -%}
+  {%- set ov_key, ov_label, ov_state = "online", "Online", "is-online" -%}
+{%- elif vpn_connecting -%}
+  {%- set ov_key, ov_label, ov_state = "connecting", "Connecting", "is-connecting" -%}
+{%- elif vpn_err -%}
+  {%- set ov_key, ov_label, ov_state = "error", "Offline", "is-error" -%}
+{%- elif vpn_off -%}
+  {%- set ov_key, ov_label, ov_state = "offline", "Offline", "is-offline" -%}
+{%- elif catdv_err -%}
+  {%- set ov_key, ov_label, ov_state = "error", "Offline", "is-error" -%}
+{%- else -%}
+  {%- set ov_key, ov_label, ov_state = "offline", "Offline", "is-offline" -%}
+{%- endif -%}
+
+{%- if vpn_off -%}{%- set ov_sub = "VPN off" -%}
+{%- elif vpn_connecting -%}{%- set ov_sub = "Connecting VPN…" -%}
+{%- elif vpn_err -%}{%- set ov_sub = "VPN unreachable" -%}
+{%- elif mode == "forced_offline" -%}{%- set ov_sub = "Offline (forced)" -%}
+{%- elif catdv_online -%}{%- set ov_sub = "All connected" -%}
+{%- elif catdv_err -%}{%- set ov_sub = "CatDV unreachable" -%}
+{%- else -%}{%- set ov_sub = "CatDV disconnected" -%}
+{%- endif -%}
+
+<button type="button" class="conn-pill {{ ov_state }}" @click="toggle()"
+        :class="open && 'open'" title="Connection status — click for details">
+  <span class="conn-dot" aria-hidden="true"></span>
+  <span class="conn-lbl">{{ ov_label }}</span>
+  <span class="conn-sep" aria-hidden="true"></span>
+  <span class="conn-sub">{{ ov_sub }}</span>
+  <span class="conn-cv" aria-hidden="true">▾</span>
+  <span class="htmx-indicator conn-spin" aria-hidden="true"></span>
+</button>
+
+<div class="popover-panel conn-dropdown align-right {{ ov_state }}"
+     x-show="open" x-cloak
+     @click.outside="close()" @keydown.escape.window="close()">
+  <div class="conn-head">
+    <span class="conn-head-t">Connection</span>
+    <span class="conn-head-s">{{ ov_label }}</span>
+  </div>
+
+  {% if vpn_managed %}
+  <div class="conn-svc{% if vpn.healthy %} on{% elif vpn_connecting %} work{% elif vpn_err %} err{% endif %}">
+    <span class="conn-svc-ic">{% include "icons/_shield.svg" ignore missing %}</span>
+    <div class="conn-svc-body">
+      <div class="conn-svc-name">VPN tunnel</div>
+      <div class="conn-svc-state">
+        {% if vpn_off %}<span class="s-dot off"></span>Off
+        {% elif vpn_connecting %}<span class="s-dot work"></span>Connecting…
+        {% elif vpn.healthy %}<span class="s-dot on"></span>Connected
+        {% else %}<span class="s-dot err"></span>Unreachable{% endif %}
+      </div>
+    </div>
+    {% if vpn_connecting %}{# coming up — switch shows on (amber); click cancels #}
+      <button type="button" role="switch" aria-checked="true" class="conn-switch work"
+              hx-post="/api/vpn/disable" hx-target="#connection-chip" hx-swap="innerHTML"
+              hx-indicator="#connection-chip" aria-label="Cancel VPN connection"></button>
+    {% elif vpn_err %}
+      <button type="button" class="btn ghost sm conn-retry"
+              hx-post="/api/vpn/retry" hx-target="#connection-chip" hx-swap="innerHTML"
+              hx-indicator="#connection-chip" title="Re-check the tunnel now">Retry</button>
     {% elif vpn.healthy %}
-      <span class="dot dot--green" aria-hidden="true" title="Tunnel up and reaching CatDV">●</span><span>VPN on</span>
-      <button type="button" class="btn link"
-              hx-post="/api/vpn/disable" hx-confirm="Turn the VPN off? This drops the CatDV connection and cedes the tunnel."
-              hx-target="#connection-chip" hx-swap="innerHTML"
-              title="Drop the tunnel and release the CatDV seat">Turn off</button>
-    {% else %}
-      <span class="dot dot--yellow" aria-hidden="true" title="Tunnel process up but not reaching CatDV">●</span><span>VPN on · unreachable</span>
-      <button type="button" class="btn link"
-              hx-post="/api/vpn/disable" hx-confirm="Turn the VPN off? This drops the CatDV connection and cedes the tunnel."
-              hx-target="#connection-chip" hx-swap="innerHTML"
-              title="Drop the tunnel and release the CatDV seat">Turn off</button>
+      <button type="button" role="switch" aria-checked="true" class="conn-switch on"
+              hx-post="/api/vpn/disable" hx-target="#connection-chip" hx-swap="innerHTML"
+              hx-indicator="#connection-chip" aria-label="Turn VPN off"></button>
+    {% else %}{# VPN off (desired=off) → offer Enable #}
+      <button type="button" role="switch" aria-checked="false" class="conn-switch"
+              hx-post="/api/vpn/enable" hx-target="#connection-chip" hx-swap="innerHTML"
+              hx-indicator="#connection-chip" aria-label="Turn VPN on"></button>
     {% endif %}
-  </span>
-{% endif %}
-{% if connect_mode == "manual" %}
-  {% if vpn and vpn.managed and vpn.desired == "off" %}{# VPN deliberately off — CatDV unavailable, no actionable button #}
-    <span class="dot dot--grey" aria-hidden="true">○</span><span>CatDV unavailable</span>
-    <span class="btn link disabled" aria-disabled="true"
-          title="Turn the VPN on first">Connect</span>
-  {% elif mode == "online" %}
-    <span class="dot dot--green" aria-hidden="true">●</span><span>Connected</span>
-    <button type="button" class="btn link" hx-post="/api/connection/disconnect"
-            hx-target="#connection-chip" hx-swap="innerHTML"
-            title="Log out of CatDV and release the seat">Disconnect</button>
-  {% elif mode == "disconnected" %}
-    <span class="dot dot--grey" aria-hidden="true">○</span><span>Disconnected</span>
-    <button type="button" class="btn link" hx-post="/api/connection/connect"
-            hx-target="#connection-chip" hx-swap="innerHTML"
-            title="Log in to CatDV (takes the license seat)">Connect</button>
-  {% elif mode == "forced_offline" %}
-    <span class="dot dot--red" aria-hidden="true"
-          title="Set CATDV_OFFLINE=false and restart to reconnect">●</span><span>Offline (forced)</span>
-  {% else %}{# offline == unreachable — re-probe the tunnel #}
-    <span class="dot dot--yellow" aria-hidden="true" title="VPN tunnel unreachable">●</span><span>Unreachable</span>
-    <button type="button" class="btn link" hx-post="/api/connection/retry"
-            hx-target="#connection-chip" hx-swap="innerHTML"
-            title="Re-check the VPN tunnel">Retry</button>
+  </div>
   {% endif %}
-{% else %}{# auto mode: legacy read-only label + Reconnect probe #}
-  {% if mode == "online" %}
-    <span class="dot dot--green" aria-hidden="true">●</span><span>Online</span>
-  {% elif mode == "forced_offline" %}
-    <span class="dot dot--red" aria-hidden="true"
-          title="Set CATDV_OFFLINE=false and restart to reconnect">●</span><span>Offline (forced)</span>
-  {% else %}
-    <button type="button" class="btn link" hx-post="/api/connection/retry"
-            hx-target="#connection-chip" hx-swap="innerHTML"
-            title="Click to try reconnecting">
-      <span class="dot dot--yellow" aria-hidden="true">●</span><span>Offline — click to reconnect</span>
-    </button>
+
+  {%- set catdv_gated = vpn_managed and not vpn_up -%}
+  <div class="conn-svc dep{% if vpn_up and catdv_online %} linked{% endif %}{% if catdv_online %} on{% elif catdv_err %} err{% endif %}{% if catdv_gated %} disabled{% endif %}">
+    <span class="conn-svc-ic">{% include "icons/_server.svg" ignore missing %}</span>
+    <div class="conn-svc-body">
+      <div class="conn-svc-name">CatDV Annotator</div>
+      <div class="conn-svc-state">
+        {% if catdv_gated %}<span class="s-dot off"></span>Requires VPN
+        {% elif mode == "forced_offline" %}<span class="s-dot err"></span>Offline (forced)
+        {% elif catdv_online %}<span class="s-dot on"></span>Connected
+        {% elif catdv_err %}<span class="s-dot err"></span>Unreachable
+        {% else %}<span class="s-dot off"></span>Disconnected{% endif %}
+      </div>
+    </div>
+    {% if catdv_gated or mode == "forced_offline" %}
+      <span class="conn-switch dis" aria-disabled="true"></span>
+    {% elif catdv_err %}
+      <button type="button" class="btn ghost sm conn-retry"
+              hx-post="/api/connection/retry" hx-target="#connection-chip" hx-swap="innerHTML"
+              hx-indicator="#connection-chip" title="Re-probe CatDV now">Retry</button>
+    {% elif catdv_online %}
+      <button type="button" role="switch" aria-checked="true" class="conn-switch on"
+              hx-post="/api/connection/disconnect" hx-target="#connection-chip" hx-swap="innerHTML"
+              hx-indicator="#connection-chip" aria-label="Disconnect CatDV"></button>
+    {% else %}
+      <button type="button" role="switch" aria-checked="false" class="conn-switch"
+              hx-post="/api/connection/connect" hx-target="#connection-chip" hx-swap="innerHTML"
+              hx-indicator="#connection-chip" aria-label="Connect CatDV"></button>
+    {% endif %}
+  </div>
+
+  {% if catdv_gated %}
+  <div class="conn-hint">CatDV can only connect once the VPN tunnel is up.</div>
   {% endif %}
-{% endif %}
+</div>
+
+{# Background heartbeat — ONLY while the tunnel is coming up. This hidden poller
+   re-fetches the chip every 2s so "Connecting…" resolves to Connected (or, after
+   the grace window, Unreachable) without the user clicking. It lives inside the
+   swapped innerHTML, so once a stable state renders (no vpn_connecting) the
+   poller is gone and the chip stops refreshing — no constant flicker. #}
+{% if vpn_connecting %}<span hidden hx-get="/ui/connection-chip"
+      hx-trigger="every 2s" hx-target="#connection-chip" hx-swap="innerHTML"></span>{% endif %}

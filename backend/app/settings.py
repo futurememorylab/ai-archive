@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     bind_port: int = 8765
     data_dir: Path = Field(default=Path("./data"))
 
-    # Identity backend selecting the auth adapter (ADR 0078). "dev": a single
+    # Identity backend selecting the auth adapter (ADR 0081). "dev": a single
     # local operator (no IAP) so the app is usable on 127.0.0.1 where Google
     # IAP does not exist. "iap": verify the Google IAP-signed identity header
     # (cloud). Default "dev"; cloud flips to "iap" in PR2 once JWT verification
@@ -28,12 +28,12 @@ class Settings(BaseSettings):
     # Audience the IAP-signed assertion is verified against (cloud only). The
     # exact format for *direct* Cloud Run IAP is confirmed against a live token
     # before cutover. Unset/empty makes the iap backend fail closed (it refuses
-    # to verify against an empty audience). See ADR 0078.
+    # to verify against an empty audience). See ADR 0081.
     iap_audience: str | None = None
     # Comma-separated deploy-time list of emails seeded as admins at startup
     # (idempotently). The root of trust: the first admin(s) exist before the
     # admin console does, so no one can self-promote from inside the app.
-    # See ADR 0078 / spec 2026-06-14-iap-roles-admin-console-design.md.
+    # See ADR 0081 / spec 2026-06-14-iap-roles-admin-console-design.md.
     admin_emails: str = ""
 
     catdv_base_url: str

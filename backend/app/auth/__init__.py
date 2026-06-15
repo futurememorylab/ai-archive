@@ -1,5 +1,5 @@
 """Auth seam — identity is established behind one boundary. See identity.py
-and ADR 0078. Import ``CurrentUser`` / ``get_current_user`` from here.
+and ADR 0081. Import ``CurrentUser`` / ``get_current_user`` from here.
 """
 
 from backend.app.auth.identity import CurrentUser, get_current_user, resolve_user

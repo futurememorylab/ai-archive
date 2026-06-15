@@ -215,6 +215,38 @@ If you are doing any of these, stop and reuse the existing service:
    an `is_online_provider` gate — over wedging it into an existing
    one.
 
+## Enumerations
+
+Two kinds of enumeration; route each correctly.
+
+- **Fixed enum** — every value has matching handling logic (`if status ==
+  'applied'`, a CSS class per level, a code branch). Keep it a `Literal` in
+  `models/` for static checking **and** declare it in
+  `backend/app/enums/registry.py` with `editable=False`, so the frontend reads it
+  from one place. The values are served straight from code (the DB is never
+  touched). Add a guard test pinning the registry values to `get_args(<Literal>)`.
+
+- **Editable list** — an open set whose values are just data passed through (model
+  catalogs). Declare it in the registry with `editable=True` (the `values` are the
+  seed + the one `default=True`). The DB table `enum_values` stores the user's
+  edits; `EnumService.reconcile_seeds()` materialises seeds at boot with
+  soft-delete tombstones. Users edit it in the Admin console (`/admin`).
+
+**Never** hardcode either kind in a template, a `<select>`, or a JS array again.
+
+How to consume:
+- Backend: `ctx.enum_service.values(key)` / `.generation_models()` /
+  `.generation_default()`. `EnumService` is on `CoreCtx` — DB-only and
+  offline-safe.
+- Frontend: fixed enums arrive as `window.APP_ENUMS.<key>` (injected by
+  `layout.html`). Editable lists arrive via route context (server-rendered, so
+  orphaned saved values can be unioned in) or `GET /api/enums/{key}`.
+
+How to add a new enum: add an `EnumSpec` to `ENUM_REGISTRY`. Editable enums also
+get a row in the Admin console automatically (tabs are data-driven from
+`definitions(editable_only=True)`). No new table or migration is needed unless you
+add a second editable enum — they all share `enum_values`.
+
 ## Error handling discipline
 
 Two helpers exist; route through them.

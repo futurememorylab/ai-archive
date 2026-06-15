@@ -9,7 +9,7 @@ Everything fails closed: a missing header or a verification failure raises
 ``NotAuthenticated`` (no fail-open), and an unconfigured audience raises
 ``RuntimeError`` rather than verify against an empty audience. The plaintext
 ``X-Goog-Authenticated-User-Email`` header is never trusted on its own.
-See ADR 0078 §security.
+See ADR 0081 §security.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ IAP_CERTS_URL = "https://www.gstatic.com/iap/verify/public_key"
 def current_user(request: Request, settings: Settings) -> CurrentUser:
     audience = settings.iap_audience
     if not audience:
-        # One-time discovery aid (ADR 0078/0079): the exact JWT audience for
+        # One-time discovery aid (ADR 0081/0082): the exact JWT audience for
         # direct Cloud Run IAP is not authoritatively documented, so it is
         # discovered from a live token. Signature-only decode (audience check
         # skipped) to LOG the aud, then fail closed — never ADMIT against an
@@ -45,8 +45,7 @@ def current_user(request: Request, settings: Settings) -> CurrentUser:
         if not assertion:
             goog = [k for k in request.headers.keys() if k.lower().startswith("x-goog")]
             log.warning(
-                "IAP_AUDIENCE unset and no %s header on the request; "
-                "x-goog-* headers present: %s",
+                "IAP_AUDIENCE unset and no %s header on the request; x-goog-* headers present: %s",
                 IAP_JWT_HEADER,
                 goog,
             )
@@ -58,13 +57,12 @@ def current_user(request: Request, settings: Settings) -> CurrentUser:
                 log.warning(
                     "IAP_AUDIENCE is unset; discovered aud=%r from a live IAP "
                     "assertion — set IAP_AUDIENCE to this value and redeploy "
-                    "(ADR 0079).",
+                    "(ADR 0082).",
                     claims.get("aud"),
                 )
             except Exception as exc:  # noqa: BLE001 — best-effort; still fail closed
                 log.warning(
-                    "IAP_AUDIENCE unset; assertion present but signature-only "
-                    "decode failed: %r",
+                    "IAP_AUDIENCE unset; assertion present but signature-only decode failed: %r",
                     exc,
                 )
         raise RuntimeError(

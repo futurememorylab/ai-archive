@@ -44,7 +44,7 @@ def test_admin_lists_and_adds_member(monkeypatch, tmp_path: Path):
                         data={"email": "Annie@x.com", "role": "annotator", "display_name": "Annie"},
                         headers={"HX-Request": "true"})
         assert r.status_code in (200, 201)
-        assert "annie@x.com" in client.get("/admin").text
+        assert "annie@x.com" in client.get("/admin/access").text
 
 
 def test_self_protection(monkeypatch, tmp_path: Path):
@@ -120,7 +120,7 @@ def test_patch_and_delete_carry_toast_handler(monkeypatch, tmp_path: Path):
         # Add a second member so the table has non-self rows with actions
         client.post("/admin/users",
                     data={"email": "bob@x.com", "role": "viewer", "display_name": "Bob"})
-        html = client.get("/admin").text
+        html = client.get("/admin/access").text
 
     # The hx-patch items (role change menu items) must carry the toast handler
     assert "@htmx:after-request" in html, \
@@ -150,7 +150,7 @@ def test_stat_counts_reflect_unfiltered_totals(monkeypatch, tmp_path: Path):
         client.post("/admin/users", data={"email": "ann@x.com", "role": "annotator", "display_name": ""})
 
         # Filter to viewers only — only 1 row appears in the table
-        html = client.get("/admin?role=viewer").text
+        html = client.get("/admin/access?role=viewer").text
 
     # The .admin-stats block renders:
     #   <span class="n">{{ counts.members }}</span><span class="l">Members</span>

@@ -1,33 +1,33 @@
-# 0079. App-side roles + admin console on top of IAP (4-role model, default-deny gate, app-never-touches-the-Group)
+# 0082. App-side roles + admin console on top of IAP (4-role model, default-deny gate, app-never-touches-the-Group)
 
 **Date:** 2026-06-14
 **Status:** Accepted (implemented on `feat/iap-access-control`)
 **Spec:** `docs/specs/2026-06-14-iap-roles-admin-console-design.md`
-**Builds on:** ADR 0078 (IAP as the gate + an app-side roles layer). This ADR records the
-authorization decisions left **open** in 0078 and the Claude-Design handoff
+**Builds on:** ADR 0081 (IAP as the gate + an app-side roles layer). This ADR records the
+authorization decisions left **open** in 0081 and the Claude-Design handoff
 (`admin-panel-ai-archive`: `Admin Console.dc.html` + `Access Denied.dc.html`).
 
 ## Context
 
-ADR 0078 fixed the *mechanism* (Google IAP gates the app; a small app-side roles table
+ADR 0081 fixed the *mechanism* (Google IAP gates the app; a small app-side roles table
 decides authorization) but left several calls open: the roles model, what "add member" /
 "request access" actually do, how enforcement is wired, and how cloud vs local differ. The
 user's hard requirement was *"can't afford to fuck up — don't follow the happy path, this
 needs to work at all times"*: fail-closed, default-deny, no UI that promises something the
 backend can't deliver. The design handoff (mocked against CatDV's dark/amber/green language)
 assumed the app owned the access list ("Add member → added to the IAP access list"), which
-conflicts with 0078's non-goal of managing the gate inside the app.
+conflicts with 0081's non-goal of managing the gate inside the app.
 
 ## Alternatives
 
 - **Who owns "who can reach the app"?** (a) **Google owns the gate, app owns roles only**
-  (chosen) — keeps 0078's non-goal intact, smallest security-critical surface; (b) app owns
+  (chosen) — keeps 0081's non-goal intact, smallest security-critical surface; (b) app owns
   the access list (IAP gates a wide domain, app table decides access) — makes the design's
   invite/request flows fully self-service but widens exposure and makes the app table
   load-bearing for *access*; (c) automate the Google Group from the app via the Admin SDK —
   real one-click invites but the app would hold a powerful group-admin credential. The user
   chose (a), and explicitly chose to **never** have the app modify the Group.
-- **Role model:** 2 roles (`admin`/`member`, 0078's strawman) vs the design's **4 roles**
+- **Role model:** 2 roles (`admin`/`member`, 0081's strawman) vs the design's **4 roles**
   (Admin/Annotator/Publisher/Viewer with V·P·A·M). Chose 4.
 - **Enforcement scope now:** gate + admin only · gate + admin + **AI runs** · full (also
   Publisher-gated publish, Viewer read-only). Chose the middle.

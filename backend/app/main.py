@@ -23,6 +23,7 @@ from backend.app.routes.cache import page_router as cache_page_router
 from backend.app.routes.cache import ui_router as cache_ui_router
 from backend.app.routes.catdv import router as catdv_router
 from backend.app.routes.connection import router as connection_router
+from backend.app.routes.enums import router as enums_router
 from backend.app.routes.events import router as events_router
 from backend.app.routes.jobs import router as jobs_router
 from backend.app.routes.live import router as live_router
@@ -116,6 +117,7 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(cache_api_router)
     app.include_router(cache_page_router)
     app.include_router(cache_ui_router)
+    app.include_router(enums_router)
     for r in page_routers:
         app.include_router(r)
     app.include_router(live_router)
@@ -136,23 +138,27 @@ _AUTH_ALLOWLIST = ("/static/", "/api/health", "/access", "/favicon.ico")
 
 
 def _is_allowlisted(path: str) -> bool:
-    return any(path == p or path.startswith(p.rstrip("/") + "/") or path == p.rstrip("/")
-               for p in _AUTH_ALLOWLIST)
+    return any(
+        path == p or path.startswith(p.rstrip("/") + "/") or path == p.rstrip("/")
+        for p in _AUTH_ALLOWLIST
+    )
 
 
 def _deny(request: Request, email: str | None) -> Response:
     """Fail-closed denial. JSON for HTMX/fetch callers; the access page (403)
     for a browser navigation."""
-    wants_json = (
-        request.headers.get("hx-request")
-        or "application/json" in request.headers.get("accept", "")
+    wants_json = request.headers.get("hx-request") or "application/json" in request.headers.get(
+        "accept", ""
     )
     if wants_json:
         return JSONResponse({"detail": "access not granted"}, status_code=403)
     from backend.app.routes.pages.templates import templates
+
     return templates.TemplateResponse(
-        request, "pages/access.html",
-        {"state": "denied", "email": email}, status_code=403,
+        request,
+        "pages/access.html",
+        {"state": "denied", "email": email},
+        status_code=403,
     )
 
 
@@ -204,7 +210,7 @@ async def _auth_gate(request: Request, call_next):
     Fail-closed: any failure to establish a trustworthy identity, or any
     error in the role lookup, denies. Under AUTH_BACKEND=dev the single local
     operator is implicit admin and nothing is gated (local dev stays usable;
-    no IAP path is exercised). See ADR 0078 + spec
+    no IAP path is exercised). See ADR 0081 + spec
     2026-06-14-iap-roles-admin-console-design.md.
     """
     request.state.current_user = None

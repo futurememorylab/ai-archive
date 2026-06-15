@@ -7,8 +7,8 @@ design). This spec details the **authorization** half — the `user_roles` layer
 default-deny gate, AI-run enforcement, the **admin console**, and the **access-request**
 flow — incorporating the Claude-Design handoff `admin-panel-ai-archive` (`Admin
 Console.dc.html` + `Access Denied.dc.html`). It does **not** change the mechanism
-decisions (IAP direct on Cloud Run; the seam) already fixed in the 06-13 spec / ADR 0078.
-**Decision record:** ADR 0078. This spec resolves the 06-13 spec's OPEN decisions #1 (roles
+decisions (IAP direct on Cloud Run; the seam) already fixed in the 06-13 spec / ADR 0081.
+**Decision record:** ADR 0081. This spec resolves the 06-13 spec's OPEN decisions #1 (roles
 model → the 4-role model below) and #3 (first-admin bootstrap → `ADMIN_EMAILS` seed); a
 follow-up ADR records the 4-role model + the in-console request flow.
 
@@ -31,7 +31,7 @@ backend can't deliver.
 1. **Google owns the gate; the app owns roles only.** IAP + a Google Group/domain decides
    *who can reach the app*. The app's `user_roles` table decides *what a reached user may
    do*. **The app never modifies the Google Group** (no Admin SDK / Cloud Identity
-   credential — that surface is deliberately not taken on). This keeps ADR 0078's non-goal
+   credential — that surface is deliberately not taken on). This keeps ADR 0081's non-goal
    ("managing the allow-list from inside the app") intact.
 2. **"Add member" = pre-assign a role**, not a gate edit. The console assigns a role to an
    email and **reminds the admin that a human must also add them to the Google Group**.
@@ -62,7 +62,7 @@ backend can't deliver.
 
 - `backend/app/auth/` seam: `get_current_user()` / `resolve_user()` → `CurrentUser(email,
   role)`, backend chosen by `settings.auth_backend` (`dev` | `iap`). Boundary enforced by
-  `tests/unit/test_auth_seam_boundary.py` + (per ADR 0078) an import-linter contract.
+  `tests/unit/test_auth_seam_boundary.py` + (per ADR 0081) an import-linter contract.
 - `adapters/iap.py`: **cryptographically verifies** the signed `X-Goog-IAP-JWT-Assertion`
   (signature against Google's IAP keys + `settings.iap_audience`), fail-closed; returns
   `CurrentUser(email=…)`. `adapters/dev.py`: returns `settings.dev_user_email`.
@@ -76,7 +76,7 @@ backend can't deliver.
 
 ## Architecture
 
-Two layers, one seam (unchanged from ADR 0078):
+Two layers, one seam (unchanged from ADR 0081):
 
 ```
   Browser ──HTTPS──► IAP (Google: login + coarse gate = email ∈ Google Group)

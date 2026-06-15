@@ -18,7 +18,9 @@ document.addEventListener('alpine:init', () => {
     _nextId: 1,
 
     push(message, opts = {}) {
-      const level = opts.level || 'info';  // 'info' | 'success' | 'error'
+      const levels = (window.APP_ENUMS && window.APP_ENUMS.toast_level) || ['info', 'success', 'error'];
+      let level = opts.level || 'info';
+      if (!levels.includes(level)) level = 'info';
       const ttlMs = opts.ttlMs ?? (level === 'error' ? 8000 : 4000);
       const id = this._nextId++;
       // action: { label, fn } — rendered as a button; fn runs once, then dismiss.

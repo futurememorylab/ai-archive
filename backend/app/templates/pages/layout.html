@@ -26,6 +26,7 @@
   <script defer src="/static/review.js"></script>
   <script defer src="/static/cacheActions.js"></script>
   <script defer src="/static/toast.js"></script>
+  <script>window.APP_ENUMS = {{ app_enums_json | safe }};</script>
   <script defer src="/static/vendor/alpine.min.js"></script>
 </head>
 <body>
@@ -51,9 +52,7 @@
       <span class="grow"></span>
       {% block topbar_pills %}{% include "pages/_topbar_pills.html" %}{% endblock %}
       {% if request.state.current_user and request.state.current_user.is_authenticated %}
-      {% if request.state.current_user.is_admin %}
-      <a class="btn ghost sm topbar-admin" href="/admin">Admin</a>
-      {% endif %}
+      {# Admin nav lives in the rail (gated on is_admin in _rail.html). #}
       <span class="topbar-user" title="Signed in">{{ request.state.current_user.email }}</span>
       {% endif %}
     </header>

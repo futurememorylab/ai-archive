@@ -37,7 +37,7 @@ def test_request_access_records_pending(monkeypatch, tmp_path: Path):
         # appears as a pending request to the admin
     main2 = _app(monkeypatch, tmp_path, "boss@x.com")
     with TestClient(main2.app) as client:
-        assert "newbie@x.com" in client.get("/admin?status=requested").text
+        assert "newbie@x.com" in client.get("/admin/access?status=requested").text
 
 
 def test_request_access_is_allowlisted(monkeypatch, tmp_path: Path):

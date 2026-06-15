@@ -25,7 +25,7 @@ class FakeProc:
         return self.returncode or 0
 
 
-def _make(desired="off", spawned=None, probe_ok=True):
+def _make(desired="off", spawned=None, probe_ok=True, probe=None, **kw):
     state = {"desired": desired}
     spawned = spawned if spawned is not None else []
 
@@ -45,8 +45,9 @@ def _make(desired="off", spawned=None, probe_ok=True):
 
     sup = VpnSupervisor(
         spawn=spawn, get_desired=get_desired, set_desired=set_desired,
-        probe_health=probe_health, restart_backoff_s=0.01,
-        kill_timeout_s=0.2, health_interval_s=0.01,
+        probe_health=probe if probe is not None else probe_health,
+        restart_backoff_s=0.01, kill_timeout_s=0.2, health_interval_s=0.01,
+        **kw,
     )
     return sup, state, spawned
 
@@ -161,3 +162,113 @@ def test_default_kill_timeout_fits_grace():
 
     default = inspect.signature(VpnSupervisor).parameters["kill_timeout_s"].default
     assert default == 2.0
+
+
+async def test_probe_now_running_sets_healthy_from_probe():
+    sup, state, spawned = _make(desired="on", probe_ok=True)
+    await sup.start()
+    await asyncio.sleep(0.02)
+    st = await sup.probe_now()
+    assert st.healthy is True
+    assert sup.status().healthy is True
+    await sup.aclose()
+
+
+async def test_probe_now_running_probe_false_marks_unhealthy():
+    sup, state, spawned = _make(desired="on", probe_ok=False)
+    await sup.start()
+    await asyncio.sleep(0.02)
+    st = await sup.probe_now()
+    assert st.healthy is False
+    assert st.process_running is True   # proc still up; only the probe failed
+    await sup.aclose()
+
+
+async def test_probe_now_not_running_is_unhealthy_noop():
+    sup, state, spawned = _make(desired="off")
+    await sup.start()
+    st = await sup.probe_now()
+    assert st.process_running is False
+    assert st.healthy is False
+    await sup.aclose()
+
+
+async def test_probe_now_swallows_probe_exception():
+    sup, state, spawned = _make(desired="on")
+    await sup.start()
+    await asyncio.sleep(0.02)
+
+    async def boom():
+        raise RuntimeError("probe blew up")
+
+    sup._probe_health = boom            # same best-effort contract as _health_loop
+    st = await sup.probe_now()
+    assert st.healthy is False
+    await sup.aclose()
+
+
+# --- connecting phase (amber transition, not red Unreachable) -------------
+
+def test_status_connecting_phase_state_machine():
+    """White-box: connecting is True while coming up, falls through to
+    unreachable after the grace window, and is gated off once ever-healthy."""
+    sup, _, _ = _make(desired="off", connect_grace=3)
+    # pretend spun up and running, no probe result yet
+    sup._desired = "on"
+    sup._proc = object()
+    sup._healthy = False
+    sup._ever_healthy = False
+    sup._connect_fails = 0
+    assert sup.status().connecting is True            # before any probe
+    sup._record_probe(False)                          # handshake not ready
+    assert sup.status().connecting is True            # still within grace
+    sup._record_probe(False)
+    sup._record_probe(False)                           # now 3 fails == grace
+    assert sup.status().connecting is False            # → Unreachable
+    assert sup.status().healthy is False
+    sup._record_probe(True)                            # comes up
+    assert sup.status().healthy is True
+    assert sup.status().connecting is False            # Connected, not connecting
+    sup._record_probe(False)                           # later drop
+    assert sup.status().connecting is False            # Unreachable (ever_healthy gate)
+
+
+async def test_enable_reports_connecting_immediately():
+    # Right after enable() the proc hasn't spawned and no probe has run, so the
+    # status must read Connecting (amber), never Unreachable (red).
+    sup, _, _ = _make(desired="off", probe_ok=False, connect_grace=5)
+    await sup.start()
+    st = await sup.enable()
+    assert st.connecting is True
+    assert st.healthy is False
+    assert st.desired == "on"
+    await sup.aclose()
+
+
+async def test_connecting_resolves_to_connected():
+    calls = {"n": 0}
+
+    async def probe():
+        calls["n"] += 1
+        return calls["n"] >= 2          # first probe fails (handshake), then up
+
+    sup, _, _ = _make(desired="off", probe=probe, connect_grace=5, connect_interval_s=0.01)
+    await sup.start()
+    await sup.enable()
+    assert sup.status().connecting is True            # immediately
+    await asyncio.sleep(0.05)                          # let the fast probes run
+    st = sup.status()
+    assert st.healthy is True
+    assert st.connecting is False
+    await sup.aclose()
+
+
+async def test_connecting_exhausts_grace_to_unreachable():
+    sup, _, _ = _make(desired="off", probe_ok=False, connect_grace=2, connect_interval_s=0.01)
+    await sup.start()
+    await sup.enable()
+    await asyncio.sleep(0.08)                          # several failed probes
+    st = sup.status()
+    assert st.connecting is False                      # grace exhausted
+    assert st.healthy is False                         # Unreachable
+    await sup.aclose()

@@ -11,7 +11,8 @@
                 model: {{ selected_version.model|tojson }},
                 prompt_name: {{ selected.name|tojson }},
                 prompt_description: {{ (selected.description or "")|tojson }},
-                media_kind: {{ selected.media_kind|tojson }}
+                media_kind: {{ selected.media_kind|tojson }},
+                MODELS: {{ model_options|tojson }}
             })'>
 
   {# Title row + tags + model picker + Save + kebab.
