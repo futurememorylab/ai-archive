@@ -39,20 +39,24 @@ def test_admin_lists_and_adds_member(monkeypatch, tmp_path: Path):
     holder = {"email": "boss@x.com"}
     main_mod = _app(monkeypatch, tmp_path, holder)
     with TestClient(main_mod.app) as client:
-        assert "Access" in client.get("/admin").text and "Permissions" in client.get("/admin").text
+        page = client.get("/admin").text
+        assert "Access" in page and "Permissions" in page
         r = client.post("/admin/users",
                         data={"email": "Annie@x.com", "role": "member", "display_name": "Annie"},
                         headers={"HX-Request": "true"})
         assert r.status_code in (200, 201)
-        assert "annie@x.com" in client.get("/admin/access").text
+        members = client.get("/admin/access").text
+        assert "annie@x.com" in members
 
 
 def test_self_protection(monkeypatch, tmp_path: Path):
     holder = {"email": "boss@x.com"}
     main_mod = _app(monkeypatch, tmp_path, holder)
     with TestClient(main_mod.app) as client:
-        assert client.delete("/admin/users/boss@x.com").status_code == 403
-        assert client.patch("/admin/users/boss@x.com", data={"role": "member"}).status_code == 403
+        delete_response = client.delete("/admin/users/boss@x.com")
+        assert delete_response.status_code == 403
+        patch_response = client.patch("/admin/users/boss@x.com", data={"role": "member"})
+        assert patch_response.status_code == 403
 
 
 def test_last_admin_guard(monkeypatch, tmp_path: Path):
@@ -62,8 +66,10 @@ def test_last_admin_guard(monkeypatch, tmp_path: Path):
         # add a second admin, then it's safe to demote them, but never the last one
         client.post("/admin/users", data={"email": "a2@x.com", "role": "admin", "display_name": ""})
         # demote a2 (ok — boss remains)
-        assert client.patch("/admin/users/a2@x.com", data={"role": "member"}).status_code in (200, 201)
-        # now boss is the only admin; revoking the only OTHER admin path is covered by self-protection,
+        demote = client.patch("/admin/users/a2@x.com", data={"role": "member"})
+        assert demote.status_code in (200, 201)
+        # now boss is the only admin; revoking the only OTHER admin path is
+        # covered by self-protection,
         # so simulate: make a2 admin again and try to delete boss-as-only-admin via a2
         client.patch("/admin/users/a2@x.com", data={"role": "admin"})
         holder["email"] = "a2@x.com"
@@ -105,7 +111,7 @@ def test_add_member_preserves_active_status(monkeypatch, tmp_path: Path):
 
         # Step 4: status must still be 'active'; role must have changed
         updated = asyncio.run(ctx.user_roles_repo.get(ctx.db, "alice@x.com"))
-        assert updated["status"] == "active", "active member must not be downgraded to invited on re-add"
+        assert updated["status"] == "active", "active member must not be downgraded on re-add"
         assert updated["role"] == "admin", "role must be updated by re-add"
 
 
@@ -147,7 +153,7 @@ def test_stat_counts_reflect_unfiltered_totals(monkeypatch, tmp_path: Path):
     with TestClient(main_mod.app) as client:
         # Add members: 1 admin (boss, seeded) + 1 viewer + 1 annotator = 3 total
         client.post("/admin/users", data={"email": "v@x.com", "role": "member", "display_name": ""})
-        client.post("/admin/users", data={"email": "ann@x.com", "role": "member", "display_name": ""})
+        client.post("/admin/users", data={"email": "ann@x.com", "role": "member"})
 
         # Filter to viewers only — only 1 row appears in the table
         html = client.get("/admin/access?role=member").text
@@ -174,11 +180,13 @@ def test_admin_link_only_for_admins(monkeypatch, tmp_path: Path):
     main_mod = _app(monkeypatch, tmp_path, holder)
     with TestClient(main_mod.app) as client:
         # admin: check on /admin page (core-only, renders layout.html)
-        assert 'href="/admin"' in client.get("/admin").text      # admin sees it
+        admin_view = client.get("/admin").text      # admin sees it
+        assert 'href="/admin"' in admin_view
         client.post("/admin/users", data={"email": "v@x.com", "role": "member", "display_name": ""})
         holder["email"] = "v@x.com"
         # member: check on /prompts (core-only, renders layout.html)
-        assert 'href="/admin"' not in client.get("/prompts").text  # member does not
+        member_view = client.get("/prompts").text  # member does not
+        assert 'href="/admin"' not in member_view
 
 
 def test_accept_pending_request(monkeypatch, tmp_path: Path):
@@ -192,7 +200,8 @@ def test_accept_pending_request(monkeypatch, tmp_path: Path):
         ctx = main_mod.app.state.core_ctx
         # a reached-but-unroled user records a request from the denial page
         holder["email"] = "newbie@x.com"
-        assert client.post("/access/request").status_code == 200
+        req = client.post("/access/request")
+        assert req.status_code == 200
         # admin accepts it
         holder["email"] = "boss@x.com"
         r = client.post("/admin/users/newbie@x.com/accept")

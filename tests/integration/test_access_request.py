@@ -37,11 +37,13 @@ def test_request_access_records_pending(monkeypatch, tmp_path: Path):
         # appears as a pending request to the admin
     main2 = _app(monkeypatch, tmp_path, "boss@x.com")
     with TestClient(main2.app) as client:
-        assert "newbie@x.com" in client.get("/admin/access?status=requested").text
+        pending = client.get("/admin/access?status=requested")
+        assert "newbie@x.com" in pending.text
 
 
 def test_request_access_is_allowlisted(monkeypatch, tmp_path: Path):
     main_mod = _app(monkeypatch, tmp_path, "newbie@x.com")
     with TestClient(main_mod.app) as client:
         # the POST itself must not be gated (would loop)
-        assert client.post("/access/request").status_code == 200
+        r = client.post("/access/request")
+        assert r.status_code == 200

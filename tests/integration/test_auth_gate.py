@@ -57,8 +57,10 @@ def test_allowlisted_paths_reachable_without_role(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(main_mod, "resolve_user",
                         lambda req, s: CurrentUser(email="nobody@x.com"))
     with TestClient(main_mod.app) as client:
-        assert client.get("/api/health").status_code == 200
-        assert client.get("/access").status_code == 200
+        health = client.get("/api/health")
+        assert health.status_code == 200
+        access = client.get("/access")
+        assert access.status_code == 200
 
 
 def test_seeded_admin_gets_through(monkeypatch, tmp_path: Path):
