@@ -281,10 +281,11 @@ async def _seed_ai_store_row(ctx, clip_id: int = 101) -> None:
     await ctx.db.commit()
 
 
-# `runningPromptName` is unique to _annotate_dropdown.html, so it is a precise
-# probe for whether the Annotate dropdown rendered (the shared "popover-panel
-# menu" string also appears in unrelated topbar menus).
-_ANNOTATE_MARKER = "runningPromptName"
+# `toggleOpen()` (the Annotate button's @click handler) is unique to
+# _annotate_dropdown.html, so it is a precise probe for whether the Annotate
+# dropdown rendered (the shared "popover-panel menu" string also appears in
+# unrelated topbar menus).
+_ANNOTATE_MARKER = "toggleOpen()"
 
 
 def test_annotate_available_offline_when_media_in_ai_store(monkeypatch, tmp_path):
