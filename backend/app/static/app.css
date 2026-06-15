@@ -854,6 +854,16 @@ a { color: inherit; text-decoration: none; }
 .cache-page > * { flex-shrink: 0; }
 .cache-page .page-hdr { align-items: baseline; padding: 0; border-bottom: 0; margin-bottom: 6px; }
 
+/* Admin console: the page itself is the scroll viewport (like .cache-page) so
+   long enum tables don't push the Add-value form below the fold, unreachable. */
+.admin-page { padding: 14px 18px; overflow-y: auto; gap: 12px; flex: 1; min-height: 0; }
+.admin-page > * { flex-shrink: 0; }
+.admin-page .cache-tabs { margin-bottom: 2px; }
+/* Own class, NOT .row-actions — that shared class is opacity:0 until row-hover
+   (cache/vlist convention) and would render the kebab + its menu invisible. */
+.admin-table .admin-actions { text-align: right; white-space: nowrap; }
+.admin-add-row { display: flex; align-items: flex-end; gap: 8px; margin-top: 6px; }
+
 .crumb .sep { color: var(--text-4); padding: 0 4px; }
 .crumb .strong { color: var(--text); font-weight: 500; }
 

@@ -4,10 +4,11 @@
   <p class="meta">{{ definition.description }}</p>
   <table class="admin-table">
     <thead>
-      <tr><th>Value</th><th>Label</th><th>Default</th><th>Enabled</th><th></th><th></th></tr>
+      <tr><th>Value</th><th>Label</th><th>Default</th><th>Enabled</th><th></th></tr>
     </thead>
     <tbody>
       {% for r in rows %}
+      {% set base = '/admin/enums/' ~ key ~ '/values/' ~ r.value %}
       <tr>
         <td class="mono-cell">
           {{ r.value }}
@@ -16,21 +17,22 @@
         <td>{{ r.label or '' }}</td>
         <td>{% if r.is_default %}★{% endif %}</td>
         <td>{{ 'on' if r.enabled else 'off' }}</td>
-        <td>
-          <button class="btn sm ghost"
-                  hx-post="/admin/enums/{{ key }}/values/{{ r.value }}/default"
-                  hx-target="#admin-enum-region" hx-swap="innerHTML"
-                  {% if r.is_default %}disabled{% endif %}>Make default</button>
-          <form class="inline" hx-post="/admin/enums/{{ key }}/values/{{ r.value }}/enabled"
-                hx-target="#admin-enum-region" hx-swap="innerHTML">
-            <input type="hidden" name="enabled" value="{{ 'false' if r.enabled else 'true' }}">
-            <button class="btn sm ghost" type="submit">{{ 'Disable' if r.enabled else 'Enable' }}</button>
-          </form>
-        </td>
-        <td>
-          <button class="btn sm ghost danger"
-                  hx-delete="/admin/enums/{{ key }}/values/{{ r.value }}"
-                  hx-target="#admin-enum-region" hx-swap="innerHTML">Delete</button>
+        <td class="admin-actions">
+          {# Per-row action menu — kebab trigger + shared popover/menu (design-language §8). #}
+          <div class="popover" x-data="popover()">
+            <button type="button" class="btn icon ghost sm" aria-label="Actions for {{ r.value }}"
+                    :class="open && 'open'" @click="toggle()">{% include "icons/_dots.svg" %}</button>
+            <div class="popover-panel menu align-right" x-show="open" x-cloak
+                 @click.outside="close()" @keydown.escape.window="close()">
+              {%- set default_attrs = 'hx-post="' ~ base ~ '/default" hx-target="#admin-enum-region" hx-swap="innerHTML"' ~ (' disabled' if r.is_default else '') -%}
+              {{ ui.menu_item('Make default', attrs=default_attrs) }}
+              {%- set en_attrs = 'hx-post="' ~ base ~ '/enabled" hx-vals=\'{"enabled":"' ~ ('false' if r.enabled else 'true') ~ '"}\' hx-target="#admin-enum-region" hx-swap="innerHTML"' -%}
+              {{ ui.menu_item('Disable' if r.enabled else 'Enable', attrs=en_attrs) }}
+              {{ ui.menu_sep() }}
+              {%- set del_attrs = 'hx-delete="' ~ base ~ '" hx-target="#admin-enum-region" hx-swap="innerHTML"' -%}
+              {{ ui.menu_item('Delete', danger=true, attrs=del_attrs) }}
+            </div>
+          </div>
         </td>
       </tr>
       {% endfor %}
