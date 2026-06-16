@@ -18,18 +18,35 @@
      cache_label  badge-column header label (default "Cache")
      colspan      total column count for the empty-state row
      empty_msg    empty-state text (default "No clips match.")
+     show_cache   render the cache-badge column (default True). Pass False to
+                  drop it — e.g. the main clips list, where it isn't needed.
+     thumb_col    render the thumbnail in its own column ahead of the name,
+                  instead of inline in the name cell (default False).
+
+   show_cache/thumb_col default to the original layout, so existing callers
+   that don't pass them (batch picker, cache inventory) render unchanged.
 #}
+{% set show_cache = show_cache | default(true) %}
+{% set thumb_col = thumb_col | default(false) %}
 <table class="vlist">
   <thead>
     <tr>
       <th class="col-sel"><input type="checkbox" id="row-select-all" aria-label="Select all"></th>
-      <th class="col-cache" title="metadata · media-local · media-ai">{{ cache_label | default("Cache") }}</th>
+      {% if show_cache %}<th class="col-cache" title="metadata · media-local · media-ai">{{ cache_label | default("Cache") }}</th>{% endif %}
+      {% if thumb_col %}<th class="col-thumb" aria-label="Thumbnail"></th>{% endif %}
       <th class="col-name">Clip</th>
       {% include head_cells %}
     </tr>
   </thead>
   <tbody>
     {% for row in rows %}
+    {% set thumb_img %}<img class="thumb" loading="lazy" src="{{ row.thumb_url }}" alt=""
+           onload="this.classList.add('thumb--ready');"
+           onerror="this.classList.add('thumb--empty'); this.removeAttribute('src');">{% endset %}
+    {% set name_block %}<span class="name-wrap">
+        <span class="name">{{ row.name }}</span>
+        {% if row.name_sub %}<span class="name-sub mono">{{ row.name_sub }}</span>{% endif %}
+      </span>{% endset %}
     <tr class="vrow{% if row.row_class %} {{ row.row_class }}{% endif %}"
         {% if row.row_href %}onclick="location.href='{{ row.row_href }}'"{% endif %}>
       <td class="col-sel" onclick="event.stopPropagation()">
@@ -38,20 +55,22 @@
                {% if row.row_bytes is defined and row.row_bytes is not none %}data-bytes="{{ row.row_bytes }}"{% endif %}
                aria-label="Select {{ row.name }}">
       </td>
-      <td class="cell-cache" onclick="event.stopPropagation()">
+      {% if show_cache %}
+      {# No stopPropagation here: the badge is display-only, so a click should
+         fall through to the row's onclick (open the clip) like any other cell.
+         Rows without row_href simply have no handler to bubble to. #}
+      <td class="cell-cache">
         {% with cache = row.cache %}{% include "pages/_cache_badge.html" %}{% endwith %}
       </td>
+      {% endif %}
+      {% if thumb_col %}
+      <td class="cell-thumb">{{ thumb_img }}</td>
+      <td class="cell-name">{{ name_block }}</td>
+      {% else %}
       <td class="cell-name">
-        <span class="namecell">
-          <img class="thumb" loading="lazy" src="{{ row.thumb_url }}" alt=""
-               onload="this.classList.add('thumb--ready');"
-               onerror="this.classList.add('thumb--empty'); this.removeAttribute('src');">
-          <span class="name-wrap">
-            <span class="name">{{ row.name }}</span>
-            {% if row.name_sub %}<span class="name-sub mono">{{ row.name_sub }}</span>{% endif %}
-          </span>
-        </span>
+        <span class="namecell">{{ thumb_img }}{{ name_block }}</span>
       </td>
+      {% endif %}
       {% include row_cells %}
     </tr>
     {% else %}

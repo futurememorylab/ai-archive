@@ -19,7 +19,7 @@ def client(monkeypatch, tmp_path):
         yield c
 
 
-def test_list_page_includes_cache_badge_column(client, monkeypatch):
+def test_list_page_has_cache_badge_and_thumb_column(client, monkeypatch):
     from backend.app.archive.model import CanonicalClip, ClipPage, MediaRef
 
     class _Archive:
@@ -48,7 +48,10 @@ def test_list_page_includes_cache_badge_column(client, monkeypatch):
         r = c.get("/")
     assert r.status_code == 200
     html = r.text
+    # The clips list keeps the cache-badge column AND renders the thumbnail in
+    # its own column (thumb_col=true).
     assert "cache-badge" in html
+    assert "cell-thumb" in html
     assert 'name="clip_keys"' in html
     assert "actions-dropdown" in html
 
@@ -80,7 +83,7 @@ def test_list_page_filter_form_renders_with_dropdowns(client):
     assert "search-icon" in html
     assert 'name="cache"' in html
     assert 'name="anno"' in html
-    assert ">For review<" in html
+    assert ">Awaiting review<" in html
 
 
 def test_list_page_filter_path_uses_local_first(client, tmp_path):

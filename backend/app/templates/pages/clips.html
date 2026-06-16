@@ -61,13 +61,14 @@
       </label>
       {% endif %}
       <label class="filter-field">
-        <span class="filter-lbl">Annotations</span>
-        <select name="anno" onchange="this.form.requestSubmit()">
-          <option value="any"        {% if anno_filter == 'any'        %}selected{% endif %}>Any</option>
-          <option value="for_review" {% if anno_filter == 'for_review' %}selected{% endif %}>For review</option>
-          <option value="applied"    {% if anno_filter == 'applied'    %}selected{% endif %}>Applied</option>
-          <option value="none"       {% if anno_filter == 'none'       %}selected{% endif %}>No annotations</option>
-          <option value="has_any"    {% if anno_filter == 'has_any'    %}selected{% endif %}>Any annotations</option>
+        <span class="filter-lbl">Annotation status</span>
+        <select name="anno" onchange="this.form.requestSubmit()"
+                title="Filter by whether clips have AI annotations and where they are in the review → write-back flow.">
+          <option value="any"        {% if anno_filter == 'any'        %}selected{% endif %}>All clips</option>
+          <option value="has_any"    {% if anno_filter == 'has_any'    %}selected{% endif %}>Annotated</option>
+          <option value="none"       {% if anno_filter == 'none'       %}selected{% endif %}>Not annotated</option>
+          <option value="for_review" {% if anno_filter == 'for_review' %}selected{% endif %}>Awaiting review</option>
+          <option value="applied"    {% if anno_filter == 'applied'    %}selected{% endif %}>Saved to archive</option>
         </select>
       </label>
       <label class="filter-field">

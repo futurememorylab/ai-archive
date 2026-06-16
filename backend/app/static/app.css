@@ -400,6 +400,11 @@ a { color: inherit; text-decoration: none; }
   font-size: 13px;
 }
 .vlist tbody td.num { text-align: right; }
+/* The blanket text-overflow:ellipsis above is for truncating long *text* cells
+   (name, type…). Cells that hold only a control/badge/thumbnail must opt out:
+   Safari otherwise paints a stray "…" when the control + collapsed whitespace
+   overflows the narrow cell (the three dots seen after the row checkbox). */
+.vlist .col-sel, .vlist .cell-cache, .vlist .cell-thumb { text-overflow: clip; }
 .vlist tbody tr.vrow { cursor: default; }
 .vlist tbody tr.vrow[onclick] { cursor: pointer; }
 .vlist tbody tr.vrow:hover { background: var(--hover); }
@@ -411,8 +416,18 @@ a { color: inherit; text-decoration: none; }
    buttons. */
 .vlist .col-sel { width: 40px; }
 .vlist .col-cache, .vlist .cell-cache { width: 64px; }
+/* thumbnail-as-its-own-column (clips list, thumb_col=true): just wide enough
+   for the 64px .thumb, flush-left so the name column starts close after it. */
+.vlist .col-thumb, .vlist .cell-thumb { width: 76px; padding-left: 12px; padding-right: 0; }
 .vlist .col-year, .vlist .col-decade, .vlist .col-dur, .vlist .col-mk,
 .vlist .col-local, .vlist .col-ai { width: 100px; }
+/* clips-only trailing columns. Without explicit widths these split the table's
+   leftover space with the name column (fixed table-layout), leaving Type far
+   wider than its short values need and the name cramped. Pinning them small
+   hands all the slack to the flexible Clip name column. */
+.vlist .col-type { width: 92px; }
+.vlist .col-batch, .vlist .col-cost { width: 96px; }
+.vlist .col-drafts { width: 96px; }
 .vlist .namecell { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .vlist .name-wrap { display: flex; flex-direction: column; min-width: 0; }
 .vlist .name { overflow: hidden; text-overflow: ellipsis; }
