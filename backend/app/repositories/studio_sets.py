@@ -65,7 +65,8 @@ class StudioSetsRepo:
         cur = await conn.execute(
             """
             SELECT s.id, s.name, s.source, s.created_at,
-                   COALESCE(COUNT(sc.clip_id), 0) AS clip_count
+                   COALESCE(COUNT(sc.clip_id), 0) AS clip_count,
+                   GROUP_CONCAT(sc.clip_id) AS clip_ids
             FROM studio_set s
             LEFT JOIN studio_set_clip sc ON sc.set_id = s.id
             WHERE s.source = ?
@@ -81,6 +82,10 @@ class StudioSetsRepo:
                 "source": r[2],
                 "created_at": r[3],
                 "clip_count": r[4],
+                # Member clip ids, so the set checkbox can select the whole
+                # set even when it has never been expanded (clip cards not
+                # yet lazy-loaded into the DOM). NULL for empty sets.
+                "clip_ids": [int(x) for x in r[5].split(",")] if r[5] else [],
             }
             for r in await cur.fetchall()
         ]

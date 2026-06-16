@@ -76,7 +76,7 @@ async def create_set(
         raise HTTPException(409, f"set name {body.name!r} already exists") from exc
 
     if hx_request == "true":
-        s = {"id": sid, "name": body.name, "clip_count": 0}
+        s = {"id": sid, "name": body.name, "clip_count": 0, "clip_ids": []}
         return templates.TemplateResponse(
             request,
             "pages/_studio_set_card.html",

@@ -169,21 +169,25 @@ def test_clip_picker_hides_local_option_in_ai_store_mode(monkeypatch, tmp_path: 
     assert 'value="local"' not in r.text
 
 
-def test_cache_page_hides_local_tab_in_ai_store_mode(monkeypatch, tmp_path: Path):
+def test_cache_dropdown_hides_local_option_in_ai_store_mode(monkeypatch, tmp_path: Path):
     app = _make_app(monkeypatch, tmp_path, media_cache="ai_store")
     with TestClient(app) as client:
         r = client.get("/cache?tab=all")
     assert r.status_code == 200
-    assert "AI cache" in r.text  # the AI tab stays
-    # No Local-cache *tab* in cloud. (The "Local cache" storage metric card in
-    # the summary strip is a separate dashboard element, not a filter, and is
-    # intentionally left in place.)
+    # The Cache dropdown keeps the AI-store option...
+    assert 'value="ai"' in r.text
+    # ...but drops Local in cloud (no local layer). The "Local cache" storage
+    # metric card in the summary strip is a separate dashboard element, not a
+    # filter, and is intentionally left in place.
+    assert 'value="local"' not in r.text
+    # Local/AI are dropdown options now, not tabs.
     assert "tab=local" not in r.text
 
 
-def test_cache_page_keeps_local_tab_in_local_mode(monkeypatch, tmp_path: Path):
+def test_cache_dropdown_keeps_local_option_in_local_mode(monkeypatch, tmp_path: Path):
     app = _make_app(monkeypatch, tmp_path, media_cache="local")
     with TestClient(app) as client:
         r = client.get("/cache?tab=all")
     assert r.status_code == 200
-    assert "Local cache" in r.text
+    assert 'value="local"' in r.text  # Cache dropdown offers the Local layer
+    assert "Local cache" in r.text  # metric card still present

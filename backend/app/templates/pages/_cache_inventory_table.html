@@ -9,6 +9,7 @@
   {% include "pages/_video_list.html" %}
 {% endwith %}
 {% set _cq = 'tab=' ~ tab ~ '&limit=' ~ limit %}
+{% if cache_filter and cache_filter != 'any' %}{% set _cq = _cq ~ '&cache=' ~ cache_filter %}{% endif %}
 {% if filters.store %}{% set _cq = _cq ~ '&store=' ~ (filters.store|urlencode) %}{% endif %}
 {% if filters.workspace is not none %}{% set _cq = _cq ~ '&workspace=' ~ filters.workspace %}{% endif %}
 {% if filters.orphans %}{% set _cq = _cq ~ '&orphans=1' %}{% endif %}

@@ -82,6 +82,13 @@ document.body.addEventListener('htmx:afterSwap', (evt) => {
       evt.target.querySelectorAll(`.studio-clip-card[data-clip-id="${page.focusedClipId}"]`)
         .forEach(el => el.classList.add('selected'));
     }
+    // Freshly-loaded clip checkboxes render unchecked; reflect the live
+    // selection so a set checked while collapsed shows its clips checked
+    // once expanded. (clip-check is a plain HTMX-injected box, not x-model.)
+    evt.target.querySelectorAll('.studio-clip-card[data-clip-id]').forEach(card => {
+      const cb = card.querySelector('.clip-check');
+      if (cb) cb.checked = page.isClipSelected(Number(card.dataset.clipId));
+    });
   }
 
   const card = evt.target.closest('.studio-prompt-card');

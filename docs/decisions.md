@@ -96,3 +96,4 @@ available number. See any existing ADR for the template.
 | 0086 | 2026-06-15 | [Annotate-feedback resilience: SSE replay-on-connect + prefetch orphan recovery (re-read persisted truth, don't buffer events)](./adr/0086-annotate-feedback-resilience-sse-replay-and-prefetch-orphan-recovery.md) |
 | 0087 | 2026-06-15 | [Resumable proxy download over the low-MTU cloud tunnel (Range-resume + completeness check; no truncated uploads)](./adr/0087-proxy-download-resume-over-tunnel.md) |
 | 0088 | 2026-06-16 | [Filtered clip list skips un-hydratable clips instead of 502-ing the page (+ HTMX error toast)](./adr/0088-filtered-clip-list-skips-unhydratable-clips.md) — *refines 0042* |
+| 0089 | 2026-06-16 | [Manual innerHTML/insertAdjacentHTML into a live Alpine tree uses wireHtmx, not reinit (avoid double-bound directives)](./adr/0089-manual-innerhtml-insertion-uses-wirehtmx-not-reinit.md) — *refines 0048* |

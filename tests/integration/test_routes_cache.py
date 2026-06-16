@@ -337,6 +337,47 @@ def test_cache_tab_swap_returns_partial(monkeypatch, tmp_path: Path):
     assert "<html" not in r.text.lower()
 
 
+def test_cache_dropdown_local_filters_rows(monkeypatch, tmp_path: Path):
+    """cache=local (the dropdown) hides rows without media-local."""
+    app = _make_app(monkeypatch, tmp_path)
+    proxy = tmp_path / "a.mov"
+    proxy.write_bytes(b"x" * 10)
+    with TestClient(app) as client:
+        _seed_clip(client, key=("catdv", "3001"), proxy_path=str(proxy), proxy_size=10)
+        _seed_clip(client, key=("catdv", "3002"))  # metadata only
+        r = client.get("/cache?cache=local")
+    assert r.status_code == 200
+    assert "catdv/3001" in r.text
+    assert "catdv/3002" not in r.text
+
+
+def test_cache_dropdown_ai_filters_rows(monkeypatch, tmp_path: Path):
+    """cache=ai (the dropdown) hides rows without media-ai."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        _seed_clip(client, key=("catdv", "4001"), ai_size=1234)
+        _seed_clip(client, key=("catdv", "4002"))
+        r = client.get("/cache?cache=ai")
+    assert r.status_code == 200
+    assert "catdv/4001" in r.text
+    assert "catdv/4002" not in r.text
+
+
+def test_cache_page_has_two_tabs_only(monkeypatch, tmp_path: Path):
+    """The Local/AI split moved into the Cache dropdown; only Cache + Queue
+    remain as tabs."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        r = client.get("/cache")
+    assert r.status_code == 200
+    # Tab hrefs: just the inventory ("all") and the queue.
+    assert "/cache?tab=all" in r.text
+    assert "/cache?tab=queue" in r.text
+    # The Cache dropdown replaces the old inline filters block.
+    assert 'name="cache"' in r.text
+    assert "cache-extra-filters" not in r.text
+
+
 def test_cache_tab_queue_partial(monkeypatch, tmp_path: Path):
     """tab=queue serves the queue partial (auto-refresh wrapper)."""
     app = _make_app(monkeypatch, tmp_path)

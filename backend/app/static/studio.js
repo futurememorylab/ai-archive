@@ -160,7 +160,13 @@ document.addEventListener('alpine:init', () => {
       try {
         const html = await fetch(`/studio/_sets?source=${next}`).then(r => r.text());
         body.innerHTML = html;
-        window.htmxAlpine.reinit(body);
+        // The injected list root carries its OWN x-data (`.studio-sets`
+        // → studioSets), which Alpine's MutationObserver initializes on
+        // insert. Use wireHtmx (HTMX only), NOT reinit — reinit's extra
+        // initTree would bind every directive a SECOND time, so each
+        // set-checkbox @click fired toggleSet twice (select then deselect →
+        // net nothing), which made selection look broken after any tab swap.
+        window.htmxAlpine.wireHtmx(body);
         localStorage.setItem('studio.navSource', next);
       } catch (err) {
         console.error('switchSource failed', err);
@@ -247,7 +253,13 @@ document.addEventListener('alpine:init', () => {
           list.insertAdjacentHTML('beforeend', html);
           const cards = list.querySelectorAll('.studio-set');
           const newCard = cards[cards.length - 1];
-          if (newCard) window.htmxAlpine.reinit(newCard);
+          // wireHtmx (HTMX only), NOT reinit: the card has no x-data root of
+          // its own — its directives (@click="toggle(id)", x-show) bind to the
+          // ancestor studioSets scope, which Alpine's MutationObserver already
+          // wires on insert. reinit's extra initTree bound them a SECOND time,
+          // so the new set's toggle fired twice (expand→collapse) and the set
+          // couldn't be opened until a full page reload.
+          if (newCard) window.htmxAlpine.wireHtmx(newCard);
           else console.warn('studioSets.createSet: no .studio-set card after insert');
         } else {
           console.warn('studioSets.createSet: .studio-sets-list not found');

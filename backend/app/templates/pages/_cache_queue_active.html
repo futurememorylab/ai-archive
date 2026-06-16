@@ -1,0 +1,63 @@
+{# Active prefetch queue. HTMX swaps this whole wrapper every 2s so
+   cancel/retry actions don't fight the refresh. Kept SEPARATE from the
+   Recent-activity history (a sibling in _cache_queue_table.html): the 2s
+   outerHTML swap would otherwise clobber the history <details> open
+   state, snapping it shut and flickering the panel on every tick. #}
+<div id="prefetch-panel"
+     hx-get="/ui/cache/queue"
+     hx-trigger="every 2s"
+     hx-swap="outerHTML">
+
+  {% if queue_active %}
+    <table class="cache-tbl queue-tbl">
+      <thead>
+        <tr>
+          <th class="col-sel"></th>
+          <th>Status</th>
+          <th>Clip</th>
+          <th>Layer</th>
+          <th>At</th>
+          <th class="num">Size</th>
+          <th class="col-actions"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in queue_active %}
+          {% set tone =
+              "warn" if r.status == "queued" else
+              "info" if r.status == "downloading" else
+              "good" if r.status == "done" else
+              "bad" if r.status == "error" else
+              "muted" %}
+          <tr class="cache-row queue-row queue-row-{{ r.status }}">
+            <td class="col-sel"></td>
+            <td><span class="tag {{ tone }}">{{ r.status }}</span></td>
+            <td>
+              <a class="clip-name-cell" href="/clips/{{ r.provider_clip_id }}">
+                <span class="clip-name-text">{{ r.clip_name or r.provider_clip_id }}</span>
+                <span class="mono muted-2 clip-id">{{ r.provider_id }}/{{ r.provider_clip_id }}</span>
+              </a>
+            </td>
+            <td class="mono muted-2">media-local</td>
+            <td class="mono muted-2">{{ r.started_at or r.requested_at or "—" }}</td>
+            <td class="num mono">{{ "%.1f" % (r.bytes_downloaded / 1048576) }} MB</td>
+            <td class="row-actions">
+              {% if r.status == "queued" %}
+                <button type="button" class="btn sm"
+                        hx-post="/api/cache/prefetch/{{ r.id }}/cancel"
+                        hx-target="#prefetch-panel"
+                        hx-swap="outerHTML"
+                        hx-on::after-request="htmx.ajax('GET', '/ui/cache/queue', '#prefetch-panel')">
+                  Cancel
+                </button>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="empty">Queue is empty.</p>
+  {% endif %}
+
+</div>

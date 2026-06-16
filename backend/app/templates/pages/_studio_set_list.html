@@ -5,7 +5,7 @@
   <div class="studio-sets-hdr">
     <span class="muted" x-text="setCountLabel()"></span>
     <span class="grow"></span>
-    <button class="btn ghost sm" @click="newSetOpen = !newSetOpen" title="New set">+</button>
+    <button class="btn ghost icon sm studio-add-set" @click="newSetOpen = !newSetOpen" title="New set">+</button>
   </div>
 
   <div x-show="newSetOpen" x-cloak class="studio-set-new">

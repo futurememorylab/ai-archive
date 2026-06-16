@@ -133,13 +133,18 @@ async def prefetch_cancel(request: Request, rid: int) -> dict[str, Any]:
 # --- HTML pages + HTMX partials ------------------------------------
 
 
-_VALID_TABS = {"all", "queue", "local", "ai"}
+# The cache page now has two tabs: the inventory ("all", labelled
+# "Cache") and the prefetch "queue". The local/ai split moved from tabs
+# into the Cache dropdown — see `cache` below.
+_VALID_TABS = {"all", "queue"}
+_VALID_CACHE = {"any", "local", "ai"}
 
 
 @page_router.get("/cache", response_class=HTMLResponse)
 async def cache_page(
     request: Request,
     tab: str | None = None,
+    cache: str | None = None,
     store: str | None = None,
     workspace: int | None = None,
     orphans: int | None = None,
@@ -150,7 +155,12 @@ async def cache_page(
     ctx = get_core_ctx(request)
     insp = ctx.cache_inspector
 
+    # Backward-compat: old deep links used tab=local|ai for the inventory
+    # split; map them onto the Cache dropdown so bookmarks keep working.
+    if tab in {"local", "ai"} and cache is None:
+        cache = tab
     tab_val = tab if tab in _VALID_TABS else "all"
+    cache_filter = cache if cache in _VALID_CACHE else "any"
     is_htmx = request.headers.get("HX-Request") == "true"
 
     # Single-fetch resources: every later code path that needs these
@@ -173,8 +183,11 @@ async def cache_page(
         prev_offset = next_offset = None
         page_rows: list = []
     else:
+        # The Cache dropdown (any/local/ai) drives the inventory layer
+        # filter; list_for_inventory still keys it off `tab`.
+        inv_tab = cache_filter if cache_filter in {"local", "ai"} else "all"
         statuses, total = await insp.list_for_inventory(
-            tab=tab_val,
+            tab=inv_tab,
             store=store,
             workspace=workspace,
             orphans=bool(orphans),
@@ -206,6 +219,7 @@ async def cache_page(
     ctx_dict = {
         "summary": summary,
         "tab": tab_val,
+        "cache_filter": cache_filter,
         "rows": page_rows,
         "offset": offset,
         "limit": limit,
@@ -302,18 +316,30 @@ async def cache_actions(
 
 @ui_router.get("/cache/queue", response_class=HTMLResponse)
 async def cache_queue_panel(request: Request) -> HTMLResponse:
+    # The 2s poll target. Returns ONLY the active-queue panel so the
+    # outerHTML swap never touches the Recent-activity <details> sibling
+    # (which would collapse + flicker it). Recent history refreshes on
+    # its own via /ui/cache/queue/recent when the user opens it.
     ctx = get_core_ctx(request)
     queue_active = await ctx.prefetch_queue_repo.list_active(ctx.db)
-    queue_recent = await ctx.prefetch_queue_repo.list_recent(ctx.db, limit=50)
-    queue_counts = await ctx.prefetch_queue_repo.count_by_status(ctx.db)
     return templates.TemplateResponse(
         request,
-        "pages/_cache_queue_table.html",
-        {
-            "queue_active": queue_active,
-            "queue_recent": queue_recent,
-            "queue_counts": queue_counts,
-        },
+        "pages/_cache_queue_active.html",
+        {"queue_active": queue_active},
+    )
+
+
+@ui_router.get("/cache/queue/recent", response_class=HTMLResponse)
+async def cache_queue_recent(request: Request) -> HTMLResponse:
+    # Recent-activity history body. Fetched when the user opens the
+    # <details> panel so it reflects jobs that finished after the tab
+    # was first rendered, without a flickering 2s poll.
+    ctx = get_core_ctx(request)
+    queue_recent = await ctx.prefetch_queue_repo.list_recent(ctx.db, limit=50)
+    return templates.TemplateResponse(
+        request,
+        "pages/_cache_queue_recent.html",
+        {"queue_recent": queue_recent},
     )
 
 

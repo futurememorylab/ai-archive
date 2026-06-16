@@ -19,15 +19,9 @@
     </button>
   </div>
 
-  {# Selection only needs a Clear here — running the checked clips is driven by
-     the single header Run button (it targets the selection when any clip is
-     checked), so there's no duplicate run control in the navigator. #}
-  <div class="studio-bulk-bar" x-show="$store.studio.selectedClipIds.length > 0" x-cloak>
-    <span class="muted" x-text="`${$store.studio.selectedClipIds.length} selected`"></span>
-    <span class="grow"></span>
-    <button class="btn ghost sm" @click="$store.studio.clearSelection()">Clear</button>
-  </div>
-
+  {# Selection state is surfaced by the per-set count badges (n/total) and the
+     header Run button ("Run on N clips"); the standalone "N selected" bar was
+     removed as redundant. #}
   <div class="studio-nav-body" data-studio-nav-body>
     {# Both sources render the same set list; uploaded sets host their own
        per-set dropzone (see _studio_set.html), archive sets the picker. #}

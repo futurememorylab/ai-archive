@@ -1,7 +1,13 @@
 {# Single set card — rendered both inside _studio_set_list.html's loop and as
    the HTMX response to POST /api/studio/sets. Expects `f` (set) with
-   id / name / clip_count. #}
-<div class="studio-set" data-set-id="{{ f.id }}" :class="expandedId === {{ f.id }} && 'open'">
+   id / name / clip_count / clip_ids.
+
+   data-clip-ids carries the set's member clip ids so the set checkbox can
+   select the whole set even before it has been expanded (clip cards are
+   lazy-loaded on first expand). #}
+<div class="studio-set" data-set-id="{{ f.id }}"
+     data-clip-ids="{{ (f.clip_ids if f.clip_ids is defined else [])|join(',') }}"
+     :class="expandedId === {{ f.id }} && 'open'">
   <div class="studio-set-row">
     <input type="checkbox" class="set-check"
            @click.stop="toggleSet({{ f.id }})"
@@ -17,6 +23,6 @@
        hx-get="/studio/_set?set_id={{ f.id }}{% if active_version %}&active_version_id={{ active_version.id }}{% endif %}{% if focused_clip_id %}&clip_id={{ focused_clip_id }}{% endif %}"
        hx-trigger="intersect once"
        hx-swap="innerHTML">
-    <div class="muted">loading…</div>
+    <div class="muted set-kids-loading">loading…</div>
   </div>
 </div>

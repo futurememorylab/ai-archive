@@ -1,0 +1,47 @@
+{# Recent prefetch history — the inner body of the queue-history <details>.
+   Rendered on tab load and re-fetched when the user opens the panel
+   (hx-trigger="toggle" in _cache_queue_table.html), so it stays fresh
+   without the 2s poll clobbering the open state. #}
+{% if queue_recent %}
+  <table class="cache-tbl queue-tbl">
+    <thead>
+      <tr>
+        <th class="col-sel"></th>
+        <th>Status</th>
+        <th>Clip</th>
+        <th>Layer</th>
+        <th>Requested</th>
+        <th>Finished</th>
+        <th class="num">Size</th>
+        <th>Error</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in queue_recent %}
+        {% set tone =
+            "warn" if r.status == "queued" else
+            "info" if r.status == "downloading" else
+            "good" if r.status == "done" else
+            "bad" if r.status == "error" else
+            "muted" %}
+        <tr class="cache-row queue-row queue-row-{{ r.status }}">
+          <td class="col-sel"></td>
+          <td><span class="tag {{ tone }}">{{ r.status }}</span></td>
+          <td>
+            <div class="clip-name-cell">
+              <span class="clip-name-text">{{ r.clip_name or r.provider_clip_id }}</span>
+              <span class="mono muted-2 clip-id">{{ r.provider_id }}/{{ r.provider_clip_id }}</span>
+            </div>
+          </td>
+          <td class="mono muted-2">media-local</td>
+          <td class="mono muted-2">{{ r.requested_at }}</td>
+          <td class="mono muted-2">{{ r.finished_at or "—" }}</td>
+          <td class="num mono">{{ "%.1f" % (r.bytes_downloaded / 1048576) }} MB</td>
+          <td class="mono muted-2">{{ r.error or "" }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p class="empty">No recent activity.</p>
+{% endif %}

@@ -333,7 +333,7 @@ a { color: inherit; text-decoration: none; }
   color: var(--text-3); font-size: 10.5px;
   letter-spacing: 0.06em; text-transform: uppercase;
 }
-.filter-form select, .ba-select {
+.filter-form select, .cache-filter-row select, .ba-select {
   height: 28px; padding: 0 24px 0 10px;
   background: var(--bg-2);
   color: var(--text);
@@ -347,7 +347,7 @@ a { color: inherit; text-decoration: none; }
   background-position: right 8px center;
   background-size: 10px 6px;
 }
-.filter-form select:focus, .ba-select:focus {
+.filter-form select:focus, .cache-filter-row select:focus, .ba-select:focus {
   outline: none;
   border-color: color-mix(in oklab, var(--accent) 50%, var(--line));
 }
@@ -404,7 +404,12 @@ a { color: inherit; text-decoration: none; }
    (name, type…). Cells that hold only a control/badge/thumbnail must opt out:
    Safari otherwise paints a stray "…" when the control + collapsed whitespace
    overflows the narrow cell (the three dots seen after the row checkbox). */
-.vlist .col-sel, .vlist .cell-cache, .vlist .cell-thumb { text-overflow: clip; }
+.vlist .col-sel, .vlist .cell-cache, .vlist .cell-thumb,
+.vlist .col-actions { text-overflow: clip; }
+/* The actions cell hosts a kebab dropdown (.popover-panel, absolutely
+   positioned). The blanket overflow:hidden on .vlist td would clip the
+   open panel, so this cell opts out. */
+.vlist td.col-actions { overflow: visible; }
 .vlist tbody tr.vrow { cursor: default; }
 .vlist tbody tr.vrow[onclick] { cursor: pointer; }
 .vlist tbody tr.vrow:hover { background: var(--hover); }
@@ -472,7 +477,7 @@ a { color: inherit; text-decoration: none; }
 
 /* cache-list specifics carried onto the shared scaffold */
 .vlist tr.vrow.orphan { background: color-mix(in oklab, var(--bad) 5%, transparent); }
-.vlist .col-actions { width: 148px; text-align: right; white-space: nowrap; }
+.vlist .col-actions { width: 64px; text-align: right; white-space: nowrap; }
 .vlist .row-actions { opacity: 0; transition: opacity 80ms; }
 .vlist tr.vrow:hover .row-actions,
 .vlist tr.vrow:focus-within .row-actions { opacity: 1; }
@@ -830,7 +835,7 @@ a { color: inherit; text-decoration: none; }
 /* ─── row select + bulk buttons ──────────────────────────────────────── */
 .col-sel, .row-select { width: 28px; text-align: center; }
 .col-cache, .cell-cache { width: 56px; }
-.row-check, .ri-accept, input[type="checkbox"].review-check {
+.row-check, .ri-accept, #row-select-all, input[type="checkbox"].review-check {
   accent-color: var(--accent);
   width: 15px; height: 15px; cursor: pointer;
 }
@@ -958,23 +963,13 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* filter bar + layer legend */
-.cache-extra-filters { margin-bottom: 6px; }
-.cache-entry-count { margin-left: 8px; font-size: 11px; }
-.cache-extra-filters summary {
-  cursor: pointer; color: var(--text-3);
-  font-size: 11.5px;
-  padding: 4px 0;
-}
-.filters-form {
-  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
-  padding: 8px 0;
-  font-size: 12px;
-}
-.filters-form input[type="text"], .filters-form input:not([type]) {
-  background: var(--bg-2); border: 1px solid var(--line);
-  border-radius: var(--r-1); color: var(--text);
-  padding: 4px 6px;
-}
+.cache-filter-row { margin-bottom: 8px; }
+.cache-entry-count { font-size: 11px; }
+
+/* Recent-activity history (queue tab): breathing room so the table
+   doesn't butt against the panel's bottom edge. */
+.queue-history { padding-bottom: 16px; }
+.queue-history summary { padding: 8px 12px; cursor: pointer; }
 
 /* Generic dark form control (used by prompt editor textareas + new-prompt form). */
 .txt {
@@ -1016,6 +1011,8 @@ a { color: inherit; text-decoration: none; }
   margin: 0 0 8px;
 }
 .bulkbar .bulk-count { color: var(--text-2); font-size: 12px; }
+.bulkbar .bulk-clear { margin-left: 4px; color: var(--text-3); }
+.bulkbar .bulk-clear:hover { color: var(--text); }
 
 /* inventory + queue tables */
 .cache-listwrap { background: var(--panel); border: 1px solid var(--line);
@@ -1487,7 +1484,12 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
    `right` (rule above) they become columns. The divider is a real track. */
 .studio-right {
   display: grid;
-  grid-template-rows: var(--studio-player-h, 320px) 6px minmax(0, 1fr);
+  /* Player row is `minmax(0, …)` so it can SHRINK below its drag-set
+     height, and the prompt row keeps a `160px` floor — otherwise a tall
+     saved --studio-player-h (e.g. dragged big on a larger window) starves
+     the prompt to ~0px and pushes the player transport off-screen on a
+     shorter viewport. */
+  grid-template-rows: minmax(0, var(--studio-player-h, 320px)) 6px minmax(160px, 1fr);
   grid-template-columns: 1fr;
   min-height: 0;
   min-width: 0;
@@ -1577,6 +1579,9 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   font-size: 13px;
 }
 
+/* "New set" + button — a bigger, centered glyph than the default .btn.sm text. */
+.studio-add-set { font-size: 20px; line-height: 1; font-weight: 400; }
+
 .studio-set-new {
   display: flex;
   gap: 6px;
@@ -1609,8 +1614,12 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 }
 
 .studio-set-row .twist {
-  width: 12px;
+  width: 22px;
   display: inline-flex;
+  justify-content: center;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--text-2);
 }
 
 .studio-set-row .name {
@@ -1753,12 +1762,6 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   padding: 1px 6px; border-radius: 9px;
 }
 .studio-nav-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-
-.studio-bulk-bar {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 12px; border-bottom: 1px solid var(--line);
-  background: var(--surface-2);
-}
 
 /* ── Uploaded stub ───────────────────────────────────────────────── */
 .studio-uploaded-stub {

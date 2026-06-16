@@ -147,13 +147,12 @@ def test_prompt_switch_link_carries_tab_and_open_set():
     assert "u.searchParams.set('open_set_id'" in js
 
 
-def test_studio_nav_bulk_bar_is_clear_only(client):
-    # The bulk bar holds only Clear now — running is driven by the single
-    # header Run button (which targets the selection when clips are checked),
-    # so there is no duplicate "Run on N clips" button in the navigator.
+def test_studio_nav_has_no_bulk_bar_or_run_button(client):
+    # The standalone "N selected" bulk bar was removed — selection state is
+    # surfaced by the per-set count badges (n/total) and the header Run button.
+    # The navigator still has no duplicate "Run on N clips" control.
     html = client.get("/studio").text
-    assert "studio-bulk-bar" in html
-    assert "clearSelection()" in html
+    assert "studio-bulk-bar" not in html
     assert "runOnSelectedClips()" not in html
 
 
