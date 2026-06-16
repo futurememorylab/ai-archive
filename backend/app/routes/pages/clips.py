@@ -1,5 +1,6 @@
 """Clip-facing HTML pages: list, detail, draft partial, and live-history."""
 
+import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Request
@@ -107,6 +108,8 @@ def _batch_options(jobs: list) -> list[dict[str, str]]:
             options.append({"value": str(j.id), "label": label})
     return options
 
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["pages"])
 
@@ -338,7 +341,19 @@ async def _filtered_page(
 
     hydrated: list[CanonicalClip] = []
     for cid in candidate_ids:
-        clip = list_cache.get(str(cid)) or await _hydrate_clip(ctx, cid)
+        clip = list_cache.get(str(cid))
+        if clip is None:
+            try:
+                clip = await _hydrate_clip(ctx, cid)
+            except ProviderError as exc:
+                # CatDV offline / transient, OR a synthetic-id review_items clip
+                # with no upstream record. Skip it from THIS render rather than
+                # 502-ing the entire filtered list — it reappears on refresh
+                # when the archive is reachable. (HTMX swallows non-2xx swaps,
+                # so a 502 here silently leaves the previous filter's rows on
+                # screen and makes the filter look broken.) See ADR 0087.
+                logger.warning("filtered list: skipping clip %s — %s", cid, exc)
+                continue
         if clip is None:
             continue
         if needle is not None and needle not in clip.name.casefold():

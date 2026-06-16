@@ -60,6 +60,31 @@
     done();
   });
 
+  // htmx does NOT swap on non-2xx responses (or network failures) by default,
+  // so a failed request silently leaves the previous content on screen — e.g. a
+  // 502 from a filter change looks like "the filter did nothing". Surface every
+  // such failure as an error toast so it can never masquerade as "no change".
+  function toastHtmxError(message) {
+    try {
+      if (window.Alpine && Alpine.store && Alpine.store("toast")) {
+        Alpine.store("toast").push(message, { level: "error" });
+      }
+    } catch (err) { /* toast store not ready — nothing better to do */ }
+  }
+  document.body.addEventListener("htmx:responseError", function (e) {
+    if (skipProgressBar(e.detail)) return;
+    var xhr = e.detail && e.detail.xhr;
+    var status = xhr ? xhr.status : "";
+    var detail = "";
+    try { detail = JSON.parse(xhr.responseText).detail || ""; } catch (err) { /* not JSON */ }
+    toastHtmxError("Request failed" + (status ? " (" + status + ")" : "") +
+                   (detail ? ": " + detail : "") + ". Try again.");
+  });
+  document.body.addEventListener("htmx:sendError", function (e) {
+    if (skipProgressBar(e.detail)) return;
+    toastHtmxError("Network error — the server couldn’t be reached. Check your connection.");
+  });
+
   // Full-page navigations: same-origin links and rows wired with
   // onclick="location.href=...". Capture phase so we react before navigation.
   function isPlainClick(ev) {
