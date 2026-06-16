@@ -1,109 +1,18 @@
-{# Queue table partial. Replaces the old _prefetch_panel.html.
+{# Queue tab: the live active queue (#prefetch-panel, polls every 2s) plus
+   the Recent-activity history. The history <details> is a SIBLING of the
+   polling wrapper — never inside it — so the 2s swap can't collapse it or
+   flicker it. The history body refreshes when the user opens the panel
+   (hx-trigger="toggle"), keeping it fresh without polling. #}
+{% include "pages/_cache_queue_active.html" %}
 
-   The outer wrapper carries the auto-refresh trigger; HTMX swaps the
-   entire wrapper every 2s so cancel/retry actions don't fight the
-   refresh.
-#}
-<div id="prefetch-panel"
-     hx-get="/ui/cache/queue"
-     hx-trigger="every 2s"
-     hx-swap="outerHTML">
-
-  {% if queue_active %}
-    <table class="cache-tbl queue-tbl">
-      <thead>
-        <tr>
-          <th class="col-sel"></th>
-          <th>Status</th>
-          <th>Clip</th>
-          <th>Layer</th>
-          <th>At</th>
-          <th class="num">Size</th>
-          <th class="col-actions"></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in queue_active %}
-          {% set tone =
-              "warn" if r.status == "queued" else
-              "info" if r.status == "downloading" else
-              "good" if r.status == "done" else
-              "bad" if r.status == "error" else
-              "muted" %}
-          <tr class="cache-row queue-row queue-row-{{ r.status }}">
-            <td class="col-sel"></td>
-            <td><span class="tag {{ tone }}">{{ r.status }}</span></td>
-            <td>
-              <a class="clip-name-cell" href="/clips/{{ r.provider_clip_id }}">
-                <span class="clip-name-text">{{ r.clip_name or r.provider_clip_id }}</span>
-                <span class="mono muted-2 clip-id">{{ r.provider_id }}/{{ r.provider_clip_id }}</span>
-              </a>
-            </td>
-            <td class="mono muted-2">media-local</td>
-            <td class="mono muted-2">{{ r.started_at or r.requested_at or "—" }}</td>
-            <td class="num mono">{{ "%.1f" % (r.bytes_downloaded / 1048576) }} MB</td>
-            <td class="row-actions">
-              {% if r.status == "queued" %}
-                <button type="button" class="btn sm"
-                        hx-post="/api/cache/prefetch/{{ r.id }}/cancel"
-                        hx-target="#prefetch-panel"
-                        hx-swap="outerHTML"
-                        hx-on::after-request="htmx.ajax('GET', '/ui/cache/queue', '#prefetch-panel')">
-                  Cancel
-                </button>
-              {% endif %}
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <p class="empty">Queue is empty.</p>
-  {% endif %}
-
-  {% if queue_recent %}
-    <details class="queue-history">
-      <summary>Recent activity ({{ queue_recent | length }})</summary>
-      <table class="cache-tbl queue-tbl">
-        <thead>
-          <tr>
-            <th class="col-sel"></th>
-            <th>Status</th>
-            <th>Clip</th>
-            <th>Layer</th>
-            <th>Requested</th>
-            <th>Finished</th>
-            <th class="num">Size</th>
-            <th>Error</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in queue_recent %}
-            {% set tone =
-                "warn" if r.status == "queued" else
-                "info" if r.status == "downloading" else
-                "good" if r.status == "done" else
-                "bad" if r.status == "error" else
-                "muted" %}
-            <tr class="cache-row queue-row queue-row-{{ r.status }}">
-              <td class="col-sel"></td>
-              <td><span class="tag {{ tone }}">{{ r.status }}</span></td>
-              <td>
-                <div class="clip-name-cell">
-                  <span class="clip-name-text">{{ r.clip_name or r.provider_clip_id }}</span>
-                  <span class="mono muted-2 clip-id">{{ r.provider_id }}/{{ r.provider_clip_id }}</span>
-                </div>
-              </td>
-              <td class="mono muted-2">media-local</td>
-              <td class="mono muted-2">{{ r.requested_at }}</td>
-              <td class="mono muted-2">{{ r.finished_at or "—" }}</td>
-              <td class="num mono">{{ "%.1f" % (r.bytes_downloaded / 1048576) }} MB</td>
-              <td class="mono muted-2">{{ r.error or "" }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </details>
-  {% endif %}
-
-</div>
+{% if queue_recent %}
+  <details class="queue-history" id="queue-history">
+    <summary>Recent activity ({{ queue_recent | length }})</summary>
+    <div id="queue-history-body"
+         hx-get="/ui/cache/queue/recent"
+         hx-trigger="toggle[event.target.open] from:#queue-history"
+         hx-swap="innerHTML">
+      {% include "pages/_cache_queue_recent.html" %}
+    </div>
+  </details>
+{% endif %}

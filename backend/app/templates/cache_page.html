@@ -68,36 +68,46 @@
   </div>
 
   {# ─── Tabs ─────────────────────────────────────────────────────── #}
+  {# Plain links (full navigation): the tab bar + Cache dropdown live
+     outside the #cache-table-region swap target, so an HTMX table-only
+     swap would leave the active underline + dropdown visibility stuck on
+     the previous tab. A full render keeps both correct. The dropdown
+     still swaps the table region via HTMX within the Cache tab. #}
   <div class="cache-tabs">
-    {# No local proxy cache in cloud (ai_store) — drop the Local-cache tab. #}
-    {% set _tabs = [("all","All"),("queue","Queue"),("ai","AI cache")]
-                   if media_cache == 'ai_store'
-                   else [("all","All"),("queue","Queue"),("local","Local cache"),("ai","AI cache")] %}
+    {% set _tabs = [("all","Cache"),("queue","Queue")] %}
     {% for t, label in _tabs %}
       <a class="ctab{% if tab == t %} active{% endif %}"
-         href="/cache?tab={{ t }}"
-         hx-get="/cache?tab={{ t }}"
-         hx-target="#cache-table-region"
-         hx-swap="innerHTML"
-         hx-push-url="true">
+         href="/cache?tab={{ t }}">
         {{ label }} <span class="ctab-n mono">{{ counts.get(t, 0) }}</span>
       </a>
     {% endfor %}
   </div>
 
-  <details class="cache-extra-filters">
-    <summary>Filters <span class="mono muted cache-entry-count">{{ total }} entries</span></summary>
-    <form action="/cache" method="get" class="filters-form">
-      <input type="hidden" name="tab" value="{{ tab }}">
-      <label>Store: <input name="store" value="{{ filters.store or '' }}"></label>
-      <label>Workspace: <input name="workspace" value="{{ filters.workspace or '' }}"></label>
-      <label><input type="checkbox" name="orphans" value="1"
-                    {% if filters.orphans %}checked{% endif %}> orphans only</label>
-      <label><input type="checkbox" name="evictable" value="1"
-                    {% if filters.evictable %}checked{% endif %}> evictable only</label>
-      <button type="submit" class="btn sm">Apply</button>
-    </form>
-  </details>
+  {# Cache dropdown — mirrors the main-search clip filter. Filters the
+     inventory by storage layer; hidden on the Queue tab. The Local
+     option is dropped in cloud (ai_store) where there is no local layer. #}
+  {% if tab != "queue" %}
+  <form class="filter-row cache-filter-row"
+        hx-get="/cache"
+        hx-target="#cache-table-region"
+        hx-swap="innerHTML"
+        hx-push-url="true"
+        hx-trigger="change">
+    <input type="hidden" name="tab" value="all">
+    <label class="filter-field">
+      <span class="filter-lbl">Cache</span>
+      <select name="cache">
+        <option value="any"   {% if cache_filter == 'any'   %}selected{% endif %}>Any</option>
+        {% if media_cache != 'ai_store' %}
+        <option value="local" {% if cache_filter == 'local' %}selected{% endif %}>Local</option>
+        {% endif %}
+        <option value="ai"    {% if cache_filter == 'ai'    %}selected{% endif %}>AI store</option>
+      </select>
+    </label>
+    <span class="grow"></span>
+    <span class="mono muted cache-entry-count">{{ total }} entries</span>
+  </form>
+  {% endif %}
 
   {# ─── Bulk action bar ──────────────────────────────────────────── #}
   <div class="bulkbar" x-show="count > 0" x-cloak>
@@ -106,9 +116,12 @@
       <span class="mono muted" x-text="bytesHuman(totalBytes)"></span>
     </span>
     <span class="grow"></span>
-    <button type="button" class="btn sm" @click="clearSel()">Clear</button>
     <button type="button" class="btn sm" @click="bulkPrefetch()">Re-fetch</button>
     <button type="button" class="btn sm danger" @click="bulkEvict()">Purge selected</button>
+    {# Clear-selection affordance: a plain ✕ at the far right, replacing the
+       old "Clear" text button which read like another bulk action. #}
+    <button type="button" class="btn ghost icon sm bulk-clear" @click="clearSel()"
+            aria-label="Clear selection" title="Clear selection">✕</button>
   </div>
 
   {# ─── Table region (HTMX target) ──────────────────────────────── #}
@@ -139,14 +152,15 @@
       async bulkEvict(keys) {
         keys = keys || this._selectedKeys();
         if (keys.length === 0) return;
-        // Evict the layer matching the active tab. Tab switches are HTMX
-        // swaps of the table region only (cacheSel stays mounted), so read
-        // the current tab live from the URL rather than a render-time value.
-        const tab = new URLSearchParams(location.search).get('tab') || 'all';
+        // Evict the layer matching the active Cache dropdown. Dropdown
+        // changes are HTMX swaps of the table region only (cacheSel stays
+        // mounted), so read the current value live from the URL rather
+        // than a render-time value.
+        const cache = new URLSearchParams(location.search).get('cache') || 'any';
         const plan =
-          tab === 'ai'    ? { layers: ['media-ai'],    what: 'AI-store media' } :
-          tab === 'local' ? { layers: ['media-local'], what: 'local media' } :
-                            { layers: ['media-local', 'media-ai', 'metadata'], what: 'all cache layers' };
+          cache === 'ai'    ? { layers: ['media-ai'],    what: 'AI-store media' } :
+          cache === 'local' ? { layers: ['media-local'], what: 'local media' } :
+                              { layers: ['media-local', 'media-ai', 'metadata'], what: 'all cache layers' };
         if (!confirm(`Purge ${plan.what} for ${keys.length} clip(s)?`)) return;
         const r = await fetch('/api/cache/bulk-evict', {
           method: 'POST',

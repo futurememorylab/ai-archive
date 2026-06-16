@@ -1,12 +1,17 @@
+{% import "components/_ui.html" as ui %}
 <td class="num mono col-local">
   {% if row.local_bytes %}{{ row.local_bytes | bytes_human }}{% else %}<span class="muted-2">—</span>{% endif %}
 </td>
 <td class="num mono col-ai">
   {% if row.ai_bytes %}{{ row.ai_bytes | bytes_human }}{% else %}<span class="muted-2">—</span>{% endif %}
 </td>
+{# Row actions live in a kebab menu (shared ui.menu + popover) rather than
+   inline buttons — two text buttons overflowed the narrow column and the
+   second ("Purge") was clipped to an unclickable "…". #}
+{% set _key = "[['" ~ row.clip_pid ~ "','" ~ row.clip_cid ~ "']]" %}
 <td class="row-actions col-actions" onclick="event.stopPropagation()">
-  <button type="button" class="btn sm"
-          @click="bulkPrefetch([['{{ row.clip_pid }}','{{ row.clip_cid }}']])">Re-fetch</button>
-  <button type="button" class="btn sm danger"
-          @click="bulkEvict([['{{ row.clip_pid }}','{{ row.clip_cid }}']])">Purge</button>
+  {% call ui.menu(label='⋯', variant='ghost', size='sm', align='right') %}
+    {{ ui.menu_item('Re-fetch', action='close(); bulkPrefetch(' ~ _key ~ ')') }}
+    {{ ui.menu_item('Purge', danger=True, action='close(); bulkEvict(' ~ _key ~ ')') }}
+  {% endcall %}
 </td>
