@@ -1484,7 +1484,12 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
    `right` (rule above) they become columns. The divider is a real track. */
 .studio-right {
   display: grid;
-  grid-template-rows: var(--studio-player-h, 320px) 6px minmax(0, 1fr);
+  /* Player row is `minmax(0, …)` so it can SHRINK below its drag-set
+     height, and the prompt row keeps a `160px` floor — otherwise a tall
+     saved --studio-player-h (e.g. dragged big on a larger window) starves
+     the prompt to ~0px and pushes the player transport off-screen on a
+     shorter viewport. */
+  grid-template-rows: minmax(0, var(--studio-player-h, 320px)) 6px minmax(160px, 1fr);
   grid-template-columns: 1fr;
   min-height: 0;
   min-width: 0;
@@ -1574,6 +1579,9 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   font-size: 13px;
 }
 
+/* "New set" + button — a bigger, centered glyph than the default .btn.sm text. */
+.studio-add-set { font-size: 20px; line-height: 1; font-weight: 400; }
+
 .studio-set-new {
   display: flex;
   gap: 6px;
@@ -1606,8 +1614,12 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 }
 
 .studio-set-row .twist {
-  width: 12px;
+  width: 22px;
   display: inline-flex;
+  justify-content: center;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--text-2);
 }
 
 .studio-set-row .name {
@@ -1750,12 +1762,6 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   padding: 1px 6px; border-radius: 9px;
 }
 .studio-nav-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-
-.studio-bulk-bar {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 12px; border-bottom: 1px solid var(--line);
-  background: var(--surface-2);
-}
 
 /* ── Uploaded stub ───────────────────────────────────────────────── */
 .studio-uploaded-stub {

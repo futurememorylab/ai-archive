@@ -31,6 +31,21 @@ async def test_create_and_list_set(db: aiosqlite.Connection):
     assert rows[0]["name"] == "edge_cases"
     assert rows[0]["source"] == "archive"
     assert rows[0]["clip_count"] == 0
+    # Empty set → no member ids (NULL GROUP_CONCAT collapses to []).
+    assert rows[0]["clip_ids"] == []
+
+
+@pytest.mark.asyncio
+async def test_list_sets_includes_member_clip_ids(db):
+    """The set checkbox selects the whole set before it is expanded, so the
+    set row carries its member clip ids."""
+    repo = StudioSetsRepo()
+    sid = await repo.create_set(db, name="with_clips")
+    await repo.add_clips(db, sid, clip_ids=[101, 202, 303])
+    rows = await repo.list_sets_with_counts(db, source="archive")
+    assert rows[0]["clip_count"] == 3
+    assert sorted(rows[0]["clip_ids"]) == [101, 202, 303]
+    assert all(isinstance(x, int) for x in rows[0]["clip_ids"])
 
 
 @pytest.mark.asyncio

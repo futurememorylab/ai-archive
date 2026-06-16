@@ -217,10 +217,21 @@ document.addEventListener('alpine:init', () => {
     },
 
     _clipIdsInSet(setId) {
-      const kids = document.querySelector(`.studio-set[data-set-id="${setId}"] .studio-set-kids`);
-      if (!kids) return [];
-      return [...kids.querySelectorAll('.studio-clip-card[data-clip-id]')]
-        .map(el => Number(el.dataset.clipId));
+      const setEl = document.querySelector(`.studio-set[data-set-id="${setId}"]`);
+      if (!setEl) return [];
+      const kids = setEl.querySelector('.studio-set-kids');
+      // Once a set has been expanded its clip cards are in the DOM (kept,
+      // just hidden, when re-collapsed) and stay accurate across add/remove,
+      // so they're the source of truth. Until first expand the kids hold only
+      // the loading sentinel — fall back to the server-rendered membership on
+      // data-clip-ids so selecting a collapsed set still selects every clip.
+      const loaded = kids && !kids.querySelector('.set-kids-loading');
+      if (loaded) {
+        return [...kids.querySelectorAll('.studio-clip-card[data-clip-id]')]
+          .map(el => Number(el.dataset.clipId));
+      }
+      const raw = setEl.dataset.clipIds || '';
+      return raw ? raw.split(',').map(Number) : [];
     },
 
     setFullySelected(setId) {
