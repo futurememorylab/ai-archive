@@ -1,14 +1,24 @@
 # backend/app/services/publish_status.py
 """Single source of truth for a clip's headline publish status.
 
-Inputs are both cheap and already computed elsewhere:
-  * has_draft        — un-applied review_items exist (ReviewItemsRepo.list_pending_clips)
-  * version_state    — newest clip_versions.publish_state for the clip (or None)
-  * version_num      — that newest version's number (or None)
+The in-flight / failed / conflict signal comes from `pending_operations` — the
+durable write queue, which the SyncEngine updates on EVERY path. This is the
+same source the topbar sync chip and the batches "N failed to sync" surface use,
+so all three agree. We deliberately do NOT key the headline off
+`clip_versions.publish_state`: that is a derived copy and any code path that
+forgets to update it leaves a clip stuck reading "Publishing…" forever. The
+version table is consulted only for *which* version is live (the number).
 
-Precedence: failed/conflict > publishing > draft > live > none.
+Inputs (all cheap, all already computed by the caller's batched reads):
+  * has_draft        — un-applied review_items exist (list_pending_clips)
+  * pending_write    — clip has pending/in_flight write ops
+  * failed_write     — clip has failed write ops
+  * conflict_write   — clip has conflicted write ops
+  * live_version_num — the clip's live clip_version number (or None)
+
+Precedence: conflict > failed > publishing > draft > live > none.
 Returns (ClipPublishState, version_num_or_None) so callers can render
-'Live v3' / 'Publishing…' / 'Draft' / 'Failed' from one place.
+'Live v3' / 'Publishing…' / 'Draft' / 'Failed' / 'Conflict' from one place.
 """
 
 from __future__ import annotations
@@ -17,14 +27,21 @@ from backend.app.models.annotation import ClipPublishState
 
 
 def resolve_publish_status(
-    *, has_draft: bool, version_state: str | None, version_num: int | None
+    *,
+    has_draft: bool,
+    pending_write: bool = False,
+    failed_write: bool = False,
+    conflict_write: bool = False,
+    live_version_num: int | None = None,
 ) -> tuple[ClipPublishState, int | None]:
-    if version_state in ("failed", "conflict"):
-        return (version_state, version_num)  # type: ignore[return-value]
-    if version_state == "publishing":
-        return ("publishing", version_num)
+    if conflict_write:
+        return ("conflict", live_version_num)
+    if failed_write:
+        return ("failed", live_version_num)
+    if pending_write:
+        return ("publishing", live_version_num)
     if has_draft:
-        return ("draft", version_num)
-    if version_state in ("live", "superseded"):
-        return ("live", version_num)
+        return ("draft", live_version_num)
+    if live_version_num is not None:
+        return ("live", live_version_num)
     return ("none", None)

@@ -146,6 +146,21 @@ async def _seed_pending_draft(ctx, clip_id: int) -> None:
     await ctx.db.commit()
 
 
+async def _seed_pending_op(ctx, clip_id: int, status: str) -> None:
+    """Insert one pending_operations row for the clip in the given status —
+    the write-queue signal that drives the publish headline."""
+    now = datetime.now(UTC).isoformat()
+    await ctx.db.execute(
+        "INSERT INTO pending_operations "
+        "(provider_id, provider_clip_id, op_kind, op_json, origin_annotation_id, "
+        "origin_review_item_ids, expected_etag, origin_clip_version_id, status, "
+        "attempts, enqueued_at) "
+        "VALUES ('catdv', ?, 'SetField', '{}', NULL, NULL, NULL, NULL, ?, 0, ?)",
+        (str(clip_id), status, now),
+    )
+    await ctx.db.commit()
+
+
 # ---------------------------------------------------------------------------
 # Badge render tests
 # ---------------------------------------------------------------------------
@@ -195,6 +210,40 @@ def test_draft_badge_rendered(monkeypatch, tmp_path):
         r = client.get("/")
         assert r.status_code == 200
         assert "Draft" in r.text, f"Expected 'Draft' in response; got:\n{r.text[:3000]}"
+
+
+def test_failed_write_shows_failed_not_stale_version_state(monkeypatch, tmp_path):
+    """A clip whose write FAILED shows 'Failed' even if its clip_version row is
+    stale (stuck 'publishing'). The headline is sourced from pending_operations,
+    so a drifted clip_versions copy can't make the badge lie. Publishing audit
+    — the recurring stuck-'Publishing…' bug, fixed at the root."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.core_ctx
+        clip_id = 401
+        # Deliberately leave a stale 'publishing'-ish version AND a failed write:
+        asyncio.run(_seed_live_version(ctx, clip_id, version_num=1))
+        asyncio.run(_seed_pending_op(ctx, clip_id, "failed"))
+
+        install_live_ctx(app, archive=_FakeArchive([_canonical(clip_id)]))
+        r = client.get("/")
+        assert r.status_code == 200
+        assert "Failed" in r.text
+        assert "Publishing" not in r.text
+
+
+def test_pending_write_shows_publishing(monkeypatch, tmp_path):
+    """A clip with an in-flight write shows 'Publishing…' from the queue."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.core_ctx
+        clip_id = 402
+        asyncio.run(_seed_pending_op(ctx, clip_id, "pending"))
+
+        install_live_ctx(app, archive=_FakeArchive([_canonical(clip_id)]))
+        r = client.get("/")
+        assert r.status_code == 200
+        assert "Publishing" in r.text
 
 
 def test_no_badge_for_clean_clip(monkeypatch, tmp_path):
@@ -275,15 +324,16 @@ def _count_render(monkeypatch, tmp_path, n: int) -> int:
 
 @pytest.mark.parametrize("n_clips", [10, 100, 1000])
 def test_clips_status_badge_query_count_bounded(monkeypatch, tmp_path, n_clips):
-    """GET / with status-badge derivation issues ≤ 12 SQL statements at all clip counts.
+    """GET / with status-badge derivation issues ≤ 13 SQL statements at all clip counts.
 
-    The new batched newest_state_by_clip adds 1 query on top of the pre-existing
-    baseline (was 8-10). Bound is set to 12 (actual + 2 headroom) so a per-row
-    DB lookup (10 extra statements for a 10-row page) trips the assertion.
+    The badge now uses two batched reads — live_version_num_by_clip and
+    count_pending_by_clip — instead of one newest_state_by_clip, both O(1) in
+    clip count. Bound is 13 (actual + headroom) so a per-row DB lookup (10 extra
+    statements for a 10-row page) trips the assertion.
     """
     count = _count_render(monkeypatch, tmp_path, n_clips)
-    assert count <= 12, (
-        f"[n={n_clips}] query count {count} > 12; "
+    assert count <= 13, (
+        f"[n={n_clips}] query count {count} > 13; "
         "an N+1 may have been introduced in the status-badge derivation. "
         "See ADR 0046."
     )

@@ -282,10 +282,13 @@ async def clips_list(
     pending_rows = await ctx.review_items_repo.list_pending_clips(ctx.db, limit=2000, offset=0)
     pmap = {r["catdv_clip_id"]: r for r in pending_rows}
 
-    # Batched: one query for the newest publish state of every clip on the
-    # page — O(1) regardless of page size (chunked_in_clause inside the repo).
+    # Batched, O(1) regardless of page size: the publishing/failed/conflict
+    # signal comes from pending_operations (the durable write queue — the same
+    # source the topbar chip uses, so they always agree); clip_versions is
+    # consulted only for the live version number. See services/publish_status.py.
     clip_ids = [row["id"] for row in ctx_dict["clips"]]
-    version_states = await ctx.clip_versions_repo.newest_state_by_clip(ctx.db, clip_ids)
+    live_nums = await ctx.clip_versions_repo.live_version_num_by_clip(ctx.db, clip_ids)
+    pending_by_clip = await ctx.pending_ops_repo.count_pending_by_clip(ctx.db, provider_id="catdv")
     from backend.app.services.publish_status import resolve_publish_status
 
     for row in ctx_dict["clips"]:
@@ -306,10 +309,13 @@ async def clips_list(
         row["draft_label"] = " · ".join(parts) if parts else ""
         row["batch"] = p["job_id"] if p else None
         # Unified publish status for the status-badge column.
-        vs, vn = version_states.get(row["id"], (None, None))
-        has_draft = row["id"] in pmap
+        b = pending_by_clip.get(str(row["id"]), {})
         ps_state, ps_num = resolve_publish_status(
-            has_draft=has_draft, version_state=vs, version_num=vn
+            has_draft=row["id"] in pmap,
+            pending_write=b.get("pending", 0) > 0,
+            failed_write=b.get("failed", 0) > 0,
+            conflict_write=b.get("conflict", 0) > 0,
+            live_version_num=live_nums.get(row["id"]),
         )
         row["publish_state"] = ps_state
         row["publish_version_num"] = ps_num
@@ -571,16 +577,23 @@ async def clip_detail_page(request: Request, clip_id: int, review: int | None = 
     )
     ctx_dict["review_mode"] = bool(review)
 
-    # Version history + headline publish status
+    # Version history + headline publish status. Like the clips list, the
+    # publishing/failed/conflict signal is read from pending_operations (the
+    # write queue), not clip_versions.publish_state — the latter is a derived
+    # copy that can drift; the queue is always accurate.
     versions = await ctx.clip_versions_repo.list_by_clip(ctx.db, clip_id)
-    newest = versions[0] if versions else None
-    has_draft = bool(ctx_dict["draft"].get("has_draft", False))
+    live = await ctx.clip_versions_repo.live_for_clip(ctx.db, clip_id)
+    counts = await ctx.pending_ops_repo.status_counts_for_clip(
+        ctx.db, provider_id="catdv", provider_clip_id=str(clip_id)
+    )
     from backend.app.services.publish_status import resolve_publish_status
 
     ps_state, ps_num = resolve_publish_status(
-        has_draft=has_draft,
-        version_state=newest.publish_state if newest else None,
-        version_num=newest.version_num if newest else None,
+        has_draft=bool(ctx_dict["draft"].get("has_draft", False)),
+        pending_write=(counts.get("pending", 0) + counts.get("in_flight", 0)) > 0,
+        failed_write=counts.get("failed", 0) > 0,
+        conflict_write=counts.get("conflict", 0) > 0,
+        live_version_num=live.version_num if live else None,
     )
     # Map ClipPublishState → pill CSS state class (used in both the headline
     # pill and the history menu partial, so defined once here).

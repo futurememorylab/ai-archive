@@ -303,26 +303,31 @@ class PendingOperationsRepo:
         *,
         provider_id: str,
     ) -> dict[str, dict[str, int]]:
-        """Per-clip queued / conflict counts for the badge.
+        """Per-clip queued / conflict / failed write counts.
 
-        Returns `{provider_clip_id: {"pending": N, "conflict": M}}`. Only
-        clips with at least one non-terminal row appear.
+        Returns `{provider_clip_id: {"pending": N, "conflict": M, "failed": K}}`.
+        Only clips with at least one non-applied row appear — so a clip whose
+        write FAILED surfaces here too. This is the single source of truth for a
+        clip's publish headline (see services/publish_status.py), consistent
+        with the topbar chip and the batches problem state.
         """
         cur = await conn.execute(
             """
             SELECT provider_clip_id, status, COUNT(*)
               FROM pending_operations
              WHERE provider_id = ?
-               AND status IN ('pending', 'in_flight', 'conflict')
+               AND status IN ('pending', 'in_flight', 'conflict', 'failed')
              GROUP BY provider_clip_id, status
             """,
             (provider_id,),
         )
         out: dict[str, dict[str, int]] = {}
         for clip_id, status, n in await cur.fetchall():
-            bucket = out.setdefault(clip_id, {"pending": 0, "conflict": 0})
+            bucket = out.setdefault(clip_id, {"pending": 0, "conflict": 0, "failed": 0})
             if status == "conflict":
                 bucket["conflict"] += n
+            elif status == "failed":
+                bucket["failed"] += n
             else:  # pending + in_flight both count as "queued"
                 bucket["pending"] += n
         return out

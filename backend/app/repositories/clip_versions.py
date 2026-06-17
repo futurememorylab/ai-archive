@@ -195,6 +195,30 @@ class ClipVersionsRepo:
                 out[int(clip_id)] = (state, int(num))
         return out
 
+    async def live_version_num_by_clip(
+        self, conn: aiosqlite.Connection, clip_ids: list[int], *, provider_id: str = "catdv"
+    ) -> dict[int, int]:
+        """Batched: {clip_id: version_num} for the LIVE version per clip (clips
+        with no live version are absent). Backs the 'Live vN' label without N+1;
+        the publishing/failed signal comes from pending_operations, not here."""
+        out: dict[int, int] = {}
+        if not clip_ids:
+            return out
+        for fragment, params in chunked_in_clause((cid,) for cid in clip_ids):
+            cur = await conn.execute(
+                f"""
+                SELECT catdv_clip_id, MAX(version_num)
+                  FROM clip_versions
+                 WHERE provider_id = ? AND publish_state = 'live'
+                   AND catdv_clip_id IN ({fragment})
+                 GROUP BY catdv_clip_id
+                """,
+                (provider_id, *params),
+            )
+            for clip_id, num in await cur.fetchall():
+                out[int(clip_id)] = int(num)
+        return out
+
     @staticmethod
     def _row(row) -> ClipVersion:
         return ClipVersion(
