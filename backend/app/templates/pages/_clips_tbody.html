@@ -21,4 +21,16 @@
           hx_target = none %}
     {% include "pages/_pager.html" %}
   {% endwith %}
+  {# While this batch is still running, refresh the per-clip run-status pills
+     (Queued → Processing → Done) in place via OOB <span> swaps — NOT a full
+     #clips-region re-render, which would reset the table scroll and re-run the
+     list's heavier queries every few seconds. The endpoint returns one OOB span
+     per clip; once the batch settles it OOB-replaces this poller with a
+     triggerless span, so polling stops. hx-swap="none" → only the OOB spans are
+     applied. Background "every" trigger → nav-feedback.js skips bar + toasts. #}
+  {% if batch_query and batch_running %}
+  <span id="bstatus-poll" hidden
+        hx-get="/ui/batch-statuses?batch={{ batch_query }}"
+        hx-trigger="every 4s" hx-swap="none"></span>
+  {% endif %}
 </div>

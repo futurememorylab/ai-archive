@@ -77,3 +77,37 @@ def test_marker_to_catdv_expands_partial_timecode():
     # secs_to_smpte (existing public API) uses 2-digit hours; preserves prior behavior.
     assert raw["in"]["txt"] == "00:00:04:00"
     assert raw["out"]["frm"] == 150
+
+
+def test_marker_to_catdv_clamps_overlong_name_and_preserves_full_text():
+    """A runaway marker name is clamped so CatDV's `name` column can't 500 the
+    write; the full original text is kept in the description. Publishing A8."""
+    from backend.app.archive.providers.catdv.mapping import MARKER_NAME_MAX
+
+    long_name = "x" * (MARKER_NAME_MAX + 50)
+    m = Marker(name=long_name, in_=Timecode(secs=1.0, fps=25.0), out=None, description="orig desc")
+    raw = marker_to_catdv(m, fps=25.0)
+    assert len(raw["name"]) <= MARKER_NAME_MAX
+    assert raw["name"].endswith("…")
+    # nothing lost: the full original name is preserved in the description
+    assert long_name in raw["description"]
+    assert "orig desc" in raw["description"]
+
+
+def test_marker_to_catdv_leaves_short_name_untouched():
+    m = Marker(name="Rodina", in_=Timecode(secs=1.0, fps=25.0), out=None)
+    raw = marker_to_catdv(m, fps=25.0)
+    assert raw["name"] == "Rodina"
+    assert "description" not in raw
+
+
+def test_from_catdv_clip_demojibakes_marker_text(raw):
+    # CatDV mangled the category over prior writes (UTF-8 read as latin-1, 3x);
+    # reading must repair it so the UI shows clean "Interiér".
+    raw = json.loads(json.dumps(raw))  # deep copy so the fixture isn't mutated
+    bad = "Interiér"
+    for _ in range(3):
+        bad = bad.encode("utf-8").decode("latin-1")
+    raw["markers"][0]["category"] = bad
+    clip = from_catdv_clip(raw, fetched_at=datetime.now(UTC))
+    assert clip.markers[0].category == "Interiér"

@@ -32,4 +32,28 @@ class ReviewItem(BaseModel):
     proposed_value: dict[str, Any] | list[Any] | str | int | float | bool | None
     edited_value: dict[str, Any] | list[Any] | str | int | float | bool | None = None
     decision: Literal["pending", "accepted", "rejected"] = "pending"
-    applied_at: str | None = None
+    applied_at: str | None = None  # enqueued to the write queue (+ dedup key)
+    synced_at: str | None = None  # confirmed on CatDV by the SyncEngine
+
+
+ClipPublishState = Literal["none", "draft", "publishing", "live", "failed", "conflict"]
+
+
+class ClipVersion(BaseModel):
+    id: int | None = None
+    provider_id: str = "catdv"
+    catdv_clip_id: int
+    version_num: int
+    parent_version_id: int | None = None
+    snapshot: dict[str, Any]
+    diff: dict[str, Any] | None = None
+    origin: Literal["publish", "restore"] = "publish"
+    model: str | None = None
+    prompt_version_id: int | None = None
+    annotation_id: int | None = None
+    author: str | None = None
+    publish_state: Literal["publishing", "live", "superseded", "failed", "conflict"]
+    expected_etag: str | None = None
+    failed_reason: str | None = None
+    synced_at: str | None = None
+    created_at: str | None = None

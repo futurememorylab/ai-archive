@@ -11,14 +11,17 @@ function reviewMixin(clipId) {
     // Writeback state surfaced in the draft message: the upstream apply runs
     // asynchronously in the SyncEngine, so we poll /api/sync/clip/{id}/status
     // to learn when it lands (or fails) and refresh Published without a reload.
-    syncState: "idle",   // idle | syncing | synced | failed
-    syncProblems: 0,
+    syncState: "idle",   // idle | syncing | synced | problem
+    syncFailed: 0,       // ops that errored out — retry from the drawer
+    syncConflicts: 0,    // ops whose clip changed upstream — resolve in drawer
     _reviewInit() {
       try { this.reviewQueue = JSON.parse(sessionStorage.getItem("catdv:reviewQueue") || "[]"); }
       catch (e) { this.reviewQueue = []; }
       // Reloading a page whose draft was already applied must not show a stale
       // "syncing…" forever — reconcile the message against the real queue once.
       if (this.appliedCount > 0) this._checkSyncOnce();
+      // Wire delegated Restore / Restore-and-publish handlers on the history panel.
+      this._initRestoreDelegation();
     },
     // ── counts ────────────────────────────────────────────────────
     _allDraft() { return [...this.draftMarkers, ...this.draftFields, ...this.draftNotes]; },
@@ -160,7 +163,12 @@ function reviewMixin(clipId) {
     async acceptApplyAll() {
       if (this.editingItemId != null) this.saveEdit();
       this.acceptAll();
-      await this.applyDraft();
+      // On success, walk straight to the next clip in the review queue rather
+      // than parking on the "syncing…" message — the write-back keeps going
+      // server-side (glanceable in the topbar sync chip). navClip(1) is a no-op
+      // on the last clip in the queue, so that one stays put and shows the
+      // applied/synced message as the terminal state.
+      if (await this.applyDraft()) this.navClip(1);
     },
     // ── apply (stay) + refresh ───────────────────────────────────
     async applyDraft() {
@@ -171,14 +179,28 @@ function reviewMixin(clipId) {
         const r = await fetch(`/api/review/clips/${clipId}/apply`, { method: "POST" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         let queued = 0;
-        try { queued = (await r.json()).queued || 0; } catch (e) { /* non-JSON body */ }
+        // apply now publishes a clip version: a non-null version_id means ops
+        // (the accepted changes + the provenance stamp) were enqueued. Fall back
+        // to the legacy `queued` field for any non-publish caller.
+        try { const b = await r.json(); queued = b.version_id != null ? 1 : (b.queued || 0); } catch (e) { /* non-JSON body */ }
         Alpine.store("toast").push("Accepted proposals applied.", { level: "success" });
         await this.refreshDraft();
+        // Applying consumes the draft, so refresh the topbar "N to review" pill
+        // at once rather than waiting for its poll.
+        window.htmx?.ajax("GET", "/ui/review-pill", { target: "#review-pill", swap: "innerHTML" });
         // Hand off to the async writeback: poll until it reaches CatDV, then
         // resolve the message + refresh Published. No-op if nothing enqueued.
-        if (queued > 0) { this.syncState = "syncing"; this._pollSync(); }
+        if (queued > 0) {
+          this.syncState = "syncing";
+          this._pollSync();
+          // Reflect the new queued writes in the topbar sync chip at once — it
+          // otherwise only updates on its own ~10s heartbeat.
+          window.htmx?.ajax("GET", "/ui/sync-chip", { target: "#sync-chip", swap: "innerHTML" });
+        }
+        return true;
       } catch (e) {
         Alpine.store("toast").push(`Apply failed: ${e.message || e}. Nothing was applied.`, { level: "error" });
+        return false;
       }
     },
     async refreshDraft() {
@@ -194,6 +216,7 @@ function reviewMixin(clipId) {
         this.draftDeleted.fields.splice(0, this.draftDeleted.fields.length, ...d.deleted.fields);
         this.draftDeleted.notes.splice(0, this.draftDeleted.notes.length, ...d.deleted.notes);
         this.appliedCount = d.applied_count;
+        this.syncedCount = d.synced_count || 0;
         this.editingItemId = null;
         this._editSnapshot = null;
       } catch (e) { /* keep current view */ }
@@ -202,13 +225,32 @@ function reviewMixin(clipId) {
     // Message shown once the draft is fully applied; reflects whether the
     // upstream CatDV writeback has actually landed, is still syncing, or failed.
     _plural(n) { return n === 1 ? "" : "s"; },
+    // Record a settled-with-problems status and split it into the two kinds we
+    // word differently: failed (the write didn't reach CatDV) vs conflict (the
+    // clip changed upstream after review). Both are fixed by Retry in the Sync
+    // drawer — a conflict retry re-bases on the live clip (ADR 0098), so it
+    // applies rather than re-conflicting.
+    _setProblems(st) {
+      this.syncState = "problem";
+      this.syncFailed = st.failed || 0;
+      this.syncConflicts = st.conflict || 0;
+    },
+    _problemMessage() {
+      const f = this.syncFailed, c = this.syncConflicts;
+      const parts = [];
+      if (f > 0) parts.push(`${f} change${this._plural(f)} didn't reach CatDV`);
+      if (c > 0) parts.push(`${c} change${this._plural(c)} changed in CatDV after you reviewed`);
+      const tail = c > 0 ? "open the Sync drawer to resolve." : "retry from the Sync drawer.";
+      return `${parts.join(" and ")} — ${tail}`;
+    },
     appliedMessage() {
       const n = this.appliedCount;
       if (this.syncState === "synced")
-        return `${n} proposal${this._plural(n)} applied and synced to CatDV ✓ — see Published.`;
-      if (this.syncState === "failed")
-        return `${n} applied, but ${this.syncProblems} change${this._plural(this.syncProblems)} didn't reach CatDV — retry from the Sync drawer.`;
-      return `${n} proposal${this._plural(n)} applied — syncing to CatDV; visible under Published once synced.`;
+        return `${n} proposal${this._plural(n)} applied to CatDV ✓ — see Published.`;
+      if (this.syncState === "problem")
+        return `${n} sent, but ${this._problemMessage()}`;
+      // Syncing: be honest about how many are actually ON CatDV vs just queued.
+      return `${n} sent to CatDV — ${this.syncedCount} confirmed on the server so far; the rest are still syncing (visible under Published once synced).`;
     },
     async _checkSyncOnce() {
       // One-shot reconciliation on page load (no toasts): set the message to
@@ -217,7 +259,7 @@ function reviewMixin(clipId) {
         const r = await fetch(`/api/sync/clip/${clipId}/status`);
         if (!r.ok) return;
         const st = await r.json();
-        if (st.problems > 0) { this.syncState = "failed"; this.syncProblems = st.problems; }
+        if (st.problems > 0) { this._setProblems(st); }
         else if (st.unfinished > 0) { this.syncState = "syncing"; this._pollSync(); }
         else if (st.applied > 0) { this.syncState = "synced"; }
       } catch (e) { /* leave state as-is */ }
@@ -236,19 +278,27 @@ function reviewMixin(clipId) {
         } catch (e) { continue; }
         if (st.unfinished > 0) { this.syncState = "syncing"; continue; }
         if (st.problems > 0) {
-          this.syncState = "failed";
-          this.syncProblems = st.problems;
-          Alpine.store("toast").push(
-            `${st.problems} change${this._plural(st.problems)} didn't reach CatDV. Open the Sync drawer to retry.`,
-            { level: "error" });
+          this._setProblems(st);
+          this._refreshVersionPanel();  // headline pill → Failed/Conflict
+          Alpine.store("toast").push(this._problemMessage(), { level: "error" });
           return;
         }
         // Settled with nothing unfinished and no problems → applied upstream.
         this.syncState = "synced";
+        this.syncedCount = this.appliedCount;  // everything enqueued has landed
         await this._refreshPublished();
+        this._refreshVersionPanel();  // headline pill → Live vN; history updates
         Alpine.store("toast").push("Synced to CatDV — Published updated.", { level: "success" });
         return;
       }
+    },
+    // Re-render the headline pill + history dropdown in place after a Make-live
+    // / publish, so #version-panel reflects the new live version without a reload.
+    _refreshVersionPanel() {
+      window.htmx?.ajax("GET", `/clips/${clipId}/version-panel`, {
+        target: "#version-panel",
+        swap: "innerHTML",
+      });
     },
     async _refreshPublished() {
       // Swap the server-rendered Published panel in place and refresh the
@@ -269,6 +319,54 @@ function reviewMixin(clipId) {
           } catch (e) { /* keep current markers */ }
         }
       } catch (e) { /* keep current view */ }
+    },
+    // ── version history: Restore + Restore-and-publish ───────────────────
+    // Delegated handlers attached on x-init via $root delegation. Mirror the
+    // fetch+toast+refreshDraft style used by applyDraft / _persist above.
+    // POST /api/review/clips/{id}/versions/{n}/restore → rehydrate draft.
+    // POST /api/review/clips/{id}/versions/{n}/restore-and-publish → same, then
+    //   the SyncEngine publishes it; poll + refresh as in applyDraft.
+    // History actions. "activate" switches the clip back to an existing version
+    // (re-PUT + make live, NO new version). "restore" loads a version into the
+    // working draft for editing. Neither forks a duplicate version any more.
+    async _handleVersionAction(btn, action) {
+      const vnum = btn.dataset.activate ?? btn.dataset.restore;
+      if (!vnum) return;
+      const path = action === "activate" ? "activate" : "restore";
+      try {
+        const r = await fetch(`/api/review/clips/${clipId}/versions/${vnum}/${path}`, { method: "POST" });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        await this.refreshDraft();
+        // "restore" loads a version into the working draft (a new thing to
+        // review); refresh the topbar pill at once so its count is correct.
+        window.htmx?.ajax("GET", "/ui/review-pill", { target: "#review-pill", swap: "innerHTML" });
+        if (action === "activate") {
+          Alpine.store("toast").push(`Switching to version ${vnum}…`, { level: "success" });
+          this.syncState = "syncing";
+          this._pollSync();
+          this._refreshVersionPanel();  // immediate: pill → Publishing…; _pollSync → Live vN
+          window.htmx?.ajax("GET", "/ui/sync-chip", { target: "#sync-chip", swap: "innerHTML" });
+        } else {
+          Alpine.store("toast").push(`Draft loaded from version ${vnum}.`, { level: "success" });
+        }
+      } catch (e) {
+        Alpine.store("toast").push(`Version action failed: ${e.message || e}`, { level: "error" });
+      }
+    },
+    _initRestoreDelegation() {
+      // ONE delegated listener on the aside (the history panel is server-
+      // rendered, so its items don't get individual Alpine bindings). Guard
+      // against a re-init double-binding it — a second listener would fire the
+      // POST twice and create duplicate writes. See publishing audit, A5.
+      const aside = this.$root.closest(".anno-col") ?? this.$root;
+      if (aside._versionActionsBound) return;
+      aside._versionActionsBound = true;
+      aside.addEventListener("click", (ev) => {
+        const activate = ev.target.closest("[data-activate]");
+        if (activate) { ev.preventDefault(); this._handleVersionAction(activate, "activate"); return; }
+        const restore = ev.target.closest("[data-restore]");
+        if (restore) { ev.preventDefault(); this._handleVersionAction(restore, "restore"); }
+      });
     },
   };
 }

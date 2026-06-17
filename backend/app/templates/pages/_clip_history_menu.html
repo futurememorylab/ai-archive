@@ -1,0 +1,58 @@
+{% from "components/_ui.html" import menu, menu_item, menu_header, status_pill %}
+{# Version history dropdown. Each version is a clean block: header (#N + state
+   pill), meta (author · model), an optional diff summary, and — for non-live
+   versions — Make live (switch) / Edit as draft actions. JS handles the fetch
+   via delegated [data-activate] / [data-restore] in review.js. #}
+
+{% set _PS = {
+  "live":       "ok",
+  "superseded": "",
+  "publishing": "accent",
+  "failed":     "bad",
+  "conflict":   "bad",
+} %}
+
+<div data-history-menu>
+  {% call menu(label='Versions', variant='ghost', size='sm', align='right') %}
+    {% if versions %}
+      {{ menu_header('Version history') }}
+      {% for v in versions %}
+        {% set vstate = v.publish_state %}
+        {% set vpill  = _PS.get(vstate, '') %}
+        {# Compact diff summary from v.diff (e.g. "+2 markers · genre · notes"). #}
+        {% set vdiff = v.diff if v.diff else {} %}
+        {% set _parts = namespace(items=[]) %}
+        {% if vdiff.get('markers_added', 0) > 0 %}
+          {% set _parts.items = _parts.items + ['+' ~ vdiff['markers_added'] ~ ' marker' ~ ('s' if vdiff['markers_added'] != 1 else '')] %}
+        {% endif %}
+        {% for fkey in vdiff.get('fields_changed', {}).keys() %}
+          {% set _parts.items = _parts.items + [fkey.split('.')[-1]] %}
+        {% endfor %}
+        {% if vdiff.get('notes_changed') %}{% set _parts.items = _parts.items + ['notes'] %}{% endif %}
+        {% if vdiff.get('big_notes_changed') %}{% set _parts.items = _parts.items + ['bigNotes'] %}{% endif %}
+        <div class="cv-row{% if vstate == 'live' %} is-live{% endif %}">
+          <div class="cv-head">
+            <span class="cv-num">#{{ v.version_num }}</span>
+            {{ status_pill(vstate, vpill) }}
+          </div>
+          <div class="cv-meta">{{ v.author or '—' }} · {{ v.model or '—' }}</div>
+          {% if _parts.items %}
+            <div class="cv-diff" data-diff-summary>{{ _parts.items | join(' · ') }}</div>
+          {% endif %}
+          {% if vstate != 'live' %}
+            <div class="cv-actions">
+              <button type="button" class="btn sm good"
+                      data-activate="{{ v.version_num }}"
+                      data-clip-id="{{ v.catdv_clip_id }}">Make live</button>
+              <button type="button" class="btn sm ghost"
+                      data-restore="{{ v.version_num }}"
+                      data-clip-id="{{ v.catdv_clip_id }}">Edit as draft</button>
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    {% else %}
+      {{ menu_item('No history yet') }}
+    {% endif %}
+  {% endcall %}
+</div>

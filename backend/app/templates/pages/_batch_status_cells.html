@@ -1,0 +1,14 @@
+{# Out-of-band per-clip run-status pills for a running batch. Each span patches
+   the matching #bstatus-<clip_id> in the clips list in place — so the pills
+   update without re-rendering (and re-scrolling) the whole table. Returned by
+   /ui/batch-statuses, polled by #bstatus-poll while the batch is running. #}
+{% import "components/_ui.html" as ui %}
+{%- for cid, sv in cells.items() -%}
+<span id="bstatus-{{ cid }}" hx-swap-oob="true">
+  {%- if sv -%}{{ ui.status_pill(sv.label, sv.state) }}{%- else -%}—{%- endif -%}
+</span>
+{%- endfor -%}
+{%- if not batch_running -%}
+{# Batch settled → replace the poller with a triggerless span so polling stops. #}
+<span id="bstatus-poll" hx-swap-oob="true"></span>
+{%- endif -%}

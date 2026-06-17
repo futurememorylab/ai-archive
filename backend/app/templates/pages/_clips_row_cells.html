@@ -5,9 +5,28 @@
 <td class="mono num col-mk">{{ row.marker_count }}</td>
 <td class="col-type mono">{{ row.kind }}</td>
 <td class="num col-batch mono">
-  {%- if row.batch_status -%}{{ ui.status_pill(row.batch_status.label, row.batch_status.state) }}
-  {%- elif row.batch is not none -%}#{{ row.batch }}
-  {%- else -%}—{%- endif -%}
+  {# id'd span so a running batch can refresh just this pill via an OOB swap
+     (see /ui/batch-statuses) without re-rendering the whole list. #}
+  <span id="bstatus-{{ row.id }}">
+    {%- if row.batch_status -%}{{ ui.status_pill(row.batch_status.label, row.batch_status.state) }}
+    {%- elif row.batch is not none -%}#{{ row.batch }}
+    {%- else -%}—{%- endif -%}
+  </span>
 </td>
 {% if batch_query %}<td class="batch-cost num mono">{{ row.batch_cost_usd|usd }}</td>{% endif %}
-<td class="col-drafts mono">{{ row.draft_label or "—" }}</td>
+<td class="col-drafts mono">
+  {%- set _ps = row.publish_state -%}
+  {%- if _ps == "live" -%}
+    {{ ui.status_pill("Live v" ~ row.publish_version_num, "ok") }}
+  {%- elif _ps == "publishing" -%}
+    {{ ui.status_pill("Publishing…", "accent") }}
+  {%- elif _ps == "draft" -%}
+    {{ ui.status_pill("Draft", "accent") }}{{ " " ~ row.draft_label if row.draft_label else "" }}
+  {%- elif _ps == "failed" -%}
+    {{ ui.status_pill("Failed", "bad") }}
+  {%- elif _ps == "conflict" -%}
+    {{ ui.status_pill("Conflict", "bad") }}
+  {%- else -%}
+    {{ row.draft_label or "—" }}
+  {%- endif -%}
+</td>

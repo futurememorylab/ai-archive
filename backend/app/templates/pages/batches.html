@@ -126,6 +126,12 @@
           if (!region) return;
           region.innerHTML = await r.text();
           window.htmxAlpine.reinit(region);
+          // Keep the topbar sync chip in step with the live-refreshing table.
+          // The chip self-polls only while it already shows queued/problem
+          // writes (ADR 0095), so a write-back that starts in the background
+          // would otherwise read "Synced" up here while a batch row shows
+          // "Syncing N" below — until a manual reload. Refresh it alongside.
+          window.htmx?.ajax("GET", "/ui/sync-chip", { target: "#sync-chip", swap: "innerHTML" });
         } catch (e) { /* offline — keep current view */ }
       },
       toggle(key) { this.expanded[key] = !this.expanded[key]; },

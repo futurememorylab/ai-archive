@@ -23,6 +23,8 @@ from typing import Literal
 
 import aiosqlite
 
+from backend.app.repositories.review_items import FOR_REVIEW_WHERE
+
 CacheFilter = Literal["any", "none", "local", "ai"]
 AnnoFilter = Literal["any", "for_review", "applied", "none", "has_any"]
 
@@ -71,8 +73,18 @@ async def _ids_with_media_ai(db: aiosqlite.Connection, provider_id: str) -> set[
 
 
 async def _ids_with_annotation_review_state(db: aiosqlite.Connection, *, applied: bool) -> set[int]:
-    """Clip IDs with at least one review_item matching the applied predicate."""
-    where = "applied_at IS NOT NULL" if applied else "applied_at IS NULL"
+    """Clip IDs with at least one review_item matching the predicate.
+
+    applied=True  → has a write-back enqueued (applied_at set): the "Applied" filter.
+    applied=False → the clip's LATEST annotation still has an UNDECIDED proposal
+        (applied_at NULL, not rejected): the "Awaiting review" filter. Rejected
+        items are decided (though applied_at stays NULL), and items from a
+        superseded older annotation aren't the current draft — both are excluded,
+        matching the draft panel (which shows only the latest annotation). Without
+        that, fully-decided / re-annotated clips showed "Awaiting review" with 0
+        proposals to act on.
+    """
+    where = "applied_at IS NOT NULL" if applied else FOR_REVIEW_WHERE
     cur = await db.execute(f"SELECT DISTINCT catdv_clip_id FROM review_items WHERE {where}")
     return {int(r[0]) for r in await cur.fetchall()}
 

@@ -77,6 +77,8 @@ class SyncEngine:
         write_log_repo: Any,
         connection_monitor: ConnectionMonitor | None,
         db_provider: Callable[[], aiosqlite.Connection],
+        review_items_repo: Any = None,
+        clip_versions_repo: Any = None,
         event_bus: Any = None,
         tick_interval_s: float = 5.0,
         retry_base_s: float = 2.0,
@@ -87,6 +89,8 @@ class SyncEngine:
         self._provider = provider
         self._pending = pending_ops_repo
         self._write_log = write_log_repo
+        self._review_items = review_items_repo
+        self._clip_versions = clip_versions_repo
         self._monitor = connection_monitor
         self._db_provider = db_provider
         self._event_bus = event_bus
@@ -181,7 +185,12 @@ class SyncEngine:
                 continue
             op_ids = [r["id"] for r in rows]
             ops = [change_op_from_json(r["op_json"]) for r in rows]
-            expected_etag = rows[0].get("expected_etag")
+            # Rows are ordered oldest-first; when several apply batches for one
+            # clip are merged into a single ChangeSet, the conflict check must
+            # use the FRESHEST snapshot the user saw (the last-enqueued batch),
+            # not the oldest. Using rows[0] would let a stale older batch
+            # spuriously flag (or mask) a conflict. See ADR 0091.
+            expected_etag = rows[-1].get("expected_etag")
             change_set = ChangeSet(
                 clip_key=(provider_id, clip_id),
                 ops=tuple(ops),
@@ -193,39 +202,23 @@ class SyncEngine:
             try:
                 result = await self._provider.apply_changes(change_set)
             except RetryableError as exc:
-                await self._pending.mark_retryable(db, op_ids, error=str(exc))
+                # Explicit "try later" (server busy, transport blip). Bounded
+                # by the same ceiling as unknown errors so a permanently-
+                # erroring op can't retry forever and block the queue.
+                await self._retry_or_fail(db, op_ids, rows, error=str(exc))
                 continue
             except (AuthError, FatalProviderError) as exc:
                 await self._pending.mark_failed(db, op_ids, error=str(exc))
+                await self._mark_version_failed(db, rows, reason=str(exc))
                 continue
             except ProviderError as exc:
                 await self._pending.mark_failed(db, op_ids, error=str(exc))
+                await self._mark_version_failed(db, rows, reason=str(exc))
                 continue
             except Exception as exc:  # noqa: BLE001 — unknown adapter bug
                 # Default to retryable: unknown exception is most often
-                # transient (transport bug, adapter glitch). The
-                # max-attempts ceiling prevents an infinitely-retried row
-                # from blocking the queue. See ADR 0042 (added in this PR).
-                #
-                # Use min(attempts) across the group: ceiling fires only
-                # when the YOUNGEST op in the batch has hit the cap. Using
-                # max would kill younger ops early when sibling ops on the
-                # same clip have divergent attempt counts.
-                next_attempts = min(int(r.get("attempts") or 0) for r in rows) + 1
-                err_msg = f"{type(exc).__name__}: {exc}"
-                if next_attempts >= self._max_attempts:
-                    # Atomic: status='failed' AND attempts+=1 in one SQL
-                    # statement. A two-call sequence (mark_retryable then
-                    # mark_failed) would leave a crash window where the
-                    # row stays 'pending' at the ceiling and gets retried
-                    # past it.
-                    await self._pending.mark_failed(
-                        db, op_ids,
-                        error=f"{err_msg}; max_attempts={self._max_attempts} reached",
-                        bump_attempts=True,
-                    )
-                else:
-                    await self._pending.mark_retryable(db, op_ids, error=err_msg)
+                # transient (transport bug, adapter glitch). See ADR 0042.
+                await self._retry_or_fail(db, op_ids, rows, error=f"{type(exc).__name__}: {exc}")
                 continue
 
             await self._handle_result(
@@ -248,6 +241,64 @@ class SyncEngine:
                 )
         return processed
 
+    async def _retry_or_fail(
+        self,
+        db: aiosqlite.Connection,
+        op_ids: list[int],
+        rows: list[dict[str, Any]],
+        *,
+        error: str,
+    ) -> None:
+        """Bump attempts and keep the rows retryable, UNLESS the youngest op
+        in the group has reached the ceiling — then flip to failed atomically.
+
+        Use min(attempts) across the group: the ceiling fires only when the
+        YOUNGEST op in the batch has hit the cap. Using max would kill younger
+        ops early when sibling ops on the same clip have divergent counts. The
+        terminal transition is mark_failed(bump_attempts=True) — status + the
+        final attempt in one SQL statement, so there is no crash window where
+        the row stays 'pending' at the ceiling and gets retried past it.
+        Shared by every retryable path (explicit RetryableError, unknown
+        exception, and WriteResult(status='retryable')). See ADR 0091.
+        """
+        next_attempts = min(int(r.get("attempts") or 0) for r in rows) + 1
+        if next_attempts >= self._max_attempts:
+            await self._pending.mark_failed(
+                db,
+                op_ids,
+                error=f"{error}; max_attempts={self._max_attempts} reached",
+                bump_attempts=True,
+            )
+            version_id = self._version_id_from_rows(rows)
+            if self._clip_versions is not None and version_id is not None:
+                await self._clip_versions.mark_failed(
+                    db, version_id, reason=f"max_attempts={self._max_attempts} reached"
+                )
+        else:
+            await self._pending.mark_retryable(db, op_ids, error=error)
+
+    @staticmethod
+    def _version_id_from_rows(rows: list[dict[str, Any]]) -> int | None:
+        """Freshest clip_version among this clip's drained rows (max non-null).
+        When several publishes for one clip merge into one PUT, the newest
+        version is the one whose state should advance."""
+        ids = [r.get("origin_clip_version_id") for r in rows if r.get("origin_clip_version_id")]
+        return max(ids) if ids else None
+
+    async def _mark_version_failed(
+        self, db: aiosqlite.Connection, rows: list[dict[str, Any]], *, reason: str
+    ) -> None:
+        """Flip the clip_version 'failed' when a write RAISES a fatal/provider
+        error (not only when apply_changes RETURNS a fatal result). Without
+        this the version stays 'publishing' forever and the clips-list badge /
+        clip headline read 'Publishing…' for a write that actually failed. See
+        the publishing audit, anomaly A9."""
+        if self._clip_versions is None:
+            return
+        version_id = self._version_id_from_rows(rows)
+        if version_id is not None:
+            await self._clip_versions.mark_failed(db, version_id, reason=reason)
+
     async def _handle_result(
         self,
         db: aiosqlite.Connection,
@@ -258,8 +309,24 @@ class SyncEngine:
         rows: list[dict[str, Any]],
         result: Any,
     ) -> None:
+        version_id = self._version_id_from_rows(rows)
+
         if result.status == "ok":
             await self._pending.mark_applied(db, op_ids)
+            # The write actually landed on CatDV now — stamp the originating
+            # review_items as synced so the UI shows "applied" only once a
+            # change is truly upstream, not merely enqueued. See ADR 0093.
+            if self._review_items is not None:
+                item_ids: list[int] = []
+                for r in rows:
+                    raw = r.get("origin_review_item_ids")
+                    if raw:
+                        try:
+                            item_ids.extend(int(i) for i in json.loads(raw))
+                        except (ValueError, TypeError):
+                            pass
+                if item_ids:
+                    await self._review_items.mark_synced(db, sorted(set(item_ids)))
             annotation_id = rows[0].get("origin_annotation_id")
             try:
                 catdv_clip_id = int(clip_id)
@@ -275,6 +342,8 @@ class SyncEngine:
                 provider_id=provider_id,
                 provider_clip_id=clip_id,
             )
+            if self._clip_versions is not None and version_id is not None:
+                await self._clip_versions.mark_live(db, version_id)
         elif result.status == "conflict":
             detail = None
             cd = result.conflict_detail
@@ -286,10 +355,13 @@ class SyncEngine:
                     "fields": cd.fields,
                 }
             await self._pending.mark_conflict(db, op_ids, conflict_detail=detail)
+            if self._clip_versions is not None and version_id is not None:
+                await self._clip_versions.mark_conflict(db, version_id, reason="etag conflict")
         elif result.status == "retryable":
-            await self._pending.mark_retryable(
+            await self._retry_or_fail(
                 db,
                 op_ids,
+                rows,
                 error=json.dumps(result.upstream_response or {}),
             )
         else:  # fatal
@@ -298,3 +370,5 @@ class SyncEngine:
                 op_ids,
                 error=json.dumps(result.upstream_response or {}),
             )
+            if self._clip_versions is not None and version_id is not None:
+                await self._clip_versions.mark_failed(db, version_id, reason="fatal")

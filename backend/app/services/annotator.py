@@ -665,6 +665,14 @@ async def _finalize_annotation(
     )
     await jobs_repo.attach_annotation(db, item.id, annotation_id)
 
+    # Clear prior un-applied review_items for this clip so a re-run replaces
+    # the working draft rather than appending to it.  Applied items are kept as
+    # historical record; only the "pending" draft is replaced.  This call is
+    # intentionally on the clip-annotate path only — the studio finalize path
+    # uses delete_for_studio_run (keyed by studio_run_id) and must not be
+    # touched here.
+    await review_items_repo.clear_unapplied_for_clip(db, item.catdv_clip_id)
+
     review_count = 0
     if structured:
         review = expand(

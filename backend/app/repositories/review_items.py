@@ -16,6 +16,18 @@ def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
+# The "awaiting review" predicate (a WHERE body): clips whose LATEST annotation
+# still has an undecided proposal — applied_at NULL, not rejected, newest
+# annotation only. Single source of truth so the /?anno=for_review filter
+# (clip_list_filters), the topbar count (count_clips_for_review), and the
+# full-render sync context (routes/pages/templates.py) can never drift apart.
+FOR_REVIEW_WHERE = (
+    "applied_at IS NULL AND decision != 'rejected' "
+    "AND annotation_id = (SELECT MAX(a.id) FROM annotations a "
+    "WHERE a.catdv_clip_id = review_items.catdv_clip_id)"
+)
+
+
 def _json_default(obj):
     if isinstance(obj, datetime):
         return obj.isoformat()
@@ -56,7 +68,7 @@ class ReviewItemsRepo:
         cur = await conn.execute(
             """
             SELECT id, annotation_id, studio_run_id, catdv_clip_id, kind,
-                   target_identifier, proposed_value, edited_value, decision, applied_at
+                   target_identifier, proposed_value, edited_value, decision, applied_at, synced_at
             FROM review_items WHERE id = ?
             """,
             (item_id,),
@@ -73,7 +85,8 @@ class ReviewItemsRepo:
             cur = await conn.execute(
                 """
                 SELECT id, annotation_id, studio_run_id, catdv_clip_id, kind,
-                       target_identifier, proposed_value, edited_value, decision, applied_at
+                       target_identifier, proposed_value, edited_value, decision,
+                       applied_at, synced_at
                 FROM review_items WHERE catdv_clip_id = ? AND decision = ?
                 ORDER BY id
                 """,
@@ -83,7 +96,8 @@ class ReviewItemsRepo:
             cur = await conn.execute(
                 """
                 SELECT id, annotation_id, studio_run_id, catdv_clip_id, kind,
-                       target_identifier, proposed_value, edited_value, decision, applied_at
+                       target_identifier, proposed_value, edited_value, decision,
+                       applied_at, synced_at
                 FROM review_items WHERE catdv_clip_id = ?
                 ORDER BY id
                 """,
@@ -97,7 +111,7 @@ class ReviewItemsRepo:
         cur = await conn.execute(
             """
             SELECT id, annotation_id, studio_run_id, catdv_clip_id, kind,
-                   target_identifier, proposed_value, edited_value, decision, applied_at
+                   target_identifier, proposed_value, edited_value, decision, applied_at, synced_at
             FROM review_items WHERE studio_run_id = ?
             ORDER BY id
             """,
@@ -105,9 +119,21 @@ class ReviewItemsRepo:
         )
         return [self._row(r) for r in await cur.fetchall()]
 
-    async def delete_for_studio_run(
-        self, conn: aiosqlite.Connection, *, studio_run_id: int
-    ) -> int:
+    async def clear_unapplied_for_clip(self, conn: aiosqlite.Connection, clip_id: int) -> int:
+        """Delete all review_items for a clip that have not yet been applied.
+
+        Used by RestoreService to clear the working draft before re-seeding it
+        from a published version's snapshot. Applied items are preserved as a
+        historical record.
+        """
+        cur = await conn.execute(
+            "DELETE FROM review_items WHERE catdv_clip_id = ? AND applied_at IS NULL",
+            (clip_id,),
+        )
+        await conn.commit()
+        return cur.rowcount or 0
+
+    async def delete_for_studio_run(self, conn: aiosqlite.Connection, *, studio_run_id: int) -> int:
         """Delete all review_items linked to a studio_run. Used by the
         annotator's studio finalize to ensure a retry doesn't accumulate
         duplicate markers/fields on the same run_id. Safe on empty sets.
@@ -155,6 +181,26 @@ class ReviewItemsRepo:
         await conn.executemany(
             "UPDATE review_items SET applied_at = ? WHERE id = ?",
             [(_now_iso(), i) for i in item_ids],
+        )
+        if commit:
+            await conn.commit()
+
+    async def mark_synced(
+        self,
+        conn: aiosqlite.Connection,
+        item_ids: list[int],
+        *,
+        commit: bool = True,
+    ) -> None:
+        """Stamp synced_at = now on the given items — the SyncEngine calls this
+        once a clip's write-back actually lands on CatDV, so the UI can tell
+        'confirmed upstream' from merely 'enqueued' (applied_at)."""
+        if not item_ids:
+            return
+        now = _now_iso()
+        await conn.executemany(
+            "UPDATE review_items SET synced_at = ? WHERE id = ?",
+            [(now, i) for i in item_ids],
         )
         if commit:
             await conn.commit()
@@ -256,6 +302,19 @@ class ReviewItemsRepo:
         row = await cur.fetchone()
         return int(row[0]) if row else 0
 
+    async def count_clips_for_review(self, conn: aiosqlite.Connection) -> int:
+        """Clips whose LATEST annotation still has an undecided proposal — the
+        "N to review" topbar count and the /?anno=for_review list. Excludes
+        rejected items (decided) and items from a superseded older annotation
+        (the draft panel shows only the latest annotation). Backs the
+        /ui/review-pill refresh poll; shares FOR_REVIEW_WHERE with the
+        clips-list filter and the full-render sync context."""
+        cur = await conn.execute(
+            f"SELECT COUNT(DISTINCT catdv_clip_id) FROM review_items WHERE {FOR_REVIEW_WHERE}"
+        )
+        row = await cur.fetchone()
+        return int(row[0]) if row else 0
+
     @staticmethod
     def _row(row) -> ReviewItem:
         return ReviewItem(
@@ -269,4 +328,5 @@ class ReviewItemsRepo:
             edited_value=json.loads(row[7]) if row[7] is not None else None,
             decision=row[8],
             applied_at=row[9] if len(row) > 9 else None,
+            synced_at=row[10] if len(row) > 10 else None,
         )

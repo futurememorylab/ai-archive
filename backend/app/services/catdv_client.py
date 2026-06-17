@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Self
 
 import httpx
+from pydantic import ValidationError
 
 from backend.app.models.catdv import Envelope
 
@@ -77,6 +78,35 @@ class CatdvBusyError(RuntimeError):
     """Raised when the CatDV server is at its concurrent-session limit."""
 
 
+def _body_snippet(resp: "httpx.Response", limit: int = 200) -> str:
+    try:
+        return resp.text[:limit]
+    except Exception:  # noqa: BLE001 — diagnostic only
+        return "<unreadable body>"
+
+
+def _envelope_or_raise(resp: "httpx.Response") -> Envelope:
+    """Parse a CatDV JSON envelope; a body we can't parse becomes a classified
+    CatdvError rather than a raw pydantic ValidationError.
+
+    Parse-first: a well-formed envelope (OK / AUTH / ERROR / BUSY) is returned
+    and the caller's is_busy / is_ok logic decides — even on a 5xx, so a
+    BUSY-at-503 still maps to retryable. Only a body our model CANNOT validate
+    — CatDV's ``{"status": 500}`` server-error shape, an HTML error page, a
+    non-JSON body — falls through. Those previously escaped apply_changes'
+    error mapping (it only catches CatdvError/Busy/Auth) as an unknown
+    exception, so the SyncEngine retried them forever with an unreadable
+    message (the 'Publishing… N' pile-up). See the publishing audit, A2.
+    """
+    try:
+        return Envelope.model_validate(resp.json())
+    except (ValueError, ValidationError) as exc:
+        status = getattr(resp, "status_code", "?")
+        raise CatdvError(
+            f"CatDV returned an error response (HTTP {status}): {_body_snippet(resp)}"
+        ) from exc
+
+
 class CatdvClient:
     """Thin async wrapper around CatDV REST. One client per app process.
 
@@ -130,7 +160,7 @@ class CatdvClient:
                 f"{self._base}/catdv/api/9/session",
                 json={"username": self._username, "password": self._password},
             )
-            env = Envelope.model_validate(resp.json())
+            env = _envelope_or_raise(resp)
             if env.is_busy:
                 raise CatdvBusyError(env.error_message or "CatDV session limit reached")
             if not env.is_ok:
@@ -147,9 +177,7 @@ class CatdvClient:
         if self._client is None or not self._logged_in:
             return
         try:
-            await self.http.delete(
-                f"{self._base}/catdv/api/9/session", timeout=LOGOUT_TIMEOUT_S
-            )
+            await self.http.delete(f"{self._base}/catdv/api/9/session", timeout=LOGOUT_TIMEOUT_S)
         except Exception:
             logging.getLogger(__name__).warning(
                 "CatDV logout (DELETE /session) failed; the license seat may "
@@ -160,19 +188,24 @@ class CatdvClient:
             self._logged_in = False
 
     async def _call_json(
-        self, method: str, path: str, *, json: Any = None, reauth: bool = True,
+        self,
+        method: str,
+        path: str,
+        *,
+        json: Any = None,
+        reauth: bool = True,
         track_activity: bool = True,
     ) -> Envelope:
         """Issue a JSON request. Re-login once on AUTH (unless reauth=False); raise on ERROR."""
         url = f"{self._base}{path}"
         resp = await self.http.request(method, url, json=json)
-        env = Envelope.model_validate(resp.json())
+        env = _envelope_or_raise(resp)
         if env.requires_reauth:
             if not reauth:
                 raise CatdvAuthError(env.error_message or "not authenticated")
             await self.login()
             resp = await self.http.request(method, url, json=json)
-            env = Envelope.model_validate(resp.json())
+            env = _envelope_or_raise(resp)
         if env.is_busy:
             raise CatdvBusyError(env.error_message or "CatDV session limit reached")
         if not env.is_ok:
@@ -210,16 +243,20 @@ class CatdvClient:
         return env.data
 
     async def _call_json_with_params(
-        self, method: str, path: str, *, params: dict[str, str] | None = None,
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, str] | None = None,
         track_activity: bool = True,
     ) -> Envelope:
         url = f"{self._base}{path}"
         resp = await self.http.request(method, url, params=params)
-        env = Envelope.model_validate(resp.json())
+        env = _envelope_or_raise(resp)
         if env.requires_reauth:
             await self.login()
             resp = await self.http.request(method, url, params=params)
-            env = Envelope.model_validate(resp.json())
+            env = _envelope_or_raise(resp)
         if env.is_busy:
             raise CatdvBusyError(env.error_message or "CatDV session limit reached")
         if not env.is_ok:
@@ -251,7 +288,7 @@ class CatdvClient:
         expected_total: int | None = None
         stalled = 0
         while True:
-            existing = dest.stat().st_size if dest.exists() else 0  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
+            existing = dest.stat().st_size if dest.exists() else 0  # sync-io-ok: pre-existing
             if expected_total is not None and existing >= expected_total:
                 return  # complete
             headers = {"Range": f"bytes={existing}-"} if existing > 0 else {}
@@ -271,9 +308,7 @@ class CatdvClient:
                         # ignored Range — rewrite from byte 0, don't append a
                         # whole body onto the partial.
                         append = resp.status_code == 206 and existing > 0
-                        await self._stream_to_file(
-                            resp, dest, append=append, chunk_size=chunk_size
-                        )
+                        await self._stream_to_file(resp, dest, append=append, chunk_size=chunk_size)
                         finished_stream = True
             except (httpx.TimeoutException, httpx.TransportError, httpx.RemoteProtocolError):
                 # Stall / cut mid-stream. The partial on disk is intact; the

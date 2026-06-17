@@ -1,0 +1,29 @@
+{# Topbar user menu: the single home for who you are + the one environment-
+   appropriate "end your session here" action. Log out only with real auth
+   (cloud/IAP); Shut down only on a local instance (disabled under --reload,
+   forbidden in prod by the route). Built on the shared ui.menu/popover()
+   component — see design-language.md §8. #}
+{% import "components/_ui.html" as ui %}
+{%- set _settings = request.app.state.core_ctx.settings -%}
+{%- set _user = (request.state.current_user if request.state is defined else None) -%}
+{%- set _email = (_user.email if _user else "") -%}
+{%- set _initials = ((_email.split('@')[0][:2]) | upper) if _email else "?" -%}
+{%- set _is_iap = _settings.auth_backend == "iap" -%}
+{%- set _is_prod = _settings.app_env == "prod" -%}
+{%- set _env_label = ("PROD" if _is_prod else "DEV") ~ " · " ~ request.url.netloc -%}
+{% call ui.menu(label=_initials, align='right', trigger_cls='user-menu-trigger') %}
+  <div class="menu-head">
+    <div class="menu-head-email">{{ _email }}</div>
+    <div class="menu-head-env">{{ _env_label }}</div>
+  </div>
+  <div class="menu-sep"></div>
+  {% if _is_iap %}
+    {{ ui.menu_item('Log out', href='/?gcp-iap-mode=CLEAR_LOGIN_COOKIE', icon='⎋') }}
+  {% elif not _is_prod %}
+    {% if _settings.dev_reload %}
+      {{ ui.menu_item('Shut down', icon='⏻', attrs='disabled title="Reload mode — stop with Ctrl-C in the terminal"') }}
+    {% else %}
+      {{ ui.menu_item('Shut down & release seat', danger=True, icon='⏻', attrs='hx-post="/api/connection/shutdown" hx-target="body" hx-swap="innerHTML" hx-confirm="Shut down the annotator and release the CatDV seat?"') }}
+    {% endif %}
+  {% endif %}
+{% endcall %}

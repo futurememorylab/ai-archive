@@ -8,11 +8,14 @@ from types import SimpleNamespace
 from backend.app.routes.pages.templates import templates
 
 
-def _vpn(managed=True, desired="on", healthy=True, process_running=True,
-         connecting=False):
-    return SimpleNamespace(managed=managed, desired=desired,
-                           healthy=healthy, process_running=process_running,
-                           connecting=connecting)
+def _vpn(managed=True, desired="on", healthy=True, process_running=True, connecting=False):
+    return SimpleNamespace(
+        managed=managed,
+        desired=desired,
+        healthy=healthy,
+        process_running=process_running,
+        connecting=connecting,
+    )
 
 
 def _render(mode="disconnected", vpn=None, connect_mode="manual"):
@@ -21,6 +24,7 @@ def _render(mode="disconnected", vpn=None, connect_mode="manual"):
 
 
 # ---- overall pill ----
+
 
 def test_pill_online_when_vpn_healthy_and_catdv_online():
     html = _render(mode="online", vpn=_vpn(healthy=True))
@@ -80,7 +84,25 @@ def test_connecting_chip_polls_in_background():
     assert 'hx-trigger="every 2s"' in html
 
 
+def test_recovering_chip_polls_to_catch_reconnect():
+    # CatDV offline while the VPN is UP is auto-recoverable (manual mode keeps
+    # probing every 30s); the chip polls so it reflects recovery without the
+    # user navigating — the post-batch "stale Disconnected" fix. The poll matches
+    # the monitor's 30s probe interval: the chip reads cached state, so polling
+    # faster just re-fetched the same value and spammed the log.
+    html = _render(mode="offline", vpn=_vpn(desired="on", healthy=True))
+    assert 'hx-get="/ui/connection-chip"' in html
+    assert 'hx-trigger="every 30s"' in html
+
+
+def test_online_chip_does_not_poll():
+    # Fully stable → no background poll (avoids the old constant-swap flicker).
+    html = _render(mode="online", vpn=_vpn(desired="on", healthy=True))
+    assert 'hx-get="/ui/connection-chip"' not in html
+
+
 # ---- VPN row ----
+
 
 def test_vpn_row_off_offers_enable_switch():
     html = _render(mode="disconnected", vpn=_vpn(desired="off", healthy=False))
@@ -106,6 +128,7 @@ def test_vpn_row_hidden_when_unmanaged():
 
 
 # ---- CatDV row ----
+
 
 def test_catdv_row_connected_offers_disconnect():
     html = _render(mode="online", vpn=_vpn(healthy=True))
@@ -137,6 +160,7 @@ def test_catdv_row_gated_when_vpn_unreachable():
 
 # ---- dropdown chrome ----
 
+
 def test_dropdown_has_no_footer():
     # The CATALOG · READ-ONLY footer was removed from the dropdown.
     html = _render(mode="online", vpn=_vpn(healthy=True))
@@ -163,8 +187,8 @@ def test_catdv_row_forced_offline_shows_disabled_switch():
 def test_container_is_popover_with_xdata():
     html = _render(mode="disconnected", vpn=_vpn(desired="off", healthy=False))
     assert 'x-data="popover()"' in html
-    assert "popover" in html            # container carries the popover class
-    assert 'x-show="open"' in html      # panel binds to the parent popover scope
+    assert "popover" in html  # container carries the popover class
+    assert 'x-show="open"' in html  # panel binds to the parent popover scope
 
 
 def test_inner_partial_has_no_shadow_xdata():
@@ -172,25 +196,26 @@ def test_inner_partial_has_no_shadow_xdata():
     # partial must NOT declare its own x-data (hosted mode), or it would shadow
     # the parent popover scope and break toggle()/open across polls.
     html = _render(mode="disconnected", vpn=_vpn(desired="off", healthy=False))
-    assert html.count('x-data=') == 1   # only the container's x-data="popover()"
+    assert html.count("x-data=") == 1  # only the container's x-data="popover()"
 
 
 # ---- VPN connecting phase (amber transition, not red Unreachable) ----
+
 
 def test_pill_connecting_when_vpn_coming_up():
     html = _render(mode="disconnected", vpn=_vpn(desired="on", healthy=False, connecting=True))
     assert "Connecting" in html
     assert "is-connecting" in html
-    assert "Connecting VPN" in html          # weakest-link subtext
-    assert "is-error" not in html            # NOT shown as red/unreachable
+    assert "Connecting VPN" in html  # weakest-link subtext
+    assert "is-error" not in html  # NOT shown as red/unreachable
 
 
 def test_vpn_row_connecting_shows_amber_not_unreachable():
     html = _render(mode="disconnected", vpn=_vpn(desired="on", healthy=False, connecting=True))
     assert "Connecting" in html
-    assert "s-dot work" in html              # amber state dot
-    assert "Unreachable" not in html         # not the red error row
-    assert "/api/vpn/retry" not in html      # Retry is for the unreachable state
+    assert "s-dot work" in html  # amber state dot
+    assert "Unreachable" not in html  # not the red error row
+    assert "/api/vpn/retry" not in html  # Retry is for the unreachable state
 
 
 def test_vpn_row_unreachable_only_when_not_connecting():

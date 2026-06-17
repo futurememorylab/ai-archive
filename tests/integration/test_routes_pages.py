@@ -418,6 +418,271 @@ def test_clips_list_batch_view_shows_per_clip_cost(monkeypatch, tmp_path):
         assert '<div class="batch-cost muted">' not in r.text
 
 
+def test_clips_list_running_batch_self_polls_then_stops(monkeypatch, tmp_path):
+    """While a viewed batch still has in-flight items, the tbody emits a
+    self-limiting poller (targeting the lightweight OOB status endpoint, not a
+    full-region re-render); once every item settles, the poller is gone."""
+    import asyncio
+
+    from backend.app.repositories.jobs import JobsRepo
+    from backend.app.repositories.prompts import PromptsRepo
+
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.core_ctx
+
+        async def _seed() -> int:
+            prompts = PromptsRepo()
+            _, vid = await prompts.create_with_initial_version(
+                ctx.db, name="p", description=None, body="b",
+                target_map={}, output_schema={}, model="m",
+            )
+            jobs = JobsRepo()
+            # Fresh job → items are 'pending' (in-flight) → batch is running.
+            return await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[12041])
+
+        jid = asyncio.run(_seed())
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
+
+        r = client.get(f"/?batch={jid}")
+        assert r.status_code == 200
+        assert 'id="bstatus-poll"' in r.text  # running → poller armed
+        assert "/ui/batch-statuses" in r.text  # lightweight OOB endpoint
+        # The poller does OOB swaps (hx-swap="none"), not a full-region re-render.
+        assert 'hx-trigger="every 4s"' in r.text
+
+        # Settle the batch: every item done → poller must disappear.
+        async def _finish():
+            jobs = JobsRepo()
+            for it in await jobs.list_items(ctx.db, jid):
+                await jobs.update_item_status(ctx.db, it.id, "review_ready")
+
+        asyncio.run(_finish())
+        r2 = client.get(f"/?batch={jid}")
+        assert r2.status_code == 200
+        assert 'id="bstatus-poll"' not in r2.text  # settled → no poll
+
+
+def test_batch_statuses_fragment_returns_oob_pills(monkeypatch, tmp_path):
+    """The lightweight status endpoint returns one OOB span per clip and, only
+    once the batch settles, a triggerless poller replacement to stop polling."""
+    import asyncio
+
+    from backend.app.repositories.jobs import JobsRepo
+    from backend.app.repositories.prompts import PromptsRepo
+
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.core_ctx
+
+        async def _seed() -> int:
+            prompts = PromptsRepo()
+            _, vid = await prompts.create_with_initial_version(
+                ctx.db, name="p", description=None, body="b",
+                target_map={}, output_schema={}, model="m",
+            )
+            jobs = JobsRepo()
+            return await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[12041])
+
+        jid = asyncio.run(_seed())
+
+        # Running: OOB pill present, no poller-stop.
+        r = client.get(f"/ui/batch-statuses?batch={jid}")
+        assert r.status_code == 200
+        assert 'id="bstatus-12041"' in r.text
+        assert 'hx-swap-oob="true"' in r.text
+        assert 'id="bstatus-poll"' not in r.text  # still running → keep polling
+
+        async def _finish():
+            jobs = JobsRepo()
+            for it in await jobs.list_items(ctx.db, jid):
+                await jobs.update_item_status(ctx.db, it.id, "review_ready")
+
+        asyncio.run(_finish())
+        # Settled: OOB poller-stop span present.
+        r2 = client.get(f"/ui/batch-statuses?batch={jid}")
+        assert r2.status_code == 200
+        assert 'id="bstatus-poll"' in r2.text  # triggerless → polling stops
+
+
+def test_topbar_to_review_chip_counts_unapplied_drafts(monkeypatch, tmp_path):
+    """An un-applied draft surfaces a '👁 N to review' chip linking to the review
+    queue; once applied, the chip is gone."""
+    import asyncio
+
+    from backend.app.repositories.jobs import JobsRepo
+    from backend.app.repositories.prompts import PromptsRepo
+
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.core_ctx
+
+        async def _seed_unapplied() -> None:
+            prompts = PromptsRepo()
+            _, vid = await prompts.create_with_initial_version(
+                ctx.db, name="p", description=None, body="b",
+                target_map={}, output_schema={}, model="m",
+            )
+            jobs = JobsRepo()
+            jid = await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[12041])
+            cur = await ctx.db.execute(
+                "INSERT INTO annotations "
+                "(catdv_clip_id, catdv_clip_name, prompt_version_id, job_id, model, "
+                " prompt_used, raw_response, structured_output, clip_snapshot, created_at) "
+                "VALUES (12041, 'C', ?, ?, 'm', 'p', '{}', '{}', '{}', '2026-06-02T00:00:00')",
+                (vid, jid),
+            )
+            ann_id = cur.lastrowid
+            await ctx.db.execute(
+                "INSERT INTO review_items "
+                "(annotation_id, studio_run_id, catdv_clip_id, kind, target_identifier, "
+                " proposed_value, edited_value, decision, applied_at) "
+                "VALUES (?, NULL, 12041, 'marker', NULL, '{}', NULL, 'pending', NULL)",
+                (ann_id,),
+            )
+            await ctx.db.commit()
+
+        asyncio.run(_seed_unapplied())
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
+
+        r = client.get("/")
+        assert r.status_code == 200
+        assert "to-review-chip" in r.text
+        assert "1 to review" in r.text
+        assert 'href="/?anno=for_review"' in r.text
+
+        async def _apply() -> None:
+            await ctx.db.execute(
+                "UPDATE review_items SET applied_at = '2026-06-02T01:00:00'"
+            )
+            await ctx.db.commit()
+
+        asyncio.run(_apply())
+        r2 = client.get("/")
+        assert r2.status_code == 200
+        assert "to-review-chip" not in r2.text
+
+
+def test_to_review_ignores_fully_decided_clips(monkeypatch, tmp_path):
+    """A clip whose drafts are all DECIDED (some applied, the rest rejected) has
+    nothing left to review — rejected items keep applied_at NULL, but they must
+    NOT inflate the chip count nor appear under the 'Awaiting review' filter."""
+    import asyncio
+
+    from backend.app.repositories.jobs import JobsRepo
+    from backend.app.repositories.prompts import PromptsRepo
+
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.core_ctx
+
+        async def _seed() -> None:
+            prompts = PromptsRepo()
+            _, vid = await prompts.create_with_initial_version(
+                ctx.db, name="p", description=None, body="b",
+                target_map={}, output_schema={}, model="m",
+            )
+            jobs = JobsRepo()
+            jid = await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[12041])
+            cur = await ctx.db.execute(
+                "INSERT INTO annotations "
+                "(catdv_clip_id, catdv_clip_name, prompt_version_id, job_id, model, "
+                " prompt_used, raw_response, structured_output, clip_snapshot, created_at) "
+                "VALUES (12041, 'C', ?, ?, 'm', 'p', '{}', '{}', '{}', '2026-06-02T00:00:00')",
+                (vid, jid),
+            )
+            ann = cur.lastrowid
+            # one accepted+applied, one rejected (applied_at NULL) → 0 to review
+            await ctx.db.execute(
+                "INSERT INTO review_items "
+                "(annotation_id, studio_run_id, catdv_clip_id, kind, target_identifier, "
+                " proposed_value, edited_value, decision, applied_at) "
+                "VALUES (?, NULL, 12041, 'marker', NULL, '{}', NULL, 'accepted', '2026-06-02T01:00:00')",
+                (ann,),
+            )
+            await ctx.db.execute(
+                "INSERT INTO review_items "
+                "(annotation_id, studio_run_id, catdv_clip_id, kind, target_identifier, "
+                " proposed_value, edited_value, decision, applied_at) "
+                "VALUES (?, NULL, 12041, 'marker', NULL, '{}', NULL, 'rejected', NULL)",
+                (ann,),
+            )
+            await ctx.db.commit()
+
+        asyncio.run(_seed())
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
+
+        # Chip: nothing to review.
+        r = client.get("/")
+        assert r.status_code == 200
+        assert "to-review-chip" not in r.text
+
+        # for_review filter: the fully-decided clip must not appear.
+        r2 = client.get("/?anno=for_review")
+        assert r2.status_code == 200
+        assert "Abramcukova" not in r2.text
+
+
+def test_to_review_ignores_superseded_annotation(monkeypatch, tmp_path):
+    """A clip re-annotated later: the OLD annotation's undecided proposals are
+    superseded (the draft panel shows only the latest annotation). They must not
+    count as 'to review' — that's the '2 to review but 0 proposals' bug."""
+    import asyncio
+
+    from backend.app.repositories.jobs import JobsRepo
+    from backend.app.repositories.prompts import PromptsRepo
+
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.core_ctx
+
+        async def _seed() -> None:
+            prompts = PromptsRepo()
+            _, vid = await prompts.create_with_initial_version(
+                ctx.db, name="p", description=None, body="b",
+                target_map={}, output_schema={}, model="m",
+            )
+            jobs = JobsRepo()
+            j_old = await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[12041])
+            j_new = await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[12041])
+
+            async def _ann(job_id) -> int:
+                cur = await ctx.db.execute(
+                    "INSERT INTO annotations "
+                    "(catdv_clip_id, catdv_clip_name, prompt_version_id, job_id, model, "
+                    " prompt_used, raw_response, structured_output, clip_snapshot, created_at) "
+                    "VALUES (12041, 'C', ?, ?, 'm', 'p', '{}', '{}', '{}', '2026-06-02T00:00:00')",
+                    (vid, job_id),
+                )
+                return cur.lastrowid
+
+            old_ann = await _ann(j_old)  # superseded
+            new_ann = await _ann(j_new)  # latest → its items are all applied
+            # OLD annotation: an undecided (pending) proposal, never applied.
+            await ctx.db.execute(
+                "INSERT INTO review_items "
+                "(annotation_id, studio_run_id, catdv_clip_id, kind, target_identifier, "
+                " proposed_value, edited_value, decision, applied_at) "
+                "VALUES (?, NULL, 12041, 'marker', NULL, '{}', NULL, 'pending', NULL)",
+                (old_ann,),
+            )
+            # LATEST annotation: accepted + applied → nothing to review now.
+            await ctx.db.execute(
+                "INSERT INTO review_items "
+                "(annotation_id, studio_run_id, catdv_clip_id, kind, target_identifier, "
+                " proposed_value, edited_value, decision, applied_at) "
+                "VALUES (?, NULL, 12041, 'marker', NULL, '{}', NULL, 'accepted', '2026-06-02T01:00:00')",
+                (new_ann,),
+            )
+            await ctx.db.commit()
+
+        asyncio.run(_seed())
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
+
+        r = client.get("/")
+        assert r.status_code == 200
+        assert "to-review-chip" not in r.text  # latest draft is fully decided
+
+        r2 = client.get("/?anno=for_review")
+        assert r2.status_code == 200
+        assert "Abramcukova" not in r2.text
+
+
 def test_clips_list_normal_view_has_no_cost_column(monkeypatch, tmp_path):
     """The unfiltered clips list must NOT include the Cost column."""
     with _make_client(monkeypatch, tmp_path) as client:

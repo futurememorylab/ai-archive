@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse
 from backend.app.archive.errors import ProviderError, is_provider_not_found
 from backend.app.archive.model import CanonicalClip, ClipQuery
 from backend.app.deps import get_core_ctx, get_live_ctx
+from backend.app.repositories.jobs import TRANSIENT_STATUSES
 from backend.app.repositories.live_sessions import LiveSessionsRepo
 from backend.app.routes.pages.templates import templates
 from backend.app.services.clip_list_filters import (
@@ -21,6 +22,7 @@ from backend.app.services.clip_list_filters import (
 from backend.app.services.clip_list_filters import (
     resolve as resolve_filters,
 )
+from backend.app.services.publish_status import resolve_publish_status
 from backend.app.timecode import secs_to_smpte
 from backend.app.ui.pagination import page_offsets
 from backend.app.ui.view_models import clip_detail, clip_summary, draft_review_arrays
@@ -64,6 +66,13 @@ _BATCH_STATUS_VIEW: dict[str, tuple[str, str]] = {
     "rejected": ("Rejected", ""),
     "error": ("Failed", "bad"),
 }
+
+
+# Item statuses that mean "still working" (maps to the Queued/Processing pills).
+# Mirrors the in-flight set in JobsRepo._BATCHES_SQL.
+# "pending" plus the in-flight phases (TRANSIENT_STATUSES) — derived so it can't
+# drift from the job-items state set in repositories/jobs.py.
+_RUNNING_ITEM_STATUSES = frozenset({"pending", *TRANSIENT_STATUSES})
 
 
 def _batch_status_view(status: str | None) -> dict[str, str] | None:
@@ -261,6 +270,10 @@ async def clips_list(
     for jid in batch_ids:
         for it in await ctx.jobs_repo.list_items(ctx.db, jid):
             batch_status_map[it.catdv_clip_id] = it.status
+    # While any item is still in-flight, the per-clip pills change underneath a
+    # static page — flag it so the tbody self-polls and refreshes the pills
+    # without a manual reload. Stops automatically once the batch settles.
+    ctx_dict["batch_running"] = any(s in _RUNNING_ITEM_STATUSES for s in batch_status_map.values())
 
     # Actual billable cost per clip for this batch: one batched aggregate
     # over the batch's job ids, summed per clip in SQL (a clip may appear
@@ -272,6 +285,15 @@ async def clips_list(
     # Annotate each row with its pending-draft counts and batch job id.
     pending_rows = await ctx.review_items_repo.list_pending_clips(ctx.db, limit=2000, offset=0)
     pmap = {r["catdv_clip_id"]: r for r in pending_rows}
+
+    # Batched, O(1) regardless of page size: the publishing/failed/conflict
+    # signal comes from pending_operations (the durable write queue — the same
+    # source the topbar chip uses, so they always agree); clip_versions is
+    # consulted only for the live version number. See services/publish_status.py.
+    clip_ids = [row["id"] for row in ctx_dict["clips"]]
+    live_nums = await ctx.clip_versions_repo.live_version_num_by_clip(ctx.db, clip_ids)
+    pending_by_clip = await ctx.pending_ops_repo.count_pending_by_clip(ctx.db, provider_id="catdv")
+
     for row in ctx_dict["clips"]:
         row["batch_status"] = _batch_status_view(batch_status_map.get(row["id"]))
         bc = batch_cost_map.get(row["id"])
@@ -289,6 +311,17 @@ async def clips_list(
             parts.append(f"{nc}n")
         row["draft_label"] = " · ".join(parts) if parts else ""
         row["batch"] = p["job_id"] if p else None
+        # Unified publish status for the status-badge column.
+        b = pending_by_clip.get(str(row["id"]), {})
+        ps_state, ps_num = resolve_publish_status(
+            has_draft=row["id"] in pmap,
+            pending_write=b.get("pending", 0) > 0,
+            failed_write=b.get("failed", 0) > 0,
+            conflict_write=b.get("conflict", 0) > 0,
+            live_version_num=live_nums.get(row["id"]),
+        )
+        row["publish_state"] = ps_state
+        row["publish_version_num"] = ps_num
 
     template = (
         "pages/_clips_tbody.html"
@@ -505,6 +538,55 @@ async def _build_draft_view_model_for_live(ctx, clip_id: int) -> dict:
     }
 
 
+# ClipPublishState → pill CSS class + human label, used by the headline pill and
+# the history menu so the version panel and its refresh route agree.
+_PILL_STATE: dict[str, str] = {
+    "live": "ok",
+    "publishing": "accent",
+    "draft": "accent",
+    "failed": "bad",
+    "conflict": "bad",
+    "none": "",
+}
+_PILL_LABEL: dict[str, str] = {
+    "publishing": "Publishing…",
+    "draft": "Draft – unpublished",
+    "failed": "Failed",
+    "conflict": "Conflict",
+}
+
+
+async def _version_panel_ctx(ctx, clip_id: int, *, has_draft: bool) -> dict:
+    """Shared context for the version panel (headline pill + history dropdown),
+    rendered both inline on the clip page and by the /version-panel refresh
+    route. The publishing/failed/conflict signal comes from pending_operations
+    (the write queue) — not the drift-prone clip_versions.publish_state copy."""
+    versions = await ctx.clip_versions_repo.list_by_clip(ctx.db, clip_id)
+    # list_by_clip already returns every version (version_num DESC), so the live
+    # one is the first with publish_state == 'live' — no second query needed.
+    live = next((v for v in versions if v.publish_state == "live"), None)
+    counts = await ctx.pending_ops_repo.status_counts_for_clip(
+        ctx.db, provider_id="catdv", provider_clip_id=str(clip_id)
+    )
+    state, num = resolve_publish_status(
+        has_draft=has_draft,
+        pending_write=(counts.get("pending", 0) + counts.get("in_flight", 0)) > 0,
+        failed_write=counts.get("failed", 0) > 0,
+        conflict_write=counts.get("conflict", 0) > 0,
+        live_version_num=live.version_num if live else None,
+    )
+    label = f"Live v{num}" if state == "live" else _PILL_LABEL.get(state, "")
+    return {
+        "versions": [v.model_dump() for v in versions],
+        "publish_status": {
+            "state": state,
+            "version_num": num,
+            "pill_state": _PILL_STATE.get(state, ""),
+            "label": label,
+        },
+    }
+
+
 @router.get("/clips/{clip_id}", response_class=HTMLResponse)
 async def clip_detail_page(request: Request, clip_id: int, review: int | None = None):
     ctx = get_live_ctx(request)
@@ -546,7 +628,31 @@ async def clip_detail_page(request: Request, clip_id: int, review: int | None = 
         60,
     )
     ctx_dict["review_mode"] = bool(review)
+
+    # Version history + headline publish status (shared with the /version-panel
+    # refresh route).
+    panel = await _version_panel_ctx(
+        ctx, clip_id, has_draft=bool(ctx_dict["draft"].get("has_draft", False))
+    )
+    ctx_dict["versions"] = panel["versions"]
+    ctx_dict["publish_status"] = panel["publish_status"]
+
     return templates.TemplateResponse(request, "pages/clip_detail.html", ctx_dict)
+
+
+@router.get("/clips/{clip_id}/version-panel", response_class=HTMLResponse)
+async def clip_version_panel(request: Request, clip_id: int):
+    """The headline pill + history dropdown, re-rendered so review.js can swap
+    #version-panel after a Make-live / publish without a full reload. DB-only
+    (offline-safe)."""
+    ctx = get_core_ctx(request)
+    draft = await _build_draft_for_clip(ctx, clip_id)
+    panel = await _version_panel_ctx(ctx, clip_id, has_draft=bool(draft.get("has_draft", False)))
+    return templates.TemplateResponse(
+        request,
+        "pages/_version_panel.html",
+        {"versions": panel["versions"], "publish_status": panel["publish_status"]},
+    )
 
 
 @router.get("/clips/{clip_id}/draft", response_class=HTMLResponse)
@@ -620,4 +726,26 @@ async def clip_live_history(request: Request, clip_id: int):
         request,
         "pages/_anno_live_history.html",
         {"sessions": sessions},
+    )
+
+
+@router.get("/ui/batch-statuses", response_class=HTMLResponse)
+async def batch_statuses_fragment(request: Request, batch: str = ""):
+    """Per-clip run-status pills for a running batch, as HTMX out-of-band <span>
+    swaps — so the clips list refreshes just the pills in place, with no
+    full-table re-render (which would reset the scroll and re-run the list's
+    heavier queries every few seconds). DB-only; polled by #bstatus-poll while
+    the batch is running, and tells the poller to stop once it settles."""
+    ctx = get_core_ctx(request)
+    job_ids = [int(b) for b in batch.split(",") if b.strip().isdigit()]
+    status_map: dict[int, str] = {}
+    for jid in job_ids:
+        for it in await ctx.jobs_repo.list_items(ctx.db, jid):
+            status_map[it.catdv_clip_id] = it.status
+    cells = {cid: _batch_status_view(s) for cid, s in status_map.items()}
+    running = any(s in _RUNNING_ITEM_STATUSES for s in status_map.values())
+    return templates.TemplateResponse(
+        request,
+        "pages/_batch_status_cells.html",
+        {"cells": cells, "batch_running": running},
     )

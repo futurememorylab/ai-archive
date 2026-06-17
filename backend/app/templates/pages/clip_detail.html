@@ -12,6 +12,7 @@
 {% set can_play = mode == "online" or (clip.cache and (clip.cache.media_local.present or clip.cache.media_ai.present)) %}
 <script>localStorage.setItem("catdv:lastClipId", "{{ clip.id }}");</script>
 <div class="detail"
+     data-rerun-confirm="{{ 'true' if publish_status.state == 'draft' else 'false' }}"
      :class="{ 'is-draft': scope === 'draft', 'live-active': liveSession.state !== 'idle' }"
      x-data='Object.assign(
        player({{ clip.fps }}, {{ clip.duration_secs }}, {{ clip.markers|tojson }}, {{ draft_arrays.markers|tojson }}),
@@ -20,6 +21,7 @@
        { scope: "{{ 'draft' if review_mode else 'published' }}", tab: "{{ 'fields' if clip.kind == 'image' else 'markers' }}",
          draftFields: {{ draft_arrays.fields|tojson }}, draftNotes: {{ draft_arrays.notes|tojson }},
          draftDeleted: {{ draft_arrays.deleted|tojson }}, appliedCount: {{ draft_arrays.applied_count }},
+         syncedCount: {{ draft_arrays.synced_count }},
          canPlay: {{ 'true' if can_play else 'false' }},
          liveSession: liveSession({{ clip.id }}, { inactivityS: {{ gemini_live_inactivity_s|default(60) }} })
        }
@@ -119,19 +121,32 @@
   </section>
 
   <aside class="anno-col">
-    <div class="anno-scope" role="tablist" aria-label="Annotation source">
-      <button type="button" class="btn sm" data-scope="published"
-              :class="{ active: scope === 'published' }"
-              :aria-selected="scope === 'published'"
-              @click="scope = 'published'">
-        Published
-      </button>
-      <button type="button" class="btn sm" data-scope="draft"
-              :class="{ active: scope === 'draft' }"
-              :aria-selected="scope === 'draft'"
-              @click="scope = 'draft'">
-        Draft
-      </button>
+    {# Non-scrolling header: the Published/Draft tabs with the version panel
+       (headline pill + History dropdown) beside them. Kept out of the scrolling
+       .anno-body so the History popover overlays the content instead of being
+       clipped by the column overflow. #version-panel is swapped in place by
+       review.js after a Make-live / publish (no reload). #}
+    <div class="anno-head">
+      <div class="anno-scope-row">
+        <div class="anno-scope" role="tablist" aria-label="Annotation source">
+          <button type="button" class="btn sm" data-scope="published"
+                  :class="{ active: scope === 'published' }"
+                  :aria-selected="scope === 'published'"
+                  @click="scope = 'published'">
+            Published
+          </button>
+          <button type="button" class="btn sm" data-scope="draft"
+                  :class="{ active: scope === 'draft' }"
+                  :aria-selected="scope === 'draft'"
+                  @click="scope = 'draft'">
+            Draft
+          </button>
+        </div>
+        <span class="grow"></span>
+        <div id="version-panel" class="version-panel">
+          {% include "pages/_version_panel.html" %}
+        </div>
+      </div>
     </div>
 
     {# Review walk: a clip with no draft can't be reviewed, so skip past it to
@@ -152,16 +167,35 @@
     </script>
     {% endif %}
 
-    <div class="anno-scoped" x-show="scope === 'published'" x-cloak>
-      {% if annotation_cost_usd is not none %}
-      <div class="anno-cost muted mono">Cost: {{ annotation_cost_usd|usd }}</div>
-      {% endif %}
-      {% include "pages/_published_refreshable.html" %}
-    </div>
+    {# Scrolling body — only the annotation lists scroll, so the header (tabs +
+       History) stays pinned and the History popover isn't clipped. #}
+    <div class="anno-body">
+      <div class="anno-scoped" x-show="scope === 'published'" x-cloak>
+        {% if annotation_cost_usd is not none %}
+        <div class="anno-cost muted mono">Cost: {{ annotation_cost_usd|usd }}</div>
+        {% endif %}
+        {% include "pages/_published_refreshable.html" %}
+      </div>
 
-    <div class="anno-scoped" id="draft-aside" x-show="scope === 'draft'" x-cloak>
-      {% include "pages/_anno_draft.html" %}
+      <div class="anno-scoped" id="draft-aside" x-show="scope === 'draft'" x-cloak>
+        {% include "pages/_anno_draft.html" %}
+      </div>
     </div>
   </aside>
+
+  {# ── Re-run confirm dialog (only when an unpublished draft exists) ──────── #}
+  {% if publish_status.state == 'draft' %}
+  {% call ui.modal('rerunConfirmOpen', label='Re-run annotation?', card_cls='sm') %}
+    <div class="modal-body">
+      <p>This replaces your current unpublished draft — last published
+        {% if publish_status.version_num %}#{{ publish_status.version_num }}{% else %}version{% endif %}
+        stays restorable.</p>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" @click="rerunConfirmOpen = false">Cancel</button>
+      <button type="button" class="btn primary" @click="confirmRerun()">Re-run</button>
+    </div>
+  {% endcall %}
+  {% endif %}
 </div>
 {% endblock %}

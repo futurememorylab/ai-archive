@@ -13,6 +13,7 @@ from backend.app.archive.model import (
     AppendNote,
     ChangeSet,
     Marker,
+    ReconcileMarkers,
     ReplaceNote,
     SetField,
     Timecode,
@@ -83,3 +84,13 @@ def test_change_op_to_dict_rejects_unknown_type():
         assert "Bogus" in str(exc)
     else:  # pragma: no cover
         raise AssertionError("expected TypeError")
+
+
+def test_reconcile_markers_round_trips():
+    op = ReconcileMarkers(
+        desired=(Marker(name="A", in_=Timecode(secs=4.0, fps=0.0), out=None),),
+        drop_secs=(8.0, 12.0),
+    )
+    back = change_op_from_json(change_op_to_json(op))
+    assert back == op
+    assert isinstance(back, ReconcileMarkers)

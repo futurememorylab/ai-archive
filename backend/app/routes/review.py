@@ -21,6 +21,13 @@ def _notify_sync(request: Request) -> None:
     if live is not None:
         live.sync_engine.notify()
 
+
+def _author(request: Request) -> str | None:
+    """Extract the current user's email for version authorship, or None."""
+    user = getattr(request.state, "current_user", None)
+    return getattr(user, "email", None)
+
+
 router = APIRouter(prefix="/api/review", tags=["review"])
 
 _VALID_KINDS = {"marker", "field", "note"}
@@ -34,7 +41,6 @@ class Decision(BaseModel):
 class ApplyBatch(BaseModel):
     clip_ids: list[int]
     kinds: list[str] | None = None
-
 
 
 @router.get("/clips/{clip_id}/draft-data")
@@ -142,26 +148,25 @@ async def apply_clip(
     clip_id: int,
     hx_request: str | None = Header(None, alias="HX-Request"),
 ):
-    """Enqueue accepted review items for upstream apply.
+    """Publish accepted review items as a new clip version and enqueue upstream apply.
 
     The route used to PUT to CatDV synchronously. Now it writes one
     `pending_operations` row per ChangeOp (atomic with marking the
-    review_items as `applied`) and notifies the SyncEngine to drain.
-    When the engine is online the drain runs immediately, so the
-    user-observable behaviour is unchanged ("applied: N"); when offline
-    the ops sit in the queue until reconnection.
+    review_items as `applied`) via PublishService, which also records an
+    immutable clip_versions row. The SyncEngine flips the version live
+    when CatDV confirms.
 
     HTMX callers (the clip-detail "Accept & apply" button, which stays on
     the page) send `HX-Request: true` and get the re-rendered draft aside
     partial back so the JS can swap it in place rather than full-reload.
     Non-HX callers (e.g. `applyAndNext`, which navigates away on success)
-    keep getting the JSON `{"queued","applied"}` body unchanged.
+    get a JSON `{"version_id": ...}` body.
     """
     ctx = get_core_ctx(request)
     if ctx.write_queue is None:
         raise HTTPException(503, "write queue not initialized")
-    queued = await _resolve_and_enqueue_clip(ctx, clip_id)
-    if queued:
+    version_id = await ctx.publish_service.publish(ctx.db, clip_id=clip_id, author=_author(request))
+    if version_id is not None:
         _notify_sync(request)
     if hx_request == "true":
         # Re-render the draft aside so its applied/decision state reflects
@@ -174,4 +179,45 @@ async def apply_clip(
         return templates.TemplateResponse(
             request, "pages/_anno_draft.html", {"draft": draft, "clip": None}
         )
-    return {"queued": queued, "applied": queued}
+    return {"version_id": version_id}
+
+
+@router.get("/clips/{clip_id}/versions")
+async def list_versions(request: Request, clip_id: int):
+    """Return all clip versions for a clip, ordered by version_num."""
+    ctx = get_core_ctx(request)
+    versions = await ctx.clip_versions_repo.list_by_clip(ctx.db, clip_id)
+    return [v.model_dump() for v in versions]
+
+
+@router.post("/clips/{clip_id}/versions/{version_num}/activate")
+async def activate_version(request: Request, clip_id: int, version_num: int):
+    """Switch the clip back to an existing published version — re-PUT its
+    snapshot to CatDV and mark it live again, superseding the current live,
+    WITHOUT creating a new version. This is the 'switch versions' action; it
+    replaces the old publish-forward 'restore & publish' that forked a new
+    identical version on every click (publishing audit A3/A4)."""
+    ctx = get_core_ctx(request)
+    try:
+        version_id = await ctx.publish_service.reactivate(
+            ctx.db, clip_id=clip_id, version_num=version_num
+        )
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    _notify_sync(request)
+    return {"activated_version_id": version_id}
+
+
+@router.post("/clips/{clip_id}/versions/{version_num}/restore")
+async def restore_version(request: Request, clip_id: int, version_num: int):
+    """Load a published version's snapshot into the working draft as fresh
+    pending review_items, for editing before re-publishing. Does NOT publish
+    and does NOT create a version — use /activate to just switch live."""
+    ctx = get_core_ctx(request)
+    try:
+        n = await ctx.restore_service.restore_into_draft(
+            ctx.db, clip_id=clip_id, version_num=version_num
+        )
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return {"restored_items": n}

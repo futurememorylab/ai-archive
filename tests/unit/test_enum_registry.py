@@ -21,3 +21,14 @@ def test_editable_enums_never_seed_two_defaults():
     for spec in ENUM_REGISTRY.values():
         if spec.editable:
             assert sum(1 for v in spec.values if v.default) <= 1
+
+
+def test_clip_publish_state_matches_literal():
+    from typing import get_args
+
+    from backend.app.enums.registry import ENUM_REGISTRY
+    from backend.app.models.annotation import ClipPublishState
+
+    spec = ENUM_REGISTRY["clip_publish_state"]
+    assert spec.editable is False
+    assert tuple(v.value for v in spec.values) == get_args(ClipPublishState)

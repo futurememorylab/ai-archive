@@ -99,6 +99,7 @@ async def list_active_jobs(request: Request):
                 "done": done,
                 "total": total,
                 "errors": errors,
+                "phases": await ctx.jobs_repo.phase_counts(ctx.db, job.id),
             }
         )
     return out

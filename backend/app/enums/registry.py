@@ -63,4 +63,18 @@ ENUM_REGISTRY: dict[str, EnumSpec] = {
             EnumValueSpec("error"),
         ),
     ),
+    "clip_publish_state": EnumSpec(
+        key="clip_publish_state",
+        name="Clip publish state",
+        description="Headline status of a clip's annotation work versus CatDV.",
+        editable=False,
+        values=(
+            EnumValueSpec("none"),
+            EnumValueSpec("draft"),
+            EnumValueSpec("publishing"),
+            EnumValueSpec("live"),
+            EnumValueSpec("failed"),
+            EnumValueSpec("conflict"),
+        ),
+    ),
 }

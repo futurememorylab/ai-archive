@@ -57,6 +57,7 @@
         </span>
       </td>
       <td class="bt-actions" onclick="event.stopPropagation()">
+        <div class="bt-actions-inner">
         {% if not b.running and b.failed %}
         <button type="button" class="btn sm" @click="retryFailed({{ b.job_ids|tojson }})">
           ↻ Retry failed ({{ b.failed }})
@@ -67,8 +68,12 @@
                 @click="reviewBatch({{ b.job_ids|tojson }}, '{{ b.review_href }}')">Review →</button>
         {% endif %}
         {% if b.running or (b.reviewed >= b.completed and not b.failed) %}
-        <a class="btn sm ghost" href="{{ b.review_href if b.completed else '/' }}">Open</a>
+        {# Open the batch's own clip list (every file, live status pills) — NOT
+           review_href, which points at the for_review filter and is empty once
+           the batch is fully reviewed. Matches the row click. #}
+        <a class="btn sm ghost" href="{{ b.files_href }}">Open</a>
         {% endif %}
+        </div>
       </td>
     </tr>
     {% if b.fails %}

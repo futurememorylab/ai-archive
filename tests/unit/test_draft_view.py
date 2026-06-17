@@ -79,6 +79,7 @@ def test_build_draft_view_maps_marker_review_items():
             "kind": "marker",
             "decision": "pending",
             "applied_at": None,
+            "synced_at": None,
         },
         {
             "name": "Scene 2",
@@ -91,6 +92,7 @@ def test_build_draft_view_maps_marker_review_items():
             "kind": "marker",
             "decision": "pending",
             "applied_at": None,
+            "synced_at": None,
         },
     ]
 
@@ -141,6 +143,7 @@ def test_build_draft_view_maps_string_field():
             "kind": "field",
             "decision": "pending",
             "applied_at": None,
+            "synced_at": None,
         },
     ]
 
@@ -167,6 +170,7 @@ def test_build_draft_view_maps_list_field_by_joining():
             "kind": "field",
             "decision": "pending",
             "applied_at": None,
+            "synced_at": None,
         },
     ]
 

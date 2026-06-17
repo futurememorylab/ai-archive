@@ -42,3 +42,6 @@ logs/
 
 # Superpowers brainstorm scratch
 .superpowers/
+
+# Claude Code agent worktrees (local, per-machine)
+.claude/worktrees/

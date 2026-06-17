@@ -52,6 +52,7 @@ from backend.app.repositories.app_meta import get_or_create_install_id
 from backend.app.repositories.cache_actions_log import CacheActionsLogRepo
 from backend.app.repositories.clip_cache import ClipCacheRepo
 from backend.app.repositories.clip_list_cache import ClipListCacheRepo
+from backend.app.repositories.clip_versions import ClipVersionsRepo
 from backend.app.repositories.enum_values import EnumValuesRepo
 from backend.app.repositories.field_def_cache import FieldDefCacheRepo
 from backend.app.repositories.jobs import JobsRepo
@@ -78,6 +79,8 @@ from backend.app.services.lru_eviction import LruEviction
 from backend.app.services.media_cache import MediaCacheBackend, build_media_cache_backend
 from backend.app.services.media_prefetcher import MediaPrefetcher
 from backend.app.services.proxy_cache_reconciler import ProxyCacheReconciler
+from backend.app.services.publish_service import PublishService
+from backend.app.services.restore_service import RestoreService
 from backend.app.services.sync_engine import SyncEngine
 from backend.app.services.vpn_supervisor import VpnSupervisor
 from backend.app.services.workspace_manager import WorkspaceManager
@@ -116,12 +119,15 @@ class CoreCtx:
     run_telemetry_repo: RunTelemetryRepo = field(default_factory=RunTelemetryRepo)
     user_roles_repo: UserRolesRepo = field(default_factory=UserRolesRepo)
     enum_values_repo: EnumValuesRepo = field(default_factory=EnumValuesRepo)
+    clip_versions_repo: ClipVersionsRepo = field(default_factory=ClipVersionsRepo)
     telemetry_ctx: TelemetryCtx = field(init=False)
     event_bus: EventBus = field(default_factory=EventBus)
 
     _running_jobs: dict[int, object] = field(default_factory=dict)
 
     write_queue: WriteQueue = field(init=False)
+    publish_service: PublishService = field(init=False)
+    restore_service: RestoreService = field(init=False)
     # Cache services are DB-first (offline-required). Their live
     # augmentations (deep-orphan provider checks, bucket-side AI
     # eviction) are each a single None-guarded call site, so they live
@@ -159,6 +165,19 @@ class CoreCtx:
             pending_ops_repo=ctx.pending_ops_repo,
             review_items_repo=ctx.review_items_repo,
         )
+        ctx.publish_service = PublishService(
+            annotations_repo=ctx.annotations_repo,
+            review_items_repo=ctx.review_items_repo,
+            clip_versions_repo=ctx.clip_versions_repo,
+            write_queue=ctx.write_queue,
+            prompts_repo=ctx.prompts_repo,
+            live_snapshot_loader=_load_live_snapshot,
+        )
+        ctx.restore_service = RestoreService(
+            clip_versions_repo=ctx.clip_versions_repo,
+            review_items_repo=ctx.review_items_repo,
+            annotations_repo=ctx.annotations_repo,
+        )
 
         import os
         from urllib.parse import urlparse
@@ -182,6 +201,9 @@ class CoreCtx:
             repo=ctx.enum_values_repo,
         )
         await ctx.enum_service.reconcile_seeds()
+        from backend.app.services.clip_versions_backfill import backfill_clip_versions
+
+        await backfill_clip_versions(ctx.db, ctx.clip_versions_repo)
         return ctx
 
     def _wire_cache_services(
@@ -369,6 +391,18 @@ class LiveCtx:
         return self.core.enum_service
 
     @property
+    def clip_versions_repo(self) -> ClipVersionsRepo:
+        return self.core.clip_versions_repo
+
+    @property
+    def publish_service(self) -> PublishService:
+        return self.core.publish_service
+
+    @property
+    def restore_service(self) -> RestoreService:
+        return self.core.restore_service
+
+    @property
     def _running_jobs(self) -> dict[int, object]:
         return self.core._running_jobs
 
@@ -420,6 +454,20 @@ class _ArchiveSubsystem(NamedTuple):
     proxy_resolver: ProxyResolver | None
     thumbnail_service: ThumbnailService | None
     flags: _OnlineFlags
+
+
+async def _load_live_snapshot(conn, clip_id: int) -> dict:
+    # No prior version: start from an empty committed state. Accepted items
+    # are layered on top (markers ADD, fields/notes SET), so the empty base is
+    # correct — the snapshot is our record of the accepted deltas we wrote.
+    return {
+        "markers": [],
+        "fields": {},
+        "notes": None,
+        "bigNotes": None,
+        "fps": 25.0,
+        "modifyDate": None,
+    }
 
 
 async def build_context(
@@ -755,6 +803,8 @@ async def _build_sync_subsystem(
         write_log_repo=core.write_log_repo,
         connection_monitor=connection_monitor,
         db_provider=lambda: core.db,
+        review_items_repo=core.review_items_repo,
+        clip_versions_repo=core.clip_versions_repo,
         event_bus=core.event_bus,
         tick_interval_s=float(settings.sync_tick_interval_s),
         retry_base_s=float(settings.sync_retry_base_s),

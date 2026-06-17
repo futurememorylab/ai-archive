@@ -1,0 +1,12 @@
+{# Inner of the topbar "N to review" pill. Swapped into #review-pill by the
+   self-refresh poll and after draft-changing actions, so the count never goes
+   stale without a full reload. Renders nothing when there is nothing to review
+   (the stable #review-pill container in _topbar_pills.html remains as the swap
+   target). review_count comes from the full-page context (templates.py) on
+   first paint and from GET /ui/review-pill thereafter. #}
+{% if review_count is defined and review_count %}
+<a class="pill changed to-review-chip" href="/?anno=for_review"
+   title="{{ review_count }} clip(s) with AI drafts awaiting your review">
+  <span class="led"></span>{{ review_count }} to review
+</a>
+{% endif %}

@@ -14,6 +14,7 @@ from backend.app.archive.model import (
     MediaRef,
     Timecode,
 )
+from backend.app.archive.providers.catdv.text_repair import demojibake
 from backend.app.timecode import secs_to_smpte
 
 DEFAULT_FPS = 25.0
@@ -65,12 +66,15 @@ def from_catdv_clip(raw: dict[str, Any], *, fetched_at: datetime) -> CanonicalCl
 
 
 def _marker_from_catdv(raw: dict[str, Any], fps: float) -> Marker:
+    # Repair compounding UTF-8 mojibake CatDV introduces on marker text (see
+    # text_repair). Done on read so the UI shows clean text and any re-send
+    # carries the cleaned value.
     return Marker(
-        name=str(raw.get("name", "")),
+        name=demojibake(str(raw.get("name", ""))) or "",
         in_=_timecode_from_catdv(raw.get("in") or {}, fps),
         out=_timecode_from_catdv(raw["out"], fps) if isinstance(raw.get("out"), dict) else None,
-        description=raw.get("description"),
-        category=raw.get("category"),
+        description=demojibake(raw.get("description")),
+        category=demojibake(raw.get("category")),
         color=raw.get("color"),
     )
 
@@ -86,15 +90,34 @@ def _timecode_from_catdv(raw: dict[str, Any], default_fps: float) -> Timecode:
     return Timecode(secs=secs, fps=fps, frm=frm, txt=txt)
 
 
+# CatDV's marker `name` column is length-limited; a runaway AI-generated name
+# (a whole sentence) makes `replaceMarkers` fail with a DB "Data too long for
+# column 'name'" 500 that takes the entire write down. Clamp the name and keep
+# the full text in the description so nothing is lost. Conservative default for
+# a VARCHAR(255)-ish column; lower it if a given CatDV schema is tighter.
+MARKER_NAME_MAX = 200
+
+
+def _clamp_marker_name(name: str | None, description: str | None) -> tuple[str, str | None]:
+    name = name or ""
+    if len(name) <= MARKER_NAME_MAX:
+        return name, description
+    clamped = name[: MARKER_NAME_MAX - 1].rstrip() + "…"
+    # Preserve the full original name at the head of the description.
+    description = name if not description else f"{name}\n\n{description}"
+    return clamped, description
+
+
 def marker_to_catdv(marker: Marker, fps: float) -> dict[str, Any]:
+    name, description = _clamp_marker_name(marker.name, marker.description)
     out: dict[str, Any] = {
-        "name": marker.name,
+        "name": name,
         "in": _timecode_to_catdv(marker.in_, fps),
     }
     if marker.out is not None:
         out["out"] = _timecode_to_catdv(marker.out, fps)
-    if marker.description is not None:
-        out["description"] = marker.description
+    if description is not None:
+        out["description"] = description
     if marker.category is not None:
         out["category"] = marker.category
     if marker.color is not None:

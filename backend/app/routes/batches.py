@@ -148,12 +148,21 @@ async def retry_failed(request: Request, body: RetryFailed):
     started: list[int] = []
     for jid in body.job_ids:
         items = await core.jobs_repo.list_items(core.db, jid)
-        has_failed = any(
-            it.status == "error" and (only is None or it.catdv_clip_id in only)
-            for it in items
-        )
-        if not has_failed:
+        failed = [
+            it for it in items
+            if it.status == "error" and (only is None or it.catdv_clip_id in only)
+        ]
+        if not failed:
             continue
+        # Flip the targeted failures back to 'pending' synchronously, BEFORE the
+        # async job starts. The background run can take seconds to begin flipping
+        # statuses (proxy resolution over the VPN), so without this the next
+        # /batches/table refresh lands in that gap and shows a stale "Failed"
+        # until something else triggers a re-render. 'pending' makes in_flight > 0
+        # immediately → the batch reads as running. run_job re-processes
+        # 'pending'/'error' items alike, so what actually runs is unchanged.
+        for it in failed:
+            await core.jobs_repo.update_item_status(core.db, it.id, "pending")
         start_job_in_background(core, live, jid, only_clip_ids=only)
         started.append(jid)
     return {"started": started}

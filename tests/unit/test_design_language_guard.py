@@ -49,7 +49,8 @@ GRANDFATHERED = {
     # permanent, intentional exceptions — status / chrome / nav affordances
     # that are not action buttons (so not the .btn system). Everything else is
     # migrated onto .btn / ui.menu; this is the floor.
-    "shutdown-btn",
+    # ("shutdown-btn" retired — Shut down moved into the ui.menu user menu, ADR/spec
+    #  2026-06-17 topbar consolidation.)
     "rail-btn",
 }
 

@@ -249,6 +249,51 @@ async def test_count_pending_clips(db):
 
 
 @pytest.mark.asyncio
+async def test_count_clips_for_review(db):
+    """Backs the topbar 'N to review' pill: clips whose LATEST annotation still
+    has an undecided proposal. Excludes rejected, applied, and superseded-older
+    annotation items (mirrors templates.py + the /?anno=for_review list)."""
+    vid = await _get_or_create_prompt_version(db)
+    repo = ReviewItemsRepo()
+
+    # Clip 1: undecided proposal on its (only/latest) annotation -> counts.
+    a1 = await _seed_annotation_for(db, catdv_clip_id=1, catdv_clip_name="c1", job_id=None, vid=vid)
+    await repo.bulk_insert(
+        db, [ReviewItem(annotation_id=a1, catdv_clip_id=1, kind="field", proposed_value="x")]
+    )
+
+    # Clip 2: only a rejected item -> excluded.
+    a2 = await _seed_annotation_for(db, catdv_clip_id=2, catdv_clip_name="c2", job_id=None, vid=vid)
+    r2 = (
+        await repo.bulk_insert(
+            db, [ReviewItem(annotation_id=a2, catdv_clip_id=2, kind="field", proposed_value="y")]
+        )
+    )[0]
+    await repo.set_decision(db, r2.id, "rejected")
+
+    # Clip 3: only an applied item -> excluded.
+    a3 = await _seed_annotation_for(db, catdv_clip_id=3, catdv_clip_name="c3", job_id=None, vid=vid)
+    r3 = (
+        await repo.bulk_insert(
+            db, [ReviewItem(annotation_id=a3, catdv_clip_id=3, kind="field", proposed_value="z")]
+        )
+    )[0]
+    await repo.mark_applied(db, [r3.id])
+
+    # Clip 4: undecided item on a SUPERSEDED older annotation; the latest
+    # annotation has none -> excluded (draft panel shows only the latest).
+    old4 = await _seed_annotation_for(
+        db, catdv_clip_id=4, catdv_clip_name="c4", job_id=None, vid=vid
+    )
+    await repo.bulk_insert(
+        db, [ReviewItem(annotation_id=old4, catdv_clip_id=4, kind="field", proposed_value="old")]
+    )
+    await _seed_annotation_for(db, catdv_clip_id=4, catdv_clip_name="c4", job_id=None, vid=vid)
+
+    assert await repo.count_clips_for_review(db) == 1
+
+
+@pytest.mark.asyncio
 async def test_pending_clips_multi_job_scoping(db):
     """One clip with pending items from two jobs; filters must scope independently."""
     vid = await _get_or_create_prompt_version(db)

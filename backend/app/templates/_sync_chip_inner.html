@@ -1,0 +1,44 @@
+{# Inner content of the topbar sync indicator: a pill that is ALWAYS visible
+   (so the write-back queue status is glanceable at all times) + a dropdown
+   panel reusing the sync drawer. Swapped into the stable #sync-chip container —
+   which owns x-data="popover()", so `open` survives the swaps done by the 10s
+   heartbeat and by retry/discard. Mirrors _connection_chip_inner.html. #}
+{# `sync_counts` (NOT `counts`): the chip renders on every page via the topbar,
+   so a generic name risks colliding with a page's own context. Undefined →
+   idle "Synced"; the /ui/sync-chip poll supplies the real counts. #}
+{%- set loaded = sync_counts is defined and sync_counts -%}
+{%- set queued = sync_counts.queued if loaded else 0 -%}
+{%- set problems = sync_counts.problems if loaded else 0 -%}
+<button type="button"
+        class="btn ghost sm sync-chip-trigger{% if problems %} has-problems{% endif %}"
+        @click="toggle()" :class="open && 'open'"
+        title="Write-backs to CatDV — click for details">
+  {%- if not loaded -%}
+  {# Counts not fetched yet (initial topbar paint, before #sync-chip's
+     hx-trigger="load" returns). Show a neutral placeholder — NOT a premature
+     "✓ Synced", which flickered to "↑ N" the instant the real counts arrived. #}
+  <span class="sync-chip-loading" aria-hidden="true">⋯</span>
+  {%- elif problems -%}
+  <span class="sync-chip-problems">⚠ Failed {{ problems }}</span>{% if queued %}<span class="sync-chip-queued">↑ Publishing… {{ queued }}</span>{% endif %}
+  {%- elif queued -%}
+  <span class="sync-chip-queued">↑ Publishing… {{ queued }}</span>
+  {%- else -%}
+  <span class="sync-chip-ok">✓ Synced</span>
+  {%- endif -%}
+  <span class="htmx-indicator" aria-hidden="true">↻</span>
+</button>
+<div class="popover-panel align-right sync-chip-panel"
+     x-show="open" x-cloak
+     @click.outside="close()" @keydown.escape.window="close()">
+  {% include "sync_drawer.html" %}
+</div>
+{# Heartbeat ONLY while there's something to track (queued / problem writes), so
+   the chip catches the queue draining without a navigation. When everything is
+   synced the chip is idle and does NOT poll — a perpetual 10s background fetch
+   bought nothing and spammed the log. The next apply re-arms it (review.js
+   refreshes #sync-chip on apply); the container's hx-trigger="load" repopulates
+   counts on every page load. Mirrors the connection chip's transient-only poll. #}
+{%- if queued or problems -%}
+<span hidden hx-get="/ui/sync-chip" hx-trigger="every 10s"
+      hx-target="#sync-chip" hx-swap="innerHTML"></span>
+{%- endif -%}

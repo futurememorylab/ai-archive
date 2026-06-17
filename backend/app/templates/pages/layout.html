@@ -51,12 +51,9 @@
       {% block crumb %}{% endblock %}
       <span class="grow"></span>
       {% block topbar_pills %}{% include "pages/_topbar_pills.html" %}{% endblock %}
-      {% if request.state.current_user and request.state.current_user.is_authenticated %}
-      {# Admin nav lives in the rail (gated on is_admin in _rail.html). #}
-      <span class="topbar-user" title="Signed in">{{ request.state.current_user.email }}</span>
-      {# IAP logout: clearing the IAP cookie forces a fresh Google sign-in. #}
-      <a class="btn ghost sm topbar-logout" href="/?gcp-iap-mode=CLEAR_LOGIN_COOKIE" title="Log out">Log out</a>
-      {% endif %}
+      {# Email + env + the env-appropriate session action (Log out on cloud/IAP,
+         Shut down on local) now live in the user menu inside _topbar_pills.html.
+         Admin nav lives in the rail (gated on is_admin in _rail.html). #}
     </header>
     <aside class="rail">{% include "pages/_rail.html" %}</aside>
     <main class="main">{% block body %}{% endblock %}</main>

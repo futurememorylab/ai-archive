@@ -1,4 +1,7 @@
-# 0090. Drop "last sign-in" tracking from the admin console (UI + backend)
+# 0102. Drop "last sign-in" tracking from the admin console (UI + backend)
+
+> Renumbered from 0090 → 0102 when merging `main` into `feat/clip-version-history`:
+> that branch had independently taken 0090–0101 (write-back + clip version history).
 
 **Date:** 2026-06-17
 **Status:** Accepted

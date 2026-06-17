@@ -146,10 +146,23 @@
   {% endif %}
 </div>
 
-{# Background heartbeat — ONLY while the tunnel is coming up. This hidden poller
-   re-fetches the chip every 2s so "Connecting…" resolves to Connected (or, after
-   the grace window, Unreachable) without the user clicking. It lives inside the
-   swapped innerHTML, so once a stable state renders (no vpn_connecting) the
-   poller is gone and the chip stops refreshing — no constant flicker. #}
-{% if vpn_connecting %}<span hidden hx-get="/ui/connection-chip"
-      hx-trigger="every 2s" hx-target="#connection-chip" hx-swap="innerHTML"></span>{% endif %}
+{# Heartbeat ONLY in transient/recovering states, so the chip catches the
+   monitor's recovery without a navigation — a probe that trips CatDV offline
+   during a heavy batch (then recovers a probe later, since manual mode keeps
+   probing every 30s) would otherwise leave a stale "Disconnected" until the
+   next page load. We deliberately do NOT poll when stable (online, VPN off,
+   or forced-offline): a constant innerHTML swap was the old flicker source and
+   buys nothing there. 2s while the tunnel is coming up (a fast, locally-driven
+   state); 30s while CatDV is offline/disconnected but the VPN is up (the
+   auto-recoverable case). The 30s matches the ConnectionMonitor's own probe
+   interval — the chip reads the *cached* monitor state, which can only change
+   once per probe, so polling faster (the old 5s) just re-fetched the same value
+   ~6× and spammed the log. Reads the cached monitor state — no CatDV
+   round-trip / seat. The user can force an immediate re-probe with Retry. The
+   container owns x-data="popover()", so the dropdown's `open` survives swaps. #}
+{%- set _recovering = (mode in ("offline", "disconnected")) and not catdv_gated -%}
+{%- if vpn_connecting or _recovering -%}
+{%- set _poll = '2s' if vpn_connecting else '30s' -%}
+<span hidden hx-get="/ui/connection-chip" hx-trigger="every {{ _poll }}"
+      hx-target="#connection-chip" hx-swap="innerHTML"></span>
+{%- endif -%}

@@ -36,6 +36,18 @@ async def _annotation_with_review(db, *, job_id, clip_id, applied, prompt_versio
     await db.commit()
 
 
+async def _pending_op(db, *, clip_id, status):
+    """Insert a write-back queue row for a clip (the source the topbar sync chip
+    and the batch 'Syncing' count both read)."""
+    await db.execute(
+        "INSERT INTO pending_operations "
+        "(provider_id, provider_clip_id, op_kind, op_json, status, attempts, enqueued_at) "
+        "VALUES ('catdv', ?, 'SetField', '{}', ?, 0, '2026-06-02T03:00:00')",
+        (str(clip_id), status),
+    )
+    await db.commit()
+
+
 @pytest.mark.asyncio
 async def test_list_batches_groups_run_group_into_one_row(db):
     _, vid = await _seed_version(db)
@@ -95,6 +107,42 @@ async def test_list_batches_awaiting_clips_counts_unapplied_reviews(db):
     assert rows[0]["awaiting_clips"] == 1
     # "Review →" lands on the first un-reviewed clip of the batch.
     assert rows[0]["first_pending_clip_id"] == 101
+
+
+@pytest.mark.asyncio
+async def test_list_batches_syncing_clips_counts_active_pending_writebacks(db):
+    # "Syncing" must read the SAME source as the topbar sync chip
+    # (pending_operations), so the two can never contradict each other.
+    _, vid = await _seed_version(db)
+    jobs = JobsRepo()
+    jid = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[101, 102, 103])
+    for it in await jobs.list_items(db, jid):
+        await jobs.update_item_status(db, it.id, "review_ready")
+    await _pending_op(db, clip_id=101, status="pending")  # in the queue → syncing
+    await _pending_op(db, clip_id=102, status="applied")  # landed → NOT syncing
+    # 103 has no queue row at all → not syncing
+    rows = await jobs.list_batches(db, limit=50)
+    assert rows[0]["syncing_clips"] == 1  # only 101
+
+
+@pytest.mark.asyncio
+async def test_list_batches_problem_clips_counts_failed_and_conflict_writebacks(db):
+    # A write-back that exhausted retries (failed) or hit a conflict must surface
+    # on the batch as a problem — NOT silently let it read green "Applied". Same
+    # source as the topbar sync chip (pending_operations), so they agree. A
+    # problem clip is NOT also counted as syncing.
+    _, vid = await _seed_version(db)
+    jobs = JobsRepo()
+    jid = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[101, 102, 103, 104])
+    for it in await jobs.list_items(db, jid):
+        await jobs.update_item_status(db, it.id, "review_ready")
+    await _pending_op(db, clip_id=101, status="failed")    # problem
+    await _pending_op(db, clip_id=102, status="conflict")  # problem
+    await _pending_op(db, clip_id=103, status="pending")   # syncing, not a problem
+    await _pending_op(db, clip_id=104, status="applied")   # landed → neither
+    rows = await jobs.list_batches(db, limit=50)
+    assert rows[0]["problem_clips"] == 2  # 101 + 102
+    assert rows[0]["syncing_clips"] == 1  # only 103
 
 
 @pytest.mark.asyncio

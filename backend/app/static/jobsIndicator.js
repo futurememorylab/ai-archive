@@ -16,12 +16,18 @@ function jobsIndicator() {
         if (["completed", "cancelled"].includes(p.status) && !p.errors) {
           delete this.jobs[p.job_id];
         } else {
+          // Preserve the last-known phases — job-level events don't carry them.
           this.jobs[p.job_id] = {
+            ...this.jobs[p.job_id],
             done: p.done, total: p.total, errors: p.errors, status: p.status,
           };
           if (p.status === "failed" || p.errors) this.failed = true;
         }
       };
+      // Phase transitions (caching→annotating) emit per-item events, not the
+      // job-level events this SSE carries, so refresh the phase breakdown on a
+      // short cadence WHILE a batch is active. Idle = no fetch.
+      setInterval(() => { if (this.visible()) this.refresh(); }, 2000);
     },
 
     async refresh() {
@@ -31,7 +37,10 @@ function jobsIndicator() {
         const list = await r.json();
         const next = {};
         for (const j of list) {
-          next[j.id] = { done: j.done, total: j.total, errors: j.errors, status: j.status };
+          next[j.id] = {
+            done: j.done, total: j.total, errors: j.errors, status: j.status,
+            phases: j.phases || null,
+          };
         }
         this.jobs = next;
       } catch { /* offline — leave current state */ }
@@ -44,6 +53,24 @@ function jobsIndicator() {
     hasErrors() {
       return this.failed ||
         this.activeIds().some((id) => (this.jobs[id].errors || 0) > 0);
+    },
+    // Phase breakdown across active jobs — surfaces the slow upload phase
+    // ("Caching") instead of a bare done/total. Falls back to the count when
+    // no phase info is available (e.g. before the first /active refresh).
+    _sumPhase(key) {
+      return this.activeIds().reduce(
+        (n, id) => n + ((this.jobs[id].phases || {})[key] || 0), 0);
+    },
+    caching() { return this._sumPhase("caching"); },
+    annotating() { return this._sumPhase("annotating"); },
+    queued() { return this._sumPhase("queued"); },
+    phaseLabel() {
+      const parts = [];
+      const c = this.caching(), a = this.annotating(), q = this.queued();
+      if (c) parts.push(`Caching ${c}`);
+      if (a) parts.push(`Annotating ${a}`);
+      if (q) parts.push(`${q} queued`);
+      return parts.length ? parts.join(" · ") : `Annotating ${this.done()}/${this.total()}`;
     },
 
     open() {

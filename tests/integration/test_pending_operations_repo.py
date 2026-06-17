@@ -138,6 +138,50 @@ async def test_reset_for_retry_clears_attempts_and_error(db):
 
 
 @pytest.mark.asyncio
+async def test_reset_for_retry_clears_etag_for_conflict_only(db):
+    # Retrying a CONFLICT must re-base on the current upstream clip, so its
+    # stale expected_etag is cleared — otherwise the adapter's etag check just
+    # re-conflicts forever (a blind retry can never land). A FAILED row keeps
+    # its etag, so a concurrent upstream change still surfaces as a conflict
+    # instead of being silently overwritten. See ADR 0098.
+    repo = PendingOperationsRepo()
+    [conflict_id] = await repo.insert_many(db, rows=[_row()])
+    await repo.mark_conflict(db, [conflict_id], conflict_detail={"kind": "modified"})
+    await repo.reset_for_retry(db, conflict_id)
+    assert (await repo.get(db, conflict_id))["expected_etag"] is None
+
+    [failed_id] = await repo.insert_many(db, rows=[_row()])
+    await repo.mark_failed(db, [failed_id], error="boom")
+    await repo.reset_for_retry(db, failed_id)
+    assert (await repo.get(db, failed_id))["expected_etag"] == "v1"
+
+
+@pytest.mark.asyncio
+async def test_reset_clip_for_retry_clears_etag_for_conflict_keeps_for_failed(db):
+    repo = PendingOperationsRepo()
+    [conflict_id] = await repo.insert_many(db, rows=[_row()])
+    [failed_id] = await repo.insert_many(db, rows=[_row()])
+    await repo.mark_conflict(db, [conflict_id], conflict_detail={"kind": "modified"})
+    await repo.mark_failed(db, [failed_id], error="boom")
+    n = await repo.reset_clip_for_retry(db, provider_id="catdv", provider_clip_id="1")
+    assert n == 2
+    assert (await repo.get(db, conflict_id))["expected_etag"] is None
+    assert (await repo.get(db, failed_id))["expected_etag"] == "v1"
+
+
+@pytest.mark.asyncio
+async def test_reset_all_for_retry_clears_etag_for_conflict_keeps_for_failed(db):
+    repo = PendingOperationsRepo()
+    [conflict_id] = await repo.insert_many(db, rows=[_row()])
+    [failed_id] = await repo.insert_many(db, rows=[{**_row(), "provider_clip_id": "2"}])
+    await repo.mark_conflict(db, [conflict_id], conflict_detail={"kind": "modified"})
+    await repo.mark_failed(db, [failed_id], error="boom")
+    await repo.reset_all_for_retry(db)
+    assert (await repo.get(db, conflict_id))["expected_etag"] is None
+    assert (await repo.get(db, failed_id))["expected_etag"] == "v1"
+
+
+@pytest.mark.asyncio
 async def test_count_pending_by_clip(db):
     repo = PendingOperationsRepo()
     a = {**_row(), "provider_clip_id": "1"}
