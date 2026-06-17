@@ -83,6 +83,7 @@ def test_drawer_hides_offline_note_when_no_pending_writes():
 # Task 14: topbar sync chip uses the unified publish-state vocabulary
 # ---------------------------------------------------------------------------
 
+
 def test_chip_inner_queued_uses_publishing_label():
     """When there are queued ops (pending/in_flight), the chip pill says
     'Publishing…' — matching the clips-list badge and clip-detail headline."""

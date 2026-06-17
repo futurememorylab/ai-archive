@@ -5,15 +5,16 @@ Seeds a clip with a live ClipVersion and asserts the rendered HTML contains:
 - data-publish-status attribute (the headline pill wrapper)
 - 'Live v' text (confirming the live-version label is rendered)
 """
+
 import asyncio
 import importlib
+from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 
-from backend.app.archive.model import CanonicalClip, FieldValue, Marker, MediaRef, Timecode
+from backend.app.archive.model import CanonicalClip, MediaRef
 from backend.app.models.annotation import ClipVersion
 from tests._helpers.live_ctx import install_live_ctx
-from datetime import UTC, datetime
 
 
 def _canonical(clip_id: int = 12041) -> CanonicalClip:
@@ -44,6 +45,7 @@ class FakeArchive:
         if clip_id_str == str(self._clip.key[1]):
             return self._clip
         from backend.app.archive.errors import ProviderError
+
         raise ProviderError("not found")
 
 
@@ -58,6 +60,7 @@ def _make_client(monkeypatch, tmp_path):
     monkeypatch.setenv("PROXY_SOURCE", "rest")
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     return TestClient(main_mod.app)
 

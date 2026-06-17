@@ -9,6 +9,7 @@ GET /clips/{id} must render:
 When there is NO unpublished draft, the page must NOT require confirmation:
 - data-rerun-confirm="false" (or absent / not "true")
 """
+
 import asyncio
 import importlib
 from datetime import UTC, datetime
@@ -47,6 +48,7 @@ class FakeArchive:
         if clip_id_str == str(self._clip.key[1]):
             return self._clip
         from backend.app.archive.errors import ProviderError
+
         raise ProviderError("not found")
 
 
@@ -61,21 +63,26 @@ def _make_client(monkeypatch, tmp_path):
     monkeypatch.setenv("PROXY_SOURCE", "rest")
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     return TestClient(main_mod.app)
 
 
 def _seed_unapplied_draft(ctx, clip_id: int) -> None:
     """Seed a pending (un-applied) review item so has_draft=True, no live version."""
-    import asyncio
     from backend.app.repositories.jobs import JobsRepo
     from backend.app.repositories.prompts import PromptsRepo
 
     async def _do() -> None:
         prompts = PromptsRepo()
         _, vid = await prompts.create_with_initial_version(
-            ctx.db, name="p", description=None, body="b",
-            target_map={}, output_schema={}, model="m",
+            ctx.db,
+            name="p",
+            description=None,
+            body="b",
+            target_map={},
+            output_schema={},
+            model="m",
         )
         jobs = JobsRepo()
         jid = await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[clip_id])
@@ -119,9 +126,7 @@ def test_rerun_confirm_present_when_draft(monkeypatch, tmp_path):
         assert "replaces your current unpublished draft" in r.text, (
             "Expected confirm copy about replacing unpublished draft"
         )
-        assert "restorable" in r.text, (
-            "Expected 'restorable' in confirm copy"
-        )
+        assert "restorable" in r.text, "Expected 'restorable' in confirm copy"
 
 
 def test_rerun_confirm_absent_when_no_draft(monkeypatch, tmp_path):

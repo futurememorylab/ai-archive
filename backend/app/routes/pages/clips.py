@@ -68,9 +68,7 @@ _BATCH_STATUS_VIEW: dict[str, tuple[str, str]] = {
 
 # Item statuses that mean "still working" (maps to the Queued/Processing pills).
 # Mirrors the in-flight set in JobsRepo._BATCHES_SQL.
-_RUNNING_ITEM_STATUSES = frozenset(
-    {"pending", "resolving", "uploading", "prompting"}
-)
+_RUNNING_ITEM_STATUSES = frozenset({"pending", "resolving", "uploading", "prompting"})
 
 
 def _batch_status_view(status: str | None) -> dict[str, str] | None:
@@ -271,9 +269,7 @@ async def clips_list(
     # While any item is still in-flight, the per-clip pills change underneath a
     # static page — flag it so the tbody self-polls and refreshes the pills
     # without a manual reload. Stops automatically once the batch settles.
-    ctx_dict["batch_running"] = any(
-        s in _RUNNING_ITEM_STATUSES for s in batch_status_map.values()
-    )
+    ctx_dict["batch_running"] = any(s in _RUNNING_ITEM_STATUSES for s in batch_status_map.values())
 
     # Actual billable cost per clip for this batch: one batched aggregate
     # over the batch's job ids, summed per clip in SQL (a clip may appear

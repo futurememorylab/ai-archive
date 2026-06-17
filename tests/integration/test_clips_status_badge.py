@@ -28,7 +28,6 @@ from backend.app.archive.model import (
 )
 from tests._helpers.live_ctx import install_live_ctx
 
-
 # ---------------------------------------------------------------------------
 # Env + app factory (mirrors test_clips_page_perf.py)
 # ---------------------------------------------------------------------------
