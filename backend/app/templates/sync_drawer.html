@@ -11,7 +11,8 @@
 {%- set STATUS_STATE = {
   "pending": "", "in_flight": "accent", "conflict": "changed", "failed": "bad"} -%}
 {%- set OP_LABEL = {
-  "AddMarkers": "Markers", "SetField": "Field", "AppendNote": "Note", "ReplaceNote": "Note"} -%}
+  "AddMarkers": "Markers", "SetField": "Field", "AppendNote": "Note",
+  "ReplaceNote": "Note", "ReconcileMarkers": "Switch version"} -%}
 {%- set SEVERITY = {"pending": 0, "in_flight": 1, "failed": 2, "conflict": 3} -%}
 {%- set hdr = namespace(retryable=0) -%}
 {%- for r in sync_rows or [] -%}{%- if r.status in ("failed", "conflict") -%}{%- set hdr.retryable = hdr.retryable + 1 -%}{%- endif -%}{%- endfor -%}
