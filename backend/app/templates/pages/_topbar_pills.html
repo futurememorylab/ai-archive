@@ -1,7 +1,5 @@
-{# Default right-side pillset for the topbar.
-   Reads settings from request.app.state.core_ctx.settings so no per-handler
-   wiring is required. #}
-{% set _settings = request.app.state.core_ctx.settings %}
+{# Default right-side pillset for the topbar: batch progress (transient),
+   "N to review", sync chip, connection chip, and the user menu. #}
 <span class="pillset">
   <span class="job-indicator" x-data="jobsIndicator()" x-show="visible()" x-cloak
         :class="{ 'job-indicator--error': hasErrors() }">
@@ -22,23 +20,7 @@
   {% endif %}
   {% include "_sync_chip.html" %}
   {% include "_connection_chip.html" %}
-  {% if _settings.app_env == "prod" %}
-    {# Cloud Run owns the lifecycle (scale-to-zero releases the seat + VPN on
-       SIGTERM). A manual shutdown here would only force a cold start, so the
-       control is hidden. The route also rejects it (403). #}
-  {% elif _settings.dev_reload %}
-    <button type="button" class="shutdown-btn" disabled
-            title="Reload mode — stop with Ctrl-C in the terminal">
-      {% include "icons/_power.svg" %}<span>Shut down</span>
-    </button>
-  {% else %}
-    <button type="button" class="shutdown-btn"
-            hx-post="/api/connection/shutdown"
-            hx-target="body" hx-swap="innerHTML"
-            hx-confirm="Shut down the annotator and release the CatDV seat?"
-            title="Stop the server and release the CatDV seat">
-      {% include "icons/_power.svg" %}<span>Shut down</span>
-    </button>
-  {% endif %}
-  <span class="env-pill ok"><span class="led"></span>DEV · {{ request.url.netloc }}</span>
+  {# Email, env badge, and the env-appropriate session action (Log out on
+     cloud/IAP · Shut down on local) all live in this one menu. #}
+  {% include "pages/_user_menu.html" %}
 </span>
