@@ -29,15 +29,24 @@ class UserRolesRepo:
         row = await cur.fetchone()
         return dict(zip(_COLS, row, strict=True)) if row else None
 
-    async def get_active_role(self, conn: aiosqlite.Connection, email: str) -> str | None:
-        """The role that ADMITS at the gate, or None. Only active/invited admit;
-        requested (and absent) are denied."""
+    async def get_gate_state(
+        self, conn: aiosqlite.Connection, email: str
+    ) -> tuple[str, str] | None:
+        """The `(role, status)` that ADMITS at the gate, or None. Only
+        active/invited admit; requested (and absent) are denied.
+
+        One read serves both gate jobs: the role to attach, and the status that
+        tells the gate whether a first-sight invited→active flip is due. This is
+        what keeps an already-active user's request READ-ONLY — the gate only
+        writes when status=='invited', so steady-state browsing never commits
+        (issue #73: the per-request UPDATE+commit was the Litestream lock
+        contention that crashed the container)."""
         cur = await conn.execute(
-            "SELECT role FROM user_roles WHERE email = ? AND status IN ('active','invited')",
+            "SELECT role, status FROM user_roles WHERE email = ? AND status IN ('active','invited')",
             (_norm(email),),
         )
         row = await cur.fetchone()
-        return row[0] if row else None
+        return (row[0], row[1]) if row else None
 
     async def list_members(
         self,

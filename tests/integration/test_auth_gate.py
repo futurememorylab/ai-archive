@@ -5,6 +5,7 @@ gets through. Fail-closed (spec 2026-06-14-iap-roles-admin-console-design.md).
 
 We patch main.resolve_user so we don't have to forge a signed IAP JWT; the
 gate logic (role lookup, allow-list, deny) is what's under test."""
+import asyncio
 import importlib
 import sqlite3
 from pathlib import Path
@@ -78,25 +79,81 @@ def test_seeded_admin_gets_through(monkeypatch, tmp_path: Path):
     assert r.status_code == 200
 
 
+def test_active_user_browse_does_no_db_write(monkeypatch, tmp_path: Path):
+    """Issue #73: an already-active user browsing must NOT trigger an auth-path
+    DB write/commit. With last-seen tracking gone, the only reason to write is
+    the one-time invited→active flip — so the gate reads `(role, status)` and
+    writes ONLY when status=='invited'. An active user hits the gate read-only.
+    The old code ran an UPDATE + commit() on every browse (no-op or not), which
+    kept poking the SQLite connection Litestream was checkpointing — the lock
+    contention that crashed the container."""
+    main_mod = _make_app(monkeypatch, tmp_path)  # boss@x.com seeded active admin
+    monkeypatch.setattr(main_mod, "resolve_user",
+                        lambda req, s: CurrentUser(email="boss@x.com"))
+    writes: list[str] = []
+    orig = UserRolesRepo.activate_on_first_sight
+
+    async def _spy(self, conn, email):
+        writes.append(email)
+        return await orig(self, conn, email)
+
+    monkeypatch.setattr(UserRolesRepo, "activate_on_first_sight", _spy)
+    with TestClient(main_mod.app) as client:
+        install_live_ctx(client.app, archive=_EmptyArchive())
+        assert client.get("/").status_code == 200
+        assert client.get("/").status_code == 200
+    assert writes == [], f"active user must not trigger an activation write; got {writes}"
+
+
+def test_invited_user_is_activated_once_then_stays_read_only(monkeypatch, tmp_path: Path):
+    """An invited user flips to active on first authenticated sight (exactly one
+    write); every later request is read-only, because the flip is gated on
+    status=='invited'."""
+    main_mod = _make_app(monkeypatch, tmp_path)
+    monkeypatch.setattr(main_mod, "resolve_user",
+                        lambda req, s: CurrentUser(email="inv@x.com"))
+    writes: list[str] = []
+    orig = UserRolesRepo.activate_on_first_sight
+
+    async def _spy(self, conn, email):
+        writes.append(email)
+        return await orig(self, conn, email)
+
+    monkeypatch.setattr(UserRolesRepo, "activate_on_first_sight", _spy)
+    with TestClient(main_mod.app) as client:
+        install_live_ctx(client.app, archive=_EmptyArchive())
+        ctx = main_mod.app.state.core_ctx
+        asyncio.run(ctx.user_roles_repo.upsert_role(
+            ctx.db, "inv@x.com", "member", status="invited", granted_by="boss@x.com"))
+        assert client.get("/").status_code == 200   # first sight → flip
+        assert client.get("/").status_code == 200   # now active → no write
+        row = asyncio.run(ctx.user_roles_repo.get(ctx.db, "inv@x.com"))
+    assert writes == ["inv@x.com"], f"expected exactly one activation write; got {writes}"
+    assert row["status"] == "active"
+
+
 def test_activate_on_first_sight_db_lock_does_not_500_the_request(monkeypatch, tmp_path: Path):
-    """`activate_on_first_sight` is best-effort bookkeeping on the auth critical
-    path. If its write hits a transient `database is locked`, the request must
-    still be served — the invited→active flip failing must never take the app
-    down (an invited user still admits at the gate and flips on a later request).
+    """`activate_on_first_sight` is best-effort: if the (gated) invited→active
+    write hits a transient `database is locked`, the request must still be
+    served — the invited user still admits and flips on a later request.
 
     Regression guard for the prod outage on 2026-06-17: an unguarded write
     turned a transient SQLite write-lock into a 500 on every authenticated
     request, including `GET /`."""
     main_mod = _make_app(monkeypatch, tmp_path)
     monkeypatch.setattr(main_mod, "resolve_user",
-                        lambda req, s: CurrentUser(email="boss@x.com"))
+                        lambda req, s: CurrentUser(email="inv@x.com"))
 
     async def _locked(self, conn, email):
         raise sqlite3.OperationalError("database is locked")
 
-    monkeypatch.setattr(UserRolesRepo, "activate_on_first_sight", _locked)
     with TestClient(main_mod.app) as client:
         install_live_ctx(client.app, archive=_EmptyArchive())
+        ctx = main_mod.app.state.core_ctx
+        # Seed an invited user so the gate actually attempts the flip write.
+        asyncio.run(ctx.user_roles_repo.upsert_role(
+            ctx.db, "inv@x.com", "member", status="invited", granted_by="boss@x.com"))
+        monkeypatch.setattr(UserRolesRepo, "activate_on_first_sight", _locked)
         r = client.get("/")
     assert r.status_code == 200
 
