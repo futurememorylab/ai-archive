@@ -25,9 +25,29 @@
         {% set vlabel = '#' ~ v.version_num
                         ~ (' · ' ~ v.author if v.author else '')
                         ~ (' · ' ~ v.model  if v.model  else '') %}
+        {# Build a compact diff summary line from v.diff when present.
+           e.g. "+2 markers · genre · notes"
+           Handles null/absent diff gracefully (renders nothing). #}
+        {% set vdiff = v.diff if v.diff else {} %}
+        {% set _parts = namespace(items=[]) %}
+        {% if vdiff.get('markers_added', 0) > 0 %}
+          {% set _parts.items = _parts.items + ['+' ~ vdiff['markers_added'] ~ ' marker' ~ ('s' if vdiff['markers_added'] != 1 else '')] %}
+        {% endif %}
+        {% for fkey in vdiff.get('fields_changed', {}).keys() %}
+          {% set _parts.items = _parts.items + [fkey.split('.')[-1]] %}
+        {% endfor %}
+        {% if vdiff.get('notes_changed') %}
+          {% set _parts.items = _parts.items + ['notes'] %}
+        {% endif %}
+        {% if vdiff.get('big_notes_changed') %}
+          {% set _parts.items = _parts.items + ['bigNotes'] %}
+        {% endif %}
         <div class="menu-item" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
           <span class="menu-lbl">{{ vlabel }}</span>
           {{ status_pill(vstate, vpill) }}
+          {% if _parts.items %}
+            <span class="muted" data-diff-summary>{{ _parts.items | join(' · ') }}</span>
+          {% endif %}
           {% if vstate != 'live' %}
             <button type="button" class="btn sm ghost"
                     data-restore="{{ v.version_num }}"

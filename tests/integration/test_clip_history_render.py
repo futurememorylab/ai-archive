@@ -108,3 +108,92 @@ def test_clip_detail_no_versions_shows_no_live_pill(monkeypatch, tmp_path):
         assert "data-history-menu" in r.text
         # No live version = no 'Live v' text.
         assert "Live v" not in r.text
+
+
+def test_clip_history_diff_summary_rendered(monkeypatch, tmp_path):
+    """A version with a diff dict renders a compact summary line in the history row."""
+    clip_id = 12042
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.core_ctx
+
+        async def _seed() -> None:
+            repo = ctx.clip_versions_repo
+            # v1: no diff (backfilled baseline)
+            await repo.insert(
+                ctx.db,
+                ClipVersion(
+                    catdv_clip_id=clip_id,
+                    version_num=1,
+                    snapshot={},
+                    diff=None,
+                    publish_state="superseded",
+                    origin="publish",
+                    model=None,
+                    author=None,
+                ),
+            )
+            # v2: has a diff with markers, changed field, and notes
+            await repo.insert(
+                ctx.db,
+                ClipVersion(
+                    catdv_clip_id=clip_id,
+                    version_num=2,
+                    snapshot={},
+                    diff={
+                        "markers_added": 2,
+                        "fields_changed": {"pragafilm.genre": "thriller"},
+                        "notes_changed": True,
+                        "big_notes_changed": False,
+                    },
+                    publish_state="live",
+                    origin="publish",
+                    model=None,
+                    author="editor@example.com",
+                ),
+            )
+
+        asyncio.run(_seed())
+        install_live_ctx(client.app, archive=FakeArchive(_canonical(clip_id)))
+
+        r = client.get(f"/clips/{clip_id}")
+        assert r.status_code == 200
+
+        # v2's diff summary must contain the marker count, field short-name, and notes indicator.
+        assert "+2 markers" in r.text, "Expected '+2 markers' in diff summary"
+        assert "genre" in r.text, "Expected 'genre' (short field name) in diff summary"
+        assert "notes" in r.text, "Expected 'notes' indicator in diff summary"
+
+        # big_notes_changed=False must NOT produce 'bigNotes' in the summary.
+        assert "bigNotes" not in r.text, "Did not expect 'bigNotes' when big_notes_changed is False"
+
+
+def test_clip_history_null_diff_renders_without_error(monkeypatch, tmp_path):
+    """A version with diff=None renders without error and without a diff summary line."""
+    clip_id = 12043
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.core_ctx
+
+        async def _seed() -> None:
+            repo = ctx.clip_versions_repo
+            await repo.insert(
+                ctx.db,
+                ClipVersion(
+                    catdv_clip_id=clip_id,
+                    version_num=1,
+                    snapshot={},
+                    diff=None,
+                    publish_state="live",
+                    origin="publish",
+                    model=None,
+                    author=None,
+                ),
+            )
+
+        asyncio.run(_seed())
+        install_live_ctx(client.app, archive=FakeArchive(_canonical(clip_id)))
+
+        r = client.get(f"/clips/{clip_id}")
+        assert r.status_code == 200
+        assert "data-history-menu" in r.text
+        # No diff summary data-attribute or marker summary should appear.
+        assert "data-diff-summary" not in r.text
