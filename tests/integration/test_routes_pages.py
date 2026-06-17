@@ -560,6 +560,65 @@ def test_topbar_to_review_chip_counts_unapplied_drafts(monkeypatch, tmp_path):
         assert "to-review-chip" not in r2.text
 
 
+def test_to_review_ignores_fully_decided_clips(monkeypatch, tmp_path):
+    """A clip whose drafts are all DECIDED (some applied, the rest rejected) has
+    nothing left to review — rejected items keep applied_at NULL, but they must
+    NOT inflate the chip count nor appear under the 'Awaiting review' filter."""
+    import asyncio
+
+    from backend.app.repositories.jobs import JobsRepo
+    from backend.app.repositories.prompts import PromptsRepo
+
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.core_ctx
+
+        async def _seed() -> None:
+            prompts = PromptsRepo()
+            _, vid = await prompts.create_with_initial_version(
+                ctx.db, name="p", description=None, body="b",
+                target_map={}, output_schema={}, model="m",
+            )
+            jobs = JobsRepo()
+            jid = await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[12041])
+            cur = await ctx.db.execute(
+                "INSERT INTO annotations "
+                "(catdv_clip_id, catdv_clip_name, prompt_version_id, job_id, model, "
+                " prompt_used, raw_response, structured_output, clip_snapshot, created_at) "
+                "VALUES (12041, 'C', ?, ?, 'm', 'p', '{}', '{}', '{}', '2026-06-02T00:00:00')",
+                (vid, jid),
+            )
+            ann = cur.lastrowid
+            # one accepted+applied, one rejected (applied_at NULL) → 0 to review
+            await ctx.db.execute(
+                "INSERT INTO review_items "
+                "(annotation_id, studio_run_id, catdv_clip_id, kind, target_identifier, "
+                " proposed_value, edited_value, decision, applied_at) "
+                "VALUES (?, NULL, 12041, 'marker', NULL, '{}', NULL, 'accepted', '2026-06-02T01:00:00')",
+                (ann,),
+            )
+            await ctx.db.execute(
+                "INSERT INTO review_items "
+                "(annotation_id, studio_run_id, catdv_clip_id, kind, target_identifier, "
+                " proposed_value, edited_value, decision, applied_at) "
+                "VALUES (?, NULL, 12041, 'marker', NULL, '{}', NULL, 'rejected', NULL)",
+                (ann,),
+            )
+            await ctx.db.commit()
+
+        asyncio.run(_seed())
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
+
+        # Chip: nothing to review.
+        r = client.get("/")
+        assert r.status_code == 200
+        assert "to-review-chip" not in r.text
+
+        # for_review filter: the fully-decided clip must not appear.
+        r2 = client.get("/?anno=for_review")
+        assert r2.status_code == 200
+        assert "Abramcukova" not in r2.text
+
+
 def test_clips_list_normal_view_has_no_cost_column(monkeypatch, tmp_path):
     """The unfiltered clips list must NOT include the Cost column."""
     with _make_client(monkeypatch, tmp_path) as client:

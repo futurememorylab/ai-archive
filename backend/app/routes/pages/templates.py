@@ -111,10 +111,14 @@ def _topbar_sync_context(request) -> dict[str, object]:
                     "GROUP BY status"
                 ).fetchall()
             )
+            # Mirror the /?anno=for_review filter exactly (same predicate, same
+            # population) so the chip count equals the list it links to. "To
+            # review" = undecided proposals: rejected items keep applied_at NULL
+            # but are DECIDED, so they must be excluded (else a fully-applied
+            # clip with a rejected proposal shows "to review" with 0 proposals).
             review_row = conn.execute(
-                "SELECT COUNT(DISTINCT ri.catdv_clip_id) FROM review_items ri "
-                "JOIN annotations a ON a.id = ri.annotation_id "
-                "WHERE ri.applied_at IS NULL"
+                "SELECT COUNT(DISTINCT catdv_clip_id) FROM review_items "
+                "WHERE applied_at IS NULL AND decision != 'rejected'"
             ).fetchone()
         finally:
             conn.close()

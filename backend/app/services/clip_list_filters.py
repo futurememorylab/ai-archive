@@ -71,8 +71,19 @@ async def _ids_with_media_ai(db: aiosqlite.Connection, provider_id: str) -> set[
 
 
 async def _ids_with_annotation_review_state(db: aiosqlite.Connection, *, applied: bool) -> set[int]:
-    """Clip IDs with at least one review_item matching the applied predicate."""
-    where = "applied_at IS NOT NULL" if applied else "applied_at IS NULL"
+    """Clip IDs with at least one review_item matching the predicate.
+
+    applied=True  → has a write-back enqueued (applied_at set): the "Applied" filter.
+    applied=False → has an UNDECIDED proposal still to review (applied_at NULL and
+        not rejected): the "Awaiting review" filter. Rejected items also keep
+        applied_at NULL, but they're DECIDED — including them made fully-decided
+        clips show under "Awaiting review" with 0 proposals to act on.
+    """
+    where = (
+        "applied_at IS NOT NULL"
+        if applied
+        else "applied_at IS NULL AND decision != 'rejected'"
+    )
     cur = await db.execute(f"SELECT DISTINCT catdv_clip_id FROM review_items WHERE {where}")
     return {int(r[0]) for r in await cur.fetchall()}
 

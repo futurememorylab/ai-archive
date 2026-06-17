@@ -248,7 +248,8 @@ class JobsRepo:
             MIN(ri.catdv_clip_id) AS first_pending_clip_id
           FROM jobs j
           JOIN annotations a ON a.job_id = j.id
-          JOIN review_items ri ON ri.annotation_id = a.id AND ri.applied_at IS NULL
+          JOIN review_items ri ON ri.annotation_id = a.id
+            AND ri.applied_at IS NULL AND ri.decision != 'rejected'
           WHERE COALESCE(j.kind, '') != 'studio'
           GROUP BY batch_key
         ),
