@@ -723,7 +723,7 @@ a { color: inherit; text-decoration: none; }
 }
 .anno-head { flex: none; }
 .anno-publish-row { margin: 8px 14px 0; }
-.anno-scope-row { display: flex; align-items: center; gap: 8px; margin: 8px 14px; }
+.anno-scope-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; row-gap: 8px; margin: 8px 14px; }
 .anno-body { flex: 1; min-height: 0; overflow-y: auto; }
 
 .anno-tabs {
