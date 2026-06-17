@@ -12,6 +12,7 @@
 {% set can_play = mode == "online" or (clip.cache and (clip.cache.media_local.present or clip.cache.media_ai.present)) %}
 <script>localStorage.setItem("catdv:lastClipId", "{{ clip.id }}");</script>
 <div class="detail"
+     data-rerun-confirm="{{ 'true' if publish_status.state == 'draft' else 'false' }}"
      :class="{ 'is-draft': scope === 'draft', 'live-active': liveSession.state !== 'idle' }"
      x-data='Object.assign(
        player({{ clip.fps }}, {{ clip.duration_secs }}, {{ clip.markers|tojson }}, {{ draft_arrays.markers|tojson }}),
@@ -191,5 +192,20 @@
       {% include "pages/_anno_draft.html" %}
     </div>
   </aside>
+
+  {# ── Re-run confirm dialog (only when an unpublished draft exists) ──────── #}
+  {% if publish_status.state == 'draft' %}
+  {% call ui.modal('rerunConfirmOpen', label='Re-run annotation?', card_cls='sm') %}
+    <div class="modal-body">
+      <p>This replaces your current unpublished draft — last published
+        {% if publish_status.version_num %}#{{ publish_status.version_num }}{% else %}version{% endif %}
+        stays restorable.</p>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" @click="rerunConfirmOpen = false">Cancel</button>
+      <button type="button" class="btn primary" @click="confirmRerun()">Re-run</button>
+    </div>
+  {% endcall %}
+  {% endif %}
 </div>
 {% endblock %}

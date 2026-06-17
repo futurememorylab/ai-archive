@@ -33,6 +33,8 @@ function clipAnnotate(clipId, clipKind) {
     _announcedAnnotating: false,
     historyLoaded: false,
     historyHtml: "",
+    rerunConfirmOpen: false,
+    _pendingPrompt: null,
 
     _kindLabel() {
       return this.clipKind === "image" ? "Image" : "Video";
@@ -167,8 +169,37 @@ function clipAnnotate(clipId, clipKind) {
       }
     },
 
+    // Check the server-rendered flag on the .detail container to decide whether
+    // a re-run needs a confirm (only when an unpublished draft exists).
+    _needsRerunConfirm() {
+      const el = this.$el && this.$el.closest
+        ? this.$el.closest("[data-rerun-confirm]")
+        : null;
+      return el ? el.dataset.rerunConfirm === "true" : false;
+    },
+
     async pick(prompt) {
       this.open = false;
+      // Gate: if there's an unpublished draft, show the confirm dialog first.
+      if (this._needsRerunConfirm()) {
+        this._pendingPrompt = prompt;
+        this.rerunConfirmOpen = true;
+        return;
+      }
+      await this._startPickedRun(prompt);
+    },
+
+    // Called by the confirm dialog's "Re-run" button.
+    async confirmRerun() {
+      this.rerunConfirmOpen = false;
+      const prompt = this._pendingPrompt;
+      this._pendingPrompt = null;
+      if (prompt) {
+        await this._startPickedRun(prompt);
+      }
+    },
+
+    async _startPickedRun(prompt) {
       this.runError = null;
       this.runStatus = "starting";
       this.running = true;
