@@ -1957,6 +1957,10 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 /* Version history dropdown (clip detail) — each version is a clean vertical
    block rather than one wrapping line, so the rows don't render "crooked". */
 .version-panel { display: inline-flex; align-items: center; gap: 8px; }
+/* Give the expanded Versions panel room: wider than the default menu so the
+   #N + pill + diff line and the Make live / Edit as draft actions sit on one
+   line. Scoped to this menu via its wrapper; capped by .popover-panel max-width. */
+[data-history-menu] .popover-panel { min-width: 320px; }
 .vp-pill { display: inline-flex; }
 .cv-row { display: flex; flex-direction: column; gap: 4px; padding: 8px 6px; }
 .cv-row + .cv-row { border-top: 1px solid var(--line); }
