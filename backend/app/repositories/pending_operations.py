@@ -30,6 +30,7 @@ _ROW_COLS = (
     "origin_annotation_id",
     "origin_review_item_ids",
     "expected_etag",
+    "origin_clip_version_id",
     "status",
     "attempts",
     "last_error",
@@ -88,8 +89,8 @@ class PendingOperationsRepo:
                 INSERT INTO pending_operations
                   (provider_id, provider_clip_id, op_kind, op_json,
                    origin_annotation_id, origin_review_item_ids, expected_etag,
-                   status, attempts, enqueued_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?)
+                   origin_clip_version_id, status, attempts, enqueued_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?)
                 """,
                 (
                     r["provider_id"],
@@ -99,6 +100,7 @@ class PendingOperationsRepo:
                     r.get("origin_annotation_id"),
                     origin_ids_json,
                     r.get("expected_etag"),
+                    r.get("origin_clip_version_id"),
                     now,
                 ),
             )

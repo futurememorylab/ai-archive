@@ -53,6 +53,8 @@ class WriteQueue:
         expected_etag: str | None,
         annotation_id: int | None,
         fps: float,
+        clip_version_id: int | None = None,
+        extra_ops: list[ChangeOp] | None = None,
     ) -> list[int]:
         """Thin wrapper over enqueue_apply keyed by a catdv clip id."""
         return await self.enqueue_apply(
@@ -63,6 +65,8 @@ class WriteQueue:
             expected_etag=expected_etag,
             annotation_id=annotation_id,
             fps=fps,
+            clip_version_id=clip_version_id,
+            extra_ops=extra_ops,
         )
 
     async def enqueue_apply(
@@ -75,19 +79,25 @@ class WriteQueue:
         expected_etag: str | None,
         annotation_id: int | None,
         fps: float,
+        clip_version_id: int | None = None,
+        extra_ops: list[ChangeOp] | None = None,
     ) -> list[int]:
         """Group accepted items into ChangeOps and write one row per op.
 
         Items already marked applied (`applied_at IS NOT NULL`) are skipped,
         so a double-click does not produce duplicate ops. The pending_ops
         insert and the `mark_applied` update commit together.
+
+        `clip_version_id` is stamped onto every row as `origin_clip_version_id`
+        so the SyncEngine can flip that version live once the ops land.
+        `extra_ops` (e.g. provenance SetField writes) are appended after the
+        item-derived ops with an empty origin review-item list.
         """
         provider_id, provider_clip_id = clip_key
         fresh_items = [it for it in items if it.applied_at is None and it.id is not None]
-        if not fresh_items:
-            return []
-
         ops_with_origin = _items_to_change_ops(fresh_items, target_map, fps=fps)
+        for op in extra_ops or []:
+            ops_with_origin.append((op, []))
         if not ops_with_origin:
             return []
 
@@ -102,6 +112,7 @@ class WriteQueue:
                     "origin_annotation_id": annotation_id,
                     "origin_review_item_ids": origin_ids,
                     "expected_etag": expected_etag,
+                    "origin_clip_version_id": clip_version_id,
                 }
             )
 
