@@ -289,6 +289,22 @@ class ReviewItemsRepo:
         row = await cur.fetchone()
         return int(row[0]) if row else 0
 
+    async def count_clips_for_review(self, conn: aiosqlite.Connection) -> int:
+        """Clips whose LATEST annotation still has an undecided proposal — the
+        "N to review" topbar count and the /?anno=for_review list. Excludes
+        rejected items (decided) and items from a superseded older annotation
+        (the draft panel shows only the latest annotation). MUST mirror the
+        inline query in routes/pages/templates.py (full-page render path); this
+        async method backs the /ui/review-pill refresh poll."""
+        cur = await conn.execute(
+            "SELECT COUNT(DISTINCT catdv_clip_id) FROM review_items "
+            "WHERE applied_at IS NULL AND decision != 'rejected' "
+            "AND annotation_id = (SELECT MAX(a.id) FROM annotations a "
+            "WHERE a.catdv_clip_id = review_items.catdv_clip_id)"
+        )
+        row = await cur.fetchone()
+        return int(row[0]) if row else 0
+
     @staticmethod
     def _row(row) -> ReviewItem:
         return ReviewItem(

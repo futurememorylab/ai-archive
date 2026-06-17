@@ -44,6 +44,16 @@ def test_workspace_switcher_renders(monkeypatch, tmp_path: Path):
     assert "All clips" in r.text
 
 
+def test_review_pill_renders_empty(monkeypatch, tmp_path: Path):
+    # No drafts in a fresh app -> the pill renders nothing (200, empty target),
+    # which is the swap target #review-pill polls. Guards the endpoint + partial.
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        r = client.get("/ui/review-pill")
+    assert r.status_code == 200
+    assert "to review" not in r.text
+
+
 def test_sync_drawer_renders_empty(monkeypatch, tmp_path: Path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:

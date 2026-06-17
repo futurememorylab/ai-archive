@@ -118,6 +118,9 @@ def _topbar_sync_context(request) -> dict[str, object]:
             # older annotation (the draft panel shows only the latest annotation,
             # clips.py:_build_draft_for_clip). Without the latest-annotation guard
             # a re-annotated/fully-applied clip showed "to review" with 0 proposals.
+            # MUST stay in sync with ReviewItemsRepo.count_clips_for_review, which
+            # backs the /ui/review-pill refresh poll (this sync path is full-render
+            # only; the pill self-refreshes via that async method).
             review_row = conn.execute(
                 "SELECT COUNT(DISTINCT catdv_clip_id) FROM review_items "
                 "WHERE applied_at IS NULL AND decision != 'rejected' "

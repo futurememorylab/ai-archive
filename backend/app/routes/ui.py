@@ -87,6 +87,20 @@ async def sync_drawer(request: Request):
     )
 
 
+@router.get("/review-pill", response_class=HTMLResponse)
+async def review_pill(request: Request):
+    """Topbar "N to review" pill inner partial. Polled (load + every 15s) and
+    refreshed after draft-changing actions by #review-pill, so the count never
+    goes stale without a full reload. DB-only; mirrors the sync-chip pattern."""
+    ctx = get_core_ctx(request)
+    review_count = await ctx.review_items_repo.count_clips_for_review(ctx.db)
+    resp = templates.TemplateResponse(
+        request, "pages/_review_pill_inner.html", {"review_count": review_count}
+    )
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 @router.get("/sync-chip", response_class=HTMLResponse)
 async def sync_chip(request: Request):
     """Topbar sync indicator inner partial: queued / problem counts + the

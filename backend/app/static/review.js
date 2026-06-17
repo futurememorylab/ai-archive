@@ -185,6 +185,9 @@ function reviewMixin(clipId) {
         try { const b = await r.json(); queued = b.version_id != null ? 1 : (b.queued || 0); } catch (e) { /* non-JSON body */ }
         Alpine.store("toast").push("Accepted proposals applied.", { level: "success" });
         await this.refreshDraft();
+        // Applying consumes the draft, so refresh the topbar "N to review" pill
+        // at once rather than waiting for its poll.
+        window.htmx?.ajax("GET", "/ui/review-pill", { target: "#review-pill", swap: "innerHTML" });
         // Hand off to the async writeback: poll until it reaches CatDV, then
         // resolve the message + refresh Published. No-op if nothing enqueued.
         if (queued > 0) {
@@ -334,6 +337,9 @@ function reviewMixin(clipId) {
         const r = await fetch(`/api/review/clips/${clipId}/versions/${vnum}/${path}`, { method: "POST" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         await this.refreshDraft();
+        // "restore" loads a version into the working draft (a new thing to
+        // review); refresh the topbar pill at once so its count is correct.
+        window.htmx?.ajax("GET", "/ui/review-pill", { target: "#review-pill", swap: "innerHTML" });
         if (action === "activate") {
           Alpine.store("toast").push(`Switching to version ${vnum}…`, { level: "success" });
           this.syncState = "syncing";

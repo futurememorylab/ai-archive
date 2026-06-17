@@ -12,12 +12,11 @@
     <button type="button" class="job-indicator-x" @click="hasErrors() ? dismiss() : cancel()"
             :title="hasErrors() ? 'Dismiss' : 'Cancel batch'">✕</button>
   </span>
-  {% if review_count is defined and review_count %}
-  <a class="pill changed to-review-chip" href="/?anno=for_review"
-     title="{{ review_count }} clip(s) with AI drafts awaiting your review">
-    <span class="led"></span>{{ review_count }} to review
-  </a>
-  {% endif %}
+  {# Stable container so the "N to review" count refreshes in place (poll +
+     after draft-changing actions) instead of going stale until a full reload.
+     Mirrors the #sync-chip pattern. #}
+  <span id="review-pill" hx-get="/ui/review-pill" hx-trigger="load, every 15s"
+        hx-target="#review-pill" hx-swap="innerHTML">{% include "pages/_review_pill_inner.html" %}</span>
   {% include "_sync_chip.html" %}
   {% include "_connection_chip.html" %}
   {# Email, env badge, and the env-appropriate session action (Log out on
