@@ -86,15 +86,34 @@ def _timecode_from_catdv(raw: dict[str, Any], default_fps: float) -> Timecode:
     return Timecode(secs=secs, fps=fps, frm=frm, txt=txt)
 
 
+# CatDV's marker `name` column is length-limited; a runaway AI-generated name
+# (a whole sentence) makes `replaceMarkers` fail with a DB "Data too long for
+# column 'name'" 500 that takes the entire write down. Clamp the name and keep
+# the full text in the description so nothing is lost. Conservative default for
+# a VARCHAR(255)-ish column; lower it if a given CatDV schema is tighter.
+MARKER_NAME_MAX = 200
+
+
+def _clamp_marker_name(name: str | None, description: str | None) -> tuple[str, str | None]:
+    name = name or ""
+    if len(name) <= MARKER_NAME_MAX:
+        return name, description
+    clamped = name[: MARKER_NAME_MAX - 1].rstrip() + "…"
+    # Preserve the full original name at the head of the description.
+    description = name if not description else f"{name}\n\n{description}"
+    return clamped, description
+
+
 def marker_to_catdv(marker: Marker, fps: float) -> dict[str, Any]:
+    name, description = _clamp_marker_name(marker.name, marker.description)
     out: dict[str, Any] = {
-        "name": marker.name,
+        "name": name,
         "in": _timecode_to_catdv(marker.in_, fps),
     }
     if marker.out is not None:
         out["out"] = _timecode_to_catdv(marker.out, fps)
-    if marker.description is not None:
-        out["description"] = marker.description
+    if description is not None:
+        out["description"] = description
     if marker.category is not None:
         out["category"] = marker.category
     if marker.color is not None:

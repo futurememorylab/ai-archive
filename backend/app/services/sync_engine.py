@@ -209,9 +209,11 @@ class SyncEngine:
                 continue
             except (AuthError, FatalProviderError) as exc:
                 await self._pending.mark_failed(db, op_ids, error=str(exc))
+                await self._mark_version_failed(db, rows, reason=str(exc))
                 continue
             except ProviderError as exc:
                 await self._pending.mark_failed(db, op_ids, error=str(exc))
+                await self._mark_version_failed(db, rows, reason=str(exc))
                 continue
             except Exception as exc:  # noqa: BLE001 — unknown adapter bug
                 # Default to retryable: unknown exception is most often
@@ -267,16 +269,35 @@ class SyncEngine:
                 error=f"{error}; max_attempts={self._max_attempts} reached",
                 bump_attempts=True,
             )
-            version_ids = [
-                r.get("origin_clip_version_id") for r in rows if r.get("origin_clip_version_id")
-            ]
-            version_id = max(version_ids) if version_ids else None
+            version_id = self._version_id_from_rows(rows)
             if self._clip_versions is not None and version_id is not None:
                 await self._clip_versions.mark_failed(
                     db, version_id, reason=f"max_attempts={self._max_attempts} reached"
                 )
         else:
             await self._pending.mark_retryable(db, op_ids, error=error)
+
+    @staticmethod
+    def _version_id_from_rows(rows: list[dict[str, Any]]) -> int | None:
+        """Freshest clip_version among this clip's drained rows (max non-null).
+        When several publishes for one clip merge into one PUT, the newest
+        version is the one whose state should advance."""
+        ids = [r.get("origin_clip_version_id") for r in rows if r.get("origin_clip_version_id")]
+        return max(ids) if ids else None
+
+    async def _mark_version_failed(
+        self, db: aiosqlite.Connection, rows: list[dict[str, Any]], *, reason: str
+    ) -> None:
+        """Flip the clip_version 'failed' when a write RAISES a fatal/provider
+        error (not only when apply_changes RETURNS a fatal result). Without
+        this the version stays 'publishing' forever and the clips-list badge /
+        clip headline read 'Publishing…' for a write that actually failed. See
+        the publishing audit, anomaly A9."""
+        if self._clip_versions is None:
+            return
+        version_id = self._version_id_from_rows(rows)
+        if version_id is not None:
+            await self._clip_versions.mark_failed(db, version_id, reason=reason)
 
     async def _handle_result(
         self,
@@ -288,13 +309,7 @@ class SyncEngine:
         rows: list[dict[str, Any]],
         result: Any,
     ) -> None:
-        # Freshest version id among this clip's drained rows (max non-null).
-        # Using max ensures that when several publish batches for one clip are
-        # merged, we advance the newest version (the last-enqueued publish).
-        version_ids = [
-            r.get("origin_clip_version_id") for r in rows if r.get("origin_clip_version_id")
-        ]
-        version_id = max(version_ids) if version_ids else None
+        version_id = self._version_id_from_rows(rows)
 
         if result.status == "ok":
             await self._pending.mark_applied(db, op_ids)

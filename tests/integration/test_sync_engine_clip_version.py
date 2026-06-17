@@ -82,3 +82,34 @@ async def test_conflict_marks_version_conflict_and_keeps_prior_live(db):
     await _engine(db, "conflict").drain_once()
     assert (await repo.get(db, v2)).publish_state == "conflict"
     assert (await repo.get(db, v1)).publish_state == "live"
+
+
+class _RaisingProvider:
+    id = "catdv"
+
+    async def apply_changes(self, change_set):
+        from backend.app.archive.errors import FatalProviderError
+
+        raise FatalProviderError("CatDV HTTP 500: Data too long for column 'name'")
+
+
+@pytest.mark.asyncio
+async def test_raised_fatal_error_marks_version_failed(db):
+    """When apply_changes RAISES a fatal error (e.g. a CatDV 500), the version
+    must flip to 'failed' — otherwise it stays 'publishing' and the clips-list
+    badge / headline read 'Publishing…' for a write that actually failed.
+    Publishing audit, A9."""
+    repo = ClipVersionsRepo()
+    v = await repo.insert(db, _v(1, "publishing"))
+    await _enqueue_for_version(db, v)
+    engine = SyncEngine(
+        provider=_RaisingProvider(),
+        pending_ops_repo=PendingOperationsRepo(),
+        write_log_repo=_NoopLog(),
+        connection_monitor=None,
+        db_provider=lambda: db,
+        review_items_repo=None,
+        clip_versions_repo=ClipVersionsRepo(),
+    )
+    await engine.drain_once()
+    assert (await repo.get(db, v)).publish_state == "failed"
