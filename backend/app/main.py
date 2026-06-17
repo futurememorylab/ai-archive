@@ -129,6 +129,7 @@ app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 
 _timing_log = logging.getLogger("backend.app.timing")
+_auth_log = logging.getLogger("backend.app.auth")
 
 
 # Paths reachable WITHOUT an active role (everything else is default-deny under
@@ -242,18 +243,29 @@ async def _auth_gate(request: Request, call_next):
     if _is_allowlisted(path):
         return await call_next(request)
 
-    # Authorize: look up the active role (fail-closed on any error).
-    role = None
+    # Authorize: one read returns (role, status); fail-closed on any error.
+    gate = None
     if email:
         try:
-            role = await core.user_roles_repo.get_active_role(core.db, email)
+            gate = await core.user_roles_repo.get_gate_state(core.db, email)
         except Exception:  # noqa: BLE001 — any lookup error denies, never admits
-            role = None
-    if role is None:
+            gate = None
+    if gate is None:
         return _deny(request, email)
+    role, status = gate
 
     request.state.current_user = CurrentUser(email=email, role=role)
-    await core.user_roles_repo.mark_seen(core.db, email)
+    # Steady-state browsing is READ-ONLY: the gate writes ONLY to flip an invited
+    # user to active on first sight (issue #73 — the old per-request UPDATE+commit
+    # was the Litestream lock contention that crashed the container). The flip is
+    # best-effort: a transient write-lock must NEVER take the request down — an
+    # invited user already admits and flips on a later request.
+    # Regression guard: tests/integration/test_auth_gate.py (prod outage 2026-06-17).
+    if status == "invited":
+        try:
+            await core.user_roles_repo.activate_on_first_sight(core.db, email)
+        except Exception:  # noqa: BLE001 — bookkeeping write; never block the request
+            _auth_log.warning("activate_on_first_sight failed (non-fatal); continuing", exc_info=True)
     return await call_next(request)
 
 

@@ -12,7 +12,7 @@ from typing import Any
 
 import aiosqlite
 
-_COLS = ("email", "role", "status", "display_name", "granted_by", "granted_at", "last_seen_at")
+_COLS = ("email", "role", "status", "display_name", "granted_by", "granted_at")
 
 
 def _norm(email: str) -> str:
@@ -29,15 +29,24 @@ class UserRolesRepo:
         row = await cur.fetchone()
         return dict(zip(_COLS, row, strict=True)) if row else None
 
-    async def get_active_role(self, conn: aiosqlite.Connection, email: str) -> str | None:
-        """The role that ADMITS at the gate, or None. Only active/invited admit;
-        requested (and absent) are denied."""
+    async def get_gate_state(
+        self, conn: aiosqlite.Connection, email: str
+    ) -> tuple[str, str] | None:
+        """The `(role, status)` that ADMITS at the gate, or None. Only
+        active/invited admit; requested (and absent) are denied.
+
+        One read serves both gate jobs: the role to attach, and the status that
+        tells the gate whether a first-sight invited→active flip is due. This is
+        what keeps an already-active user's request READ-ONLY — the gate only
+        writes when status=='invited', so steady-state browsing never commits
+        (issue #73: the per-request UPDATE+commit was the Litestream lock
+        contention that crashed the container)."""
         cur = await conn.execute(
-            "SELECT role FROM user_roles WHERE email = ? AND status IN ('active','invited')",
+            "SELECT role, status FROM user_roles WHERE email = ? AND status IN ('active','invited')",
             (_norm(email),),
         )
         row = await cur.fetchone()
-        return row[0] if row else None
+        return (row[0], row[1]) if row else None
 
     async def list_members(
         self,
@@ -108,18 +117,13 @@ class UserRolesRepo:
         )
         await conn.commit()
 
-    async def mark_seen(self, conn: aiosqlite.Connection, email: str) -> None:
-        """Bounded last-seen touch (≤ once/min) + flip invited→active on first
-        sight. Bounded to keep Litestream write churn low (perf discipline)."""
+    async def activate_on_first_sight(self, conn: aiosqlite.Connection, email: str) -> None:
+        """Flip invited→active on first authenticated sight. The WHERE clause
+        only matches an 'invited' row, so this writes exactly once (on first
+        sign-in) and is a no-op thereafter — keeping Litestream write churn low
+        (perf discipline). Last-seen tracking was removed; see ADR 0090."""
         await conn.execute(
-            """
-            UPDATE user_roles
-               SET last_seen_at = datetime('now'),
-                   status = CASE WHEN status='invited' THEN 'active' ELSE status END
-             WHERE email = ?
-               AND status IN ('active','invited')
-               AND (last_seen_at IS NULL OR last_seen_at < datetime('now','-60 seconds'))
-            """,
+            "UPDATE user_roles SET status = 'active' WHERE email = ? AND status = 'invited'",
             (_norm(email),),
         )
         await conn.commit()

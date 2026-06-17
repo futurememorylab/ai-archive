@@ -2,7 +2,7 @@
 <div id="members" class="admin-members">
   <table class="admin-table">
     <thead>
-      <tr><th>Member</th><th>Role</th><th>Last sign-in</th><th>Status</th><th></th></tr>
+      <tr><th>Member</th><th>Role</th><th>Status</th><th></th></tr>
     </thead>
     <tbody>
       {% for m in members %}
@@ -31,7 +31,6 @@
             {% endcall %}
           {% endif %}
         </td>
-        <td class="mono">{{ m.last_seen_at or '—' }}</td>
         <td>{{ ui.status_pill(m.status, 'ok' if m.status=='active' else ('accent' if m.status=='invited' else 'bad')) }}</td>
         <td class="m-actions">
           {% if m.email != me %}
