@@ -72,6 +72,7 @@ from backend.app.repositories.write_log import WriteLogRepo
 from backend.app.services.cache_actions import CacheActions
 from backend.app.services.cache_inspector import CacheInspector
 from backend.app.services.publish_service import PublishService
+from backend.app.services.restore_service import RestoreService
 from backend.app.services.connection_monitor import ConnectionMonitor
 from backend.app.services.enum_service import EnumService
 from backend.app.services.events import EventBus
@@ -126,6 +127,7 @@ class CoreCtx:
 
     write_queue: WriteQueue = field(init=False)
     publish_service: PublishService = field(init=False)
+    restore_service: RestoreService = field(init=False)
     # Cache services are DB-first (offline-required). Their live
     # augmentations (deep-orphan provider checks, bucket-side AI
     # eviction) are each a single None-guarded call site, so they live
@@ -170,6 +172,11 @@ class CoreCtx:
             write_queue=ctx.write_queue,
             prompts_repo=ctx.prompts_repo,
             live_snapshot_loader=_load_live_snapshot,
+        )
+        ctx.restore_service = RestoreService(
+            clip_versions_repo=ctx.clip_versions_repo,
+            review_items_repo=ctx.review_items_repo,
+            annotations_repo=ctx.annotations_repo,
         )
 
         import os
@@ -387,6 +394,10 @@ class LiveCtx:
     @property
     def publish_service(self) -> PublishService:
         return self.core.publish_service
+
+    @property
+    def restore_service(self) -> RestoreService:
+        return self.core.restore_service
 
     @property
     def _running_jobs(self) -> dict[int, object]:

@@ -107,6 +107,20 @@ class ReviewItemsRepo:
         )
         return [self._row(r) for r in await cur.fetchall()]
 
+    async def clear_unapplied_for_clip(self, conn: aiosqlite.Connection, clip_id: int) -> int:
+        """Delete all review_items for a clip that have not yet been applied.
+
+        Used by RestoreService to clear the working draft before re-seeding it
+        from a published version's snapshot. Applied items are preserved as a
+        historical record.
+        """
+        cur = await conn.execute(
+            "DELETE FROM review_items WHERE catdv_clip_id = ? AND applied_at IS NULL",
+            (clip_id,),
+        )
+        await conn.commit()
+        return cur.rowcount or 0
+
     async def delete_for_studio_run(self, conn: aiosqlite.Connection, *, studio_run_id: int) -> int:
         """Delete all review_items linked to a studio_run. Used by the
         annotator's studio finalize to ensure a retry doesn't accumulate

@@ -52,7 +52,7 @@ class PublishService:
         self._load_live = live_snapshot_loader
 
     async def publish(
-        self, conn: aiosqlite.Connection, *, clip_id: int, author: str | None
+        self, conn: aiosqlite.Connection, *, clip_id: int, author: str | None, origin: str = "publish"
     ) -> int | None:
         accepted = await self._review_items.list_by_clip(conn, clip_id, decision="accepted")
         accepted = [it for it in accepted if it.annotation_id is not None and it.applied_at is None]
@@ -73,7 +73,7 @@ class PublishService:
             catdv_clip_id=clip_id, version_num=num,
             parent_version_id=parent.id if parent else None,
             snapshot=snapshot, diff=_diff(base, snapshot),
-            origin="publish", model=annotation.model,
+            origin=origin, model=annotation.model,
             prompt_version_id=annotation.prompt_version_id, annotation_id=annotation.id,
             author=author, publish_state="publishing",
             expected_etag=etag_from_snapshot(annotation.clip_snapshot),

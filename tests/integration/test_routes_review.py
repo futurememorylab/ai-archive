@@ -159,7 +159,7 @@ def test_apply_clip_enqueues_and_drains_via_sync_engine(monkeypatch, tmp_path):
         r = client.post("/api/review/clips/1/apply")
         assert r.status_code == 200
         body = r.json()
-        assert body["queued"] >= 1
+        assert body["version_id"] is not None
 
         # Drain explicitly (the route only notifies; the lifespan-managed
         # background loop is not started here because init_external=False).
@@ -180,7 +180,7 @@ def test_apply_clip_enqueues_and_drains_via_sync_engine(monkeypatch, tmp_path):
 
 def test_apply_clip_returns_json_for_non_hx_caller(monkeypatch, tmp_path):
     """The non-HX path (e.g. applyAndNext, which navigates away on success)
-    must keep getting the JSON {"queued","applied"} body."""
+    must return JSON {"version_id": ...} with the newly published version id."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         ctx = client.app.state.core_ctx
@@ -194,8 +194,8 @@ def test_apply_clip_returns_json_for_non_hx_caller(monkeypatch, tmp_path):
         assert r.status_code == 200
         assert "application/json" in r.headers["content-type"]
         body = r.json()
-        assert body["queued"] >= 1
-        assert body["applied"] == body["queued"]
+        assert "version_id" in body
+        assert body["version_id"] is not None
 
 
 def test_apply_clip_returns_partial_for_hx_caller(monkeypatch, tmp_path):
