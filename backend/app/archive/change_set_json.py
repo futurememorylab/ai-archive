@@ -15,6 +15,7 @@ from backend.app.archive.model import (
     ChangeOp,
     ChangeSet,
     Marker,
+    ReconcileMarkers,
     ReplaceNote,
     SetField,
     Timecode,
@@ -68,6 +69,12 @@ def change_op_to_dict(op: ChangeOp) -> dict[str, Any]:
         return {"kind": "AppendNote", "target": op.target, "text": op.text}
     if isinstance(op, ReplaceNote):
         return {"kind": "ReplaceNote", "target": op.target, "text": op.text}
+    if isinstance(op, ReconcileMarkers):
+        return {
+            "kind": "ReconcileMarkers",
+            "desired": [_marker_to_dict(m) for m in op.desired],
+            "drop_secs": list(op.drop_secs),
+        }
     raise TypeError(f"unknown ChangeOp: {type(op).__name__}")
 
 
@@ -81,6 +88,11 @@ def change_op_from_dict(d: dict[str, Any]) -> ChangeOp:
         return AppendNote(target=d["target"], text=d["text"])
     if k == "ReplaceNote":
         return ReplaceNote(target=d["target"], text=d["text"])
+    if k == "ReconcileMarkers":
+        return ReconcileMarkers(
+            desired=tuple(_marker_from_dict(m) for m in d["desired"]),
+            drop_secs=tuple(float(s) for s in d.get("drop_secs", [])),
+        )
     raise ValueError(f"unknown ChangeOp kind: {k!r}")
 
 

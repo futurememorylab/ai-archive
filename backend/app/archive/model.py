@@ -75,6 +75,31 @@ class AddMarkers:
 
 
 @dataclass(frozen=True)
+class ReconcileMarkers:
+    """Reconcile the clip's marker set to a published version's snapshot — the
+    'Make live' / switch path. Unlike AddMarkers (additive), this REMOVES the
+    markers the app authored in OTHER versions, while preserving markers it
+    never authored (pre-existing or human-added directly in CatDV).
+
+    desired   — markers that must be present (the target version's). Built with a
+                Timecode fps sentinel of 0.0 so the frame is derived from the
+                clip's real fps at payload-build time, never a hardcoded value.
+    drop_secs — in-point seconds of markers WE authored in other versions that
+                must be removed; matched to the clip's frames at the clip's real
+                fps in build_put_payload.
+    """
+
+    desired: tuple[Marker, ...]
+    drop_secs: tuple[float, ...]
+
+    def __post_init__(self) -> None:
+        if isinstance(self.desired, list):
+            object.__setattr__(self, "desired", tuple(self.desired))
+        if isinstance(self.drop_secs, list):
+            object.__setattr__(self, "drop_secs", tuple(self.drop_secs))
+
+
+@dataclass(frozen=True)
 class SetField:
     identifier: str
     value: Any
@@ -92,7 +117,7 @@ class ReplaceNote:
     text: str
 
 
-ChangeOp = AddMarkers | SetField | AppendNote | ReplaceNote
+ChangeOp = AddMarkers | ReconcileMarkers | SetField | AppendNote | ReplaceNote
 
 
 @dataclass(frozen=True)
