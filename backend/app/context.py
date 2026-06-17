@@ -201,6 +201,8 @@ class CoreCtx:
             repo=ctx.enum_values_repo,
         )
         await ctx.enum_service.reconcile_seeds()
+        from backend.app.services.clip_versions_backfill import backfill_clip_versions
+        await backfill_clip_versions(ctx.db, ctx.clip_versions_repo)
         return ctx
 
     def _wire_cache_services(
