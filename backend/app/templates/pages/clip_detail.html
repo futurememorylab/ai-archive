@@ -138,29 +138,37 @@
         {% set _pill_label = publish_status.state %}
       {% endif %}
     {% endif %}
-    <div class="anno-publish-row">
-      <span data-publish-status="{{ publish_status.state }}">
-        {% if publish_status.state != 'none' %}
-          {{ status_pill(_pill_label, publish_status.pill_state) }}
-        {% endif %}
-      </span>
-      <span class="grow"></span>
-      {% include "pages/_clip_history_menu.html" %}
-    </div>
+    {# Non-scrolling header: status pill + the Published/Draft tabs with the
+       History dropdown beside them. Kept out of the scrolling .anno-body so the
+       History popover panel can overlay the content instead of being clipped by
+       the column's overflow. #}
+    <div class="anno-head">
+      <div class="anno-publish-row">
+        <span data-publish-status="{{ publish_status.state }}">
+          {% if publish_status.state != 'none' %}
+            {{ status_pill(_pill_label, publish_status.pill_state) }}
+          {% endif %}
+        </span>
+      </div>
 
-    <div class="anno-scope" role="tablist" aria-label="Annotation source">
-      <button type="button" class="btn sm" data-scope="published"
-              :class="{ active: scope === 'published' }"
-              :aria-selected="scope === 'published'"
-              @click="scope = 'published'">
-        Published
-      </button>
-      <button type="button" class="btn sm" data-scope="draft"
-              :class="{ active: scope === 'draft' }"
-              :aria-selected="scope === 'draft'"
-              @click="scope = 'draft'">
-        Draft
-      </button>
+      <div class="anno-scope-row">
+        <div class="anno-scope" role="tablist" aria-label="Annotation source">
+          <button type="button" class="btn sm" data-scope="published"
+                  :class="{ active: scope === 'published' }"
+                  :aria-selected="scope === 'published'"
+                  @click="scope = 'published'">
+            Published
+          </button>
+          <button type="button" class="btn sm" data-scope="draft"
+                  :class="{ active: scope === 'draft' }"
+                  :aria-selected="scope === 'draft'"
+                  @click="scope = 'draft'">
+            Draft
+          </button>
+        </div>
+        <span class="grow"></span>
+        {% include "pages/_clip_history_menu.html" %}
+      </div>
     </div>
 
     {# Review walk: a clip with no draft can't be reviewed, so skip past it to
@@ -181,15 +189,19 @@
     </script>
     {% endif %}
 
-    <div class="anno-scoped" x-show="scope === 'published'" x-cloak>
-      {% if annotation_cost_usd is not none %}
-      <div class="anno-cost muted mono">Cost: {{ annotation_cost_usd|usd }}</div>
-      {% endif %}
-      {% include "pages/_published_refreshable.html" %}
-    </div>
+    {# Scrolling body — only the annotation lists scroll, so the header (tabs +
+       History) stays pinned and the History popover isn't clipped. #}
+    <div class="anno-body">
+      <div class="anno-scoped" x-show="scope === 'published'" x-cloak>
+        {% if annotation_cost_usd is not none %}
+        <div class="anno-cost muted mono">Cost: {{ annotation_cost_usd|usd }}</div>
+        {% endif %}
+        {% include "pages/_published_refreshable.html" %}
+      </div>
 
-    <div class="anno-scoped" id="draft-aside" x-show="scope === 'draft'" x-cloak>
-      {% include "pages/_anno_draft.html" %}
+      <div class="anno-scoped" id="draft-aside" x-show="scope === 'draft'" x-cloak>
+        {% include "pages/_anno_draft.html" %}
+      </div>
     </div>
   </aside>
 
