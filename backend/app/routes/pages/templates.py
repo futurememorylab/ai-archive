@@ -111,17 +111,23 @@ def _topbar_sync_context(request) -> dict[str, object]:
                     "GROUP BY status"
                 ).fetchall()
             )
+            review_row = conn.execute(
+                "SELECT COUNT(DISTINCT ri.catdv_clip_id) FROM review_items ri "
+                "JOIN annotations a ON a.id = ri.annotation_id "
+                "WHERE ri.applied_at IS NULL"
+            ).fetchone()
         finally:
             conn.close()
         counts = {
             "queued": rows.get("pending", 0) + rows.get("in_flight", 0),
             "problems": rows.get("failed", 0) + rows.get("conflict", 0),
         }
+        review_count = review_row[0] if review_row else 0
         monitor = getattr(getattr(state, "live_ctx", None), "connection_monitor", None)
         offline = monitor is not None and monitor.current_state().value != "online"
     except Exception:  # noqa: BLE001 - must never break page rendering
         return {}
-    return {"sync_counts": counts, "offline": offline}
+    return {"sync_counts": counts, "offline": offline, "review_count": review_count}
 
 
 templates.context_processors.append(_topbar_sync_context)

@@ -142,6 +142,8 @@ a { color: inherit; text-decoration: none; }
 .pill.changed { color: var(--changed);
   border-color: color-mix(in oklab, var(--changed) 35%, transparent); }
 .pill.changed .led { background: var(--changed); box-shadow: 0 0 6px var(--changed); }
+.to-review-chip { text-decoration: none; cursor: pointer; gap: 4px; }
+.to-review-chip:hover { filter: brightness(1.15); }
 .pillset {
   display: inline-flex; align-items: center; gap: 8px;
   padding-right: 4px;

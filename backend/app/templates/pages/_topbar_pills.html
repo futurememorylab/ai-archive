@@ -14,6 +14,12 @@
     <button type="button" class="job-indicator-x" @click="hasErrors() ? dismiss() : cancel()"
             :title="hasErrors() ? 'Dismiss' : 'Cancel batch'">✕</button>
   </span>
+  {% if review_count is defined and review_count %}
+  <a class="pill changed to-review-chip" href="/?anno=for_review"
+     title="{{ review_count }} clip(s) with AI drafts awaiting your review">
+    <span class="led"></span>👁 {{ review_count }} to review
+  </a>
+  {% endif %}
   {% include "_sync_chip.html" %}
   {% include "_connection_chip.html" %}
   {% if _settings.app_env == "prod" %}
