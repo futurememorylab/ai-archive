@@ -19,9 +19,9 @@
      "✓ Synced", which flickered to "↑ N" the instant the real counts arrived. #}
   <span class="sync-chip-loading" aria-hidden="true">⋯</span>
   {%- elif problems -%}
-  <span class="sync-chip-problems">⚠ {{ problems }}</span>{% if queued %}<span class="sync-chip-queued">↑ {{ queued }}</span>{% endif %}
+  <span class="sync-chip-problems">⚠ Failed {{ problems }}</span>{% if queued %}<span class="sync-chip-queued">↑ Publishing… {{ queued }}</span>{% endif %}
   {%- elif queued -%}
-  <span class="sync-chip-queued">↑ {{ queued }}</span>
+  <span class="sync-chip-queued">↑ Publishing… {{ queued }}</span>
   {%- else -%}
   <span class="sync-chip-ok">✓ Synced</span>
   {%- endif -%}

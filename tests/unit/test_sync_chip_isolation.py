@@ -77,3 +77,46 @@ def test_drawer_hides_offline_note_when_no_pending_writes():
     html = tmpl.render(sync_rows=[], offline=True, request=None)
     assert "sync-offline-note" not in html
     assert "No pending writes" in html
+
+
+# ---------------------------------------------------------------------------
+# Task 14: topbar sync chip uses the unified publish-state vocabulary
+# ---------------------------------------------------------------------------
+
+def test_chip_inner_queued_uses_publishing_label():
+    """When there are queued ops (pending/in_flight), the chip pill says
+    'Publishing…' — matching the clips-list badge and clip-detail headline."""
+    tmpl = templates.get_template("_sync_chip_inner.html")
+    html = tmpl.render(
+        sync_counts={"queued": 3, "problems": 0},
+        request=None,
+    )
+    assert "Publishing…" in html
+    assert "sync-chip-queued" in html
+
+
+def test_chip_inner_problems_uses_failed_label():
+    """When there are problem ops (failed/conflict), the chip pill says
+    'Failed' — matching the clips-list badge and clip-detail headline
+    (count_actionable bundles both failed and conflict into `problems`)."""
+    tmpl = templates.get_template("_sync_chip_inner.html")
+    html = tmpl.render(
+        sync_counts={"queued": 0, "problems": 2},
+        request=None,
+    )
+    assert "Failed" in html
+    assert "sync-chip-problems" in html
+    assert "has-problems" in html
+
+
+def test_chip_inner_both_queued_and_problems():
+    """When both queued and problems are present, both 'Publishing…' and
+    'Failed' appear in the chip — problems pill leads, queued pill follows."""
+    tmpl = templates.get_template("_sync_chip_inner.html")
+    html = tmpl.render(
+        sync_counts={"queued": 1, "problems": 2},
+        request=None,
+    )
+    assert "Publishing…" in html
+    assert "Failed" in html
+    assert "has-problems" in html
