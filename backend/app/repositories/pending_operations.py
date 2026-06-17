@@ -43,6 +43,21 @@ def _row_to_dict(row: Iterable[Any]) -> dict[str, Any]:
     return dict(zip(_ROW_COLS, row, strict=False))
 
 
+# Shared SET fragment for the three "retry" resets. A conflict means the clip
+# changed upstream after the user reviewed it, so the stored expected_etag no
+# longer matches live; replaying it would just re-conflict (the adapter rejects
+# on etag mismatch). An explicit retry is the user choosing to apply anyway, so
+# we drop the etag and let the change re-base on the current clip. FAILED rows
+# (transport/unknown errors) keep their etag, so a genuine concurrent upstream
+# change still surfaces as a conflict rather than being silently overwritten.
+# `status` here is the PRE-update value — SQLite evaluates SET right-hand sides
+# against the original row, even though the same statement also sets status.
+# See ADR 0098.
+_CONFLICT_RETRY_ETAG = (
+    "expected_etag = CASE WHEN status = 'conflict' THEN NULL ELSE expected_etag END"
+)
+
+
 class PendingOperationsRepo:
     """DB-backed pending_operations journal."""
 
@@ -262,14 +277,17 @@ class PendingOperationsRepo:
         """Reset a row back to a fresh `pending` state for the sync drawer.
 
         Zeros attempts, clears last_error and attempted_at, regardless of
-        the current status (including conflict / failed). Returns the
+        the current status (including conflict / failed). A conflict row also
+        has its stale expected_etag dropped so the retry re-bases on the live
+        clip instead of re-conflicting (see _CONFLICT_RETRY_ETAG). Returns the
         number of rows updated (0 or 1).
         """
         cur = await conn.execute(
-            """
+            f"""
             UPDATE pending_operations
                SET status = 'pending', attempts = 0,
-                   last_error = NULL, attempted_at = NULL
+                   last_error = NULL, attempted_at = NULL,
+                   {_CONFLICT_RETRY_ETAG}
              WHERE id = ?
             """,
             (op_id,),
@@ -313,10 +331,11 @@ class PendingOperationsRepo:
         re-attempts them. Pending / in_flight rows are left untouched. Returns
         the number of rows reset."""
         cur = await conn.execute(
-            """
+            f"""
             UPDATE pending_operations
                SET status = 'pending', attempts = 0,
-                   last_error = NULL, attempted_at = NULL
+                   last_error = NULL, attempted_at = NULL,
+                   {_CONFLICT_RETRY_ETAG}
              WHERE status IN ('failed', 'conflict')
             """
         )
@@ -330,10 +349,11 @@ class PendingOperationsRepo:
         fresh pending state. Pending / in_flight ops are left alone. Returns
         rows reset."""
         cur = await conn.execute(
-            """
+            f"""
             UPDATE pending_operations
                SET status = 'pending', attempts = 0,
-                   last_error = NULL, attempted_at = NULL
+                   last_error = NULL, attempted_at = NULL,
+                   {_CONFLICT_RETRY_ETAG}
              WHERE provider_id = ? AND provider_clip_id = ?
                AND status IN ('failed', 'conflict')
             """,

@@ -217,9 +217,11 @@ function reviewMixin(clipId) {
     // Message shown once the draft is fully applied; reflects whether the
     // upstream CatDV writeback has actually landed, is still syncing, or failed.
     _plural(n) { return n === 1 ? "" : "s"; },
-    // Record a settled-with-problems status and split it into the two kinds
-    // the user must act on differently: failed (retryable) vs conflict (the
-    // clip changed upstream, so a blind retry just re-conflicts).
+    // Record a settled-with-problems status and split it into the two kinds we
+    // word differently: failed (the write didn't reach CatDV) vs conflict (the
+    // clip changed upstream after review). Both are fixed by Retry in the Sync
+    // drawer — a conflict retry re-bases on the live clip (ADR 0098), so it
+    // applies rather than re-conflicting.
     _setProblems(st) {
       this.syncState = "problem";
       this.syncFailed = st.failed || 0;
