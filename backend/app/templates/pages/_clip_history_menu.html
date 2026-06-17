@@ -1,11 +1,8 @@
-{% from "components/_ui.html" import menu, menu_item, menu_header, menu_sep, status_pill %}
-{# History dropdown — version list for the current clip.
-   Each row: #N · author · model, a status pill, and a Restore action for
-   non-live versions. Rendered server-side; JS handles the actual Restore
-   fetch in review.js (delegated [data-restore] / [data-restore-publish]).
-
-   pill_state_for is a local map from publish_state → pill CSS modifier,
-   mirroring the route's _PILL_STATE dict so both surfaces are consistent. #}
+{% from "components/_ui.html" import menu, menu_item, menu_header, status_pill %}
+{# Version history dropdown. Each version is a clean block: header (#N + state
+   pill), meta (author · model), an optional diff summary, and — for non-live
+   versions — Make live (switch) / Edit as draft actions. JS handles the fetch
+   via delegated [data-activate] / [data-restore] in review.js. #}
 
 {% set _PS = {
   "live":       "ok",
@@ -22,12 +19,7 @@
       {% for v in versions %}
         {% set vstate = v.publish_state %}
         {% set vpill  = _PS.get(vstate, '') %}
-        {% set vlabel = '#' ~ v.version_num
-                        ~ (' · ' ~ v.author if v.author else '')
-                        ~ (' · ' ~ v.model  if v.model  else '') %}
-        {# Build a compact diff summary line from v.diff when present.
-           e.g. "+2 markers · genre · notes"
-           Handles null/absent diff gracefully (renders nothing). #}
+        {# Compact diff summary from v.diff (e.g. "+2 markers · genre · notes"). #}
         {% set vdiff = v.diff if v.diff else {} %}
         {% set _parts = namespace(items=[]) %}
         {% if vdiff.get('markers_added', 0) > 0 %}
@@ -36,25 +28,26 @@
         {% for fkey in vdiff.get('fields_changed', {}).keys() %}
           {% set _parts.items = _parts.items + [fkey.split('.')[-1]] %}
         {% endfor %}
-        {% if vdiff.get('notes_changed') %}
-          {% set _parts.items = _parts.items + ['notes'] %}
-        {% endif %}
-        {% if vdiff.get('big_notes_changed') %}
-          {% set _parts.items = _parts.items + ['bigNotes'] %}
-        {% endif %}
-        <div class="menu-item" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
-          <span class="menu-lbl">{{ vlabel }}</span>
-          {{ status_pill(vstate, vpill) }}
+        {% if vdiff.get('notes_changed') %}{% set _parts.items = _parts.items + ['notes'] %}{% endif %}
+        {% if vdiff.get('big_notes_changed') %}{% set _parts.items = _parts.items + ['bigNotes'] %}{% endif %}
+        <div class="cv-row{% if vstate == 'live' %} is-live{% endif %}">
+          <div class="cv-head">
+            <span class="cv-num">#{{ v.version_num }}</span>
+            {{ status_pill(vstate, vpill) }}
+          </div>
+          <div class="cv-meta">{{ v.author or '—' }} · {{ v.model or '—' }}</div>
           {% if _parts.items %}
-            <span class="muted" data-diff-summary>{{ _parts.items | join(' · ') }}</span>
+            <div class="cv-diff" data-diff-summary>{{ _parts.items | join(' · ') }}</div>
           {% endif %}
           {% if vstate != 'live' %}
-            <button type="button" class="btn sm good"
-                    data-activate="{{ v.version_num }}"
-                    data-clip-id="{{ v.catdv_clip_id }}">Make live</button>
-            <button type="button" class="btn sm ghost"
-                    data-restore="{{ v.version_num }}"
-                    data-clip-id="{{ v.catdv_clip_id }}">Edit as draft</button>
+            <div class="cv-actions">
+              <button type="button" class="btn sm good"
+                      data-activate="{{ v.version_num }}"
+                      data-clip-id="{{ v.catdv_clip_id }}">Make live</button>
+              <button type="button" class="btn sm ghost"
+                      data-restore="{{ v.version_num }}"
+                      data-clip-id="{{ v.catdv_clip_id }}">Edit as draft</button>
+            </div>
           {% endif %}
         </div>
       {% endfor %}

@@ -276,6 +276,7 @@ function reviewMixin(clipId) {
         if (st.unfinished > 0) { this.syncState = "syncing"; continue; }
         if (st.problems > 0) {
           this._setProblems(st);
+          this._refreshVersionPanel();  // headline pill → Failed/Conflict
           Alpine.store("toast").push(this._problemMessage(), { level: "error" });
           return;
         }
@@ -283,9 +284,18 @@ function reviewMixin(clipId) {
         this.syncState = "synced";
         this.syncedCount = this.appliedCount;  // everything enqueued has landed
         await this._refreshPublished();
+        this._refreshVersionPanel();  // headline pill → Live vN; history updates
         Alpine.store("toast").push("Synced to CatDV — Published updated.", { level: "success" });
         return;
       }
+    },
+    // Re-render the headline pill + history dropdown in place after a Make-live
+    // / publish, so #version-panel reflects the new live version without a reload.
+    _refreshVersionPanel() {
+      window.htmx?.ajax("GET", `/clips/${clipId}/version-panel`, {
+        target: "#version-panel",
+        swap: "innerHTML",
+      });
     },
     async _refreshPublished() {
       // Swap the server-rendered Published panel in place and refresh the
@@ -328,6 +338,7 @@ function reviewMixin(clipId) {
           Alpine.store("toast").push(`Switching to version ${vnum}…`, { level: "success" });
           this.syncState = "syncing";
           this._pollSync();
+          this._refreshVersionPanel();  // immediate: pill → Publishing…; _pollSync → Live vN
           window.htmx?.ajax("GET", "/ui/sync-chip", { target: "#sync-chip", swap: "innerHTML" });
         } else {
           Alpine.store("toast").push(`Draft loaded from version ${vnum}.`, { level: "success" });

@@ -1,0 +1,11 @@
+{% from "components/_ui.html" import status_pill %}
+{# Headline publish-status pill + the version history dropdown. Wrapped in
+   #version-panel (clip_detail.html) so review.js can swap it after a Make-live
+   / publish without a full reload. The pill label + state are computed in the
+   route (_version_panel_ctx) so this partial and the page agree. #}
+{% if publish_status.state != 'none' and publish_status.label %}
+<span class="vp-pill" data-publish-status="{{ publish_status.state }}">
+  {{ status_pill(publish_status.label, publish_status.pill_state) }}
+</span>
+{% endif %}
+{% include "pages/_clip_history_menu.html" %}

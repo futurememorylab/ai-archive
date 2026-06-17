@@ -121,36 +121,12 @@
   </section>
 
   <aside class="anno-col">
-    {# ── Publish-status headline + history dropdown ──────────────────────── #}
-    {% from "components/_ui.html" import status_pill %}
-    {% if publish_status.state != 'none' %}
-      {% if publish_status.state == 'live' %}
-        {% set _pill_label = 'Live v' ~ publish_status.version_num %}
-      {% elif publish_status.state == 'publishing' %}
-        {% set _pill_label = 'Publishing…' %}
-      {% elif publish_status.state == 'draft' %}
-        {% set _pill_label = 'Draft – unpublished' %}
-      {% elif publish_status.state == 'failed' %}
-        {% set _pill_label = 'Failed' %}
-      {% elif publish_status.state == 'conflict' %}
-        {% set _pill_label = 'Conflict' %}
-      {% else %}
-        {% set _pill_label = publish_status.state %}
-      {% endif %}
-    {% endif %}
-    {# Non-scrolling header: status pill + the Published/Draft tabs with the
-       History dropdown beside them. Kept out of the scrolling .anno-body so the
-       History popover panel can overlay the content instead of being clipped by
-       the column's overflow. #}
+    {# Non-scrolling header: the Published/Draft tabs with the version panel
+       (headline pill + History dropdown) beside them. Kept out of the scrolling
+       .anno-body so the History popover overlays the content instead of being
+       clipped by the column overflow. #version-panel is swapped in place by
+       review.js after a Make-live / publish (no reload). #}
     <div class="anno-head">
-      <div class="anno-publish-row">
-        <span data-publish-status="{{ publish_status.state }}">
-          {% if publish_status.state != 'none' %}
-            {{ status_pill(_pill_label, publish_status.pill_state) }}
-          {% endif %}
-        </span>
-      </div>
-
       <div class="anno-scope-row">
         <div class="anno-scope" role="tablist" aria-label="Annotation source">
           <button type="button" class="btn sm" data-scope="published"
@@ -167,7 +143,9 @@
           </button>
         </div>
         <span class="grow"></span>
-        {% include "pages/_clip_history_menu.html" %}
+        <div id="version-panel" class="version-panel">
+          {% include "pages/_version_panel.html" %}
+        </div>
       </div>
     </div>
 
