@@ -147,7 +147,7 @@ class PublishService:
         return target.id
 
 
-def _switch_ops(target, versions) -> list[ChangeOp]:
+def _switch_ops(target: ClipVersion, versions: list[ClipVersion]) -> list[ChangeOp]:
     """Ops that switch a clip to `target`'s snapshot (the 'Make live' path).
 
     Markers are reconciled, not merely added: we re-assert the target's markers

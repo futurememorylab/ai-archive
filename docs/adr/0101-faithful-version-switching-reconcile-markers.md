@@ -82,6 +82,12 @@ wholesale array replace — that would silently delete an editor's manual marker
   markers at 25fps frames on a non-25fps clip) are left as-is — a repair pass is
   a separate task. Fields a later version newly introduced may still linger
   after a switch (out of scope here).
+- **Frame-collision caveat:** CatDV markers carry no stable id, so reconcile
+  keys on the integer in-frame. A foreign / human marker sitting on the *exact*
+  frame of one of our dropped markers is indistinguishable from ours and will be
+  removed by a switch — a low-probability exception to "preserve human markers".
+  Pinned by `test_reconcile_drops_foreign_marker_colliding_on_a_dropped_frame`
+  so the behaviour can only change deliberately.
 - Tests: `ReconcileMarkers` JSON round-trip; payload reconcile (drop ours, keep
   foreign, overwrite at shared frame, 30fps no-duplicate); `reactivate` emits the
   op with the right `desired`/`drop_secs` and no new version; an offline

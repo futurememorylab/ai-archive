@@ -240,3 +240,21 @@ def test_reconcile_derives_frames_at_clip_fps_no_duplicate():
     )
     payload = build_put_payload(current=_clip(markers=existing, fps=30.0), ops=[op])
     assert sorted(m["in"]["frm"] for m in payload["markers"]) == [120, 240]
+
+
+def test_reconcile_drops_foreign_marker_colliding_on_a_dropped_frame():
+    # KNOWN LIMITATION (ADR 0101): CatDV markers carry no stable id, so reconcile
+    # keys on the integer in-frame. A foreign / human marker sitting on the EXACT
+    # frame of one of our dropped markers is indistinguishable from ours and is
+    # removed. Pinned so any future change to this behaviour is deliberate.
+    existing = [
+        {"name": "ours_keep", "in": {"frm": 100, "fmt": 25.0, "secs": 4.0}},
+        # human marker that happens to collide with the dropped 8.0s frame:
+        {"name": "HUMAN", "in": {"frm": 200, "fmt": 25.0, "secs": 8.0}},
+    ]
+    op = ReconcileMarkers(
+        desired=(Marker(name="ours_keep", in_=Timecode(secs=4.0, fps=0.0), out=None),),
+        drop_secs=(8.0,),
+    )
+    payload = build_put_payload(current=_clip(markers=existing), ops=[op])
+    assert sorted(m["name"] for m in payload["markers"]) == ["ours_keep"]
