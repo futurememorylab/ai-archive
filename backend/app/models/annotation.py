@@ -32,4 +32,5 @@ class ReviewItem(BaseModel):
     proposed_value: dict[str, Any] | list[Any] | str | int | float | bool | None
     edited_value: dict[str, Any] | list[Any] | str | int | float | bool | None = None
     decision: Literal["pending", "accepted", "rejected"] = "pending"
-    applied_at: str | None = None
+    applied_at: str | None = None  # enqueued to the write queue (+ dedup key)
+    synced_at: str | None = None  # confirmed on CatDV by the SyncEngine

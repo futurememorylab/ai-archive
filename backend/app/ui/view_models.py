@@ -186,6 +186,12 @@ def batch_view(row: dict) -> dict:
     completed = int(row["completed"])
     failed = int(row["failed"])
     awaiting = int(row["awaiting_clips"])
+    # Clips whose accepted write-backs are enqueued (applied_at) but not yet
+    # confirmed on CatDV (synced_at NULL) — in-flight or, while CatDV is offline,
+    # parked. Lets the batch show "Syncing" instead of claiming "Applied" before
+    # the change is actually on the server (see ADR 0093). Rejected items never
+    # get applied_at, so they don't wedge this count. Optional for back-compat.
+    syncing = int(row.get("syncing_clips", 0) or 0)
     running = int(row["running_jobs"]) > 0 or int(row["in_flight"]) > 0
     reviewed = max(0, completed - awaiting)
 
@@ -194,6 +200,9 @@ def batch_view(row: dict) -> dict:
     elif awaiting > 0:
         status_state = ""
         status_label = "Awaiting review" if reviewed == 0 else f"{awaiting} to review"
+    elif syncing > 0:
+        # Review done, but write-backs haven't landed on CatDV yet.
+        status_state, status_label = "accent", f"Syncing {syncing}"
     else:
         status_state, status_label = "ok", "Applied"
 
@@ -259,7 +268,8 @@ def draft_review_arrays(draft: dict) -> dict:
         "markers": [],
         "fields": [],
         "notes": [],
-        "applied_count": 0,
+        "applied_count": 0,  # enqueued to the write queue (may still be syncing)
+        "synced_count": 0,  # confirmed landed on CatDV (synced_at set)
         "deleted": {"markers": [], "fields": [], "notes": []},
     }
     if not draft.get("has_draft"):
@@ -310,6 +320,8 @@ def draft_review_arrays(draft: dict) -> dict:
                 out["deleted"][out_key].append(shape(it))
             elif applied:
                 out["applied_count"] += 1
+                if it.get("synced_at") is not None:
+                    out["synced_count"] += 1
             else:
                 out[out_key].append(shape(it))
     return out

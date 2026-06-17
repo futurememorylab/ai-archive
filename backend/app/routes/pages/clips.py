@@ -66,6 +66,13 @@ _BATCH_STATUS_VIEW: dict[str, tuple[str, str]] = {
 }
 
 
+# Item statuses that mean "still working" (maps to the Queued/Processing pills).
+# Mirrors the in-flight set in JobsRepo._BATCHES_SQL.
+_RUNNING_ITEM_STATUSES = frozenset(
+    {"pending", "resolving", "uploading", "prompting"}
+)
+
+
 def _batch_status_view(status: str | None) -> dict[str, str] | None:
     if status is None:
         return None
@@ -261,6 +268,12 @@ async def clips_list(
     for jid in batch_ids:
         for it in await ctx.jobs_repo.list_items(ctx.db, jid):
             batch_status_map[it.catdv_clip_id] = it.status
+    # While any item is still in-flight, the per-clip pills change underneath a
+    # static page — flag it so the tbody self-polls and refreshes the pills
+    # without a manual reload. Stops automatically once the batch settles.
+    ctx_dict["batch_running"] = any(
+        s in _RUNNING_ITEM_STATUSES for s in batch_status_map.values()
+    )
 
     # Actual billable cost per clip for this batch: one batched aggregate
     # over the batch's job ids, summed per clip in SQL (a clip may appear
@@ -620,4 +633,26 @@ async def clip_live_history(request: Request, clip_id: int):
         request,
         "pages/_anno_live_history.html",
         {"sessions": sessions},
+    )
+
+
+@router.get("/ui/batch-statuses", response_class=HTMLResponse)
+async def batch_statuses_fragment(request: Request, batch: str = ""):
+    """Per-clip run-status pills for a running batch, as HTMX out-of-band <span>
+    swaps — so the clips list refreshes just the pills in place, with no
+    full-table re-render (which would reset the scroll and re-run the list's
+    heavier queries every few seconds). DB-only; polled by #bstatus-poll while
+    the batch is running, and tells the poller to stop once it settles."""
+    ctx = get_core_ctx(request)
+    job_ids = [int(b) for b in batch.split(",") if b.strip().isdigit()]
+    status_map: dict[int, str] = {}
+    for jid in job_ids:
+        for it in await ctx.jobs_repo.list_items(ctx.db, jid):
+            status_map[it.catdv_clip_id] = it.status
+    cells = {cid: _batch_status_view(s) for cid, s in status_map.items()}
+    running = any(s in _RUNNING_ITEM_STATUSES for s in status_map.values())
+    return templates.TemplateResponse(
+        request,
+        "pages/_batch_status_cells.html",
+        {"cells": cells, "batch_running": running},
     )

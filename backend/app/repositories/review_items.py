@@ -56,7 +56,7 @@ class ReviewItemsRepo:
         cur = await conn.execute(
             """
             SELECT id, annotation_id, studio_run_id, catdv_clip_id, kind,
-                   target_identifier, proposed_value, edited_value, decision, applied_at
+                   target_identifier, proposed_value, edited_value, decision, applied_at, synced_at
             FROM review_items WHERE id = ?
             """,
             (item_id,),
@@ -73,7 +73,8 @@ class ReviewItemsRepo:
             cur = await conn.execute(
                 """
                 SELECT id, annotation_id, studio_run_id, catdv_clip_id, kind,
-                       target_identifier, proposed_value, edited_value, decision, applied_at
+                       target_identifier, proposed_value, edited_value, decision,
+                       applied_at, synced_at
                 FROM review_items WHERE catdv_clip_id = ? AND decision = ?
                 ORDER BY id
                 """,
@@ -83,7 +84,8 @@ class ReviewItemsRepo:
             cur = await conn.execute(
                 """
                 SELECT id, annotation_id, studio_run_id, catdv_clip_id, kind,
-                       target_identifier, proposed_value, edited_value, decision, applied_at
+                       target_identifier, proposed_value, edited_value, decision,
+                       applied_at, synced_at
                 FROM review_items WHERE catdv_clip_id = ?
                 ORDER BY id
                 """,
@@ -97,7 +99,7 @@ class ReviewItemsRepo:
         cur = await conn.execute(
             """
             SELECT id, annotation_id, studio_run_id, catdv_clip_id, kind,
-                   target_identifier, proposed_value, edited_value, decision, applied_at
+                   target_identifier, proposed_value, edited_value, decision, applied_at, synced_at
             FROM review_items WHERE studio_run_id = ?
             ORDER BY id
             """,
@@ -105,9 +107,7 @@ class ReviewItemsRepo:
         )
         return [self._row(r) for r in await cur.fetchall()]
 
-    async def delete_for_studio_run(
-        self, conn: aiosqlite.Connection, *, studio_run_id: int
-    ) -> int:
+    async def delete_for_studio_run(self, conn: aiosqlite.Connection, *, studio_run_id: int) -> int:
         """Delete all review_items linked to a studio_run. Used by the
         annotator's studio finalize to ensure a retry doesn't accumulate
         duplicate markers/fields on the same run_id. Safe on empty sets.
@@ -154,6 +154,25 @@ class ReviewItemsRepo:
             return
         await conn.executemany(
             "UPDATE review_items SET applied_at = ? WHERE id = ?",
+            [(_now_iso(), i) for i in item_ids],
+        )
+        if commit:
+            await conn.commit()
+
+    async def mark_synced(
+        self,
+        conn: aiosqlite.Connection,
+        item_ids: list[int],
+        *,
+        commit: bool = True,
+    ) -> None:
+        """Stamp synced_at = now on the given items — the SyncEngine calls this
+        once a clip's write-back actually lands on CatDV, so the UI can tell
+        'confirmed upstream' from merely 'enqueued' (applied_at)."""
+        if not item_ids:
+            return
+        await conn.executemany(
+            "UPDATE review_items SET synced_at = ? WHERE id = ?",
             [(_now_iso(), i) for i in item_ids],
         )
         if commit:
@@ -269,4 +288,5 @@ class ReviewItemsRepo:
             edited_value=json.loads(row[7]) if row[7] is not None else None,
             decision=row[8],
             applied_at=row[9] if len(row) > 9 else None,
+            synced_at=row[10] if len(row) > 10 else None,
         )

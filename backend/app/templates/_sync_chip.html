@@ -1,0 +1,9 @@
+{# Topbar sync indicator container. The stable #sync-chip owns
+   x-data="popover()" so the dropdown's open state survives the inner-partial
+   swaps done by the heartbeat poll and by retry/discard. The hx-trigger="load"
+   fetch populates counts on first paint (the topbar is a sync template and
+   count_actionable is an async DB read, so it can't be computed inline like the
+   connection chip's state). Mirrors _connection_chip.html. #}
+<div id="sync-chip" class="sync-chip popover" x-data="popover()"
+     hx-get="/ui/sync-chip" hx-trigger="load" hx-target="#sync-chip"
+     hx-swap="innerHTML">{% include "_sync_chip_inner.html" %}</div>

@@ -74,3 +74,54 @@ def _fixed_enums_json() -> str:
 
 
 templates.env.globals["app_enums_json"] = _fixed_enums_json()
+
+
+def _topbar_sync_context(request) -> dict[str, object]:
+    """Render the topbar sync chip's counts INLINE on full-page loads, so the
+    chip shows the real "↑ N" / "✓ Synced" on first paint instead of flickering
+    through a placeholder while an async load-fetch returns.
+
+    Skipped for HTMX fragment renders (HX-Request) — those don't draw the topbar,
+    and it keeps the read off the hot fragment-poll paths. Reads pending_operations
+    directly with a short synchronous SQLite query rather than the async
+    PendingOperationsRepo, because a Jinja context processor is synchronous and
+    can't await; WAL mode serves concurrent readers without blocking the app's
+    own connection. The query mirrors count_actionable exactly so the inline
+    value and the /ui/sync-chip poll always agree.
+    """
+    if request.headers.get("HX-Request") == "true":
+        return {}
+    state = getattr(getattr(request, "app", None), "state", None)
+    core = getattr(state, "core_ctx", None)
+    data_dir = getattr(getattr(core, "settings", None), "data_dir", None)
+    if data_dir is None:
+        return {}
+    # A context processor runs on EVERY full-page render, so it must never raise
+    # (a failure would 500 every page). Any problem → return {} and let the chip
+    # fall back to its load-fetch. Broad except is intentional here.
+    import sqlite3
+
+    try:
+        conn = sqlite3.connect(str(data_dir / "app.db"), timeout=0.5)
+        try:
+            rows = dict(
+                conn.execute(
+                    "SELECT status, COUNT(*) FROM pending_operations "
+                    "WHERE status IN ('pending','in_flight','failed','conflict') "
+                    "GROUP BY status"
+                ).fetchall()
+            )
+        finally:
+            conn.close()
+        counts = {
+            "queued": rows.get("pending", 0) + rows.get("in_flight", 0),
+            "problems": rows.get("failed", 0) + rows.get("conflict", 0),
+        }
+        monitor = getattr(getattr(state, "live_ctx", None), "connection_monitor", None)
+        offline = monitor is not None and monitor.current_state().value != "online"
+    except Exception:  # noqa: BLE001 - must never break page rendering
+        return {}
+    return {"sync_counts": counts, "offline": offline}
+
+
+templates.context_processors.append(_topbar_sync_context)

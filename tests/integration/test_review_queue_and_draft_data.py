@@ -75,7 +75,9 @@ def test_draft_data_route(monkeypatch, tmp_path):
         r = client.get("/api/review/clips/101/draft-data")
         assert r.status_code == 200
         body = r.json()
-        assert set(body.keys()) == {"markers", "fields", "notes", "applied_count", "deleted"}
+        assert set(body.keys()) == {
+            "markers", "fields", "notes", "applied_count", "synced_count", "deleted"
+        }
         # the seeded pending marker item is present as a "proposed" card
         assert any(m["status"] == "proposed" for m in body["markers"])
         assert body["applied_count"] == 0

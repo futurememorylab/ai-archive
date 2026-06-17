@@ -17,6 +17,11 @@ from backend.app.archive.providers.catdv.mapping import marker_to_catdv
 
 NOTE_SEPARATOR = "\n\n---\n\n"
 DEFAULT_FPS = 25.0
+# CatDV's built-in note properties live at the top level of the clip JSON,
+# not in the user-defined `fields` map (see mapping.from_catdv_clip, which
+# reads them top-level). A note op targeting one of these must be written
+# top-level so it round-trips; any other target is a user field.
+TOP_LEVEL_NOTE_TARGETS = ("notes", "bigNotes")
 
 
 def build_put_payload(
@@ -53,17 +58,29 @@ def build_put_payload(
         payload["markers"] = existing + new_markers
 
     field_changes: dict[str, Any] = {}
+
+    def _emit_note(target: str, text: str) -> None:
+        if target in TOP_LEVEL_NOTE_TARGETS:
+            payload[target] = text
+        else:
+            field_changes[target] = text
+
     for op in ops_list:
         if isinstance(op, SetField):
             field_changes[op.identifier] = op.value
         elif isinstance(op, AppendNote):
             existing_text = _existing_text(current, op.target) or ""
+            if existing_text == op.text or existing_text.endswith(NOTE_SEPARATOR + op.text):
+                # Idempotent re-drain: the append already landed (the live note
+                # is the text, or ends with the separated segment). Re-applying
+                # after a crash / lost PUT response would duplicate it, so skip.
+                continue
             if existing_text:
-                field_changes[op.target] = existing_text + NOTE_SEPARATOR + op.text
+                _emit_note(op.target, existing_text + NOTE_SEPARATOR + op.text)
             else:
-                field_changes[op.target] = op.text
+                _emit_note(op.target, op.text)
         elif isinstance(op, ReplaceNote):
-            field_changes[op.target] = op.text
+            _emit_note(op.target, op.text)
 
     if field_changes:
         payload["fields"] = field_changes

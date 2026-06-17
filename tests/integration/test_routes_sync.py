@@ -193,6 +193,99 @@ def test_clip_status_done_when_all_applied(monkeypatch, tmp_path: Path):
         assert body["done"] is True
 
 
+def test_retry_returns_chip_partial_on_hx_request(monkeypatch, tmp_path: Path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        [op_id] = _enqueue_one(client)
+        # HX request → the refreshed sync-chip partial (so the panel updates).
+        r = client.post(f"/api/sync/pending/{op_id}/retry", headers={"HX-Request": "true"})
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+        assert "/ui/sync-chip" in r.text  # the chip inner (heartbeat poller)
+        # Plain request → JSON, unchanged for API/tests.
+        r2 = client.post(f"/api/sync/pending/{op_id}/retry")
+        assert r2.headers["content-type"].startswith("application/json")
+        assert r2.json()["reset"] is True
+
+
+def test_discard_returns_chip_partial_on_hx_request(monkeypatch, tmp_path: Path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        [op_id] = _enqueue_one(client)
+        r = client.post(f"/api/sync/pending/{op_id}/discard", headers={"HX-Request": "true"})
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+
+
+def test_retry_all_resets_failed_and_conflict(monkeypatch, tmp_path: Path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        failed = _enqueue_one(client, clip_id="70")
+        _enqueue_one(client, clip_id="71")  # stays pending, untouched
+        ctx = client.app.state.core_ctx
+        import asyncio
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(ctx.pending_ops_repo.mark_failed(ctx.db, failed, error="boom"))
+        finally:
+            loop.close()
+
+        assert client.get("/api/sync/clip/70/status").json()["failed"] == 1
+        r = client.post("/api/sync/retry-all")
+        assert r.status_code == 200
+        assert r.json()["reset"] == 1  # only the failed row was reset
+        # failed → pending, and the already-pending row is left as-is
+        assert client.get("/api/sync/clip/70/status").json()["pending"] == 1
+        assert client.get("/api/sync/clip/70/status").json()["failed"] == 0
+        assert client.get("/api/sync/clip/71/status").json()["pending"] == 1
+
+
+def test_retry_clip_resets_only_that_clips_problems(monkeypatch, tmp_path: Path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        a = _enqueue_one(client, clip_id="80")
+        b = _enqueue_one(client, clip_id="81")
+        ctx = client.app.state.core_ctx
+        import asyncio
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(ctx.pending_ops_repo.mark_failed(ctx.db, a + b, error="boom"))
+        finally:
+            loop.close()
+
+        r = client.post("/api/sync/clip/catdv/80/retry")
+        assert r.status_code == 200
+        assert r.json()["reset"] == 1
+        # clip 80 reset to pending; clip 81 still failed (untouched)
+        assert client.get("/api/sync/clip/80/status").json()["pending"] == 1
+        assert client.get("/api/sync/clip/80/status").json()["failed"] == 0
+        assert client.get("/api/sync/clip/81/status").json()["failed"] == 1
+
+
+def test_discard_clip_removes_all_its_pending(monkeypatch, tmp_path: Path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        _enqueue_one(client, clip_id="82")
+        b = _enqueue_one(client, clip_id="82")
+        ctx = client.app.state.core_ctx
+        import asyncio
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(ctx.pending_ops_repo.mark_failed(ctx.db, b, error="boom"))
+        finally:
+            loop.close()
+
+        r = client.post("/api/sync/clip/catdv/82/discard")
+        assert r.status_code == 200
+        assert r.json()["discarded"] == 2  # both the pending and the failed op
+        body = client.get("/api/sync/clip/82/status").json()
+        assert body["pending"] == 0
+        assert body["failed"] == 0
+
+
 def test_retry_404_when_missing(monkeypatch, tmp_path: Path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:

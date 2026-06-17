@@ -83,8 +83,31 @@ async def sync_drawer(request: Request):
     return templates.TemplateResponse(
         request,
         "sync_drawer.html",
-        {"rows": rows},
+        {"sync_rows": rows},
     )
+
+
+@router.get("/sync-chip", response_class=HTMLResponse)
+async def sync_chip(request: Request):
+    """Topbar sync indicator inner partial: queued / problem counts + the
+    pending-writes drawer. Polled every 10s (and on load) by #sync-chip, and
+    returned by retry/discard so the panel refreshes in place. DB-only."""
+    ctx = get_core_ctx(request)
+    counts = await ctx.pending_ops_repo.count_actionable(ctx.db)
+    rows = await ctx.pending_ops_repo.list_with_clip_names(ctx.db)
+    # Offline → the SyncEngine can't drain the queue (sync_engine._tick returns
+    # early when not online), so the drawer explains the wait instead of showing
+    # a bare, action-less "Queued". Cached monitor state — no CatDV round-trip.
+    live = getattr(request.app.state, "live_ctx", None)
+    monitor = getattr(live, "connection_monitor", None)
+    offline = monitor is not None and monitor.current_state().value != "online"
+    resp = templates.TemplateResponse(
+        request,
+        "_sync_chip_inner.html",
+        {"sync_counts": counts, "sync_rows": rows, "offline": offline},
+    )
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @router.get("/clip-badge/{provider_id}/{provider_clip_id}", response_class=HTMLResponse)

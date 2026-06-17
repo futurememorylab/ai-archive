@@ -151,6 +151,34 @@ def test_retry_failed_starts_only_jobs_with_failures(monkeypatch, tmp_path):
         assert r.json()["started"] == [jid]
 
 
+def test_retry_failed_flips_failed_items_to_pending_synchronously(monkeypatch, tmp_path):
+    """Retry must reset the failed items to 'pending' before returning, so the
+    batch immediately reads as running (in_flight > 0) instead of a stale
+    'Failed' while the async run spins up. start_job_in_background is stubbed so
+    only the synchronous pre-reset is observed."""
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.core_ctx
+        jid = asyncio.run(_seed_batch(ctx))
+        install_live_ctx(client.app, proxy_resolver=MagicMock())
+
+        import backend.app.routes.batches as batches_mod
+
+        monkeypatch.setattr(
+            batches_mod, "start_job_in_background",
+            lambda core, live, job_id, **kw: None,  # don't actually run
+        )
+        r = client.post("/batches/retry-failed", json={"job_ids": [jid]})
+        assert r.status_code == 200
+
+        async def _statuses():
+            jobs = JobsRepo()
+            return {it.catdv_clip_id: it.status for it in await jobs.list_items(ctx.db, jid)}
+
+        statuses = asyncio.run(_statuses())
+        assert statuses[102] == "pending"        # was 'error' → reset
+        assert statuses[101] == "review_ready"   # untouched
+
+
 def _picker_clip(clip_id=12041, name="Abramcukova_Anna_09"):
     return CanonicalClip(
         key=("catdv", str(clip_id)), name=name, duration_secs=60.0, fps=25.0,

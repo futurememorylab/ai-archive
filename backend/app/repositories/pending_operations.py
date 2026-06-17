@@ -307,6 +307,73 @@ class PendingOperationsRepo:
                 bucket["pending"] += n
         return out
 
+    async def reset_all_for_retry(self, conn: aiosqlite.Connection) -> int:
+        """Bulk 'Retry all': reset every failed/conflict row to a fresh pending
+        state (attempts, last_error, attempted_at cleared) so the SyncEngine
+        re-attempts them. Pending / in_flight rows are left untouched. Returns
+        the number of rows reset."""
+        cur = await conn.execute(
+            """
+            UPDATE pending_operations
+               SET status = 'pending', attempts = 0,
+                   last_error = NULL, attempted_at = NULL
+             WHERE status IN ('failed', 'conflict')
+            """
+        )
+        await conn.commit()
+        return cur.rowcount or 0
+
+    async def reset_clip_for_retry(
+        self, conn: aiosqlite.Connection, *, provider_id: str, provider_clip_id: str
+    ) -> int:
+        """Retry one clip (grouped drawer): reset its failed/conflict ops to a
+        fresh pending state. Pending / in_flight ops are left alone. Returns
+        rows reset."""
+        cur = await conn.execute(
+            """
+            UPDATE pending_operations
+               SET status = 'pending', attempts = 0,
+                   last_error = NULL, attempted_at = NULL
+             WHERE provider_id = ? AND provider_clip_id = ?
+               AND status IN ('failed', 'conflict')
+            """,
+            (provider_id, provider_clip_id),
+        )
+        await conn.commit()
+        return cur.rowcount or 0
+
+    async def delete_clip_pending(
+        self, conn: aiosqlite.Connection, *, provider_id: str, provider_clip_id: str
+    ) -> int:
+        """Discard one clip (grouped drawer): delete all its non-applied ops.
+        The originating review_items.applied_at is left as-is (matching the
+        single-op `delete`). Returns rows deleted."""
+        cur = await conn.execute(
+            "DELETE FROM pending_operations "
+            "WHERE provider_id = ? AND provider_clip_id = ? AND status != 'applied'",
+            (provider_id, provider_clip_id),
+        )
+        await conn.commit()
+        return cur.rowcount or 0
+
+    async def count_actionable(self, conn: aiosqlite.Connection) -> dict[str, int]:
+        """Global counts behind the topbar sync indicator: `queued`
+        (pending + in_flight — work in motion) and `problems`
+        (failed + conflict — needs the user). Provider-agnostic; one grouped
+        query. Lets a write-back that exhausted its retries (or hit a conflict)
+        show up app-wide, not only on its clip's draft page. See ADR 0091.
+        """
+        cur = await conn.execute(
+            "SELECT status, COUNT(*) FROM pending_operations "
+            "WHERE status IN ('pending', 'in_flight', 'failed', 'conflict') "
+            "GROUP BY status"
+        )
+        rows = {status: n for status, n in await cur.fetchall()}
+        return {
+            "queued": rows.get("pending", 0) + rows.get("in_flight", 0),
+            "problems": rows.get("failed", 0) + rows.get("conflict", 0),
+        }
+
     async def status_counts_for_clip(
         self,
         conn: aiosqlite.Connection,

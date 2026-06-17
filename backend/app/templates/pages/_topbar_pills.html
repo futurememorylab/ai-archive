@@ -8,12 +8,13 @@
     <button type="button" class="job-indicator-main" @click="open()"
             :title="hasErrors() ? 'Batch finished with errors — click to view' : 'Click to view batch'">
       <span class="ca-spinner" x-show="!hasErrors() && total() > done()" aria-hidden="true"></span>
-      <span x-show="!hasErrors()" x-text="'Annotating ' + done() + '/' + total()"></span>
+      <span x-show="!hasErrors()" x-text="phaseLabel()"></span>
       <span x-show="hasErrors()">Annotation failed</span>
     </button>
     <button type="button" class="job-indicator-x" @click="hasErrors() ? dismiss() : cancel()"
             :title="hasErrors() ? 'Dismiss' : 'Cancel batch'">✕</button>
   </span>
+  {% include "_sync_chip.html" %}
   {% include "_connection_chip.html" %}
   {% if _settings.app_env == "prod" %}
     {# Cloud Run owns the lifecycle (scale-to-zero releases the seat + VPN on

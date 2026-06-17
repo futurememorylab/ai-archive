@@ -11,8 +11,9 @@ function reviewMixin(clipId) {
     // Writeback state surfaced in the draft message: the upstream apply runs
     // asynchronously in the SyncEngine, so we poll /api/sync/clip/{id}/status
     // to learn when it lands (or fails) and refresh Published without a reload.
-    syncState: "idle",   // idle | syncing | synced | failed
-    syncProblems: 0,
+    syncState: "idle",   // idle | syncing | synced | problem
+    syncFailed: 0,       // ops that errored out — retry from the drawer
+    syncConflicts: 0,    // ops whose clip changed upstream — resolve in drawer
     _reviewInit() {
       try { this.reviewQueue = JSON.parse(sessionStorage.getItem("catdv:reviewQueue") || "[]"); }
       catch (e) { this.reviewQueue = []; }
@@ -160,7 +161,12 @@ function reviewMixin(clipId) {
     async acceptApplyAll() {
       if (this.editingItemId != null) this.saveEdit();
       this.acceptAll();
-      await this.applyDraft();
+      // On success, walk straight to the next clip in the review queue rather
+      // than parking on the "syncing…" message — the write-back keeps going
+      // server-side (glanceable in the topbar sync chip). navClip(1) is a no-op
+      // on the last clip in the queue, so that one stays put and shows the
+      // applied/synced message as the terminal state.
+      if (await this.applyDraft()) this.navClip(1);
     },
     // ── apply (stay) + refresh ───────────────────────────────────
     async applyDraft() {
@@ -176,9 +182,17 @@ function reviewMixin(clipId) {
         await this.refreshDraft();
         // Hand off to the async writeback: poll until it reaches CatDV, then
         // resolve the message + refresh Published. No-op if nothing enqueued.
-        if (queued > 0) { this.syncState = "syncing"; this._pollSync(); }
+        if (queued > 0) {
+          this.syncState = "syncing";
+          this._pollSync();
+          // Reflect the new queued writes in the topbar sync chip at once — it
+          // otherwise only updates on its own ~10s heartbeat.
+          window.htmx?.ajax("GET", "/ui/sync-chip", { target: "#sync-chip", swap: "innerHTML" });
+        }
+        return true;
       } catch (e) {
         Alpine.store("toast").push(`Apply failed: ${e.message || e}. Nothing was applied.`, { level: "error" });
+        return false;
       }
     },
     async refreshDraft() {
@@ -194,6 +208,7 @@ function reviewMixin(clipId) {
         this.draftDeleted.fields.splice(0, this.draftDeleted.fields.length, ...d.deleted.fields);
         this.draftDeleted.notes.splice(0, this.draftDeleted.notes.length, ...d.deleted.notes);
         this.appliedCount = d.applied_count;
+        this.syncedCount = d.synced_count || 0;
         this.editingItemId = null;
         this._editSnapshot = null;
       } catch (e) { /* keep current view */ }
@@ -202,13 +217,30 @@ function reviewMixin(clipId) {
     // Message shown once the draft is fully applied; reflects whether the
     // upstream CatDV writeback has actually landed, is still syncing, or failed.
     _plural(n) { return n === 1 ? "" : "s"; },
+    // Record a settled-with-problems status and split it into the two kinds
+    // the user must act on differently: failed (retryable) vs conflict (the
+    // clip changed upstream, so a blind retry just re-conflicts).
+    _setProblems(st) {
+      this.syncState = "problem";
+      this.syncFailed = st.failed || 0;
+      this.syncConflicts = st.conflict || 0;
+    },
+    _problemMessage() {
+      const f = this.syncFailed, c = this.syncConflicts;
+      const parts = [];
+      if (f > 0) parts.push(`${f} change${this._plural(f)} didn't reach CatDV`);
+      if (c > 0) parts.push(`${c} change${this._plural(c)} changed in CatDV after you reviewed`);
+      const tail = c > 0 ? "open the Sync drawer to resolve." : "retry from the Sync drawer.";
+      return `${parts.join(" and ")} — ${tail}`;
+    },
     appliedMessage() {
       const n = this.appliedCount;
       if (this.syncState === "synced")
-        return `${n} proposal${this._plural(n)} applied and synced to CatDV ✓ — see Published.`;
-      if (this.syncState === "failed")
-        return `${n} applied, but ${this.syncProblems} change${this._plural(this.syncProblems)} didn't reach CatDV — retry from the Sync drawer.`;
-      return `${n} proposal${this._plural(n)} applied — syncing to CatDV; visible under Published once synced.`;
+        return `${n} proposal${this._plural(n)} applied to CatDV ✓ — see Published.`;
+      if (this.syncState === "problem")
+        return `${n} sent, but ${this._problemMessage()}`;
+      // Syncing: be honest about how many are actually ON CatDV vs just queued.
+      return `${n} sent to CatDV — ${this.syncedCount} confirmed on the server so far; the rest are still syncing (visible under Published once synced).`;
     },
     async _checkSyncOnce() {
       // One-shot reconciliation on page load (no toasts): set the message to
@@ -217,7 +249,7 @@ function reviewMixin(clipId) {
         const r = await fetch(`/api/sync/clip/${clipId}/status`);
         if (!r.ok) return;
         const st = await r.json();
-        if (st.problems > 0) { this.syncState = "failed"; this.syncProblems = st.problems; }
+        if (st.problems > 0) { this._setProblems(st); }
         else if (st.unfinished > 0) { this.syncState = "syncing"; this._pollSync(); }
         else if (st.applied > 0) { this.syncState = "synced"; }
       } catch (e) { /* leave state as-is */ }
@@ -236,15 +268,13 @@ function reviewMixin(clipId) {
         } catch (e) { continue; }
         if (st.unfinished > 0) { this.syncState = "syncing"; continue; }
         if (st.problems > 0) {
-          this.syncState = "failed";
-          this.syncProblems = st.problems;
-          Alpine.store("toast").push(
-            `${st.problems} change${this._plural(st.problems)} didn't reach CatDV. Open the Sync drawer to retry.`,
-            { level: "error" });
+          this._setProblems(st);
+          Alpine.store("toast").push(this._problemMessage(), { level: "error" });
           return;
         }
         // Settled with nothing unfinished and no problems → applied upstream.
         this.syncState = "synced";
+        this.syncedCount = this.appliedCount;  // everything enqueued has landed
         await this._refreshPublished();
         Alpine.store("toast").push("Synced to CatDV — Published updated.", { level: "success" });
         return;

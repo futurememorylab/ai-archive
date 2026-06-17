@@ -1,42 +1,60 @@
-{# Sync drawer: pending_operations with retry/discard/view-conflict. #}
-<div id="sync-drawer" class="sync-drawer"
-     hx-get="/ui/sync-drawer"
-     hx-trigger="every 10s"
-     hx-swap="outerHTML">
-  <h3>Pending writes</h3>
-  {% if not rows %}
+{# Sync drawer: pending_operations grouped by clip (one row per clip), with a
+   worst-status pill and per-clip retry/discard. Rendered standalone via
+   /ui/sync-drawer and embedded in the topbar sync chip. The context var is
+   `sync_rows` (NOT `rows`): the chip is embedded on EVERY page via the topbar,
+   so a generic `rows` would collide with a page's own `rows` (e.g. /cache) and
+   blow up the groupby — see ADR 0093. Undefined `sync_rows` → empty state; the
+   /ui/sync-chip poll supplies the real rows. #}
+{% import "components/_ui.html" as ui %}
+{%- set STATUS_LABEL = {
+  "pending": "Queued", "in_flight": "Sending…", "conflict": "Conflict", "failed": "Failed"} -%}
+{%- set STATUS_STATE = {
+  "pending": "", "in_flight": "accent", "conflict": "changed", "failed": "bad"} -%}
+{%- set OP_LABEL = {
+  "AddMarkers": "Markers", "SetField": "Field", "AppendNote": "Note", "ReplaceNote": "Note"} -%}
+{%- set SEVERITY = {"pending": 0, "in_flight": 1, "failed": 2, "conflict": 3} -%}
+{%- set hdr = namespace(retryable=0) -%}
+{%- for r in sync_rows or [] -%}{%- if r.status in ("failed", "conflict") -%}{%- set hdr.retryable = hdr.retryable + 1 -%}{%- endif -%}{%- endfor -%}
+<div id="sync-drawer" class="sync-drawer">
+  <div class="sync-drawer-hdr">
+    <h3>Pending writes</h3>
+    {% if hdr.retryable %}{{ ui.button("Retry all", size="sm", attrs='hx-post="/api/sync/retry-all" hx-target="#sync-chip" hx-swap="innerHTML" title="Re-attempt all ' ~ hdr.retryable ~ ' failed/conflict write(s)"') }}{% endif %}
+  </div>
+  {% if offline and sync_rows %}
+    <p class="sync-offline-note">CatDV is offline — these write-backs are waiting and
+      will send automatically when it reconnects. Nothing to do.</p>
+  {% endif %}
+  {% if not sync_rows %}
     <p class="empty">No pending writes.</p>
   {% else %}
     <table class="sync-table">
       <thead>
-        <tr>
-          <th>Clip</th><th>Op</th><th>Status</th><th>Age</th>
-          <th>Attempts</th><th>Last error</th><th>Actions</th>
-        </tr>
+        <tr><th>Clip</th><th>Changes</th><th>Status</th><th>Detail</th><th>Actions</th></tr>
       </thead>
       <tbody>
-      {% for r in rows %}
-        <tr class="row-{{ r.status }}">
-          <td>{{ r.clip_name or r.provider_clip_id }}</td>
-          <td>{{ r.op_kind }}</td>
-          <td>{{ r.status }}</td>
-          <td>{{ r.enqueued_at }}</td>
-          <td>{{ r.attempts }}</td>
-          <td class="last-error">{{ r.last_error or "" }}</td>
-          <td>
-            <button hx-post="/api/sync/pending/{{ r.id }}/retry"
-                    hx-target="#sync-drawer"
-                    hx-swap="outerHTML">Retry</button>
-            <button hx-post="/api/sync/pending/{{ r.id }}/discard"
-                    hx-confirm="Discard this write?"
-                    hx-target="#sync-drawer"
-                    hx-swap="outerHTML">Discard</button>
-            {% if r.status == "conflict" %}
-              <button class="view-conflict"
-                      data-detail="{{ r.last_error|e }}">
-                View conflict
-              </button>
+      {% for clip_id, ops in (sync_rows | sort(attribute="provider_clip_id") | groupby("provider_clip_id")) %}
+        {%- set cl = namespace(sev=-1, status="pending", err=None) -%}
+        {%- set changes = [] -%}
+        {%- for op in ops -%}
+          {%- set lbl = OP_LABEL.get(op.op_kind, op.op_kind) -%}
+          {%- if lbl not in changes -%}{%- set _ = changes.append(lbl) -%}{%- endif -%}
+          {%- set sev = SEVERITY.get(op.status, 0) -%}
+          {%- if sev > cl.sev -%}{%- set cl.sev = sev -%}{%- set cl.status = op.status -%}{%- set cl.err = op.last_error -%}{%- endif -%}
+        {%- endfor -%}
+        {%- set pid = ops[0].provider_id -%}
+        <tr class="row-{{ cl.status }}">
+          <td>{{ ops[0].clip_name or clip_id }}</td>
+          <td>{{ changes | join(", ") }}</td>
+          <td>{{ ui.status_pill(STATUS_LABEL.get(cl.status, cl.status), STATUS_STATE.get(cl.status, "")) }}</td>
+          <td class="last-error">
+            {%- if cl.status == "conflict" -%}Changed in CatDV after you reviewed it.
+            {%- elif cl.err -%}{{ cl.err }}{%- endif -%}
+          </td>
+          <td class="sync-actions">
+            {% if cl.status in ("failed", "conflict") %}
+              {{ ui.button("Retry", size="sm", attrs='hx-post="/api/sync/clip/' ~ pid ~ '/' ~ clip_id ~ '/retry" hx-target="#sync-chip" hx-swap="innerHTML"') }}
             {% endif %}
+            {{ ui.button("Discard", variant="ghost", size="sm", attrs='hx-post="/api/sync/clip/' ~ pid ~ '/' ~ clip_id ~ '/discard" hx-confirm="Discard all pending writes for this clip?" hx-target="#sync-chip" hx-swap="innerHTML"') }}
           </td>
         </tr>
       {% endfor %}

@@ -53,8 +53,13 @@ class JobsRepo:
         if row is None:
             raise LookupError(f"job {job_id} not found")
         return Job(
-            id=row[0], prompt_version_id=row[1], status=row[2],
-            total_clips=row[3], notes=row[4], kind=row[5], run_group=row[6],
+            id=row[0],
+            prompt_version_id=row[1],
+            status=row[2],
+            total_clips=row[3],
+            notes=row[4],
+            kind=row[5],
+            run_group=row[6],
         )
 
     async def list_jobs(self, conn: aiosqlite.Connection, *, limit: int = 50) -> list[Job]:
@@ -65,8 +70,13 @@ class JobsRepo:
         )
         return [
             Job(
-                id=r[0], prompt_version_id=r[1], status=r[2],
-                total_clips=r[3], notes=r[4], kind=r[5], run_group=r[6],
+                id=r[0],
+                prompt_version_id=r[1],
+                status=r[2],
+                total_clips=r[3],
+                notes=r[4],
+                kind=r[5],
+                run_group=r[6],
             )
             for r in await cur.fetchall()
         ]
@@ -139,15 +149,18 @@ class JobsRepo:
         )
         return [
             Job(
-                id=r[0], prompt_version_id=r[1], status=r[2],
-                total_clips=r[3], notes=r[4], kind=r[5], run_group=r[6],
+                id=r[0],
+                prompt_version_id=r[1],
+                status=r[2],
+                total_clips=r[3],
+                notes=r[4],
+                kind=r[5],
+                run_group=r[6],
             )
             for r in await cur.fetchall()
         ]
 
-    async def progress(
-        self, conn: aiosqlite.Connection, job_id: int
-    ) -> tuple[int, int, int]:
+    async def progress(self, conn: aiosqlite.Connection, job_id: int) -> tuple[int, int, int]:
         """(done, total, errors) for a job. 'done' = items past the
         in-flight statuses (pending/resolving/uploading/prompting)."""
         cur = await conn.execute(
@@ -163,6 +176,26 @@ class JobsRepo:
         )
         row = await cur.fetchone()
         return (int(row[0] or 0), int(row[1] or 0), int(row[2] or 0))
+
+    async def phase_counts(self, conn: aiosqlite.Connection, job_id: int) -> dict[str, int]:
+        """Per-phase item counts for the topbar indicator's phase breakdown:
+        `caching` (resolving+uploading — proxy fetch + GCS upload), `annotating`
+        (prompting — the Gemini call), `queued` (pending), `done`, `error`.
+        One grouped query. Lets the user see the slow upload phase instead of a
+        bare 'Annotating X/Y'. See ADR 0093."""
+        cur = await conn.execute(
+            "SELECT status, COUNT(*) FROM job_items WHERE job_id = ? GROUP BY status",
+            (job_id,),
+        )
+        rows = {s: int(n) for s, n in await cur.fetchall()}
+        in_flight = ("pending", "resolving", "uploading", "prompting", "error")
+        return {
+            "caching": rows.get("resolving", 0) + rows.get("uploading", 0),
+            "annotating": rows.get("prompting", 0),
+            "queued": rows.get("pending", 0),
+            "error": rows.get("error", 0),
+            "done": sum(n for s, n in rows.items() if s not in in_flight),
+        }
 
     async def reset_transient(self, conn: aiosqlite.Connection) -> int:
         cur = await conn.execute(
@@ -218,6 +251,25 @@ class JobsRepo:
           JOIN review_items ri ON ri.annotation_id = a.id AND ri.applied_at IS NULL
           WHERE COALESCE(j.kind, '') != 'studio'
           GROUP BY batch_key
+        ),
+        syncing AS (
+          -- Clips in the batch with a write-back still in the queue
+          -- (pending/in_flight). Sourced from pending_operations — the SAME
+          -- source as the topbar sync chip (PendingOperationsRepo.count_actionable)
+          -- — so the batch "Syncing N" pill and the chip can never disagree.
+          -- (review_items.synced_at is unreliable for historical applies made
+          -- before that column existed, so it must NOT drive this.)
+          SELECT
+            COALESCE(j.run_group, 'job:' || j.id) AS batch_key,
+            COUNT(DISTINCT ji.catdv_clip_id) AS syncing_clips
+          FROM jobs j
+          JOIN job_items ji ON ji.job_id = j.id
+          JOIN pending_operations po
+            ON po.provider_id = 'catdv'
+           AND po.provider_clip_id = CAST(ji.catdv_clip_id AS TEXT)
+           AND po.status IN ('pending', 'in_flight')
+          WHERE COALESCE(j.kind, '') != 'studio'
+          GROUP BY batch_key
         )
         SELECT
           b.batch_key                   AS batch_key,
@@ -234,20 +286,20 @@ class JobsRepo:
           COALESCE(i.completed, 0)      AS completed,
           COALESCE(i.in_flight, 0)      AS in_flight,
           COALESCE(r.awaiting_clips, 0) AS awaiting_clips,
-          r.first_pending_clip_id       AS first_pending_clip_id
+          r.first_pending_clip_id       AS first_pending_clip_id,
+          COALESCE(s.syncing_clips, 0)  AS syncing_clips
         FROM batch b
         JOIN jobs pj ON pj.id = b.primary_job_id
         LEFT JOIN prompt_versions pv ON pv.id = pj.prompt_version_id
         LEFT JOIN prompts p ON p.id = pv.prompt_id
         LEFT JOIN items i ON i.batch_key = b.batch_key
         LEFT JOIN reviewed r ON r.batch_key = b.batch_key
+        LEFT JOIN syncing s ON s.batch_key = b.batch_key
         ORDER BY b.started_at DESC, b.primary_job_id DESC
         LIMIT ?
     """
 
-    async def list_batches(
-        self, conn: aiosqlite.Connection, *, limit: int = 50
-    ) -> list[dict]:
+    async def list_batches(self, conn: aiosqlite.Connection, *, limit: int = 50) -> list[dict]:
         """One row per batch (run_group, or 'job:<id>' singleton), newest
         first. `job_ids` is the sorted list of member job ids."""
         cur = await conn.execute(self._BATCHES_SQL, (limit,))
