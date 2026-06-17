@@ -15,6 +15,7 @@ from backend.app.archive.model import (
     SetField,
 )
 from backend.app.archive.providers.catdv.mapping import marker_to_catdv
+from backend.app.archive.providers.catdv.text_repair import demojibake_marker
 
 NOTE_SEPARATOR = "\n\n---\n\n"
 DEFAULT_FPS = 25.0
@@ -76,7 +77,11 @@ def build_put_payload(
                 for m in working
                 if _in_frm(m) not in drop_frm and _in_frm(m) not in desired_frm
             ] + desired
-        payload["markers"] = working
+        # Never PUT compounding mojibake: repair every marker's text before send
+        # so CatDV's per-write mis-encoding can add at most one layer (it can no
+        # longer grow unbounded and overflow its length-limited column). Covers
+        # both kept (foreign) and our re-asserted markers. See text_repair.
+        payload["markers"] = [demojibake_marker(m) for m in working]
 
     field_changes: dict[str, Any] = {}
     # Accumulate note text per target across this batch's ops. The SyncEngine

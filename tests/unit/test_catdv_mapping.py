@@ -99,3 +99,15 @@ def test_marker_to_catdv_leaves_short_name_untouched():
     raw = marker_to_catdv(m, fps=25.0)
     assert raw["name"] == "Rodina"
     assert "description" not in raw
+
+
+def test_from_catdv_clip_demojibakes_marker_text(raw):
+    # CatDV mangled the category over prior writes (UTF-8 read as latin-1, 3x);
+    # reading must repair it so the UI shows clean "Interiér".
+    raw = json.loads(json.dumps(raw))  # deep copy so the fixture isn't mutated
+    bad = "Interiér"
+    for _ in range(3):
+        bad = bad.encode("utf-8").decode("latin-1")
+    raw["markers"][0]["category"] = bad
+    clip = from_catdv_clip(raw, fetched_at=datetime.now(UTC))
+    assert clip.markers[0].category == "Interiér"
