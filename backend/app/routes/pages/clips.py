@@ -285,6 +285,13 @@ async def clips_list(
     # Annotate each row with its pending-draft counts and batch job id.
     pending_rows = await ctx.review_items_repo.list_pending_clips(ctx.db, limit=2000, offset=0)
     pmap = {r["catdv_clip_id"]: r for r in pending_rows}
+
+    # Batched: one query for the newest publish state of every clip on the
+    # page — O(1) regardless of page size (chunked_in_clause inside the repo).
+    clip_ids = [row["id"] for row in ctx_dict["clips"]]
+    version_states = await ctx.clip_versions_repo.newest_state_by_clip(ctx.db, clip_ids)
+    from backend.app.services.publish_status import resolve_publish_status
+
     for row in ctx_dict["clips"]:
         row["batch_status"] = _batch_status_view(batch_status_map.get(row["id"]))
         bc = batch_cost_map.get(row["id"])
@@ -302,6 +309,14 @@ async def clips_list(
             parts.append(f"{nc}n")
         row["draft_label"] = " · ".join(parts) if parts else ""
         row["batch"] = p["job_id"] if p else None
+        # Unified publish status for the status-badge column.
+        vs, vn = version_states.get(row["id"], (None, None))
+        has_draft = row["id"] in pmap
+        ps_state, ps_num = resolve_publish_status(
+            has_draft=has_draft, version_state=vs, version_num=vn
+        )
+        row["publish_state"] = ps_state
+        row["publish_version_num"] = ps_num
 
     template = (
         "pages/_clips_tbody.html"
