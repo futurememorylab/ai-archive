@@ -192,6 +192,11 @@ def batch_view(row: dict) -> dict:
     # the change is actually on the server (see ADR 0093). Rejected items never
     # get applied_at, so they don't wedge this count. Optional for back-compat.
     syncing = int(row.get("syncing_clips", 0) or 0)
+    # Clips whose write-back FAILED (exhausted retries) or hit a CONFLICT — the
+    # change never reached CatDV. Must beat "Syncing"/"Applied" so a stuck queue
+    # is never masked as green; mirrors the topbar sync chip's problem count so
+    # the two can't disagree (see ADR 0096). Optional for back-compat.
+    problems = int(row.get("problem_clips", 0) or 0)
     running = int(row["running_jobs"]) > 0 or int(row["in_flight"]) > 0
     reviewed = max(0, completed - awaiting)
 
@@ -200,6 +205,9 @@ def batch_view(row: dict) -> dict:
     elif awaiting > 0:
         status_state = ""
         status_label = "Awaiting review" if reviewed == 0 else f"{awaiting} to review"
+    elif problems > 0:
+        # Write-back stuck (failed / conflict) — surface it instead of "Applied".
+        status_state, status_label = "bad", f"{problems} failed to sync"
     elif syncing > 0:
         # Review done, but write-backs haven't landed on CatDV yet.
         status_state, status_label = "accent", f"Syncing {syncing}"

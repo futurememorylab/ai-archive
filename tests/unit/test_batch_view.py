@@ -69,6 +69,25 @@ def test_status_applied_when_syncing_field_absent():
     assert v["status_label"] == "Applied"
 
 
+def test_status_sync_failed_must_not_read_applied():
+    # A write-back that exhausted retries (failed) or hit a conflict must NOT
+    # let the batch read green "Applied" — it surfaces as a problem state so the
+    # batch row and the topbar sync chip can never disagree.
+    v = batch_view(_row(running_jobs=0, completed=10, awaiting_clips=0,
+                        syncing_clips=0, problem_clips=2))
+    assert v["status_state"] == "bad"
+    assert v["status_label"] == "2 failed to sync"
+
+
+def test_sync_problem_takes_precedence_over_syncing():
+    # One clip's write failed while another is still in-flight → the failure
+    # wins, so it isn't masked until the in-flight ops happen to settle.
+    v = batch_view(_row(running_jobs=0, completed=10, awaiting_clips=0,
+                        syncing_clips=1, problem_clips=1))
+    assert v["status_state"] == "bad"
+    assert v["status_label"] == "1 failed to sync"
+
+
 def test_multi_prompt_label():
     v = batch_view(_row(prompt_count=2))
     assert v["prompt"] == "Scénické značky CZ + 1 more"

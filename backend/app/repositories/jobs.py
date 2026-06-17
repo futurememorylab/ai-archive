@@ -270,6 +270,24 @@ class JobsRepo:
            AND po.status IN ('pending', 'in_flight')
           WHERE COALESCE(j.kind, '') != 'studio'
           GROUP BY batch_key
+        ),
+        problems AS (
+          -- Clips in the batch whose write-back FAILED (exhausted retries) or
+          -- hit a CONFLICT — the queue is stuck, the change never reached CatDV.
+          -- Same source as the topbar sync chip, so the batch row and the chip
+          -- can never disagree. Without this, a stuck write-back would let the
+          -- batch read green "Applied" (see ADR 0096).
+          SELECT
+            COALESCE(j.run_group, 'job:' || j.id) AS batch_key,
+            COUNT(DISTINCT ji.catdv_clip_id) AS problem_clips
+          FROM jobs j
+          JOIN job_items ji ON ji.job_id = j.id
+          JOIN pending_operations po
+            ON po.provider_id = 'catdv'
+           AND po.provider_clip_id = CAST(ji.catdv_clip_id AS TEXT)
+           AND po.status IN ('failed', 'conflict')
+          WHERE COALESCE(j.kind, '') != 'studio'
+          GROUP BY batch_key
         )
         SELECT
           b.batch_key                   AS batch_key,
@@ -287,7 +305,8 @@ class JobsRepo:
           COALESCE(i.in_flight, 0)      AS in_flight,
           COALESCE(r.awaiting_clips, 0) AS awaiting_clips,
           r.first_pending_clip_id       AS first_pending_clip_id,
-          COALESCE(s.syncing_clips, 0)  AS syncing_clips
+          COALESCE(s.syncing_clips, 0)  AS syncing_clips,
+          COALESCE(pr.problem_clips, 0) AS problem_clips
         FROM batch b
         JOIN jobs pj ON pj.id = b.primary_job_id
         LEFT JOIN prompt_versions pv ON pv.id = pj.prompt_version_id
@@ -295,6 +314,7 @@ class JobsRepo:
         LEFT JOIN items i ON i.batch_key = b.batch_key
         LEFT JOIN reviewed r ON r.batch_key = b.batch_key
         LEFT JOIN syncing s ON s.batch_key = b.batch_key
+        LEFT JOIN problems pr ON pr.batch_key = b.batch_key
         ORDER BY b.started_at DESC, b.primary_job_id DESC
         LIMIT ?
     """
