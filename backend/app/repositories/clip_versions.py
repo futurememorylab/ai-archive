@@ -168,33 +168,6 @@ class ClipVersionsRepo:
         )
         await conn.commit()
 
-    async def newest_state_by_clip(
-        self, conn: aiosqlite.Connection, clip_ids: list[int], *, provider_id: str = "catdv"
-    ) -> dict[int, tuple[str, int]]:
-        """Batched: {clip_id: (publish_state, version_num)} for the NEWEST
-        version per clip. Backs the clips-list status badge without N+1."""
-        out: dict[int, tuple[str, int]] = {}
-        if not clip_ids:
-            return out
-        for fragment, params in chunked_in_clause((cid,) for cid in clip_ids):
-            cur = await conn.execute(
-                f"""
-                SELECT cv.catdv_clip_id, cv.publish_state, cv.version_num
-                  FROM clip_versions cv
-                  JOIN (
-                    SELECT catdv_clip_id, MAX(version_num) AS mx
-                      FROM clip_versions
-                     WHERE provider_id = ? AND catdv_clip_id IN ({fragment})
-                     GROUP BY catdv_clip_id
-                  ) m ON m.catdv_clip_id = cv.catdv_clip_id AND m.mx = cv.version_num
-                 WHERE cv.provider_id = ?
-                """,
-                (provider_id, *params, provider_id),
-            )
-            for clip_id, state, num in await cur.fetchall():
-                out[int(clip_id)] = (state, int(num))
-        return out
-
     async def live_version_num_by_clip(
         self, conn: aiosqlite.Connection, clip_ids: list[int], *, provider_id: str = "catdv"
     ) -> dict[int, int]:

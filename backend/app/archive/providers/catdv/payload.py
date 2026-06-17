@@ -149,7 +149,7 @@ def _in_frm(marker: dict[str, Any]) -> int | None:
 
 
 def _existing_text(current: dict[str, Any], identifier: str) -> str | None:
-    if identifier in ("notes", "bigNotes"):
+    if identifier in TOP_LEVEL_NOTE_TARGETS:
         v = current.get(identifier)
         return v if isinstance(v, str) else None
     fields = current.get("fields") or {}

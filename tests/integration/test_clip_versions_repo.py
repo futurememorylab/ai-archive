@@ -67,17 +67,6 @@ async def test_mark_failed_leaves_prior_live(db):
 
 
 @pytest.mark.asyncio
-async def test_newest_state_by_clip_is_batched(db):
-    repo = ClipVersionsRepo()
-    await repo.insert(db, _v(clip_id=1, num=1, state="live"))
-    await repo.insert(db, _v(clip_id=2, num=1, state="publishing"))
-    out = await repo.newest_state_by_clip(db, [1, 2, 3])
-    assert out[1] == ("live", 1)
-    assert out[2] == ("publishing", 1)
-    assert 3 not in out
-
-
-@pytest.mark.asyncio
 async def test_mark_live_supersedes_orphaned_publishing_siblings(db):
     """mark_live cleans up other 'publishing' rows for the clip so a merged
     multi-publish (or a stuck pile-up) doesn't orphan them. Audit A4."""

@@ -23,6 +23,8 @@ from typing import Literal
 
 import aiosqlite
 
+from backend.app.repositories.review_items import FOR_REVIEW_WHERE
+
 CacheFilter = Literal["any", "none", "local", "ai"]
 AnnoFilter = Literal["any", "for_review", "applied", "none", "has_any"]
 
@@ -82,15 +84,7 @@ async def _ids_with_annotation_review_state(db: aiosqlite.Connection, *, applied
         that, fully-decided / re-annotated clips showed "Awaiting review" with 0
         proposals to act on.
     """
-    where = (
-        "applied_at IS NOT NULL"
-        if applied
-        else (
-            "applied_at IS NULL AND decision != 'rejected' "
-            "AND annotation_id = (SELECT MAX(a.id) FROM annotations a "
-            "WHERE a.catdv_clip_id = review_items.catdv_clip_id)"
-        )
-    )
+    where = "applied_at IS NOT NULL" if applied else FOR_REVIEW_WHERE
     cur = await db.execute(f"SELECT DISTINCT catdv_clip_id FROM review_items WHERE {where}")
     return {int(r[0]) for r in await cur.fetchall()}
 

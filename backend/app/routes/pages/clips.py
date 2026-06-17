@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse
 from backend.app.archive.errors import ProviderError, is_provider_not_found
 from backend.app.archive.model import CanonicalClip, ClipQuery
 from backend.app.deps import get_core_ctx, get_live_ctx
+from backend.app.repositories.jobs import TRANSIENT_STATUSES
 from backend.app.repositories.live_sessions import LiveSessionsRepo
 from backend.app.routes.pages.templates import templates
 from backend.app.services.clip_list_filters import (
@@ -21,6 +22,7 @@ from backend.app.services.clip_list_filters import (
 from backend.app.services.clip_list_filters import (
     resolve as resolve_filters,
 )
+from backend.app.services.publish_status import resolve_publish_status
 from backend.app.timecode import secs_to_smpte
 from backend.app.ui.pagination import page_offsets
 from backend.app.ui.view_models import clip_detail, clip_summary, draft_review_arrays
@@ -68,7 +70,9 @@ _BATCH_STATUS_VIEW: dict[str, tuple[str, str]] = {
 
 # Item statuses that mean "still working" (maps to the Queued/Processing pills).
 # Mirrors the in-flight set in JobsRepo._BATCHES_SQL.
-_RUNNING_ITEM_STATUSES = frozenset({"pending", "resolving", "uploading", "prompting"})
+# "pending" plus the in-flight phases (TRANSIENT_STATUSES) — derived so it can't
+# drift from the job-items state set in repositories/jobs.py.
+_RUNNING_ITEM_STATUSES = frozenset({"pending", *TRANSIENT_STATUSES})
 
 
 def _batch_status_view(status: str | None) -> dict[str, str] | None:
@@ -289,7 +293,6 @@ async def clips_list(
     clip_ids = [row["id"] for row in ctx_dict["clips"]]
     live_nums = await ctx.clip_versions_repo.live_version_num_by_clip(ctx.db, clip_ids)
     pending_by_clip = await ctx.pending_ops_repo.count_pending_by_clip(ctx.db, provider_id="catdv")
-    from backend.app.services.publish_status import resolve_publish_status
 
     for row in ctx_dict["clips"]:
         row["batch_status"] = _batch_status_view(batch_status_map.get(row["id"]))
@@ -558,10 +561,10 @@ async def _version_panel_ctx(ctx, clip_id: int, *, has_draft: bool) -> dict:
     rendered both inline on the clip page and by the /version-panel refresh
     route. The publishing/failed/conflict signal comes from pending_operations
     (the write queue) — not the drift-prone clip_versions.publish_state copy."""
-    from backend.app.services.publish_status import resolve_publish_status
-
     versions = await ctx.clip_versions_repo.list_by_clip(ctx.db, clip_id)
-    live = await ctx.clip_versions_repo.live_for_clip(ctx.db, clip_id)
+    # list_by_clip already returns every version (version_num DESC), so the live
+    # one is the first with publish_state == 'live' — no second query needed.
+    live = next((v for v in versions if v.publish_state == "live"), None)
     counts = await ctx.pending_ops_repo.status_counts_for_clip(
         ctx.db, provider_id="catdv", provider_clip_id=str(clip_id)
     )

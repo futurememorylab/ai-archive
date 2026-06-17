@@ -16,6 +16,18 @@ def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
+# The "awaiting review" predicate (a WHERE body): clips whose LATEST annotation
+# still has an undecided proposal — applied_at NULL, not rejected, newest
+# annotation only. Single source of truth so the /?anno=for_review filter
+# (clip_list_filters), the topbar count (count_clips_for_review), and the
+# full-render sync context (routes/pages/templates.py) can never drift apart.
+FOR_REVIEW_WHERE = (
+    "applied_at IS NULL AND decision != 'rejected' "
+    "AND annotation_id = (SELECT MAX(a.id) FROM annotations a "
+    "WHERE a.catdv_clip_id = review_items.catdv_clip_id)"
+)
+
+
 def _json_default(obj):
     if isinstance(obj, datetime):
         return obj.isoformat()
@@ -185,9 +197,10 @@ class ReviewItemsRepo:
         'confirmed upstream' from merely 'enqueued' (applied_at)."""
         if not item_ids:
             return
+        now = _now_iso()
         await conn.executemany(
             "UPDATE review_items SET synced_at = ? WHERE id = ?",
-            [(_now_iso(), i) for i in item_ids],
+            [(now, i) for i in item_ids],
         )
         if commit:
             await conn.commit()
@@ -293,14 +306,11 @@ class ReviewItemsRepo:
         """Clips whose LATEST annotation still has an undecided proposal — the
         "N to review" topbar count and the /?anno=for_review list. Excludes
         rejected items (decided) and items from a superseded older annotation
-        (the draft panel shows only the latest annotation). MUST mirror the
-        inline query in routes/pages/templates.py (full-page render path); this
-        async method backs the /ui/review-pill refresh poll."""
+        (the draft panel shows only the latest annotation). Backs the
+        /ui/review-pill refresh poll; shares FOR_REVIEW_WHERE with the
+        clips-list filter and the full-render sync context."""
         cur = await conn.execute(
-            "SELECT COUNT(DISTINCT catdv_clip_id) FROM review_items "
-            "WHERE applied_at IS NULL AND decision != 'rejected' "
-            "AND annotation_id = (SELECT MAX(a.id) FROM annotations a "
-            "WHERE a.catdv_clip_id = review_items.catdv_clip_id)"
+            f"SELECT COUNT(DISTINCT catdv_clip_id) FROM review_items WHERE {FOR_REVIEW_WHERE}"
         )
         row = await cur.fetchone()
         return int(row[0]) if row else 0

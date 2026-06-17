@@ -6,11 +6,13 @@ setup.
 """
 
 import json as _json
+import sqlite3
 from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
 
 from backend.app.enums.registry import ENUM_REGISTRY
+from backend.app.repositories.review_items import FOR_REVIEW_WHERE
 from backend.app.services.word_diff import diff_html
 from backend.app.timecode import secs_to_smpte
 
@@ -99,8 +101,6 @@ def _topbar_sync_context(request) -> dict[str, object]:
     # A context processor runs on EVERY full-page render, so it must never raise
     # (a failure would 500 every page). Any problem → return {} and let the chip
     # fall back to its load-fetch. Broad except is intentional here.
-    import sqlite3
-
     try:
         conn = sqlite3.connect(str(data_dir / "app.db"), timeout=0.5)
         try:
@@ -111,21 +111,11 @@ def _topbar_sync_context(request) -> dict[str, object]:
                     "GROUP BY status"
                 ).fetchall()
             )
-            # Mirror the /?anno=for_review filter exactly so the chip count
-            # equals the list it links to. "To review" = clips whose LATEST
-            # annotation still has an undecided proposal. Excluded: rejected items
-            # (decided, though applied_at stays NULL) and items from a SUPERSEDED
-            # older annotation (the draft panel shows only the latest annotation,
-            # clips.py:_build_draft_for_clip). Without the latest-annotation guard
-            # a re-annotated/fully-applied clip showed "to review" with 0 proposals.
-            # MUST stay in sync with ReviewItemsRepo.count_clips_for_review, which
-            # backs the /ui/review-pill refresh poll (this sync path is full-render
-            # only; the pill self-refreshes via that async method).
+            # "To review" count for the topbar; the shared FOR_REVIEW_WHERE
+            # predicate keeps this full-render (sync) path identical to the
+            # /?anno=for_review filter and the /ui/review-pill async count.
             review_row = conn.execute(
-                "SELECT COUNT(DISTINCT catdv_clip_id) FROM review_items "
-                "WHERE applied_at IS NULL AND decision != 'rejected' "
-                "AND annotation_id = (SELECT MAX(a.id) FROM annotations a "
-                "WHERE a.catdv_clip_id = review_items.catdv_clip_id)"
+                f"SELECT COUNT(DISTINCT catdv_clip_id) FROM review_items WHERE {FOR_REVIEW_WHERE}"
             ).fetchone()
         finally:
             conn.close()
