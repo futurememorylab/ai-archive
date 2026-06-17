@@ -12,7 +12,7 @@ from typing import Any
 
 import aiosqlite
 
-_COLS = ("email", "role", "status", "display_name", "granted_by", "granted_at", "last_seen_at")
+_COLS = ("email", "role", "status", "display_name", "granted_by", "granted_at")
 
 
 def _norm(email: str) -> str:
@@ -108,18 +108,13 @@ class UserRolesRepo:
         )
         await conn.commit()
 
-    async def mark_seen(self, conn: aiosqlite.Connection, email: str) -> None:
-        """Bounded last-seen touch (≤ once/min) + flip invited→active on first
-        sight. Bounded to keep Litestream write churn low (perf discipline)."""
+    async def activate_on_first_sight(self, conn: aiosqlite.Connection, email: str) -> None:
+        """Flip invited→active on first authenticated sight. The WHERE clause
+        only matches an 'invited' row, so this writes exactly once (on first
+        sign-in) and is a no-op thereafter — keeping Litestream write churn low
+        (perf discipline). Last-seen tracking was removed; see ADR 0090."""
         await conn.execute(
-            """
-            UPDATE user_roles
-               SET last_seen_at = datetime('now'),
-                   status = CASE WHEN status='invited' THEN 'active' ELSE status END
-             WHERE email = ?
-               AND status IN ('active','invited')
-               AND (last_seen_at IS NULL OR last_seen_at < datetime('now','-60 seconds'))
-            """,
+            "UPDATE user_roles SET status = 'active' WHERE email = ? AND status = 'invited'",
             (_norm(email),),
         )
         await conn.commit()

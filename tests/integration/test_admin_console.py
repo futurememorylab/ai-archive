@@ -99,10 +99,10 @@ def test_add_member_preserves_active_status(monkeypatch, tmp_path: Path):
                         data={"email": "alice@x.com", "role": "member", "display_name": "Alice"})
         assert r.status_code in (200, 201)
 
-        # Step 2: simulate first sign-in — mark_seen flips invited→active
-        asyncio.run(ctx.user_roles_repo.mark_seen(ctx.db, "alice@x.com"))
+        # Step 2: simulate first sign-in — activate_on_first_sight flips invited→active
+        asyncio.run(ctx.user_roles_repo.activate_on_first_sight(ctx.db, "alice@x.com"))
         row = asyncio.run(ctx.user_roles_repo.get(ctx.db, "alice@x.com"))
-        assert row["status"] == "active", "precondition: mark_seen should have flipped to active"
+        assert row["status"] == "active", "precondition: first sign-in should have flipped to active"
 
         # Step 3: admin re-adds alice with a different role
         r2 = client.post("/admin/users",

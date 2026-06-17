@@ -97,3 +97,4 @@ available number. See any existing ADR for the template.
 | 0087 | 2026-06-15 | [Resumable proxy download over the low-MTU cloud tunnel (Range-resume + completeness check; no truncated uploads)](./adr/0087-proxy-download-resume-over-tunnel.md) |
 | 0088 | 2026-06-16 | [Filtered clip list skips un-hydratable clips instead of 502-ing the page (+ HTMX error toast)](./adr/0088-filtered-clip-list-skips-unhydratable-clips.md) — *refines 0042* |
 | 0089 | 2026-06-16 | [Manual innerHTML/insertAdjacentHTML into a live Alpine tree uses wireHtmx, not reinit (avoid double-bound directives)](./adr/0089-manual-innerhtml-insertion-uses-wirehtmx-not-reinit.md) — *refines 0048* |
+| 0090 | 2026-06-17 | [Drop "last sign-in" tracking from the admin console (UI + backend); keep the invited→active first-sight flip as activate_on_first_sight](./adr/0090-drop-last-seen-from-admin-console.md) — *supersedes last-seen aspects of 0085* |
