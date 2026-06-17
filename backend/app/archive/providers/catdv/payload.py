@@ -44,18 +44,29 @@ def build_put_payload(
     marker_ops = [o for o in ops_list if isinstance(o, AddMarkers)]
     if marker_ops:
         existing = list(current.get("markers") or [])
-        existing_frms = {_in_frm(m) for m in existing if _in_frm(m) is not None}
+        # Build our markers (deduped within our own set on in.frm).
         new_markers: list[dict[str, Any]] = []
+        new_frms: set[int] = set()
         for op in marker_ops:
             for marker in op.markers:
                 raw = marker_to_catdv(marker, fps)
                 frm = _in_frm(raw)
-                if frm is not None and frm in existing_frms:
+                if frm is not None and frm in new_frms:
                     continue
                 new_markers.append(raw)
                 if frm is not None:
-                    existing_frms.add(frm)
-        payload["markers"] = existing + new_markers
+                    new_frms.add(frm)
+        # OUR markers WIN on a same-timecode conflict: drop the existing CatDV
+        # marker at that frm and use ours. Re-publishing / re-activating thus
+        # OVERWRITES the clip's marker with our correct DB-sourced copy instead
+        # of preserving CatDV's — which is how progressive mojibake
+        # ("Město" → "MÃÃ…sto") used to compound on every round-trip
+        # (we re-read CatDV's corrupted marker and wrote it back) until it
+        # overflowed the `name`/`category` column. Still idempotent on re-drain
+        # (re-applying the same markers yields the same set). Existing markers we
+        # don't touch are preserved.
+        kept_existing = [m for m in existing if _in_frm(m) not in new_frms]
+        payload["markers"] = kept_existing + new_markers
 
     field_changes: dict[str, Any] = {}
     # Accumulate note text per target across this batch's ops. The SyncEngine

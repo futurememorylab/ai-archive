@@ -61,6 +61,30 @@ def test_add_markers_dedupes_on_existing_in_frm():
     assert len(payload["markers"]) == 1
 
 
+def test_add_markers_our_marker_overwrites_existing_at_same_frm():
+    """Anti-mojibake: when our marker shares a timecode with an existing CatDV
+    marker, OURS wins — re-publishing overwrites a progressively-corrupted
+    name/category with the correct DB copy instead of re-submitting CatDV's
+    (which is how 'Město' compounded into 'MÃÃ…sto' and overflowed)."""
+    existing = [
+        {
+            "name": "MÃÃÃÃsto",  # CatDV's compounding-mojibake copy
+            "in": {"frm": 100, "fmt": 25.0, "secs": 4.0, "txt": "0:00:04:00"},
+        }
+    ]
+    op = AddMarkers(markers=[Marker(name="Město", in_=Timecode(secs=4.0, fps=25.0), out=None)])
+    payload = build_put_payload(current=_clip(markers=existing), ops=[op])
+    assert len(payload["markers"]) == 1
+    assert payload["markers"][0]["name"] == "Město"  # ours, not the corrupted existing
+
+
+def test_add_markers_preserves_untouched_existing_at_other_frm():
+    existing = [{"name": "keep", "in": {"frm": 0, "fmt": 25.0, "secs": 0.0, "txt": "0:00:00:00"}}]
+    op = AddMarkers(markers=[Marker(name="new", in_=Timecode(secs=4.0, fps=25.0), out=None)])
+    payload = build_put_payload(current=_clip(markers=existing), ops=[op])
+    assert {m["name"] for m in payload["markers"]} == {"keep", "new"}
+
+
 def test_set_field_writes_to_fields_map():
     op = SetField(identifier="pragafilm.dekáda.natočení", value="30.léta")
     payload = build_put_payload(current=_clip(), ops=[op])
