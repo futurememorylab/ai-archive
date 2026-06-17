@@ -78,6 +78,7 @@ class SyncEngine:
         connection_monitor: ConnectionMonitor | None,
         db_provider: Callable[[], aiosqlite.Connection],
         review_items_repo: Any = None,
+        clip_versions_repo: Any = None,
         event_bus: Any = None,
         tick_interval_s: float = 5.0,
         retry_base_s: float = 2.0,
@@ -89,6 +90,7 @@ class SyncEngine:
         self._pending = pending_ops_repo
         self._write_log = write_log_repo
         self._review_items = review_items_repo
+        self._clip_versions = clip_versions_repo
         self._monitor = connection_monitor
         self._db_provider = db_provider
         self._event_bus = event_bus
@@ -265,6 +267,12 @@ class SyncEngine:
                 error=f"{error}; max_attempts={self._max_attempts} reached",
                 bump_attempts=True,
             )
+            version_ids = [r.get("origin_clip_version_id") for r in rows if r.get("origin_clip_version_id")]
+            version_id = max(version_ids) if version_ids else None
+            if self._clip_versions is not None and version_id is not None:
+                await self._clip_versions.mark_failed(
+                    db, version_id, reason=f"max_attempts={self._max_attempts} reached"
+                )
         else:
             await self._pending.mark_retryable(db, op_ids, error=error)
 
@@ -278,6 +286,12 @@ class SyncEngine:
         rows: list[dict[str, Any]],
         result: Any,
     ) -> None:
+        # Freshest version id among this clip's drained rows (max non-null).
+        # Using max ensures that when several publish batches for one clip are
+        # merged, we advance the newest version (the last-enqueued publish).
+        version_ids = [r.get("origin_clip_version_id") for r in rows if r.get("origin_clip_version_id")]
+        version_id = max(version_ids) if version_ids else None
+
         if result.status == "ok":
             await self._pending.mark_applied(db, op_ids)
             # The write actually landed on CatDV now — stamp the originating
@@ -309,6 +323,8 @@ class SyncEngine:
                 provider_id=provider_id,
                 provider_clip_id=clip_id,
             )
+            if self._clip_versions is not None and version_id is not None:
+                await self._clip_versions.mark_live(db, version_id)
         elif result.status == "conflict":
             detail = None
             cd = result.conflict_detail
@@ -320,6 +336,8 @@ class SyncEngine:
                     "fields": cd.fields,
                 }
             await self._pending.mark_conflict(db, op_ids, conflict_detail=detail)
+            if self._clip_versions is not None and version_id is not None:
+                await self._clip_versions.mark_conflict(db, version_id, reason="etag conflict")
         elif result.status == "retryable":
             await self._retry_or_fail(
                 db,
@@ -333,3 +351,5 @@ class SyncEngine:
                 op_ids,
                 error=json.dumps(result.upstream_response or {}),
             )
+            if self._clip_versions is not None and version_id is not None:
+                await self._clip_versions.mark_failed(db, version_id, reason="fatal")

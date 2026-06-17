@@ -783,6 +783,7 @@ async def _build_sync_subsystem(
         connection_monitor=connection_monitor,
         db_provider=lambda: core.db,
         review_items_repo=core.review_items_repo,
+        clip_versions_repo=core.clip_versions_repo,
         event_bus=core.event_bus,
         tick_interval_s=float(settings.sync_tick_interval_s),
         retry_base_s=float(settings.sync_retry_base_s),
