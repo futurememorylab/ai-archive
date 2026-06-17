@@ -251,6 +251,10 @@ class JobsRepo:
           JOIN review_items ri ON ri.annotation_id = a.id
             AND ri.applied_at IS NULL AND ri.decision != 'rejected'
           WHERE COALESCE(j.kind, '') != 'studio'
+            -- only the clip's LATEST annotation is its current draft; a clip
+            -- re-annotated in a newer batch isn't "awaiting" on this older one.
+            AND a.id = (SELECT MAX(a2.id) FROM annotations a2
+                        WHERE a2.catdv_clip_id = ri.catdv_clip_id)
           GROUP BY batch_key
         ),
         syncing AS (

@@ -111,14 +111,18 @@ def _topbar_sync_context(request) -> dict[str, object]:
                     "GROUP BY status"
                 ).fetchall()
             )
-            # Mirror the /?anno=for_review filter exactly (same predicate, same
-            # population) so the chip count equals the list it links to. "To
-            # review" = undecided proposals: rejected items keep applied_at NULL
-            # but are DECIDED, so they must be excluded (else a fully-applied
-            # clip with a rejected proposal shows "to review" with 0 proposals).
+            # Mirror the /?anno=for_review filter exactly so the chip count
+            # equals the list it links to. "To review" = clips whose LATEST
+            # annotation still has an undecided proposal. Excluded: rejected items
+            # (decided, though applied_at stays NULL) and items from a SUPERSEDED
+            # older annotation (the draft panel shows only the latest annotation,
+            # clips.py:_build_draft_for_clip). Without the latest-annotation guard
+            # a re-annotated/fully-applied clip showed "to review" with 0 proposals.
             review_row = conn.execute(
                 "SELECT COUNT(DISTINCT catdv_clip_id) FROM review_items "
-                "WHERE applied_at IS NULL AND decision != 'rejected'"
+                "WHERE applied_at IS NULL AND decision != 'rejected' "
+                "AND annotation_id = (SELECT MAX(a.id) FROM annotations a "
+                "WHERE a.catdv_clip_id = review_items.catdv_clip_id)"
             ).fetchone()
         finally:
             conn.close()

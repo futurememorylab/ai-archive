@@ -619,6 +619,70 @@ def test_to_review_ignores_fully_decided_clips(monkeypatch, tmp_path):
         assert "Abramcukova" not in r2.text
 
 
+def test_to_review_ignores_superseded_annotation(monkeypatch, tmp_path):
+    """A clip re-annotated later: the OLD annotation's undecided proposals are
+    superseded (the draft panel shows only the latest annotation). They must not
+    count as 'to review' — that's the '2 to review but 0 proposals' bug."""
+    import asyncio
+
+    from backend.app.repositories.jobs import JobsRepo
+    from backend.app.repositories.prompts import PromptsRepo
+
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.core_ctx
+
+        async def _seed() -> None:
+            prompts = PromptsRepo()
+            _, vid = await prompts.create_with_initial_version(
+                ctx.db, name="p", description=None, body="b",
+                target_map={}, output_schema={}, model="m",
+            )
+            jobs = JobsRepo()
+            j_old = await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[12041])
+            j_new = await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[12041])
+
+            async def _ann(job_id) -> int:
+                cur = await ctx.db.execute(
+                    "INSERT INTO annotations "
+                    "(catdv_clip_id, catdv_clip_name, prompt_version_id, job_id, model, "
+                    " prompt_used, raw_response, structured_output, clip_snapshot, created_at) "
+                    "VALUES (12041, 'C', ?, ?, 'm', 'p', '{}', '{}', '{}', '2026-06-02T00:00:00')",
+                    (vid, job_id),
+                )
+                return cur.lastrowid
+
+            old_ann = await _ann(j_old)  # superseded
+            new_ann = await _ann(j_new)  # latest → its items are all applied
+            # OLD annotation: an undecided (pending) proposal, never applied.
+            await ctx.db.execute(
+                "INSERT INTO review_items "
+                "(annotation_id, studio_run_id, catdv_clip_id, kind, target_identifier, "
+                " proposed_value, edited_value, decision, applied_at) "
+                "VALUES (?, NULL, 12041, 'marker', NULL, '{}', NULL, 'pending', NULL)",
+                (old_ann,),
+            )
+            # LATEST annotation: accepted + applied → nothing to review now.
+            await ctx.db.execute(
+                "INSERT INTO review_items "
+                "(annotation_id, studio_run_id, catdv_clip_id, kind, target_identifier, "
+                " proposed_value, edited_value, decision, applied_at) "
+                "VALUES (?, NULL, 12041, 'marker', NULL, '{}', NULL, 'accepted', '2026-06-02T01:00:00')",
+                (new_ann,),
+            )
+            await ctx.db.commit()
+
+        asyncio.run(_seed())
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
+
+        r = client.get("/")
+        assert r.status_code == 200
+        assert "to-review-chip" not in r.text  # latest draft is fully decided
+
+        r2 = client.get("/?anno=for_review")
+        assert r2.status_code == 200
+        assert "Abramcukova" not in r2.text
+
+
 def test_clips_list_normal_view_has_no_cost_column(monkeypatch, tmp_path):
     """The unfiltered clips list must NOT include the Cost column."""
     with _make_client(monkeypatch, tmp_path) as client:

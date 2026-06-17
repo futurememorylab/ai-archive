@@ -74,15 +74,22 @@ async def _ids_with_annotation_review_state(db: aiosqlite.Connection, *, applied
     """Clip IDs with at least one review_item matching the predicate.
 
     applied=True  → has a write-back enqueued (applied_at set): the "Applied" filter.
-    applied=False → has an UNDECIDED proposal still to review (applied_at NULL and
-        not rejected): the "Awaiting review" filter. Rejected items also keep
-        applied_at NULL, but they're DECIDED — including them made fully-decided
-        clips show under "Awaiting review" with 0 proposals to act on.
+    applied=False → the clip's LATEST annotation still has an UNDECIDED proposal
+        (applied_at NULL, not rejected): the "Awaiting review" filter. Rejected
+        items are decided (though applied_at stays NULL), and items from a
+        superseded older annotation aren't the current draft — both are excluded,
+        matching the draft panel (which shows only the latest annotation). Without
+        that, fully-decided / re-annotated clips showed "Awaiting review" with 0
+        proposals to act on.
     """
     where = (
         "applied_at IS NOT NULL"
         if applied
-        else "applied_at IS NULL AND decision != 'rejected'"
+        else (
+            "applied_at IS NULL AND decision != 'rejected' "
+            "AND annotation_id = (SELECT MAX(a.id) FROM annotations a "
+            "WHERE a.catdv_clip_id = review_items.catdv_clip_id)"
+        )
     )
     cur = await db.execute(f"SELECT DISTINCT catdv_clip_id FROM review_items WHERE {where}")
     return {int(r[0]) for r in await cur.fetchall()}
