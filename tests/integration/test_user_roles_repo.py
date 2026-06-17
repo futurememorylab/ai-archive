@@ -36,21 +36,23 @@ async def test_role_check_constraint_rejects_bad_role(conn):
 from backend.app.repositories.user_roles import UserRolesRepo
 
 
-async def test_upsert_get_active_role_and_seed(conn):
+async def test_upsert_gate_state_and_seed(conn):
     repo = UserRolesRepo()
     # seed admins (idempotent; never downgrades)
     await repo.seed_admins(conn, ["Boss@X.com", "boss@x.com"])
-    assert await repo.get_active_role(conn, "boss@x.com") == "admin"
+    # gate_state returns (role, status) in ONE read so the gate can both admit
+    # and decide whether a first-sight flip is due — without writing.
+    assert await repo.get_gate_state(conn, "boss@x.com") == ("admin", "active")
     assert await repo.count_admins(conn) == 1
     # re-seed is a no-op and does not duplicate
     await repo.seed_admins(conn, ["boss@x.com"])
     assert await repo.count_admins(conn) == 1
 
-    # invited admits at the gate; requested does not
+    # invited admits at the gate (and is flagged so the gate flips it); requested does not
     await repo.upsert_role(conn, "inv@x.com", "member", status="invited", granted_by="boss@x.com")
-    assert await repo.get_active_role(conn, "inv@x.com") == "member"
+    assert await repo.get_gate_state(conn, "inv@x.com") == ("member", "invited")
     await repo.record_request(conn, "req@x.com", display_name="Req")
-    assert await repo.get_active_role(conn, "req@x.com") is None  # denied until granted
+    assert await repo.get_gate_state(conn, "req@x.com") is None  # denied until granted
     row = await repo.get(conn, "req@x.com")
     assert row["status"] == "requested"
 
@@ -63,10 +65,10 @@ async def test_seed_admins_promotes_existing_non_admin_row(conn):
     repo = UserRolesRepo()
     # A would-be admin clicked "Request access" first → stuck 'requested' row.
     await repo.record_request(conn, "owner@x.com", display_name="Owner")
-    assert await repo.get_active_role(conn, "owner@x.com") is None  # denied
+    assert await repo.get_gate_state(conn, "owner@x.com") is None  # denied
     # The deploy seeds them as a bootstrap admin → must take effect.
     await repo.seed_admins(conn, ["owner@x.com"])
-    assert await repo.get_active_role(conn, "owner@x.com") == "admin"
+    assert await repo.get_gate_state(conn, "owner@x.com") == ("admin", "active")
     row = await repo.get(conn, "owner@x.com")
     assert row["status"] == "active"
     assert row["display_name"] == "Owner"  # human-set fields are preserved
