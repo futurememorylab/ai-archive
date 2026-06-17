@@ -6,12 +6,14 @@ gets through. Fail-closed (spec 2026-06-14-iap-roles-admin-console-design.md).
 We patch main.resolve_user so we don't have to forge a signed IAP JWT; the
 gate logic (role lookup, allow-list, deny) is what's under test."""
 import importlib
+import sqlite3
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from backend.app.archive.model import ClipPage
 from backend.app.auth.models import CurrentUser
+from backend.app.repositories.user_roles import UserRolesRepo
 from tests._helpers.live_ctx import install_live_ctx
 
 
@@ -71,6 +73,28 @@ def test_seeded_admin_gets_through(monkeypatch, tmp_path: Path):
         # The clips list route needs a live ctx; supply a fake archive so the
         # page renders 200 once the gate admits the seeded admin (tests boot
         # offline, so without this `/` is 503 regardless of auth).
+        install_live_ctx(client.app, archive=_EmptyArchive())
+        r = client.get("/")
+    assert r.status_code == 200
+
+
+def test_mark_seen_db_lock_does_not_500_the_request(monkeypatch, tmp_path: Path):
+    """`mark_seen` is best-effort last-seen bookkeeping on the auth critical
+    path. If its write hits a transient `database is locked`, the request must
+    still be served — the cosmetic touch failing must never take the app down.
+
+    Regression guard for the prod outage on 2026-06-17: an unguarded mark_seen
+    turned a transient SQLite write-lock into a 500 on every authenticated
+    request, including `GET /`."""
+    main_mod = _make_app(monkeypatch, tmp_path)
+    monkeypatch.setattr(main_mod, "resolve_user",
+                        lambda req, s: CurrentUser(email="boss@x.com"))
+
+    async def _locked(self, conn, email):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(UserRolesRepo, "mark_seen", _locked)
+    with TestClient(main_mod.app) as client:
         install_live_ctx(client.app, archive=_EmptyArchive())
         r = client.get("/")
     assert r.status_code == 200
