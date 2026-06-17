@@ -1964,7 +1964,10 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .cv-head { display: flex; align-items: center; gap: 8px; }
 .cv-num { font-weight: 600; color: var(--text); font-size: 12px; }
 .cv-meta, .cv-diff { color: var(--text-3); font-size: 11px; }
-.cv-actions { display: flex; gap: 6px; margin-top: 2px; }
+.cv-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 2px; }
+/* Keep each action on one line (no mid-text wrap), so the two buttons stay the
+   same height and sit straight; if both don't fit, a whole button wraps. */
+.cv-actions .btn { white-space: nowrap; }
 
 .menu-lbl { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .menu-desc {
