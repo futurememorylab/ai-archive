@@ -8,7 +8,7 @@ from backend.app.repositories.clip_versions import ClipVersionsRepo
 from backend.app.repositories.pending_operations import PendingOperationsRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
-from backend.app.services.publish_service import PublishService, build_provenance_value
+from backend.app.services.publish_service import PublishService
 from backend.app.services.write_queue import WriteQueue
 
 
@@ -111,18 +111,13 @@ async def test_publish_creates_publishing_version_and_enqueues(db):
     )
     assert rows, "ops enqueued"
     assert all(r["origin_clip_version_id"] == version_id for r in rows)
-    assert any("pragafilm.anno_version" in r["op_json"] for r in rows), "provenance op present"
+    # The accepted field change is the only op — no pragafilm.anno_version
+    # provenance write (it 500'd CatDV; dropped per the publishing audit).
+    assert any("pragafilm.genre" in r["op_json"] for r in rows), "field op enqueued"
+    assert not any("anno_version" in r["op_json"] for r in rows), "no provenance op"
 
 
 @pytest.mark.asyncio
 async def test_publish_noop_when_nothing_accepted(db):
     svc = _svc()
     assert await svc.publish(db, clip_id=999, author=None) is None
-
-
-def test_provenance_value_shape():
-    s = build_provenance_value(
-        version_num=3, author="you", model="gemini-2.5-flash", ts="2026-06-17T10:44:00Z"
-    )
-    assert s.startswith("#3 · you · ")
-    assert "gemini-2.5-flash" in s

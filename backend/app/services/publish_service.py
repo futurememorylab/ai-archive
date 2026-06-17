@@ -6,33 +6,28 @@ Flow (see docs/specs/2026-06-17-clip-version-history-design.md §Publish):
   1. resolve accepted, annotation-bound review_items
   2. materialize the FULL committed snapshot (current live/CatDV state + accepted)
   3. insert clip_versions row (publishing) + diff vs the live parent
-  4. enqueue ops via WriteQueue, stamped with the version id, plus one
-     `SetField pragafilm.anno_version` provenance op
+  4. enqueue ops via WriteQueue, stamped with the version id
   5. mark items applied (done inside the write queue)
 
 The SyncEngine flips the row live (Task 7) when CatDV confirms.
+
+NOTE: an earlier design wrote a `pragafilm.anno_version` provenance field to
+CatDV on every publish (ADR 0099). That field is not defined in CatDV's schema,
+so the PUT 500'd and blocked every annotation write — it was dropped. History
+lives wholly in our app; CatDV gets only the real annotation changes.
 """
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
 from typing import Any
 
 import aiosqlite
 
-from backend.app.archive.model import SetField
 from backend.app.models.annotation import ClipVersion
 from backend.app.services.write_queue import etag_from_snapshot, fps_from_snapshot
 
-PROVENANCE_FIELD = "pragafilm.anno_version"
 SnapshotLoader = Callable[[aiosqlite.Connection, int], Awaitable[dict[str, Any]]]
-
-
-def build_provenance_value(
-    *, version_num: int, author: str | None, model: str | None, ts: str
-) -> str:
-    return f"#{version_num} · {author or '—'} · {ts} · {model or '—'}"
 
 
 class PublishService:
@@ -75,7 +70,6 @@ class PublishService:
         snapshot = _materialize(base, accepted, fps=fps)
 
         num = await self._versions.next_version_num(conn, clip_id)
-        ts = datetime.now(UTC).isoformat()
         version_id = await self._versions.insert(
             conn,
             ClipVersion(
@@ -94,12 +88,6 @@ class PublishService:
             ),
         )
 
-        provenance = SetField(
-            identifier=PROVENANCE_FIELD,
-            value=build_provenance_value(
-                version_num=num, author=author, model=annotation.model, ts=ts
-            ),
-        )
         await self._wq.enqueue_apply_for_clip(
             conn,
             clip_id=clip_id,
@@ -109,7 +97,6 @@ class PublishService:
             annotation_id=annotation.id,
             fps=fps,
             clip_version_id=version_id,
-            extra_ops=[provenance],
         )
         return version_id
 
