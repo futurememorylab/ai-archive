@@ -118,6 +118,47 @@ async def test_publish_creates_publishing_version_and_enqueues(db):
 
 
 @pytest.mark.asyncio
+async def test_reactivate_enqueues_snapshot_and_creates_no_new_version(db):
+    """reactivate() re-PUTs a version's snapshot and marks it publishing,
+    WITHOUT inserting a new clip_versions row. Publishing audit, A3."""
+    from backend.app.models.annotation import ClipVersion
+
+    repo = ClipVersionsRepo()
+    v1 = await repo.insert(
+        db,
+        ClipVersion(
+            catdv_clip_id=1,
+            version_num=1,
+            snapshot={"markers": [], "fields": {"pragafilm.genre": "drama"}, "notes": None},
+            origin="publish",
+            publish_state="superseded",
+        ),
+    )
+    await repo.insert(
+        db,
+        ClipVersion(
+            catdv_clip_id=1,
+            version_num=2,
+            snapshot={"markers": [], "fields": {"pragafilm.genre": "thriller"}, "notes": None},
+            origin="publish",
+            publish_state="live",
+        ),
+    )
+
+    rid = await _svc().reactivate(db, clip_id=1, version_num=1)
+    assert rid == v1
+    assert len(await repo.list_by_clip(db, 1)) == 2  # no new version
+    assert (await repo.get(db, v1)).publish_state == "publishing"
+
+    rows = await PendingOperationsRepo().list_pending_for_clip(
+        db, provider_id="catdv", provider_clip_id="1"
+    )
+    assert any(
+        r["origin_clip_version_id"] == v1 and "pragafilm.genre" in r["op_json"] for r in rows
+    ), "v1's snapshot re-enqueued under its own version id"
+
+
+@pytest.mark.asyncio
 async def test_publish_noop_when_nothing_accepted(db):
     svc = _svc()
     assert await svc.publish(db, clip_id=999, author=None) is None

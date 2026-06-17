@@ -49,12 +49,12 @@
             <span class="muted" data-diff-summary>{{ _parts.items | join(' · ') }}</span>
           {% endif %}
           {% if vstate != 'live' %}
+            <button type="button" class="btn sm good"
+                    data-activate="{{ v.version_num }}"
+                    data-clip-id="{{ v.catdv_clip_id }}">Make live</button>
             <button type="button" class="btn sm ghost"
                     data-restore="{{ v.version_num }}"
-                    data-clip-id="{{ v.catdv_clip_id }}">Restore</button>
-            <button type="button" class="btn sm good"
-                    data-restore-publish="{{ v.version_num }}"
-                    data-clip-id="{{ v.catdv_clip_id }}">Restore &amp; publish</button>
+                    data-clip-id="{{ v.catdv_clip_id }}">Edit as draft</button>
           {% endif %}
         </div>
       {% endfor %}

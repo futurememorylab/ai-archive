@@ -111,8 +111,25 @@ class ClipVersionsRepo:
         row = await cur.fetchone()
         return self._row(row) if row is not None else None
 
+    async def mark_publishing(self, conn: aiosqlite.Connection, version_id: int) -> None:
+        """Move a version (back) into 'publishing' — used when re-activating an
+        older version: it goes publishing → live once its re-write lands."""
+        await conn.execute(
+            "UPDATE clip_versions SET publish_state = 'publishing', failed_reason = NULL "
+            "WHERE id = ?",
+            (version_id,),
+        )
+        await conn.commit()
+
     async def mark_live(self, conn: aiosqlite.Connection, version_id: int) -> None:
-        """Flip a version live and supersede the prior live for the same clip."""
+        """Flip a version live and supersede the prior live for the same clip.
+
+        Also supersedes any *other* rows still stuck in 'publishing' for the
+        clip: when several publishes for one clip merge into a single PUT, only
+        the freshest version is flipped live, so the older 'publishing' rows
+        would otherwise orphan forever. Exactly one row per clip ends 'live'.
+        See the publishing-logic audit, anomaly A4.
+        """
         cur = await conn.execute(
             "SELECT provider_id, catdv_clip_id FROM clip_versions WHERE id = ?",
             (version_id,),
@@ -123,7 +140,8 @@ class ClipVersionsRepo:
         provider_id, clip_id = row[0], row[1]
         await conn.execute(
             "UPDATE clip_versions SET publish_state = 'superseded' "
-            "WHERE provider_id = ? AND catdv_clip_id = ? AND publish_state = 'live' AND id != ?",
+            "WHERE provider_id = ? AND catdv_clip_id = ? "
+            "AND publish_state IN ('live', 'publishing') AND id != ?",
             (provider_id, clip_id, version_id),
         )
         await conn.execute(

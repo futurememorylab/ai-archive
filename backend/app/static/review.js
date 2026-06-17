@@ -313,36 +313,42 @@ function reviewMixin(clipId) {
     // POST /api/review/clips/{id}/versions/{n}/restore → rehydrate draft.
     // POST /api/review/clips/{id}/versions/{n}/restore-and-publish → same, then
     //   the SyncEngine publishes it; poll + refresh as in applyDraft.
-    async _handleRestoreClick(btn, publish) {
-      const vnum = btn.dataset.restore ?? btn.dataset.restorePublish;
+    // History actions. "activate" switches the clip back to an existing version
+    // (re-PUT + make live, NO new version). "restore" loads a version into the
+    // working draft for editing. Neither forks a duplicate version any more.
+    async _handleVersionAction(btn, action) {
+      const vnum = btn.dataset.activate ?? btn.dataset.restore;
       if (!vnum) return;
-      const endpoint = publish
-        ? `/api/review/clips/${clipId}/versions/${vnum}/restore-and-publish`
-        : `/api/review/clips/${clipId}/versions/${vnum}/restore`;
+      const path = action === "activate" ? "activate" : "restore";
       try {
-        const r = await fetch(endpoint, { method: "POST" });
+        const r = await fetch(`/api/review/clips/${clipId}/versions/${vnum}/${path}`, { method: "POST" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         await this.refreshDraft();
-        const label = publish ? "Restored and publishing…" : "Draft restored from version " + vnum + ".";
-        Alpine.store("toast").push(label, { level: "success" });
-        if (publish) {
+        if (action === "activate") {
+          Alpine.store("toast").push(`Switching to version ${vnum}…`, { level: "success" });
           this.syncState = "syncing";
           this._pollSync();
           window.htmx?.ajax("GET", "/ui/sync-chip", { target: "#sync-chip", swap: "innerHTML" });
+        } else {
+          Alpine.store("toast").push(`Draft loaded from version ${vnum}.`, { level: "success" });
         }
       } catch (e) {
-        Alpine.store("toast").push(`Restore failed: ${e.message || e}`, { level: "error" });
+        Alpine.store("toast").push(`Version action failed: ${e.message || e}`, { level: "error" });
       }
     },
     _initRestoreDelegation() {
-      // Attach one delegated listener on the aside so the history panel items
-      // don't need individual Alpine bindings (the panel is server-rendered).
+      // ONE delegated listener on the aside (the history panel is server-
+      // rendered, so its items don't get individual Alpine bindings). Guard
+      // against a re-init double-binding it — a second listener would fire the
+      // POST twice and create duplicate writes. See publishing audit, A5.
       const aside = this.$root.closest(".anno-col") ?? this.$root;
+      if (aside._versionActionsBound) return;
+      aside._versionActionsBound = true;
       aside.addEventListener("click", (ev) => {
+        const activate = ev.target.closest("[data-activate]");
+        if (activate) { ev.preventDefault(); this._handleVersionAction(activate, "activate"); return; }
         const restore = ev.target.closest("[data-restore]");
-        if (restore) { ev.preventDefault(); this._handleRestoreClick(restore, false); return; }
-        const restorePublish = ev.target.closest("[data-restore-publish]");
-        if (restorePublish) { ev.preventDefault(); this._handleRestoreClick(restorePublish, true); }
+        if (restore) { ev.preventDefault(); this._handleVersionAction(restore, "restore"); }
       });
     },
   };

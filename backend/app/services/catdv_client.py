@@ -86,24 +86,24 @@ def _body_snippet(resp: "httpx.Response", limit: int = 200) -> str:
 
 
 def _envelope_or_raise(resp: "httpx.Response") -> Envelope:
-    """Parse a CatDV JSON envelope, mapping transport-level failures to a
-    classified CatdvError.
+    """Parse a CatDV JSON envelope; a body we can't parse becomes a classified
+    CatdvError rather than a raw pydantic ValidationError.
 
-    A raw 5xx — or a body our Envelope model can't parse, e.g. CatDV's
-    ``{"status": 500}`` error shape — must NOT escape as a pydantic
-    ValidationError: that bypasses the adapter's error mapping
-    (apply_changes only catches CatdvError/Busy/Auth), so the SyncEngine sees
-    an unknown exception and retries it forever with an unreadable message.
-    Status 401 is left to the envelope path (env.requires_reauth handles the
-    AUTH re-login). See the publishing-logic audit, anomaly A2.
+    Parse-first: a well-formed envelope (OK / AUTH / ERROR / BUSY) is returned
+    and the caller's is_busy / is_ok logic decides — even on a 5xx, so a
+    BUSY-at-503 still maps to retryable. Only a body our model CANNOT validate
+    — CatDV's ``{"status": 500}`` server-error shape, an HTML error page, a
+    non-JSON body — falls through. Those previously escaped apply_changes'
+    error mapping (it only catches CatdvError/Busy/Auth) as an unknown
+    exception, so the SyncEngine retried them forever with an unreadable
+    message (the 'Publishing… N' pile-up). See the publishing audit, A2.
     """
-    if resp.status_code >= 400 and resp.status_code != 401:
-        raise CatdvError(f"CatDV HTTP {resp.status_code}: {_body_snippet(resp)}")
     try:
         return Envelope.model_validate(resp.json())
     except (ValueError, ValidationError) as exc:
+        status = getattr(resp, "status_code", "?")
         raise CatdvError(
-            f"unparseable CatDV response (HTTP {resp.status_code}): {_body_snippet(resp)}"
+            f"CatDV returned an error response (HTTP {status}): {_body_snippet(resp)}"
         ) from exc
 
 
@@ -288,9 +288,7 @@ class CatdvClient:
         expected_total: int | None = None
         stalled = 0
         while True:
-            existing = (
-                dest.stat().st_size if dest.exists() else 0
-            )  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
+            existing = dest.stat().st_size if dest.exists() else 0  # sync-io-ok: pre-existing
             if expected_total is not None and existing >= expected_total:
                 return  # complete
             headers = {"Range": f"bytes={existing}-"} if existing > 0 else {}

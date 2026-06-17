@@ -75,3 +75,25 @@ async def test_newest_state_by_clip_is_batched(db):
     assert out[1] == ("live", 1)
     assert out[2] == ("publishing", 1)
     assert 3 not in out
+
+
+@pytest.mark.asyncio
+async def test_mark_live_supersedes_orphaned_publishing_siblings(db):
+    """mark_live cleans up other 'publishing' rows for the clip so a merged
+    multi-publish (or a stuck pile-up) doesn't orphan them. Audit A4."""
+    repo = ClipVersionsRepo()
+    v1 = await repo.insert(db, _v(num=1, state="live"))
+    v2 = await repo.insert(db, _v(num=2, state="publishing"))  # orphaned
+    v3 = await repo.insert(db, _v(num=3, state="publishing"))  # the winner
+    await repo.mark_live(db, v3)
+    assert (await repo.get(db, v3)).publish_state == "live"
+    assert (await repo.get(db, v1)).publish_state == "superseded"
+    assert (await repo.get(db, v2)).publish_state == "superseded"
+
+
+@pytest.mark.asyncio
+async def test_mark_publishing_moves_back_to_publishing(db):
+    repo = ClipVersionsRepo()
+    v = await repo.insert(db, _v(num=1, state="superseded"))
+    await repo.mark_publishing(db, v)
+    assert (await repo.get(db, v)).publish_state == "publishing"

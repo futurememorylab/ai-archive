@@ -190,11 +190,29 @@ async def list_versions(request: Request, clip_id: int):
     return [v.model_dump() for v in versions]
 
 
+@router.post("/clips/{clip_id}/versions/{version_num}/activate")
+async def activate_version(request: Request, clip_id: int, version_num: int):
+    """Switch the clip back to an existing published version — re-PUT its
+    snapshot to CatDV and mark it live again, superseding the current live,
+    WITHOUT creating a new version. This is the 'switch versions' action; it
+    replaces the old publish-forward 'restore & publish' that forked a new
+    identical version on every click (publishing audit A3/A4)."""
+    ctx = get_core_ctx(request)
+    try:
+        version_id = await ctx.publish_service.reactivate(
+            ctx.db, clip_id=clip_id, version_num=version_num
+        )
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    _notify_sync(request)
+    return {"activated_version_id": version_id}
+
+
 @router.post("/clips/{clip_id}/versions/{version_num}/restore")
 async def restore_version(request: Request, clip_id: int, version_num: int):
-    """Restore a published version's snapshot back into the working draft as
-    fresh pending review_items. Does not publish — call restore-and-publish
-    to atomically restore + publish as a new version."""
+    """Load a published version's snapshot into the working draft as fresh
+    pending review_items, for editing before re-publishing. Does NOT publish
+    and does NOT create a version — use /activate to just switch live."""
     ctx = get_core_ctx(request)
     try:
         n = await ctx.restore_service.restore_into_draft(
@@ -203,23 +221,3 @@ async def restore_version(request: Request, clip_id: int, version_num: int):
     except LookupError as exc:
         raise HTTPException(404, str(exc)) from exc
     return {"restored_items": n}
-
-
-@router.post("/clips/{clip_id}/versions/{version_num}/restore-and-publish")
-async def restore_and_publish(request: Request, clip_id: int, version_num: int):
-    """Restore a version's snapshot and immediately publish it forward as a new
-    version with origin='restore'. History is never mutated — a new row is inserted."""
-    ctx = get_core_ctx(request)
-    try:
-        await ctx.restore_service.restore_into_draft(
-            ctx.db, clip_id=clip_id, version_num=version_num
-        )
-        for it in await ctx.review_items_repo.list_by_clip(ctx.db, clip_id, decision="pending"):
-            await ctx.review_items_repo.set_decision(ctx.db, it.id, "accepted")
-        version_id = await ctx.publish_service.publish(
-            ctx.db, clip_id=clip_id, author=_author(request), origin="restore"
-        )
-    except LookupError as exc:
-        raise HTTPException(404, str(exc)) from exc
-    _notify_sync(request)
-    return {"published_version_id": version_id}

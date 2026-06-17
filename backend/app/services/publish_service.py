@@ -24,10 +24,17 @@ from typing import Any
 
 import aiosqlite
 
+from backend.app.archive.model import AddMarkers, ChangeOp, ReplaceNote, SetField
 from backend.app.models.annotation import ClipVersion
-from backend.app.services.write_queue import etag_from_snapshot, fps_from_snapshot
+from backend.app.models.prompt import TargetMap
+from backend.app.services.write_queue import (
+    _marker_from_review_value,
+    etag_from_snapshot,
+    fps_from_snapshot,
+)
 
 SnapshotLoader = Callable[[aiosqlite.Connection, int], Awaitable[dict[str, Any]]]
+DEFAULT_FPS = 25.0
 
 
 class PublishService:
@@ -99,6 +106,66 @@ class PublishService:
             clip_version_id=version_id,
         )
         return version_id
+
+    async def reactivate(
+        self, conn: aiosqlite.Connection, *, clip_id: int, version_num: int
+    ) -> int:
+        """Switch a clip back to an existing published version WITHOUT creating
+        a new row.
+
+        Re-PUTs the chosen version's snapshot to CatDV and (on success) marks it
+        live again, superseding the current live. This is the 'switch versions'
+        action — distinct from publish-forward, which forked a new identical
+        version on every restore and proliferated history. Re-bases on the live
+        clip (expected_etag=None): 'make this live' is an explicit override of
+        whatever is currently on the clip. See the publishing audit, A3/A4.
+        """
+        versions = await self._versions.list_by_clip(conn, clip_id)
+        target = next((v for v in versions if v.version_num == version_num), None)
+        if target is None:
+            raise LookupError(f"clip {clip_id} has no version {version_num}")
+        if target.publish_state == "live":
+            return target.id  # already live — no-op
+
+        ops = _ops_from_snapshot(target.snapshot)
+        await self._versions.mark_publishing(conn, target.id)
+        if not ops:
+            # Empty snapshot — nothing to write upstream; it's live in effect.
+            await self._versions.mark_live(conn, target.id)
+            return target.id
+        await self._wq.enqueue_apply(
+            conn,
+            clip_key=("catdv", str(clip_id)),
+            items=[],
+            target_map=TargetMap({}),
+            expected_etag=None,
+            annotation_id=target.annotation_id,
+            fps=DEFAULT_FPS,
+            clip_version_id=target.id,
+            extra_ops=ops,
+        )
+        return target.id
+
+
+def _ops_from_snapshot(snapshot: dict[str, Any]) -> list[ChangeOp]:
+    """Build the ChangeOps that re-assert a version's snapshot on CatDV:
+    markers added, fields set, notes/bigNotes replaced."""
+    ops: list[ChangeOp] = []
+    marker_models = []
+    for m in snapshot.get("markers") or []:
+        if isinstance(m, dict):
+            mm = _marker_from_review_value(m, DEFAULT_FPS)
+            if mm is not None:
+                marker_models.append(mm)
+    if marker_models:
+        ops.append(AddMarkers(markers=tuple(marker_models)))
+    for ident, val in (snapshot.get("fields") or {}).items():
+        ops.append(SetField(identifier=ident, value=val))
+    if snapshot.get("notes"):
+        ops.append(ReplaceNote(target="notes", text=str(snapshot["notes"])))
+    if snapshot.get("bigNotes"):
+        ops.append(ReplaceNote(target="bigNotes", text=str(snapshot["bigNotes"])))
+    return ops
 
 
 def _materialize(base: dict[str, Any], accepted: list, *, fps: float) -> dict[str, Any]:
