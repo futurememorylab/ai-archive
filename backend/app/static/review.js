@@ -177,7 +177,10 @@ function reviewMixin(clipId) {
         const r = await fetch(`/api/review/clips/${clipId}/apply`, { method: "POST" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         let queued = 0;
-        try { queued = (await r.json()).queued || 0; } catch (e) { /* non-JSON body */ }
+        // apply now publishes a clip version: a non-null version_id means ops
+        // (the accepted changes + the provenance stamp) were enqueued. Fall back
+        // to the legacy `queued` field for any non-publish caller.
+        try { const b = await r.json(); queued = b.version_id != null ? 1 : (b.queued || 0); } catch (e) { /* non-JSON body */ }
         Alpine.store("toast").push("Accepted proposals applied.", { level: "success" });
         await this.refreshDraft();
         // Hand off to the async writeback: poll until it reaches CatDV, then
