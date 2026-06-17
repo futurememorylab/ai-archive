@@ -36,10 +36,20 @@ async def backfill_clip_versions(conn: aiosqlite.Connection, versions_repo) -> i
         )
         rows = await cur2.fetchall()
         snapshot, model, annotation_id = _snapshot_from_rows(rows)
-        await versions_repo.insert(conn, ClipVersion(
-            catdv_clip_id=clip_id, version_num=1, snapshot=snapshot, diff=None,
-            origin="publish", model=model, annotation_id=annotation_id,
-            author="—", publish_state="live"))
+        await versions_repo.insert(
+            conn,
+            ClipVersion(
+                catdv_clip_id=clip_id,
+                version_num=1,
+                snapshot=snapshot,
+                diff=None,
+                origin="publish",
+                model=model,
+                annotation_id=annotation_id,
+                author="—",
+                publish_state="live",
+            ),
+        )
         created += 1
     return created
 
@@ -60,4 +70,8 @@ def _snapshot_from_rows(rows):
                 big = text
             else:
                 notes = text
-    return {"markers": markers, "fields": fields, "notes": notes, "bigNotes": big}, model, annotation_id
+    return (
+        {"markers": markers, "fields": fields, "notes": notes, "bigNotes": big},
+        model,
+        annotation_id,
+    )

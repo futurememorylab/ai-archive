@@ -22,12 +22,33 @@ async def test_backfill_creates_one_live_v1_for_synced_clip(db):
     )
 
     ar, ri = AnnotationsRepo(), ReviewItemsRepo()
-    aid = await ar.insert(db, Annotation(
-        catdv_clip_id=5, catdv_clip_name="C5", prompt_version_id=version_id, job_id=None,
-        model="m", prompt_used="p", raw_response={}, structured_output=None, clip_snapshot={}))
-    [it] = await ri.bulk_insert(db, [ReviewItem(
-        annotation_id=aid, studio_run_id=None, catdv_clip_id=5, kind="field",
-        target_identifier="pragafilm.genre", proposed_value="drama")])
+    aid = await ar.insert(
+        db,
+        Annotation(
+            catdv_clip_id=5,
+            catdv_clip_name="C5",
+            prompt_version_id=version_id,
+            job_id=None,
+            model="m",
+            prompt_used="p",
+            raw_response={},
+            structured_output=None,
+            clip_snapshot={},
+        ),
+    )
+    [it] = await ri.bulk_insert(
+        db,
+        [
+            ReviewItem(
+                annotation_id=aid,
+                studio_run_id=None,
+                catdv_clip_id=5,
+                kind="field",
+                target_identifier="pragafilm.genre",
+                proposed_value="drama",
+            )
+        ],
+    )
     await ri.mark_applied(db, [it.id])
     await ri.mark_synced(db, [it.id])
 

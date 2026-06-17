@@ -25,6 +25,7 @@ def test_editable_enums_never_seed_two_defaults():
 
 def test_clip_publish_state_matches_literal():
     from typing import get_args
+
     from backend.app.enums.registry import ENUM_REGISTRY
     from backend.app.models.annotation import ClipPublishState
 

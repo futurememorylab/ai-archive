@@ -23,26 +23,43 @@ class _NoopLog:
 
 
 async def _enqueue_for_version(db, version_id):
-    return await PendingOperationsRepo().insert_many(db, rows=[{
-        "provider_id": "catdv", "provider_clip_id": "1", "op_kind": "SetField",
-        "op_json": '{"kind":"SetField","identifier":"pragafilm.genre","value":"x"}',
-        "origin_annotation_id": None, "origin_review_item_ids": None,
-        "expected_etag": None, "origin_clip_version_id": version_id,
-    }])
+    return await PendingOperationsRepo().insert_many(
+        db,
+        rows=[
+            {
+                "provider_id": "catdv",
+                "provider_clip_id": "1",
+                "op_kind": "SetField",
+                "op_json": '{"kind":"SetField","identifier":"pragafilm.genre","value":"x"}',
+                "origin_annotation_id": None,
+                "origin_review_item_ids": None,
+                "expected_etag": None,
+                "origin_clip_version_id": version_id,
+            }
+        ],
+    )
 
 
 def _engine(db, status):
     return SyncEngine(
-        provider=_Provider(status), pending_ops_repo=PendingOperationsRepo(),
-        write_log_repo=_NoopLog(), connection_monitor=None, db_provider=lambda: db,
-        review_items_repo=None, clip_versions_repo=ClipVersionsRepo(),
+        provider=_Provider(status),
+        pending_ops_repo=PendingOperationsRepo(),
+        write_log_repo=_NoopLog(),
+        connection_monitor=None,
+        db_provider=lambda: db,
+        review_items_repo=None,
+        clip_versions_repo=ClipVersionsRepo(),
     )
 
 
 def _v(num, state):
     return ClipVersion(
-        catdv_clip_id=1, version_num=num, snapshot={"markers": [], "fields": {}, "notes": None},
-        origin="publish", publish_state=state)
+        catdv_clip_id=1,
+        version_num=num,
+        snapshot={"markers": [], "fields": {}, "notes": None},
+        origin="publish",
+        publish_state=state,
+    )
 
 
 @pytest.mark.asyncio

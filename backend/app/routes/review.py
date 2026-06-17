@@ -27,6 +27,7 @@ def _author(request: Request) -> str | None:
     user = getattr(request.state, "current_user", None)
     return getattr(user, "email", None)
 
+
 router = APIRouter(prefix="/api/review", tags=["review"])
 
 _VALID_KINDS = {"marker", "field", "note"}
@@ -40,7 +41,6 @@ class Decision(BaseModel):
 class ApplyBatch(BaseModel):
     clip_ids: list[int]
     kinds: list[str] | None = None
-
 
 
 @router.get("/clips/{clip_id}/draft-data")
@@ -197,7 +197,9 @@ async def restore_version(request: Request, clip_id: int, version_num: int):
     to atomically restore + publish as a new version."""
     ctx = get_core_ctx(request)
     try:
-        n = await ctx.restore_service.restore_into_draft(ctx.db, clip_id=clip_id, version_num=version_num)
+        n = await ctx.restore_service.restore_into_draft(
+            ctx.db, clip_id=clip_id, version_num=version_num
+        )
     except LookupError as exc:
         raise HTTPException(404, str(exc)) from exc
     return {"restored_items": n}
@@ -209,7 +211,9 @@ async def restore_and_publish(request: Request, clip_id: int, version_num: int):
     version with origin='restore'. History is never mutated — a new row is inserted."""
     ctx = get_core_ctx(request)
     try:
-        await ctx.restore_service.restore_into_draft(ctx.db, clip_id=clip_id, version_num=version_num)
+        await ctx.restore_service.restore_into_draft(
+            ctx.db, clip_id=clip_id, version_num=version_num
+        )
         for it in await ctx.review_items_repo.list_by_clip(ctx.db, clip_id, decision="pending"):
             await ctx.review_items_repo.set_decision(ctx.db, it.id, "accepted")
         version_id = await ctx.publish_service.publish(

@@ -65,9 +65,7 @@ async def test_clear_unapplied_for_clip_only_drops_unapplied(db):
     assert dropped == 1, f"expected 1 row deleted, got {dropped}"
 
     remaining = [it.id for it in await ri.list_by_clip(db, 1)]
-    assert remaining == [b.id], (
-        f"only the applied item should survive; got ids {remaining}"
-    )
+    assert remaining == [b.id], f"only the applied item should survive; got ids {remaining}"
 
 
 def _make_item(annotation_id: int, *, clip_id: int, value: str):

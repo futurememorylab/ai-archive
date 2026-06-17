@@ -239,6 +239,7 @@ def test_apply_batch_marks_and_enqueues_filtered_by_kind(monkeypatch, tmp_path):
 
         class FakeArchive:
             id = "catdv"
+
             async def apply_changes(self, change_set: ChangeSet) -> WriteResult:
                 return WriteResult(status="ok", upstream_response={"ID": 1, "modifyDate": "x"})
 
@@ -422,11 +423,11 @@ def test_clip_detail_review_mode_renders_item_controls(monkeypatch, tmp_path):
         assert r.status_code == 200
         # Card panel structural markers (new Alpine-driven design).
         assert "ri-card" in r.text
-        assert "startEdit" in r.text        # ✎ Edit (buffered save/cancel edit)
-        assert "saveEdit" in r.text         # Save
-        assert "cancelEdit" in r.text       # Cancel
-        assert "del(" in r.text             # Delete
-        assert "restore(" in r.text         # Restore (deleted strip)
+        assert "startEdit" in r.text  # ✎ Edit (buffered save/cancel edit)
+        assert "saveEdit" in r.text  # Save
+        assert "cancelEdit" in r.text  # Cancel
+        assert "del(" in r.text  # Delete
+        assert "restore(" in r.text  # Restore (deleted strip)
         assert "acceptApplyAll" in r.text
         # Review bar with the consolidated accept+apply action and clip navigation.
         assert "review-bar" in r.text
@@ -598,8 +599,8 @@ def test_clip_detail_review_action_bar_has_prev(monkeypatch, tmp_path):
         assert r.status_code == 200
         # Review bar structural markers.
         assert "review-bar" in r.text
-        assert "navClip(-1)" in r.text      # ‹ Previous clip
-        assert "navClip(1)" in r.text       # › Next clip
+        assert "navClip(-1)" in r.text  # ‹ Previous clip
+        assert "navClip(1)" in r.text  # › Next clip
         # Single consolidated bulk action: accept all visible proposals + apply.
         assert "acceptApplyAll()" in r.text
 

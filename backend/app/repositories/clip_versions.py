@@ -13,9 +13,22 @@ from backend.app.models.annotation import ClipVersion
 from backend.app.repositories._batch import chunked_in_clause
 
 _COLS = (
-    "id", "provider_id", "catdv_clip_id", "version_num", "parent_version_id",
-    "snapshot", "diff", "origin", "model", "prompt_version_id", "annotation_id",
-    "author", "publish_state", "expected_etag", "failed_reason", "synced_at",
+    "id",
+    "provider_id",
+    "catdv_clip_id",
+    "version_num",
+    "parent_version_id",
+    "snapshot",
+    "diff",
+    "origin",
+    "model",
+    "prompt_version_id",
+    "annotation_id",
+    "author",
+    "publish_state",
+    "expected_etag",
+    "failed_reason",
+    "synced_at",
     "created_at",
 )
 
@@ -35,11 +48,21 @@ class ClipVersionsRepo:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                v.provider_id, v.catdv_clip_id, v.version_num, v.parent_version_id,
+                v.provider_id,
+                v.catdv_clip_id,
+                v.version_num,
+                v.parent_version_id,
                 json.dumps(v.snapshot, ensure_ascii=False),
                 json.dumps(v.diff, ensure_ascii=False) if v.diff is not None else None,
-                v.origin, v.model, v.prompt_version_id, v.annotation_id,
-                v.author, v.publish_state, v.expected_etag, v.failed_reason, v.synced_at,
+                v.origin,
+                v.model,
+                v.prompt_version_id,
+                v.annotation_id,
+                v.author,
+                v.publish_state,
+                v.expected_etag,
+                v.failed_reason,
+                v.synced_at,
             ),
         )
         await conn.commit()
@@ -157,11 +180,21 @@ class ClipVersionsRepo:
     @staticmethod
     def _row(row) -> ClipVersion:
         return ClipVersion(
-            id=row[0], provider_id=row[1], catdv_clip_id=row[2], version_num=row[3],
+            id=row[0],
+            provider_id=row[1],
+            catdv_clip_id=row[2],
+            version_num=row[3],
             parent_version_id=row[4],
             snapshot=json.loads(row[5]),
             diff=json.loads(row[6]) if row[6] is not None else None,
-            origin=row[7], model=row[8], prompt_version_id=row[9], annotation_id=row[10],
-            author=row[11], publish_state=row[12], expected_etag=row[13],
-            failed_reason=row[14], synced_at=row[15], created_at=row[16],
+            origin=row[7],
+            model=row[8],
+            prompt_version_id=row[9],
+            annotation_id=row[10],
+            author=row[11],
+            publish_state=row[12],
+            expected_etag=row[13],
+            failed_reason=row[14],
+            synced_at=row[15],
+            created_at=row[16],
         )

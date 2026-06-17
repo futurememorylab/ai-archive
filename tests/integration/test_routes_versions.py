@@ -10,8 +10,6 @@ import importlib
 
 from fastapi.testclient import TestClient
 
-from tests._helpers.live_ctx import install_live_ctx
-
 
 def _setenv(monkeypatch, tmp_path):
     monkeypatch.setenv("APP_ENV", "dev")

@@ -40,19 +40,47 @@ class RestoreService:
 def _snapshot_to_items(snapshot, clip_id, annotation_id) -> list[ReviewItem]:
     items: list[ReviewItem] = []
     for m in snapshot.get("markers") or []:
-        items.append(ReviewItem(annotation_id=annotation_id, studio_run_id=None,
-                                catdv_clip_id=clip_id, kind="marker",
-                                target_identifier=None, proposed_value=m))
+        items.append(
+            ReviewItem(
+                annotation_id=annotation_id,
+                studio_run_id=None,
+                catdv_clip_id=clip_id,
+                kind="marker",
+                target_identifier=None,
+                proposed_value=m,
+            )
+        )
     for ident, val in (snapshot.get("fields") or {}).items():
-        items.append(ReviewItem(annotation_id=annotation_id, studio_run_id=None,
-                                catdv_clip_id=clip_id, kind="field",
-                                target_identifier=ident, proposed_value=val))
+        items.append(
+            ReviewItem(
+                annotation_id=annotation_id,
+                studio_run_id=None,
+                catdv_clip_id=clip_id,
+                kind="field",
+                target_identifier=ident,
+                proposed_value=val,
+            )
+        )
     if snapshot.get("notes"):
-        items.append(ReviewItem(annotation_id=annotation_id, studio_run_id=None,
-                                catdv_clip_id=clip_id, kind="note",
-                                target_identifier="notes", proposed_value=snapshot["notes"]))
+        items.append(
+            ReviewItem(
+                annotation_id=annotation_id,
+                studio_run_id=None,
+                catdv_clip_id=clip_id,
+                kind="note",
+                target_identifier="notes",
+                proposed_value=snapshot["notes"],
+            )
+        )
     if snapshot.get("bigNotes"):
-        items.append(ReviewItem(annotation_id=annotation_id, studio_run_id=None,
-                                catdv_clip_id=clip_id, kind="note",
-                                target_identifier="bigNotes", proposed_value=snapshot["bigNotes"]))
+        items.append(
+            ReviewItem(
+                annotation_id=annotation_id,
+                studio_run_id=None,
+                catdv_clip_id=clip_id,
+                kind="note",
+                target_identifier="bigNotes",
+                proposed_value=snapshot["bigNotes"],
+            )
+        )
     return items

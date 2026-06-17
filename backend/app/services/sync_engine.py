@@ -267,7 +267,9 @@ class SyncEngine:
                 error=f"{error}; max_attempts={self._max_attempts} reached",
                 bump_attempts=True,
             )
-            version_ids = [r.get("origin_clip_version_id") for r in rows if r.get("origin_clip_version_id")]
+            version_ids = [
+                r.get("origin_clip_version_id") for r in rows if r.get("origin_clip_version_id")
+            ]
             version_id = max(version_ids) if version_ids else None
             if self._clip_versions is not None and version_id is not None:
                 await self._clip_versions.mark_failed(
@@ -289,7 +291,9 @@ class SyncEngine:
         # Freshest version id among this clip's drained rows (max non-null).
         # Using max ensures that when several publish batches for one clip are
         # merged, we advance the newest version (the last-enqueued publish).
-        version_ids = [r.get("origin_clip_version_id") for r in rows if r.get("origin_clip_version_id")]
+        version_ids = [
+            r.get("origin_clip_version_id") for r in rows if r.get("origin_clip_version_id")
+        ]
         version_id = max(version_ids) if version_ids else None
 
         if result.status == "ok":

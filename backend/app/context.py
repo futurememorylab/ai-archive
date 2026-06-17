@@ -71,8 +71,6 @@ from backend.app.repositories.workspaces import WorkspacesRepo
 from backend.app.repositories.write_log import WriteLogRepo
 from backend.app.services.cache_actions import CacheActions
 from backend.app.services.cache_inspector import CacheInspector
-from backend.app.services.publish_service import PublishService
-from backend.app.services.restore_service import RestoreService
 from backend.app.services.connection_monitor import ConnectionMonitor
 from backend.app.services.enum_service import EnumService
 from backend.app.services.events import EventBus
@@ -81,6 +79,8 @@ from backend.app.services.lru_eviction import LruEviction
 from backend.app.services.media_cache import MediaCacheBackend, build_media_cache_backend
 from backend.app.services.media_prefetcher import MediaPrefetcher
 from backend.app.services.proxy_cache_reconciler import ProxyCacheReconciler
+from backend.app.services.publish_service import PublishService
+from backend.app.services.restore_service import RestoreService
 from backend.app.services.sync_engine import SyncEngine
 from backend.app.services.vpn_supervisor import VpnSupervisor
 from backend.app.services.workspace_manager import WorkspaceManager
@@ -202,6 +202,7 @@ class CoreCtx:
         )
         await ctx.enum_service.reconcile_seeds()
         from backend.app.services.clip_versions_backfill import backfill_clip_versions
+
         await backfill_clip_versions(ctx.db, ctx.clip_versions_repo)
         return ctx
 
@@ -459,7 +460,14 @@ async def _load_live_snapshot(conn, clip_id: int) -> dict:
     # No prior version: start from an empty committed state. Accepted items
     # are layered on top (markers ADD, fields/notes SET), so the empty base is
     # correct — the snapshot is our record of the accepted deltas we wrote.
-    return {"markers": [], "fields": {}, "notes": None, "bigNotes": None, "fps": 25.0, "modifyDate": None}
+    return {
+        "markers": [],
+        "fields": {},
+        "notes": None,
+        "bigNotes": None,
+        "fps": 25.0,
+        "modifyDate": None,
+    }
 
 
 async def build_context(

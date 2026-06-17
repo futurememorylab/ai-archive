@@ -1,4 +1,3 @@
-import json
 import pytest
 
 from backend.app.models.annotation import ClipVersion
@@ -7,8 +6,11 @@ from backend.app.repositories.clip_versions import ClipVersionsRepo
 
 def _v(clip_id=1, num=1, state="publishing", origin="publish"):
     return ClipVersion(
-        catdv_clip_id=clip_id, version_num=num, snapshot={"markers": [], "fields": {}, "notes": None},
-        origin=origin, publish_state=state,
+        catdv_clip_id=clip_id,
+        version_num=num,
+        snapshot={"markers": [], "fields": {}, "notes": None},
+        origin=origin,
+        publish_state=state,
     )
 
 

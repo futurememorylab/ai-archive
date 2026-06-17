@@ -41,17 +41,31 @@ async def _seed_annotation(conn) -> int:
 async def test_enqueue_carries_clip_version_id_and_extra_ops(db):
     aid = await _seed_annotation(db)
     ri = ReviewItemsRepo()
-    [item] = await ri.bulk_insert(db, [ReviewItem(
-        annotation_id=aid, studio_run_id=None, catdv_clip_id=1, kind="field",
-        target_identifier="pragafilm.genre", proposed_value="thriller",
-    )])
+    [item] = await ri.bulk_insert(
+        db,
+        [
+            ReviewItem(
+                annotation_id=aid,
+                studio_run_id=None,
+                catdv_clip_id=1,
+                kind="field",
+                target_identifier="pragafilm.genre",
+                proposed_value="thriller",
+            )
+        ],
+    )
     await ri.set_decision(db, item.id, "accepted")
     item = await ri.get(db, item.id)
 
     wq = WriteQueue(pending_ops_repo=PendingOperationsRepo(), review_items_repo=ri)
     op_ids = await wq.enqueue_apply_for_clip(
-        db, clip_id=1, accepted=[item], target_map=TargetMap({}),
-        expected_etag=None, annotation_id=None, fps=25.0,
+        db,
+        clip_id=1,
+        accepted=[item],
+        target_map=TargetMap({}),
+        expected_etag=None,
+        annotation_id=None,
+        fps=25.0,
         clip_version_id=42,
         extra_ops=[SetField(identifier="pragafilm.anno_version", value="#1 · you")],
     )

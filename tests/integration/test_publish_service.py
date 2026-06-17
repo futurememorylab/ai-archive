@@ -23,21 +23,38 @@ class _StubPrompts:
 
 
 async def _stub_loader(conn, clip_id):
-    return {"markers": [], "fields": {}, "notes": None, "bigNotes": None, "fps": 25.0, "modifyDate": None}
+    return {
+        "markers": [],
+        "fields": {},
+        "notes": None,
+        "bigNotes": None,
+        "fps": 25.0,
+        "modifyDate": None,
+    }
 
 
 def _svc():
     return PublishService(
-        annotations_repo=AnnotationsRepo(), review_items_repo=ReviewItemsRepo(),
+        annotations_repo=AnnotationsRepo(),
+        review_items_repo=ReviewItemsRepo(),
         clip_versions_repo=ClipVersionsRepo(),
-        write_queue=WriteQueue(pending_ops_repo=PendingOperationsRepo(), review_items_repo=ReviewItemsRepo()),
-        prompts_repo=_StubPrompts(), live_snapshot_loader=_stub_loader)
+        write_queue=WriteQueue(
+            pending_ops_repo=PendingOperationsRepo(), review_items_repo=ReviewItemsRepo()
+        ),
+        prompts_repo=_StubPrompts(),
+        live_snapshot_loader=_stub_loader,
+    )
 
 
 async def _seed_prompt_version(db) -> int:
     _, vid = await PromptsRepo().create_with_initial_version(
-        db, name="t", description=None, body="p",
-        target_map={}, output_schema={}, model="gemini-2.5-flash",
+        db,
+        name="t",
+        description=None,
+        body="p",
+        target_map={},
+        output_schema={},
+        model="gemini-2.5-flash",
     )
     return vid
 
@@ -45,15 +62,33 @@ async def _seed_prompt_version(db) -> int:
 async def _seed_accepted_field(db):
     vid = await _seed_prompt_version(db)
     ar, ri = AnnotationsRepo(), ReviewItemsRepo()
-    aid = await ar.insert(db, Annotation(
-        catdv_clip_id=1, catdv_clip_name="Clip_1", prompt_version_id=vid, job_id=None,
-        model="gemini-2.5-flash", prompt_used="p", raw_response={}, structured_output=None,
-        clip_snapshot={"modifyDate": "2026-06-17T00:00:00Z", "fps": 25.0},
-    ))
-    [item] = await ri.bulk_insert(db, [ReviewItem(
-        annotation_id=aid, studio_run_id=None, catdv_clip_id=1, kind="field",
-        target_identifier="pragafilm.genre", proposed_value="thriller",
-    )])
+    aid = await ar.insert(
+        db,
+        Annotation(
+            catdv_clip_id=1,
+            catdv_clip_name="Clip_1",
+            prompt_version_id=vid,
+            job_id=None,
+            model="gemini-2.5-flash",
+            prompt_used="p",
+            raw_response={},
+            structured_output=None,
+            clip_snapshot={"modifyDate": "2026-06-17T00:00:00Z", "fps": 25.0},
+        ),
+    )
+    [item] = await ri.bulk_insert(
+        db,
+        [
+            ReviewItem(
+                annotation_id=aid,
+                studio_run_id=None,
+                catdv_clip_id=1,
+                kind="field",
+                target_identifier="pragafilm.genre",
+                proposed_value="thriller",
+            )
+        ],
+    )
     await ri.set_decision(db, item.id, "accepted")
     return aid
 
@@ -86,7 +121,8 @@ async def test_publish_noop_when_nothing_accepted(db):
 
 
 def test_provenance_value_shape():
-    s = build_provenance_value(version_num=3, author="you", model="gemini-2.5-flash",
-                               ts="2026-06-17T10:44:00Z")
+    s = build_provenance_value(
+        version_num=3, author="you", model="gemini-2.5-flash", ts="2026-06-17T10:44:00Z"
+    )
     assert s.startswith("#3 · you · ")
     assert "gemini-2.5-flash" in s

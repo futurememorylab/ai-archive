@@ -29,7 +29,9 @@ PROVENANCE_FIELD = "pragafilm.anno_version"
 SnapshotLoader = Callable[[aiosqlite.Connection, int], Awaitable[dict[str, Any]]]
 
 
-def build_provenance_value(*, version_num: int, author: str | None, model: str | None, ts: str) -> str:
+def build_provenance_value(
+    *, version_num: int, author: str | None, model: str | None, ts: str
+) -> str:
     return f"#{version_num} · {author or '—'} · {ts} · {model or '—'}"
 
 
@@ -52,7 +54,12 @@ class PublishService:
         self._load_live = live_snapshot_loader
 
     async def publish(
-        self, conn: aiosqlite.Connection, *, clip_id: int, author: str | None, origin: str = "publish"
+        self,
+        conn: aiosqlite.Connection,
+        *,
+        clip_id: int,
+        author: str | None,
+        origin: str = "publish",
     ) -> int | None:
         accepted = await self._review_items.list_by_clip(conn, clip_id, decision="accepted")
         accepted = [it for it in accepted if it.annotation_id is not None and it.applied_at is None]
@@ -69,25 +76,40 @@ class PublishService:
 
         num = await self._versions.next_version_num(conn, clip_id)
         ts = datetime.now(UTC).isoformat()
-        version_id = await self._versions.insert(conn, ClipVersion(
-            catdv_clip_id=clip_id, version_num=num,
-            parent_version_id=parent.id if parent else None,
-            snapshot=snapshot, diff=_diff(base, snapshot),
-            origin=origin, model=annotation.model,
-            prompt_version_id=annotation.prompt_version_id, annotation_id=annotation.id,
-            author=author, publish_state="publishing",
-            expected_etag=etag_from_snapshot(annotation.clip_snapshot),
-        ))
+        version_id = await self._versions.insert(
+            conn,
+            ClipVersion(
+                catdv_clip_id=clip_id,
+                version_num=num,
+                parent_version_id=parent.id if parent else None,
+                snapshot=snapshot,
+                diff=_diff(base, snapshot),
+                origin=origin,
+                model=annotation.model,
+                prompt_version_id=annotation.prompt_version_id,
+                annotation_id=annotation.id,
+                author=author,
+                publish_state="publishing",
+                expected_etag=etag_from_snapshot(annotation.clip_snapshot),
+            ),
+        )
 
         provenance = SetField(
             identifier=PROVENANCE_FIELD,
-            value=build_provenance_value(version_num=num, author=author, model=annotation.model, ts=ts),
+            value=build_provenance_value(
+                version_num=num, author=author, model=annotation.model, ts=ts
+            ),
         )
         await self._wq.enqueue_apply_for_clip(
-            conn, clip_id=clip_id, accepted=accepted, target_map=version.target_map,
+            conn,
+            clip_id=clip_id,
+            accepted=accepted,
+            target_map=version.target_map,
             expected_etag=etag_from_snapshot(annotation.clip_snapshot),
-            annotation_id=annotation.id, fps=fps,
-            clip_version_id=version_id, extra_ops=[provenance],
+            annotation_id=annotation.id,
+            fps=fps,
+            clip_version_id=version_id,
+            extra_ops=[provenance],
         )
         return version_id
 
@@ -104,9 +126,15 @@ def _materialize(base: dict[str, Any], accepted: list, *, fps: float) -> dict[st
         if it.kind == "marker" and isinstance(value, dict):
             markers.append(value)
         elif it.kind == "field" and it.target_identifier:
-            fields[it.target_identifier] = value.get("value") if isinstance(value, dict) and "value" in value else value
+            fields[it.target_identifier] = (
+                value.get("value") if isinstance(value, dict) and "value" in value else value
+            )
         elif it.kind == "note" and it.target_identifier:
-            text = str(value.get("value")) if isinstance(value, dict) and "value" in value else str(value)
+            text = (
+                str(value.get("value"))
+                if isinstance(value, dict) and "value" in value
+                else str(value)
+            )
             if it.target_identifier == "bigNotes":
                 big_notes = text
             else:

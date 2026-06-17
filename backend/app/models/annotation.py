@@ -36,9 +36,7 @@ class ReviewItem(BaseModel):
     synced_at: str | None = None  # confirmed on CatDV by the SyncEngine
 
 
-ClipPublishState = Literal[
-    "none", "draft", "publishing", "live", "failed", "conflict"
-]
+ClipPublishState = Literal["none", "draft", "publishing", "live", "failed", "conflict"]
 
 
 class ClipVersion(BaseModel):
