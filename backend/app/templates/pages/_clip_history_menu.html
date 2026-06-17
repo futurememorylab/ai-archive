@@ -1,0 +1,45 @@
+{% from "components/_ui.html" import menu, menu_item, menu_header, menu_sep, status_pill %}
+{# History dropdown — version list for the current clip.
+   Each row: #N · author · model, a status pill, and a Restore action for
+   non-live versions. Rendered server-side; JS handles the actual Restore
+   fetch in review.js (delegated [data-restore] / [data-restore-publish]).
+
+   pill_state_for is a local map from publish_state → pill CSS modifier,
+   mirroring the route's _PILL_STATE dict so both surfaces are consistent. #}
+
+{% set _PS = {
+  "live":       "ok",
+  "superseded": "",
+  "publishing": "accent",
+  "failed":     "bad",
+  "conflict":   "bad",
+} %}
+
+<div data-history-menu>
+  {% call menu(label='History', variant='ghost', size='sm', align='right') %}
+    {% if versions %}
+      {{ menu_header('Version history') }}
+      {% for v in versions %}
+        {% set vstate = v.publish_state %}
+        {% set vpill  = _PS.get(vstate, '') %}
+        {% set vlabel = '#' ~ v.version_num
+                        ~ (' · ' ~ v.author if v.author else '')
+                        ~ (' · ' ~ v.model  if v.model  else '') %}
+        <div class="menu-item" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+          <span class="menu-lbl">{{ vlabel }}</span>
+          {{ status_pill(vstate, vpill) }}
+          {% if vstate != 'live' %}
+            <button type="button" class="btn sm ghost"
+                    data-restore="{{ v.version_num }}"
+                    data-clip-id="{{ v.catdv_clip_id }}">Restore</button>
+            <button type="button" class="btn sm good"
+                    data-restore-publish="{{ v.version_num }}"
+                    data-clip-id="{{ v.catdv_clip_id }}">Restore &amp; publish</button>
+          {% endif %}
+        </div>
+      {% endfor %}
+    {% else %}
+      {{ menu_item('No history yet') }}
+    {% endif %}
+  {% endcall %}
+</div>

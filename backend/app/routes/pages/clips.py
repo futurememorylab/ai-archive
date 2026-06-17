@@ -559,6 +559,35 @@ async def clip_detail_page(request: Request, clip_id: int, review: int | None = 
         60,
     )
     ctx_dict["review_mode"] = bool(review)
+
+    # Version history + headline publish status
+    versions = await ctx.clip_versions_repo.list_by_clip(ctx.db, clip_id)
+    newest = versions[0] if versions else None
+    has_draft = bool(ctx_dict["draft"].get("has_draft", False))
+    from backend.app.services.publish_status import resolve_publish_status
+
+    ps_state, ps_num = resolve_publish_status(
+        has_draft=has_draft,
+        version_state=newest.publish_state if newest else None,
+        version_num=newest.version_num if newest else None,
+    )
+    # Map ClipPublishState → pill CSS state class (used in both the headline
+    # pill and the history menu partial, so defined once here).
+    _PILL_STATE: dict[str, str] = {
+        "live": "ok",
+        "publishing": "accent",
+        "draft": "accent",
+        "failed": "bad",
+        "conflict": "bad",
+        "none": "",
+    }
+    ctx_dict["versions"] = [v.model_dump() for v in versions]
+    ctx_dict["publish_status"] = {
+        "state": ps_state,
+        "version_num": ps_num,
+        "pill_state": _PILL_STATE.get(ps_state, ""),
+    }
+
     return templates.TemplateResponse(request, "pages/clip_detail.html", ctx_dict)
 
 

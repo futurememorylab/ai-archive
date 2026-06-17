@@ -20,6 +20,8 @@ function reviewMixin(clipId) {
       // Reloading a page whose draft was already applied must not show a stale
       // "syncing…" forever — reconcile the message against the real queue once.
       if (this.appliedCount > 0) this._checkSyncOnce();
+      // Wire delegated Restore / Restore-and-publish handlers on the history panel.
+      this._initRestoreDelegation();
     },
     // ── counts ────────────────────────────────────────────────────
     _allDraft() { return [...this.draftMarkers, ...this.draftFields, ...this.draftNotes]; },
@@ -304,6 +306,44 @@ function reviewMixin(clipId) {
           } catch (e) { /* keep current markers */ }
         }
       } catch (e) { /* keep current view */ }
+    },
+    // ── version history: Restore + Restore-and-publish ───────────────────
+    // Delegated handlers attached on x-init via $root delegation. Mirror the
+    // fetch+toast+refreshDraft style used by applyDraft / _persist above.
+    // POST /api/review/clips/{id}/versions/{n}/restore → rehydrate draft.
+    // POST /api/review/clips/{id}/versions/{n}/restore-and-publish → same, then
+    //   the SyncEngine publishes it; poll + refresh as in applyDraft.
+    async _handleRestoreClick(btn, publish) {
+      const vnum = btn.dataset.restore ?? btn.dataset.restorePublish;
+      if (!vnum) return;
+      const endpoint = publish
+        ? `/api/review/clips/${clipId}/versions/${vnum}/restore-and-publish`
+        : `/api/review/clips/${clipId}/versions/${vnum}/restore`;
+      try {
+        const r = await fetch(endpoint, { method: "POST" });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        await this.refreshDraft();
+        const label = publish ? "Restored and publishing…" : "Draft restored from version " + vnum + ".";
+        Alpine.store("toast").push(label, { level: "success" });
+        if (publish) {
+          this.syncState = "syncing";
+          this._pollSync();
+          window.htmx?.ajax("GET", "/ui/sync-chip", { target: "#sync-chip", swap: "innerHTML" });
+        }
+      } catch (e) {
+        Alpine.store("toast").push(`Restore failed: ${e.message || e}`, { level: "error" });
+      }
+    },
+    _initRestoreDelegation() {
+      // Attach one delegated listener on the aside so the history panel items
+      // don't need individual Alpine bindings (the panel is server-rendered).
+      const aside = this.$root.closest(".anno-col") ?? this.$root;
+      aside.addEventListener("click", (ev) => {
+        const restore = ev.target.closest("[data-restore]");
+        if (restore) { ev.preventDefault(); this._handleRestoreClick(restore, false); return; }
+        const restorePublish = ev.target.closest("[data-restore-publish]");
+        if (restorePublish) { ev.preventDefault(); this._handleRestoreClick(restorePublish, true); }
+      });
     },
   };
 }
