@@ -52,6 +52,7 @@ from backend.app.repositories.app_meta import get_or_create_install_id
 from backend.app.repositories.cache_actions_log import CacheActionsLogRepo
 from backend.app.repositories.clip_cache import ClipCacheRepo
 from backend.app.repositories.clip_list_cache import ClipListCacheRepo
+from backend.app.repositories.clip_versions import ClipVersionsRepo
 from backend.app.repositories.enum_values import EnumValuesRepo
 from backend.app.repositories.field_def_cache import FieldDefCacheRepo
 from backend.app.repositories.jobs import JobsRepo
@@ -70,6 +71,7 @@ from backend.app.repositories.workspaces import WorkspacesRepo
 from backend.app.repositories.write_log import WriteLogRepo
 from backend.app.services.cache_actions import CacheActions
 from backend.app.services.cache_inspector import CacheInspector
+from backend.app.services.publish_service import PublishService
 from backend.app.services.connection_monitor import ConnectionMonitor
 from backend.app.services.enum_service import EnumService
 from backend.app.services.events import EventBus
@@ -116,12 +118,14 @@ class CoreCtx:
     run_telemetry_repo: RunTelemetryRepo = field(default_factory=RunTelemetryRepo)
     user_roles_repo: UserRolesRepo = field(default_factory=UserRolesRepo)
     enum_values_repo: EnumValuesRepo = field(default_factory=EnumValuesRepo)
+    clip_versions_repo: ClipVersionsRepo = field(default_factory=ClipVersionsRepo)
     telemetry_ctx: TelemetryCtx = field(init=False)
     event_bus: EventBus = field(default_factory=EventBus)
 
     _running_jobs: dict[int, object] = field(default_factory=dict)
 
     write_queue: WriteQueue = field(init=False)
+    publish_service: PublishService = field(init=False)
     # Cache services are DB-first (offline-required). Their live
     # augmentations (deep-orphan provider checks, bucket-side AI
     # eviction) are each a single None-guarded call site, so they live
@@ -158,6 +162,14 @@ class CoreCtx:
         ctx.write_queue = WriteQueue(
             pending_ops_repo=ctx.pending_ops_repo,
             review_items_repo=ctx.review_items_repo,
+        )
+        ctx.publish_service = PublishService(
+            annotations_repo=ctx.annotations_repo,
+            review_items_repo=ctx.review_items_repo,
+            clip_versions_repo=ctx.clip_versions_repo,
+            write_queue=ctx.write_queue,
+            prompts_repo=ctx.prompts_repo,
+            live_snapshot_loader=_load_live_snapshot,
         )
 
         import os
@@ -369,6 +381,14 @@ class LiveCtx:
         return self.core.enum_service
 
     @property
+    def clip_versions_repo(self) -> ClipVersionsRepo:
+        return self.core.clip_versions_repo
+
+    @property
+    def publish_service(self) -> PublishService:
+        return self.core.publish_service
+
+    @property
     def _running_jobs(self) -> dict[int, object]:
         return self.core._running_jobs
 
@@ -420,6 +440,13 @@ class _ArchiveSubsystem(NamedTuple):
     proxy_resolver: ProxyResolver | None
     thumbnail_service: ThumbnailService | None
     flags: _OnlineFlags
+
+
+async def _load_live_snapshot(conn, clip_id: int) -> dict:
+    # No prior version: start from an empty committed state. Accepted items
+    # are layered on top (markers ADD, fields/notes SET), so the empty base is
+    # correct — the snapshot is our record of the accepted deltas we wrote.
+    return {"markers": [], "fields": {}, "notes": None, "bigNotes": None, "fps": 25.0, "modifyDate": None}
 
 
 async def build_context(
