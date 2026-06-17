@@ -10,6 +10,7 @@ from backend.app.archive.model import (
     AddMarkers,
     AppendNote,
     ChangeOp,
+    ReconcileMarkers,
     ReplaceNote,
     SetField,
 )
@@ -41,32 +42,41 @@ def build_put_payload(
     fps = _clip_fps(current)
 
     ops_list = list(ops)
-    marker_ops = [o for o in ops_list if isinstance(o, AddMarkers)]
-    if marker_ops:
-        existing = list(current.get("markers") or [])
-        # Build our markers (deduped within our own set on in.frm).
-        new_markers: list[dict[str, Any]] = []
-        new_frms: set[int] = set()
-        for op in marker_ops:
-            for marker in op.markers:
-                raw = marker_to_catdv(marker, fps)
-                frm = _in_frm(raw)
-                if frm is not None and frm in new_frms:
-                    continue
-                new_markers.append(raw)
-                if frm is not None:
-                    new_frms.add(frm)
-        # OUR markers WIN on a same-timecode conflict: drop the existing CatDV
-        # marker at that frm and use ours. Re-publishing / re-activating thus
-        # OVERWRITES the clip's marker with our correct DB-sourced copy instead
-        # of preserving CatDV's — which is how progressive mojibake
-        # ("Město" → "MÃÃ…sto") used to compound on every round-trip
-        # (we re-read CatDV's corrupted marker and wrote it back) until it
-        # overflowed the `name`/`category` column. Still idempotent on re-drain
-        # (re-applying the same markers yields the same set). Existing markers we
-        # don't touch are preserved.
-        kept_existing = [m for m in existing if _in_frm(m) not in new_frms]
-        payload["markers"] = kept_existing + new_markers
+    add_ops = [o for o in ops_list if isinstance(o, AddMarkers)]
+    reconcile_ops = [o for o in ops_list if isinstance(o, ReconcileMarkers)]
+    if add_ops or reconcile_ops:
+        # CatDV replaces the markers array wholesale on PUT, so `working` is the
+        # final set we send. Start from the live clip's markers and apply ops.
+        working = list(current.get("markers") or [])
+        # AddMarkers (additive publish-forward): our markers win on a same-frm
+        # conflict (anti-mojibake); markers we don't touch are preserved.
+        if add_ops:
+            new_markers: list[dict[str, Any]] = []
+            new_frms: set[int] = set()
+            for op in add_ops:
+                for marker in op.markers:
+                    raw = marker_to_catdv(marker, fps)
+                    frm = _in_frm(raw)
+                    if frm is not None and frm in new_frms:
+                        continue
+                    new_markers.append(raw)
+                    if frm is not None:
+                        new_frms.add(frm)
+            working = [m for m in working if _in_frm(m) not in new_frms] + new_markers
+        # ReconcileMarkers (switch / Make-live): drop OUR other-version markers
+        # (drop_frm) and re-assert the target's (desired), but KEEP markers we
+        # never authored (pre-existing / human). Frames derive from the clip's
+        # real fps via the Timecode fps=0.0 sentinel.
+        for op in reconcile_ops:
+            desired = [marker_to_catdv(m, fps) for m in op.desired]
+            desired_frm = {_in_frm(m) for m in desired}
+            drop_frm = {round(s * fps) for s in op.drop_secs}
+            working = [
+                m
+                for m in working
+                if _in_frm(m) not in drop_frm and _in_frm(m) not in desired_frm
+            ] + desired
+        payload["markers"] = working
 
     field_changes: dict[str, Any] = {}
     # Accumulate note text per target across this batch's ops. The SyncEngine

@@ -2,6 +2,7 @@ from backend.app.archive.model import (
     AddMarkers,
     AppendNote,
     Marker,
+    ReconcileMarkers,
     ReplaceNote,
     SetField,
     Timecode,
@@ -190,3 +191,52 @@ def test_multiple_ops_combined_in_one_payload():
     assert payload["fields"]["pragafilm.barva"] == "true"
     assert payload["notes"] == "x"
     assert "notes" not in payload["fields"]
+
+
+def test_reconcile_drops_our_later_markers_keeps_foreign():
+    # Clip carries our A,B,C,D (25fps) plus a human marker H we never authored.
+    existing = [
+        {"name": "A", "in": {"frm": 100, "fmt": 25.0, "secs": 4.0}},
+        {"name": "B", "in": {"frm": 200, "fmt": 25.0, "secs": 8.0}},
+        {"name": "C", "in": {"frm": 300, "fmt": 25.0, "secs": 12.0}},
+        {"name": "D", "in": {"frm": 400, "fmt": 25.0, "secs": 16.0}},
+        {"name": "H", "in": {"frm": 500, "fmt": 25.0, "secs": 20.0}},
+    ]
+    op = ReconcileMarkers(
+        desired=(
+            Marker(name="A", in_=Timecode(secs=4.0, fps=0.0), out=None),
+            Marker(name="B", in_=Timecode(secs=8.0, fps=0.0), out=None),
+        ),
+        drop_secs=(12.0, 16.0),
+    )
+    payload = build_put_payload(current=_clip(markers=existing), ops=[op])
+    assert sorted(m["name"] for m in payload["markers"]) == ["A", "B", "H"]
+
+
+def test_reconcile_overwrites_our_copy_at_shared_frame():
+    existing = [{"name": "MÃÃsto", "in": {"frm": 100, "fmt": 25.0, "secs": 4.0}}]
+    op = ReconcileMarkers(
+        desired=(Marker(name="Město", in_=Timecode(secs=4.0, fps=0.0), out=None),),
+        drop_secs=(),
+    )
+    payload = build_put_payload(current=_clip(markers=existing), ops=[op])
+    assert len(payload["markers"]) == 1
+    assert payload["markers"][0]["name"] == "Město"
+
+
+def test_reconcile_derives_frames_at_clip_fps_no_duplicate():
+    # 30fps clip: our A,B already at frm 120/240 (4s,8s * 30). Re-asserting must
+    # re-derive at 30fps (not 25) so no duplicate at frm 100/200 appears.
+    existing = [
+        {"name": "A", "in": {"frm": 120, "fmt": 30.0, "secs": 4.0}},
+        {"name": "B", "in": {"frm": 240, "fmt": 30.0, "secs": 8.0}},
+    ]
+    op = ReconcileMarkers(
+        desired=(
+            Marker(name="A", in_=Timecode(secs=4.0, fps=0.0), out=None),
+            Marker(name="B", in_=Timecode(secs=8.0, fps=0.0), out=None),
+        ),
+        drop_secs=(),
+    )
+    payload = build_put_payload(current=_clip(markers=existing, fps=30.0), ops=[op])
+    assert sorted(m["in"]["frm"] for m in payload["markers"]) == [120, 240]
