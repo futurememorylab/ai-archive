@@ -159,6 +159,52 @@ async def test_reactivate_enqueues_snapshot_and_creates_no_new_version(db):
 
 
 @pytest.mark.asyncio
+async def test_reactivate_reconciles_markers_drops_later_versions(db):
+    """Switching to v1 emits a ReconcileMarkers asserting v1's markers and
+    dropping the markers only later versions added — no new version row."""
+    from backend.app.archive.change_set_json import change_op_from_json
+    from backend.app.archive.model import ReconcileMarkers
+    from backend.app.models.annotation import ClipVersion
+
+    repo = ClipVersionsRepo()
+    v1 = await repo.insert(
+        db,
+        ClipVersion(
+            catdv_clip_id=1, version_num=1,
+            snapshot={"markers": [{"name": "A", "in": {"secs": 4.0}}], "fields": {}, "notes": None},
+            origin="publish", publish_state="superseded",
+        ),
+    )
+    await repo.insert(
+        db,
+        ClipVersion(
+            catdv_clip_id=1, version_num=2,
+            snapshot={
+                "markers": [{"name": "A", "in": {"secs": 4.0}}, {"name": "B", "in": {"secs": 8.0}}],
+                "fields": {}, "notes": None,
+            },
+            origin="publish", publish_state="live",
+        ),
+    )
+
+    rid = await _svc().reactivate(db, clip_id=1, version_num=1)
+    assert rid == v1
+    assert len(await repo.list_by_clip(db, 1)) == 2  # no new version
+
+    rows = await PendingOperationsRepo().list_pending_for_clip(
+        db, provider_id="catdv", provider_clip_id="1"
+    )
+    recon = [
+        o
+        for o in (change_op_from_json(r["op_json"]) for r in rows)
+        if isinstance(o, ReconcileMarkers)
+    ]
+    assert len(recon) == 1
+    assert {m.name for m in recon[0].desired} == {"A"}
+    assert set(recon[0].drop_secs) == {8.0}  # B (added in v2) is dropped
+
+
+@pytest.mark.asyncio
 async def test_publish_noop_when_nothing_accepted(db):
     svc = _svc()
     assert await svc.publish(db, clip_id=999, author=None) is None

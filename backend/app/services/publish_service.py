@@ -24,7 +24,7 @@ from typing import Any
 
 import aiosqlite
 
-from backend.app.archive.model import AddMarkers, ChangeOp, ReplaceNote, SetField
+from backend.app.archive.model import ChangeOp, Marker, ReconcileMarkers, ReplaceNote, SetField
 from backend.app.models.annotation import ClipVersion
 from backend.app.models.prompt import TargetMap
 from backend.app.services.write_queue import (
@@ -127,10 +127,10 @@ class PublishService:
         if target.publish_state == "live":
             return target.id  # already live — no-op
 
-        ops = _ops_from_snapshot(target.snapshot)
+        ops = _switch_ops(target, versions)
         await self._versions.mark_publishing(conn, target.id)
         if not ops:
-            # Empty snapshot — nothing to write upstream; it's live in effect.
+            # Nothing to assert and nothing to drop — it's live in effect.
             await self._versions.mark_live(conn, target.id)
             return target.id
         await self._wq.enqueue_apply(
@@ -147,24 +147,50 @@ class PublishService:
         return target.id
 
 
-def _ops_from_snapshot(snapshot: dict[str, Any]) -> list[ChangeOp]:
-    """Build the ChangeOps that re-assert a version's snapshot on CatDV:
-    markers added, fields set, notes/bigNotes replaced."""
-    ops: list[ChangeOp] = []
-    marker_models = []
-    for m in snapshot.get("markers") or []:
+def _switch_ops(target, versions) -> list[ChangeOp]:
+    """Ops that switch a clip to `target`'s snapshot (the 'Make live' path).
+
+    Markers are reconciled, not merely added: we re-assert the target's markers
+    and drop the markers WE authored in other versions, while preserving markers
+    we never authored (handled in build_put_payload). drop_secs is the union of
+    every version's marker in-seconds minus the target's, so only our own
+    later/other additions are removed. Fields/notes overwrite to the target's
+    values and are not cleared when absent (never destroy a foreign value).
+    """
+    snap = target.snapshot
+    desired: list[Marker] = []
+    target_secs: set[float] = set()
+    for m in snap.get("markers") or []:
         if isinstance(m, dict):
-            mm = _marker_from_review_value(m, DEFAULT_FPS)
+            # fps=0.0 sentinel: the frame is derived from the clip's REAL fps in
+            # build_put_payload, never a hardcoded value.
+            mm = _marker_from_review_value(m, 0.0)
             if mm is not None:
-                marker_models.append(mm)
-    if marker_models:
-        ops.append(AddMarkers(markers=tuple(marker_models)))
-    for ident, val in (snapshot.get("fields") or {}).items():
+                desired.append(mm)
+                s = (m.get("in") or {}).get("secs")
+                if isinstance(s, (int, float)):
+                    target_secs.add(float(s))
+
+    ours_all: set[float] = set()
+    for v in versions:
+        for m in v.snapshot.get("markers") or []:
+            if isinstance(m, dict):
+                s = (m.get("in") or {}).get("secs")
+                if isinstance(s, (int, float)):
+                    ours_all.add(float(s))
+    drop_secs = tuple(sorted(ours_all - target_secs))
+
+    ops: list[ChangeOp] = []
+    # Always emit when there is something to assert OR drop, so switching to a
+    # marker-less version still strips our later additions.
+    if desired or drop_secs:
+        ops.append(ReconcileMarkers(desired=tuple(desired), drop_secs=drop_secs))
+    for ident, val in (snap.get("fields") or {}).items():
         ops.append(SetField(identifier=ident, value=val))
-    if snapshot.get("notes"):
-        ops.append(ReplaceNote(target="notes", text=str(snapshot["notes"])))
-    if snapshot.get("bigNotes"):
-        ops.append(ReplaceNote(target="bigNotes", text=str(snapshot["bigNotes"])))
+    if snap.get("notes"):
+        ops.append(ReplaceNote(target="notes", text=str(snap["notes"])))
+    if snap.get("bigNotes"):
+        ops.append(ReplaceNote(target="bigNotes", text=str(snap["bigNotes"])))
     return ops
 
 
