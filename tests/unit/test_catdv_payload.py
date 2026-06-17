@@ -125,6 +125,38 @@ def test_append_note_still_appends_when_text_differs():
     assert payload["notes"] == "old\n\n---\n\nfirst\n\n---\n\nsecond"
 
 
+def test_two_appends_to_same_note_chain_not_clobber():
+    # Two accepted notes for the same clip (e.g. two annotation runs) become
+    # two AppendNote ops with the same target. The SyncEngine merges all of a
+    # clip's pending ops into ONE ChangeSet, so both land in one payload. They
+    # must CHAIN — dropping the earlier one is silent data loss.
+    ops = [
+        AppendNote(target="notes", text="first"),
+        AppendNote(target="notes", text="second"),
+    ]
+    payload = build_put_payload(current=_clip(notes="old"), ops=ops)
+    assert payload["notes"] == "old\n\n---\n\nfirst\n\n---\n\nsecond"
+
+
+def test_two_appends_to_same_note_chain_with_no_existing():
+    ops = [
+        AppendNote(target="notes", text="a"),
+        AppendNote(target="notes", text="b"),
+    ]
+    payload = build_put_payload(current=_clip(), ops=ops)
+    assert payload["notes"] == "a\n\n---\n\nb"
+
+
+def test_two_appends_to_same_user_field_chain_not_clobber():
+    # Same clobber risk for note-mode writes routed through the fields map.
+    ops = [
+        AppendNote(target="pragafilm.popis", text="a"),
+        AppendNote(target="pragafilm.popis", text="b"),
+    ]
+    payload = build_put_payload(current=_clip(), ops=ops)
+    assert payload["fields"]["pragafilm.popis"] == "a\n\n---\n\nb"
+
+
 def test_multiple_ops_combined_in_one_payload():
     op_m = AddMarkers(markers=[Marker(name="m", in_=Timecode(secs=2.0, fps=25.0), out=None)])
     op_f = SetField(identifier="pragafilm.barva", value="true")

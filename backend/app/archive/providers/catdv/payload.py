@@ -58,8 +58,20 @@ def build_put_payload(
         payload["markers"] = existing + new_markers
 
     field_changes: dict[str, Any] = {}
+    # Accumulate note text per target across this batch's ops. The SyncEngine
+    # merges every pending op for a clip into ONE ChangeSet, so two AppendNotes
+    # to the same target arrive together; reading the live `current` afresh for
+    # each would make the second clobber the first (silent data loss). Seed
+    # lazily from the live clip on first touch, then chain off the running value.
+    note_text: dict[str, str] = {}
+
+    def _current_note_text(target: str) -> str:
+        if target not in note_text:
+            note_text[target] = _existing_text(current, target) or ""
+        return note_text[target]
 
     def _emit_note(target: str, text: str) -> None:
+        note_text[target] = text
         if target in TOP_LEVEL_NOTE_TARGETS:
             payload[target] = text
         else:
@@ -69,11 +81,12 @@ def build_put_payload(
         if isinstance(op, SetField):
             field_changes[op.identifier] = op.value
         elif isinstance(op, AppendNote):
-            existing_text = _existing_text(current, op.target) or ""
+            existing_text = _current_note_text(op.target)
             if existing_text == op.text or existing_text.endswith(NOTE_SEPARATOR + op.text):
-                # Idempotent re-drain: the append already landed (the live note
-                # is the text, or ends with the separated segment). Re-applying
-                # after a crash / lost PUT response would duplicate it, so skip.
+                # Idempotent re-drain: the append already landed (the running
+                # note is the text, or ends with the separated segment).
+                # Re-applying after a crash / lost PUT response would duplicate
+                # it, so skip.
                 continue
             if existing_text:
                 _emit_note(op.target, existing_text + NOTE_SEPARATOR + op.text)
