@@ -98,13 +98,15 @@ async def test_seed_admins_leaves_non_listed_rows_untouched(conn):
     assert row["role"] == "member" and row["status"] == "active"
 
 
-async def test_mark_seen_flips_invited_to_active(conn):
+async def test_activate_on_first_sight_flips_invited_to_active(conn):
     repo = UserRolesRepo()
     await repo.upsert_role(conn, "inv@x.com", "member", status="invited", granted_by="b@x.com")
-    await repo.mark_seen(conn, "inv@x.com")
+    await repo.activate_on_first_sight(conn, "inv@x.com")
     row = await repo.get(conn, "inv@x.com")
     assert row["status"] == "active"
-    assert row["last_seen_at"] is not None
+    # last_seen tracking was removed (ADR 0090): the column is gone, so it must
+    # not surface as a member field.
+    assert "last_seen_at" not in row
 
 
 async def test_list_filter_and_delete(conn):

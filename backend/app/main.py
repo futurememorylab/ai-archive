@@ -254,15 +254,16 @@ async def _auth_gate(request: Request, call_next):
         return _deny(request, email)
 
     request.state.current_user = CurrentUser(email=email, role=role)
-    # Best-effort last-seen touch. This is cosmetic bookkeeping on the auth
-    # critical path: a transient DB write-lock (e.g. Litestream checkpoint
-    # contention) must NEVER take the request down. Swallow + log, never 500.
+    # Best-effort invited→active flip on first sight. This is bookkeeping on the
+    # auth critical path: a transient DB write-lock (e.g. Litestream checkpoint
+    # contention) must NEVER take the request down. Swallowing is safe — an
+    # invited user already admits at the gate and flips on a later request.
     # Regression guard: tests/integration/test_auth_gate.py (prod outage
-    # 2026-06-17 — an unguarded mark_seen 500'd every authenticated request).
+    # 2026-06-17 — an unguarded write 500'd every authenticated request).
     try:
-        await core.user_roles_repo.mark_seen(core.db, email)
+        await core.user_roles_repo.activate_on_first_sight(core.db, email)
     except Exception:  # noqa: BLE001 — bookkeeping write; never block the request
-        _auth_log.warning("mark_seen failed (non-fatal); continuing", exc_info=True)
+        _auth_log.warning("activate_on_first_sight failed (non-fatal); continuing", exc_info=True)
     return await call_next(request)
 
 

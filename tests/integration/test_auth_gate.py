@@ -78,12 +78,13 @@ def test_seeded_admin_gets_through(monkeypatch, tmp_path: Path):
     assert r.status_code == 200
 
 
-def test_mark_seen_db_lock_does_not_500_the_request(monkeypatch, tmp_path: Path):
-    """`mark_seen` is best-effort last-seen bookkeeping on the auth critical
+def test_activate_on_first_sight_db_lock_does_not_500_the_request(monkeypatch, tmp_path: Path):
+    """`activate_on_first_sight` is best-effort bookkeeping on the auth critical
     path. If its write hits a transient `database is locked`, the request must
-    still be served — the cosmetic touch failing must never take the app down.
+    still be served — the invited→active flip failing must never take the app
+    down (an invited user still admits at the gate and flips on a later request).
 
-    Regression guard for the prod outage on 2026-06-17: an unguarded mark_seen
+    Regression guard for the prod outage on 2026-06-17: an unguarded write
     turned a transient SQLite write-lock into a 500 on every authenticated
     request, including `GET /`."""
     main_mod = _make_app(monkeypatch, tmp_path)
@@ -93,7 +94,7 @@ def test_mark_seen_db_lock_does_not_500_the_request(monkeypatch, tmp_path: Path)
     async def _locked(self, conn, email):
         raise sqlite3.OperationalError("database is locked")
 
-    monkeypatch.setattr(UserRolesRepo, "mark_seen", _locked)
+    monkeypatch.setattr(UserRolesRepo, "activate_on_first_sight", _locked)
     with TestClient(main_mod.app) as client:
         install_live_ctx(client.app, archive=_EmptyArchive())
         r = client.get("/")
