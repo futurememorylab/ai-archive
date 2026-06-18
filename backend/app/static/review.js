@@ -287,6 +287,11 @@ function reviewMixin(clipId) {
         this.syncState = "synced";
         this.syncedCount = this.appliedCount;  // everything enqueued has landed
         await this._refreshPublished();
+        // The draft is now live on CatDV — land the user on the Published
+        // (orange) timeline band. _refreshPublished has already refreshed the
+        // reactive `markers` array, so the just-published bars render orange
+        // without a reload instead of lingering blue in the draft band.
+        this.scope = "published";
         this._refreshVersionPanel();  // headline pill → Live vN; history updates
         Alpine.store("toast").push("Synced to CatDV — Published updated.", { level: "success" });
         return;

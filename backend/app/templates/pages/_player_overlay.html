@@ -27,6 +27,18 @@
   {% for row in rows %}
     <div class="ranges {{ row.cls }}"
          {% if row.x_show %}x-show="{{ row.x_show }}" x-cloak{% endif %}>
+      {% if row.x_for %}
+      {# Reactive published band: render bars from the live Alpine array so a
+         post-publish refresh (review.js _refreshPublished updates `markers`)
+         moves them to orange without a page reload. The static server loop can
+         only reflect page-load state, so it's skipped for this band. #}
+      <template x-for="(m, idx) in {{ row.x_for }}" :key="idx">
+        <div class="range"
+             :class="{ active: isMarkerActive(m) }"
+             :style="(() => { if (!duration) return ''; const _l = (m.in_secs / duration) * 100; const _w = (((m.out_secs != null ? m.out_secs : m.in_secs + 1) - m.in_secs) / duration) * 100; return `left:${_l}%; width:${_w}%`; })()"
+             :title="m.name"></div>
+      </template>
+      {% else %}
       {% for m in row.ranges %}
         {% if 'range-draft' in row.cls and m.item_id is defined and m.item_id is not none %}
         {# Draft range: Alpine-bound position so timeline drag moves the bar
@@ -52,6 +64,7 @@
         </div>
         {% endif %}
       {% endfor %}
+      {% endif %}
     </div>
   {% endfor %}
   <div class="playhead" :style="`left: ${pct(current)}%`"></div>
