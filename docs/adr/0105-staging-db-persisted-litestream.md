@@ -17,7 +17,7 @@ even stay seeded as a non-`ADMIN_EMAILS` admin, request-access state is lost, et
 
 The original reason for *not* persisting was the corruption guard: Litestream
 must not have two writers on one replica path, and prod already writes to
-`gs://catdv-annotator-db/litestream`. So persistence was avoided rather than given
+`gcs://catdv-annotator-db/litestream`. So persistence was avoided rather than given
 its own path.
 
 ## Alternatives
@@ -25,10 +25,10 @@ its own path.
 - **Keep staging ephemeral (status quo).** Rejected — the user needs staging
   state to survive cold starts; persistence should be the default for a real env.
 - **Reuse prod's replica path.** Hard no — two Litestream writers on
-  `gs://catdv-annotator-db/litestream` corrupts the replica.
+  `gcs://catdv-annotator-db/litestream` corrupts the replica.
 - **Separate bucket (`catdv-annotator-db-staging`).** Cleanest isolation, but
   needs a new bucket + IAM grant for the runtime SA. More infra than required.
-- **Same bucket, distinct prefix (chosen).** `gs://catdv-annotator-db/staging` —
+- **Same bucket, distinct prefix (chosen).** `gcs://catdv-annotator-db/staging` —
   a non-overlapping prefix in the existing bucket. The runtime SA
   (`catdv-annotator@catdav…`, shared with prod) already has access, so no new IAM.
 
@@ -36,7 +36,7 @@ its own path.
 
 Persist staging's DB with its own Litestream replica:
 
-- `staging.env.yaml`: `LITESTREAM_REPLICA_URL: "gs://catdv-annotator-db/staging"`
+- `staging.env.yaml`: `LITESTREAM_REPLICA_URL: "gcs://catdv-annotator-db/staging"`
   — distinct from prod's `.../litestream`. `entrypoint.sh` restores from it on
   boot and runs `litestream replicate`.
 - CI `deploy-staging` **and** `deploy/deploy-staging.sh`: add
@@ -50,8 +50,8 @@ Persist staging's DB with its own Litestream replica:
 
 - Staging DB survives cold starts: admin seeding, granted roles, batches, version
   history persist. Staging now behaves like a real persistent environment.
-- **The two replica paths MUST stay distinct.** `gs://catdv-annotator-db/staging`
-  vs prod's `gs://catdv-annotator-db/litestream` — never point either at the
+- **The two replica paths MUST stay distinct.** `gcs://catdv-annotator-db/staging`
+  vs prod's `gcs://catdv-annotator-db/litestream` — never point either at the
   other. A future third environment needs its own prefix too.
 - Storage isolation otherwise unchanged: still a separate logical DB from prod
   (different replica prefix, different `INSTANCE_ID`), just no longer ephemeral.
