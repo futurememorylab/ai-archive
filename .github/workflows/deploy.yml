@@ -1,14 +1,24 @@
 name: Deploy to Cloud Run
 
+# Promote-by-tag pipeline:
+#   * push to main (or workflow_dispatch from main)  → deploy to STAGING
+#     (catdv-annotator-staging). The image is built ONCE here, tagged by the
+#     commit SHA, so the exact same bytes can later be promoted to prod.
+#   * push a v* tag (e.g. v1.4.0)                     → promote that commit to
+#     PRODUCTION (catdv-annotator). No rebuild — it deploys the SHA image that
+#     was already built and soak-tested on staging. Tag a commit that came
+#     through main so its image exists.
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   workflow_dispatch:
 
 env:
   PROJECT_ID: catdav
   REGION: europe-west3
-  SERVICE: catdv-annotator
+  PROD_SERVICE: catdv-annotator
+  STAGING_SERVICE: catdv-annotator-staging
   IMAGE: europe-west3-docker.pkg.dev/catdav/catdv-annotator/app
 
 jobs:
@@ -26,8 +36,12 @@ jobs:
       - name: Import contracts
         run: lint-imports
 
-  deploy:
+  # ── main → STAGING. Builds + pushes the SHA image (the single build of the
+  #    pipeline), then deploys it to the staging service. Staging is isolated
+  #    from prod: CatDV-offline, ephemeral DB (no Litestream), no secrets. ──
+  deploy-staging:
     needs: test
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -48,6 +62,55 @@ jobs:
             -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" .
           docker push "$IMAGE:${{ github.sha }}"
           docker push "$IMAGE:latest"
+      - name: Deploy staging
+        # Mirrors deploy/deploy-staging.sh. VPN/CatDV is enabled on staging
+        # (ADR 0104), so it needs the WireGuard key + CatDV password — staging
+        # reuses PROD'S wg-private-key + catdv-password secrets. GEMINI is left
+        # out (annotation runs would fail without it; add gemini-api-key:latest
+        # if you want end-to-end AI in staging). --no-cpu-throttling so
+        # Litestream flushes between requests and on SIGTERM teardown — staging
+        # now persists its DB to its own replica path (ADR 0105/0077). --iap is
+        # idempotent and keeps IAP enforced on every deploy. See
+        # deploy/staging.env.yaml.
+        run: |
+          gcloud run deploy "$STAGING_SERVICE" \
+            --image="$IMAGE:${{ github.sha }}" \
+            --region="$REGION" \
+            --service-account=catdv-annotator@${PROJECT_ID}.iam.gserviceaccount.com \
+            --no-allow-unauthenticated \
+            --iap \
+            --min-instances=0 --max-instances=1 --no-cpu-throttling \
+            --memory=1Gi --cpu=1 \
+            --env-vars-file=deploy/staging.env.yaml \
+            --set-secrets="CATDV_PASSWORD=catdv-password:latest,WG_PRIVATE_KEY=wg-private-key:latest"
+
+  # ── v* tag → PRODUCTION. Promotes an already-built, staging-tested commit.
+  #    Deploys the exact SHA image; it does NOT rebuild. ───────────────────
+  deploy-prod:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Authenticate to Google Cloud (WIF, keyless)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOYER_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Verify the promoted commit was built on main
+        # Promote-by-tag deploys the SHA image built when this commit hit main.
+        # If you tag a commit that never went through main, that image won't
+        # exist — fail fast with a clear message instead of a cryptic deploy
+        # error. Re-tag a commit that's on main (its main build is the image).
+        run: |
+          if ! gcloud artifacts docker images describe "$IMAGE:${{ github.sha }}" >/dev/null 2>&1; then
+            echo "::error::No image $IMAGE:${{ github.sha }} in Artifact Registry. Tag a commit that was built on main (the push to main builds and pushes its SHA image), then push the tag again."
+            exit 1
+          fi
       - name: Deploy
         # max-instances=1 is correctness, not cost: one CatDV seat, one
         # Litestream writer, one in-process write queue. Never raise it;
@@ -56,7 +119,7 @@ jobs:
         # Keep --no-cpu-throttling so Litestream + background loops run
         # between requests and the teardown gets CPU. See ADR 0077.
         run: |
-          gcloud run deploy "$SERVICE" \
+          gcloud run deploy "$PROD_SERVICE" \
             --image="$IMAGE:${{ github.sha }}" \
             --region="$REGION" \
             --service-account=catdv-annotator@${PROJECT_ID}.iam.gserviceaccount.com \

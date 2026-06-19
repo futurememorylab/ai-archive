@@ -1,4 +1,4 @@
-# 0103. Published timeline band is reactive; scope auto-switches to Published after a confirmed publish
+# 0106. Published (and draft) timeline bands are reactive; scope auto-switches to Published after a confirmed publish
 
 **Date:** 2026-06-18
 **Status:** Accepted
