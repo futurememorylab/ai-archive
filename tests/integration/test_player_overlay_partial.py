@@ -79,6 +79,41 @@ def test_draft_range_carries_item_id_and_drag_binding():
     assert "_draftItem(42)" in html
 
 
+def test_draft_range_reactive_when_x_for_set():
+    """A draft row that opts into `x_for` renders an Alpine x-for over the live
+    draftMarkers array — so a freshly-finished annotation run (clipAnnotate
+    swapDraft → refreshDraft repopulates draftMarkers) shows its markers on the
+    timeline immediately, without a page reload. Membership AND position are
+    Alpine-driven, and the bars stay draggable (drag handles + pointerdown
+    bound to the live item via m.item_id)."""
+    rows = [
+        {
+            "key": "draft",
+            "ranges": [{"in_secs": 1.0, "out_secs": 3.0, "name": "Scene 1", "item_id": 42}],
+            "cls": "draft-ranges range-draft",
+            "alpine_list": None,
+            "x_for": "draftMarkers",
+            "draft": True,
+            "x_show": "scope === 'draft'",
+        },
+    ]
+    html = _render_overlay(rows)
+    # Reactive: an Alpine loop over the live array keyed by stable item_id, so
+    # added/removed draft markers appear/disappear live.
+    assert 'x-for="m in draftMarkers"' in html
+    assert ':key="m.item_id"' in html
+    # Drag still works — bound to the live loop item, not a baked-in literal id.
+    assert "startMarkerDrag($event, m.item_id, 'move')" in html
+    assert "startMarkerDrag($event, m.item_id, 'in')" in html
+    assert "startMarkerDrag($event, m.item_id, 'out')" in html
+    assert "editingItemId === m.item_id" in html
+    assert "range-handle in" in html and "range-handle out" in html
+    # No page-load-frozen server loop for the reactive band: neither a static
+    # left/width style= nor a literal-id _draftItem(42) lookup.
+    assert "left: 10.0%" not in html
+    assert "_draftItem(42)" not in html
+
+
 def test_published_range_stays_static_no_drag():
     """Published (non-draft) ranges keep the static server-computed style and
     gain no drag bindings."""
@@ -95,3 +130,30 @@ def test_published_range_stays_static_no_drag():
     assert "startMarkerDrag" not in html
     assert "range-handle" not in html
     assert "style=" in html  # static left/width preserved
+
+
+def test_published_range_reactive_when_x_for_set():
+    """A published row that opts into `x_for` renders an Alpine x-for over the
+    named array with a REACTIVE :style — so refreshing the Alpine `markers`
+    array (after a publish syncs) moves the orange bars without a page reload.
+    The static server `{% for %}` (which can't reflect freshly-published
+    markers) is skipped for this band."""
+    rows = [
+        {
+            "key": "markers",
+            "ranges": [{"in_secs": 1.0, "out_secs": 3.0, "name": "Cut"}],
+            "cls": "range-cur",
+            "alpine_list": "markers",
+            "x_for": "markers",
+            "x_show": "scope === 'published'",
+        },
+    ]
+    html = _render_overlay(rows)
+    # Reactive: an Alpine loop over the live array, position bound dynamically.
+    assert 'x-for="(m, idx) in markers"' in html
+    assert ":style=" in html
+    assert "isMarkerActive(m)" in html
+    # No static server-computed left/width for the reactive band (would freeze
+    # the bars at page-load state and miss freshly-published markers).
+    assert "left: 10.0%" not in html  # 1.0/10.0*100, the static expansion
+    assert "startMarkerDrag" not in html  # published band is not draggable
