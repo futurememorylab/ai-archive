@@ -71,3 +71,32 @@ array (which also feeds the aside).
 - Not addressed here: synced items still appear in the draft band if the user
   manually switches back to `draft` scope (R2). Acceptable while Published is the
   post-publish landing band; revisit if the split-band view returns.
+
+## Addendum (2026-06-19): the draft band had the inverse bug
+
+Operator report: after an **annotation run finishes**, the new draft markers
+don't appear on the timeline until a page reload.
+
+Same root-cause family as R3, on the other band. The draft band was a
+server-rendered `{% for m in row.ranges %}` loop, so each `.range` div was baked
+in for the draft markers that existed **at page load**. Its `x-show` / `:style`
+reactively reflected *edits* to those existing markers (via `_draftItem(id)`),
+but a marker with no page-load div had nowhere to render. `clipAnnotate.swapDraft`
+→ `reviewMixin.refreshDraft()` repopulates the live `draftMarkers` array, yet the
+band — keyed to page-load membership — could not show the additions. Worse, the
+common path opens a clip with **no** draft (`ranges = []`), so a first annotation
+run rendered zero bars until reload.
+
+**Decision:** extend the same opt-in. `_player_overlay.html` renders a reactive
+`<template x-for="m in {row.x_for}" :key="m.item_id">` for the draft band when a
+row sets **both** `x_for` and `draft`, carrying the full draggable/editable markup
+(item_id, editing class, in/out handles) bound to the live loop item rather than a
+baked-in literal id. `clip_detail.html`'s draft row opts in with
+`"x_for": "draftMarkers", "draft": True`. Membership *and* position are now
+Alpine-driven, so freshly-annotated markers appear immediately and deletes/restores
+track live. The static draft sub-branch stays as the no-`x_for` fallback (parity
+with the static published loop); studio is unaffected.
+
+Guard: `test_player_overlay_partial.py::test_draft_range_reactive_when_x_for_set`
+pins the reactive draft contract (x-for over `draftMarkers`, drag bound to
+`m.item_id`, no page-load-frozen `_draftItem(42)` literal). Full suite green (1754).
