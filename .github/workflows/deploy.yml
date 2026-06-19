@@ -67,9 +67,11 @@ jobs:
         # (ADR 0104), so it needs the WireGuard key + CatDV password — staging
         # reuses PROD'S wg-private-key + catdv-password secrets. GEMINI is left
         # out (annotation runs would fail without it; add gemini-api-key:latest
-        # if you want end-to-end AI in staging). No --no-cpu-throttling: staging
-        # has no Litestream replica to flush. --iap is idempotent and keeps IAP
-        # enforced on every deploy. See deploy/staging.env.yaml + ADR 0077.
+        # if you want end-to-end AI in staging). --no-cpu-throttling so
+        # Litestream flushes between requests and on SIGTERM teardown — staging
+        # now persists its DB to its own replica path (ADR 0105/0077). --iap is
+        # idempotent and keeps IAP enforced on every deploy. See
+        # deploy/staging.env.yaml.
         run: |
           gcloud run deploy "$STAGING_SERVICE" \
             --image="$IMAGE:${{ github.sha }}" \
@@ -77,7 +79,7 @@ jobs:
             --service-account=catdv-annotator@${PROJECT_ID}.iam.gserviceaccount.com \
             --no-allow-unauthenticated \
             --iap \
-            --min-instances=0 --max-instances=1 \
+            --min-instances=0 --max-instances=1 --no-cpu-throttling \
             --memory=1Gi --cpu=1 \
             --env-vars-file=deploy/staging.env.yaml \
             --set-secrets="CATDV_PASSWORD=catdv-password:latest,WG_PRIVATE_KEY=wg-private-key:latest"

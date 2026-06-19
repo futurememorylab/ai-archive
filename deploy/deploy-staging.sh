@@ -44,7 +44,7 @@ TAG="staging-$(date +%Y%m%d-%H%M%S)"
 echo ">> Building ${IMAGE}:${TAG} from the current tree via Cloud Build…"
 gcloud builds submit --project "$PROJECT_ID" --tag "${IMAGE}:${TAG}" .
 
-echo ">> Deploying ${SERVICE} (scale-to-zero, CatDV connect-on-demand, ephemeral DB)…"
+echo ">> Deploying ${SERVICE} (scale-to-zero, CatDV connect-on-demand, persisted DB)…"
 # VPN/CatDV is enabled on staging (ADR 0104): inject the WireGuard key + CatDV
 # password (staging reuses prod's secrets). Must match the CI staging deploy in
 # .github/workflows/deploy.yml so a local deploy doesn't strip the tunnel config.
@@ -53,7 +53,7 @@ gcloud run deploy "$SERVICE" \
   --image "${IMAGE}:${TAG}" \
   --service-account "$RUNTIME_SA" \
   --no-allow-unauthenticated \
-  --min-instances=0 --max-instances=1 \
+  --min-instances=0 --max-instances=1 --no-cpu-throttling \
   --memory=1Gi --cpu=1 \
   --env-vars-file=deploy/staging.env.yaml \
   --set-secrets="CATDV_PASSWORD=catdv-password:latest,WG_PRIVATE_KEY=wg-private-key:latest"
