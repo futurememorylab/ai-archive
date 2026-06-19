@@ -63,10 +63,12 @@ jobs:
           docker push "$IMAGE:${{ github.sha }}"
           docker push "$IMAGE:latest"
       - name: Deploy staging
-        # Mirrors deploy/deploy-staging.sh. No --set-secrets (CatDV is offline
-        # on staging so no CATDV_PASSWORD/WG_PRIVATE_KEY; GEMINI is optional and
-        # AI runs simply fail without it). No --no-cpu-throttling: staging has
-        # no Litestream replica to flush. --iap is idempotent and keeps IAP
+        # Mirrors deploy/deploy-staging.sh. VPN/CatDV is enabled on staging
+        # (ADR 0104), so it needs the WireGuard key + CatDV password — staging
+        # reuses PROD'S wg-private-key + catdv-password secrets. GEMINI is left
+        # out (annotation runs would fail without it; add gemini-api-key:latest
+        # if you want end-to-end AI in staging). No --no-cpu-throttling: staging
+        # has no Litestream replica to flush. --iap is idempotent and keeps IAP
         # enforced on every deploy. See deploy/staging.env.yaml + ADR 0077.
         run: |
           gcloud run deploy "$STAGING_SERVICE" \
@@ -77,7 +79,8 @@ jobs:
             --iap \
             --min-instances=0 --max-instances=1 \
             --memory=1Gi --cpu=1 \
-            --env-vars-file=deploy/staging.env.yaml
+            --env-vars-file=deploy/staging.env.yaml \
+            --set-secrets="CATDV_PASSWORD=catdv-password:latest,WG_PRIVATE_KEY=wg-private-key:latest"
 
   # ── v* tag → PRODUCTION. Promotes an already-built, staging-tested commit.
   #    Deploys the exact SHA image; it does NOT rebuild. ───────────────────
