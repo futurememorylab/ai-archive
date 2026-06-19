@@ -163,6 +163,29 @@ def test_clip_detail_renders_draft_when_annotation_exists(monkeypatch, tmp_path)
         assert "Scene 1" in r.text  # present as a JSON value in draftMarkers
 
 
+def test_published_timeline_band_visible_in_both_scopes(monkeypatch, tmp_path):
+    """The published timeline band carries NO scope x-show gate, so it renders in
+    draft scope too — letting published markers show above the draft band
+    (prompt-studio-style split). The split itself is reserved only when published
+    markers exist, gated by the `has-published-markers` class on .detail so an unpublished
+    clip's draft band keeps full height instead of leaving an empty top strip."""
+    import re
+
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(101),)))
+        r = client.get("/clips/101")
+        assert r.status_code == 200
+        # The published band (.ranges.range-cur) must not be scope-gated.
+        m = re.search(r'<div class="ranges range-cur"([^>]*)>', r.text)
+        assert m, "published timeline band (.ranges.range-cur) not found"
+        assert "x-show" not in m.group(1), "published band must show in draft scope too"
+        # Split is keyed on whether published markers exist.
+        assert "'has-published-markers': markers.length > 0" in r.text
+        # The draft band stays scope-gated to draft.
+        assert 'x-show="scope === \'draft\'"' in r.text
+
+
 def test_clips_draft_partial_returns_empty_state(monkeypatch, tmp_path):
     # Redesigned: _anno_draft.html is a pure Alpine template; there is no
     # server-rendered empty-state hook. The partial renders the review-bar

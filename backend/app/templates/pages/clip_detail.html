@@ -13,7 +13,7 @@
 <script>localStorage.setItem("catdv:lastClipId", "{{ clip.id }}");</script>
 <div class="detail"
      data-rerun-confirm="{{ 'true' if publish_status.state == 'draft' else 'false' }}"
-     :class="{ 'is-draft': scope === 'draft', 'live-active': liveSession.state !== 'idle' }"
+     :class="{ 'is-draft': scope === 'draft', 'has-published-markers': markers.length > 0, 'live-active': liveSession.state !== 'idle' }"
      x-data='Object.assign(
        player({{ clip.fps }}, {{ clip.duration_secs }}, {{ clip.markers|tojson }}, {{ draft_arrays.markers|tojson }}),
        clipAnnotate({{ clip.id }}, "{{ clip.kind }}"),
@@ -105,7 +105,6 @@
             "cls": "range-cur",
             "alpine_list": "markers",
             "x_for": "markers",
-            "x_show": "scope === 'published'",
           },
           {
             "key": "draft",
