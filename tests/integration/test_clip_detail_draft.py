@@ -186,6 +186,24 @@ def test_published_timeline_band_visible_in_both_scopes(monkeypatch, tmp_path):
         assert 'x-show="scope === \'draft\'"' in r.text
 
 
+def test_clip_detail_has_player_annotations_resizer(monkeypatch, tmp_path):
+    """The player↔annotations divider reuses the studio split-pane component
+    (studioResize.js handles data-studio-resizer='detail-side', writing
+    --detail-side-w on .detail). The page renders the divider and the inline
+    restore script that re-applies the saved width before paint."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(101),)))
+        r = client.get("/clips/101")
+        assert r.status_code == 200
+        # Reused studio resizer component, clip-detail variant.
+        assert 'class="studio-resizer is-detail-side"' in r.text
+        assert 'data-studio-resizer="detail-side"' in r.text
+        # Width persists/restores via localStorage (no flash).
+        assert "catdv:detailLayout" in r.text
+        assert "--detail-side-w" in r.text
+
+
 def test_clips_draft_partial_returns_empty_state(monkeypatch, tmp_path):
     # Redesigned: _anno_draft.html is a pure Alpine template; there is no
     # server-rendered empty-state hook. The partial renders the review-bar

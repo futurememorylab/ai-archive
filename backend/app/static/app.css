@@ -473,14 +473,19 @@ a { color: inherit; text-decoration: none; }
 /* ─── page-detail ────────────────────────────────────────────────────── */
 .detail {
   display: grid;
-  grid-template-columns: 1fr 400px;
+  grid-template-columns: 1fr 6px var(--detail-side-w, 400px);
   grid-template-rows: 44px 1fr;
   grid-template-areas:
-    "hdr   hdr"
-    "play  side";
+    "hdr   hdr  hdr"
+    "play  rez  side";
   height: 100%;
   background: var(--bg);
 }
+/* Player ↔ annotations divider. Reuses the .studio-resizer component
+   (studioResize.js handles data-studio-resizer="detail-side", writing
+   --detail-side-w); only the grid placement + column axis are page-specific. */
+.detail .studio-resizer.is-detail-side { grid-area: rez; cursor: col-resize; }
+.detail .studio-resizer.is-detail-side::after { width: 3px; height: 28px; }
 .detail-hdr {
   grid-area: hdr;
   display: flex; align-items: center; gap: 14px;

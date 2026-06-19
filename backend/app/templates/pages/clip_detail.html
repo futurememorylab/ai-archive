@@ -28,6 +28,20 @@
      )'
      x-init="_reviewInit(); if (new URLSearchParams(location.search).get('scope') === 'draft') scope = 'draft'"
      @keydown.window="handleKey($event)">
+  {# Restore the saved annotation-column width before the panes paint (set by
+     the detail-side resizer; see studioResize.js). currentScript is the .detail
+     ancestor's child, so this runs synchronously with no layout flash. #}
+  <script>
+    (function () {
+      try {
+        var p = JSON.parse(localStorage.getItem("catdv:detailLayout") || "{}");
+        if (p.sideW) {
+          document.currentScript.closest(".detail")
+            .style.setProperty("--detail-side-w", p.sideW);
+        }
+      } catch (e) { /* localStorage unavailable — use the default width */ }
+    })();
+  </script>
   <header class="detail-hdr">
     <template x-if="liveSession.state === 'idle'">
       <div class="detail-hdr-row">
@@ -121,6 +135,13 @@
       {% include "pages/_player.html" %}
     {% endwith %}
   </section>
+
+  {# Player ↔ annotations resizer — reuses the studio split-pane component
+     (studioResize.js, data-studio-resizer="detail-side") to drag the
+     annotation column's width. Width persists in localStorage and is restored
+     by the inline script at the top of .detail. #}
+  <div class="studio-resizer is-detail-side" data-studio-resizer="detail-side"
+       role="separator" aria-orientation="vertical" tabindex="-1"></div>
 
   <aside class="anno-col">
     {# Non-scrolling header: the Published/Draft tabs with the version panel
