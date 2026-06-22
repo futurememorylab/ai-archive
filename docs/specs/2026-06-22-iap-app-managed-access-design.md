@@ -8,7 +8,7 @@ layer, default-deny gate, admin console, and access-request flow). This spec cha
 mechanism decision** from the 06-13/06-14 work — the *shape of the IAP edge binding* — and
 the UI/docs copy that depended on it. It does **not** change the seam, the JWT verification,
 the roles model, or the admin console.
-**Decision record:** ADR 0103 (to be written this session).
+**Decision record:** ADR 0113.
 
 ## Why this spec exists
 
@@ -73,7 +73,7 @@ DB row an admin must approve). See "Out of scope / deferred."
    **`allAuthenticatedUsers`** on the `catdv-annotator` Cloud Run service, replacing the
    per-user grants (which become redundant and should be removed for cleanliness).
 2. **Hard invariant: `allAuthenticatedUsers`, never `allUsers`.** `allUsers` would expose
-   the app to the anonymous internet. This invariant is documented loudly in `DEPLOY.md` and
+   the app to the anonymous internet. This invariant is documented loudly in `deploy/README.md` and
    in the `cloudrun.env.yaml` comments; the deploy runbook calls it out as a check.
 3. **Self-service request stays on (flavour A1).** The denial page keeps its "Request
    access" button; reached-but-unroled users self-request, admins approve in the console.
@@ -140,7 +140,7 @@ against the *current* path → `GET /access/request?gcp-iap-mode=…` → 405. (
    `request.state.current_user` when no `email` query param is present, so identity still
    shows after the redirect.
 2. `access.html`: change the "Use a different account" href to the **absolute**
-   `/?gcp-iap-mode=CLEAR_LOGIN_COOKIE` (matching the topbar logout, ADR 0093 era), so it can
+   `/?gcp-iap-mode=CLEAR_LOGIN_COOKIE` (matching the topbar logout), so it can
    never depend on the current path. Belt-and-suspenders against the same class of bug.
 
 ### 3. Config & docs
@@ -148,10 +148,10 @@ against the *current* path → `GET /access/request?gcp-iap-mode=…` → 405. (
 - `deploy/cloudrun.env.yaml`: fix the `ADMIN_EMAILS` comment that claims each entry "must
   ALSO be IAP-allow-listed (roles/iap.httpsResourceAccessor) or it never reaches the app."
   Under `allAuthenticatedUsers`, admin emails only need to be valid Google accounts.
-- `docs/DEPLOY.md`: add the `allAuthenticatedUsers` binding step, the **never-`allUsers`**
+- `deploy/README.md`: add the `allAuthenticatedUsers` binding step, the **never-`allUsers`**
   invariant, the org-policy pre-check, and how to revert to per-user allowlist if ever
   needed.
-- `docs/adr/0103-*.md` + `docs/decisions.md`: record the decision and rationale (IAP =
+- `docs/adr/0113-*.md` + `docs/decisions.md`: record the decision and rationale (IAP =
   authN, app = sole authZ; rejected disable-IAP and app-managed-group; the accepted,
   deferred request-page exposure).
 
@@ -162,9 +162,10 @@ against the *current* path → `GET /access/request?gcp-iap-mode=…` → 405. (
   requests into a single pending row (no-op if any row exists), so it cannot pile up per
   person. A determined single account could still churn writes; if abuse ever appears, add
   per-identity + global rate-limiting. Tracked as a follow-up, not built now.
-- **ADR 0043 — raw Gemini API key shipped to the browser.** The real remaining multi-user
-  security gap, but a separate backend-proxy project, orthogonal to access control. Named
-  here so its deferral is conscious, not a surprise.
+- **ADR 0043 — raw Gemini API key shipped to the browser.** Was the *other* multi-user
+  security gap; **closed by ADR 0112 (#92, server-side ephemeral tokens)** on `main`, which
+  this branch builds on. No longer outstanding — noted here only because earlier drafts
+  flagged it as the blocker.
 
 ## Testing
 
