@@ -2,6 +2,48 @@
 // Markers must arrive sorted ascending by in_secs (see clip_detail view-model);
 // prev/next-marker navigation depends on it.
 
+// ─── follow-playback pure helpers ──────────────────────────────────
+// Kept free of `this` and the DOM so the comfort-band logic is easy to
+// reason about. Behavioural coverage is the spec's manual acceptance flows;
+// tests/unit/test_anno_follow_playback.py pins their presence.
+
+// Index of the first marker whose [in,out] window contains `current`
+// (markers arrive in_secs-ascending, so "first" = earliest-starting). A
+// marker with no out_secs gets a 40ms window, matching isMarkerActive.
+// Returns -1 when the playhead is in a gap.
+function annoActiveAnchorIndex(markers, current) {
+  for (let i = 0; i < markers.length; i++) {
+    const m = markers[i];
+    if (m.in_secs == null) continue;
+    const out = m.out_secs != null ? m.out_secs : m.in_secs + 0.04;
+    if (current >= m.in_secs && current <= out) return i;
+  }
+  return -1;
+}
+
+// Comfort-band, nearest-edge scroll. The band is the viewport inset by
+// `bandMargin` top and bottom. If the anchor card is fully inside the band,
+// return null (no movement — this is why an already-visible marker, e.g. the
+// first one, never scrolls). Otherwise scroll the minimum needed to bring the
+// card to the nearest band edge. Jumps longer than one viewport are instant
+// ('auto') so a far seek doesn't slowly glide.
+function annoComputeScroll({ scrollTop, viewportHeight, cardTop, cardHeight, bandMargin }) {
+  const bandTop = bandMargin;
+  const bandBottom = viewportHeight - bandMargin;
+  const cardBottom = cardTop + cardHeight;
+  let target;
+  if (cardTop < bandTop) {
+    target = scrollTop + (cardTop - bandTop);          // bring top to band top
+  } else if (cardBottom > bandBottom) {
+    target = scrollTop + (cardBottom - bandBottom);    // bring bottom to band bottom
+  } else {
+    return null;                                        // already inside the band
+  }
+  if (target < 0) target = 0;
+  const behavior = Math.abs(target - scrollTop) > viewportHeight ? "auto" : "smooth";
+  return { scrollTo: target, behavior };
+}
+
 document.addEventListener("alpine:init", () => {
   Alpine.data("player", (fps, duration, markers, draftMarkers) => ({
     fps: fps || 25,
