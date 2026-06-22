@@ -9,6 +9,15 @@ from backend.app.services.pricing import (
 )
 from backend.app.services.telemetry_capture import TokenUsage
 
+
+@pytest.fixture(autouse=True)
+def _reset_cards():
+    from backend.app.services import pricing
+
+    yield
+    pricing.set_rate_cards(pricing.SEED_RATE_CARDS)
+
+
 CARD = RateCard(
     input_text_video_image_per_1m=0.10,
     input_audio_per_1m=0.30,

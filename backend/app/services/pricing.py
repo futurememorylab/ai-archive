@@ -38,9 +38,10 @@ class RateCard:
     source_url: str  # provenance: where this rate was read (spec §5 audit trail)
 
 
-# Rates verified 2026-06-07 from:
-# https://cloud.google.com/vertex-ai/generative-ai/pricing
-RATE_CARDS: dict[str, RateCard] = {
+# Seed values — the offline fallback and the source the PricingService
+# reconciles into the model_config table at boot. The live lookup uses
+# _ACTIVE_CARDS (populated from the DB); see set_rate_cards/rate_cards.
+SEED_RATE_CARDS: dict[str, RateCard] = {
     "gemini-2.5-flash-lite": RateCard(
         input_text_video_image_per_1m=0.10,
         input_audio_per_1m=0.30,
@@ -65,6 +66,22 @@ RATE_CARDS: dict[str, RateCard] = {
     ),
 }
 
+# Process-wide active cache. Defaults to the seed so imports work before the
+# DB is wired (and in pure-unit tests); PricingService.reload() swaps in the
+# DB rows at boot and after every admin edit.
+_ACTIVE_CARDS: dict[str, RateCard] = dict(SEED_RATE_CARDS)
+
+
+def rate_cards() -> dict[str, RateCard]:
+    """The active per-model rate cards (DB-backed once the app has booted)."""
+    return _ACTIVE_CARDS
+
+
+def set_rate_cards(cards: dict[str, RateCard]) -> None:
+    """Replace the active cache (called by PricingService after load/edit)."""
+    _ACTIVE_CARDS.clear()
+    _ACTIVE_CARDS.update(cards)
+
 
 def compute_cost(
     usage: TokenUsage, model: str, *, card: RateCard | None = None
@@ -72,7 +89,7 @@ def compute_cost(
     """Cost in USD for one call, or (None, version) when the model is
     not in the card. Never raises — a missing rate must not fail a run."""
     if card is None:
-        card = RATE_CARDS.get(model)
+        card = _ACTIVE_CARDS.get(model)
     if card is None:
         log.warning("pricing: no rate card for model %r; cost_usd=NULL", model)
         return None, PRICING_VERSION

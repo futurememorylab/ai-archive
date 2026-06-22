@@ -14,7 +14,7 @@ clip (ADR 0046).
 from dataclasses import dataclass
 
 from backend.app.media_kind import classify_media_kind
-from backend.app.services.pricing import RATE_CARDS, compute_cost
+from backend.app.services.pricing import compute_cost, rate_cards
 from backend.app.services.telemetry_capture import TokenUsage
 from backend.app.services.telemetry_capture import prompt_hash as _prompt_hash
 
@@ -165,7 +165,7 @@ async def estimate_clips(
         confidence = "rough"
 
     def _cost(out_tokens: float) -> float | None:
-        if model not in RATE_CARDS:
+        if model not in rate_cards():
             return None
         # Approximate the modality split: media tokens at the video rate
         # bucket (correct for video/image; audio clips are billed higher —

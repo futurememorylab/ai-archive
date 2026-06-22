@@ -14,7 +14,7 @@ from backend.app.routes.pages.admin_access import _members_ctx as _access_member
 from backend.app.routes.pages.templates import templates
 from backend.app.services.enum_service import EnumError
 from backend.app.services.errors import humanise
-from backend.app.services.pricing import RATE_CARDS
+from backend.app.services.pricing import rate_cards
 
 router = APIRouter(tags=["pages"])
 
@@ -31,7 +31,7 @@ async def _enum_view(ctx, key: str) -> dict:
             "label": v.label,
             "enabled": v.enabled,
             "is_default": v.is_default,
-            "no_rate_card": is_model_enum and v.value not in RATE_CARDS,
+            "no_rate_card": is_model_enum and v.value not in rate_cards(),
         }
         for v in values
     ]
