@@ -205,6 +205,44 @@ request with a fresh ID token for your account — no VPN, no IAP, no
 service key. If you get 403, you're missing `roles/run.invoker` (granted
 in step 8 of the one-time setup).
 
+## IAP access control (who can sign in)
+
+Cloud Run IAP fronts all ingress in prod (`AUTH_BACKEND=iap`). The split:
+
+- **IAP authenticates.** Google forces a login at the edge and injects a signed
+  assertion the app verifies (`auth/adapters/iap.py`). It cannot fail open.
+- **The app authorizes.** The default-deny gate (`main.py`) + the `user_roles`
+  table decide who is actually admitted and as what role. *Reaching the edge ≠
+  being let in.*
+
+**The edge is bound to `allAuthenticatedUsers`** — any signed-in Google account
+can REACH the app; the app's denial page + admin approval decide the rest. This
+is what lets you manage users entirely from `/admin` → Access & Permissions with
+no console step (ADR 0113). Grant it once per service:
+
+```bash
+gcloud iap web add-iam-policy-binding --resource-type=cloud-run \
+  --service=catdv-annotator --region=europe-west3 \
+  --member=allAuthenticatedUsers --role=roles/iap.httpsResourceAccessor
+```
+
+🚫 **Never `allUsers`.** That is the anonymous public internet;
+`allAuthenticatedUsers` requires a real Google login. One word apart, opposite
+security posture — double-check the member before you Save.
+
+**Org policy:** if the binding is rejected with an
+`iam.allowedPolicyMemberDomains` / domain-restricted-sharing error, the org
+policy forbids `allAuthenticatedUsers` and this model isn't deployable as-is.
+
+**Adding / removing users is app-side only:** `/admin` → Access & Permissions →
+**Add member** (or **Accept** a pending request) to add; **Revoke** to remove.
+No per-user `gcloud`/console step. Deploy-time owners come from `ADMIN_EMAILS`.
+
+**Reverting to a per-user allowlist** (if ever needed): remove the
+`allAuthenticatedUsers` binding and instead grant
+`roles/iap.httpsResourceAccessor` to each `user:<email>`. The app keeps working;
+only the set of people who can reach the edge narrows.
+
 ## Local vs cloud environment variables
 
 Source of truth for names, types, and defaults:
