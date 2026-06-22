@@ -1,3 +1,5 @@
+import json
+
 import pytest
 import respx
 from httpx import Response
@@ -101,17 +103,56 @@ class _SettingsWithKey(_Settings):
     gemini_api_key = "test-key-XYZ"
 
 
+AUTH_TOKENS_ENDPOINT = "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
+
+
 @pytest.mark.asyncio
-async def test_mint_ephemeral_token_returns_raw_api_key():
-    """Live audio uses the raw GEMINI_API_KEY as the WSS `?key=` value.
-    Ephemeral tokens (authTokens.create) opened the WSS handshake but
-    Google rejected the bound setup with close code 1007 — recorded in
-    docs/decisions.md 2026-05-23. The function keeps its signature so
-    callers don't change, and accepts the `setup` arg as a no-op for
-    forward compatibility.
+@respx.mock
+async def test_mint_ephemeral_token_mints_bound_single_use_token():
+    """The raw GEMINI_API_KEY never goes to the browser. mint_ephemeral_token
+    POSTs to v1alpha auth_tokens, binding the full `setup` into the token via
+    `bidiGenerateContentSetup`, and returns the short-lived token name (which
+    the browser presents as `?access_token=`). See ADR 0112 (supersedes 0043).
     """
-    tok = await mint_ephemeral_token(setup={"anything": "ignored"}, settings=_SettingsWithKey())
-    assert tok == "test-key-XYZ"
+    route = respx.post(AUTH_TOKENS_ENDPOINT).mock(
+        return_value=Response(200, json={"name": "auth_tokens/ephemeral-abc123"})
+    )
+    setup = {
+        "model": "models/gemini-2.5-flash-native-audio-latest",
+        "generationConfig": {"responseModalities": ["AUDIO"]},
+        "systemInstruction": {"parts": [{"text": "TAJNÝ SYSTÉM"}]},
+        "tools": [{"googleSearch": {}}],
+    }
+    tok = await mint_ephemeral_token(setup=setup, settings=_SettingsWithKey())
+
+    assert tok == "auth_tokens/ephemeral-abc123"
+    assert route.called
+    req = route.calls[0].request
+    # The real key authenticates the MINT request (server→Google), not the browser.
+    assert "key=test-key-XYZ" in str(req.url)
+    body = json.loads(req.content)
+    assert body["uses"] == 1
+    assert body["expireTime"] and body["newSessionExpireTime"]
+    # The full setup — model, system prompt, tools — is bound into the token.
+    assert body["bidiGenerateContentSetup"] == setup
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_mint_ephemeral_token_raises_when_no_name_returned():
+    respx.post(AUTH_TOKENS_ENDPOINT).mock(return_value=Response(200, json={}))
+    with pytest.raises(RuntimeError, match="token"):
+        await mint_ephemeral_token(setup={"model": "x"}, settings=_SettingsWithKey())
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_mint_ephemeral_token_raises_on_http_error():
+    respx.post(AUTH_TOKENS_ENDPOINT).mock(
+        return_value=Response(403, json={"error": {"message": "bad key"}})
+    )
+    with pytest.raises(RuntimeError):
+        await mint_ephemeral_token(setup={"model": "x"}, settings=_SettingsWithKey())
 
 
 @pytest.mark.asyncio
