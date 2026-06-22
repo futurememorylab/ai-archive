@@ -7,6 +7,7 @@ import asyncio
 import logging
 import re
 import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, Self
 
@@ -14,6 +15,10 @@ import httpx
 from pydantic import ValidationError
 
 from backend.app.models.catdv import Envelope
+
+# Issue #78: report absolute bytes-on-disk + total (0 = unknown) during a
+# download. Threaded MediaPrefetcher -> backend -> resolver -> here.
+ProgressCb = Callable[[int, int], Awaitable[None]]
 
 _DEFAULT_CHUNK = 1 << 16
 
@@ -265,7 +270,14 @@ class CatdvClient:
             self._last_activity = time.monotonic()
         return env
 
-    async def download_proxy(self, clip_id: int, dest: Path, chunk_size: int = 1024 * 1024) -> None:
+    async def download_proxy(
+        self,
+        clip_id: int,
+        dest: Path,
+        chunk_size: int = 1024 * 1024,
+        *,
+        progress_cb: "ProgressCb | None" = None,
+    ) -> None:
         """Stream the proxy for a clip to `dest`, resuming across tunnel stalls.
 
         The cloud pulls proxy media through the low-MTU WireGuard tunnel, where
@@ -308,7 +320,12 @@ class CatdvClient:
                         # ignored Range — rewrite from byte 0, don't append a
                         # whole body onto the partial.
                         append = resp.status_code == 206 and existing > 0
-                        await self._stream_to_file(resp, dest, append=append, chunk_size=chunk_size)
+                        await self._stream_to_file(
+                            resp, dest, append=append, chunk_size=chunk_size,
+                            progress_cb=progress_cb,
+                            base=(existing if append else 0),
+                            total=(expected_total or 0),
+                        )
                         finished_stream = True
             except (httpx.TimeoutException, httpx.TransportError, httpx.RemoteProtocolError):
                 # Stall / cut mid-stream. The partial on disk is intact; the
@@ -337,7 +354,12 @@ class CatdvClient:
                 stalled = 0
 
     async def download_original(
-        self, media_id: int, dest: Path, chunk_size: int = 1024 * 1024
+        self,
+        media_id: int,
+        dest: Path,
+        chunk_size: int = 1024 * 1024,
+        *,
+        progress_cb: "ProgressCb | None" = None,
     ) -> None:
         """Stream a clip's ORIGINAL source file (not the proxy) to `dest`.
 
@@ -356,10 +378,18 @@ class CatdvClient:
                 await self.login()
                 async with self.http.stream("GET", url, params=params) as resp2:
                     resp2.raise_for_status()
-                    await self._stream_to_file(resp2, dest, append=False, chunk_size=chunk_size)
+                    await self._stream_to_file(
+                        resp2, dest, append=False, chunk_size=chunk_size,
+                        progress_cb=progress_cb, base=0,
+                        total=(_content_total_bytes(resp2, 0) or 0),
+                    )
                     return
             resp.raise_for_status()
-            await self._stream_to_file(resp, dest, append=False, chunk_size=chunk_size)
+            await self._stream_to_file(
+                resp, dest, append=False, chunk_size=chunk_size,
+                progress_cb=progress_cb, base=0,
+                total=(_content_total_bytes(resp, 0) or 0),
+            )
 
     async def download_thumbnail(
         self, thumb_id: int, dest: Path, *, width: int | None = None, fmt: str = "jpg"
@@ -391,15 +421,27 @@ class CatdvClient:
             await self._stream_to_file(resp, dest, append=False, chunk_size=_DEFAULT_CHUNK)
 
     async def _stream_to_file(
-        self, resp: httpx.Response, dest: Path, *, append: bool, chunk_size: int
+        self,
+        resp: httpx.Response,
+        dest: Path,
+        *,
+        append: bool,
+        chunk_size: int,
+        progress_cb: "ProgressCb | None" = None,
+        base: int = 0,
+        total: int = 0,
     ) -> None:
         mode = "ab" if append else "wb"
         dest.parent.mkdir(parents=True, exist_ok=True)
+        written = 0
         # File writes hop to a worker thread so the event loop stays
         # responsive while we ingest a multi-hundred-MB proxy stream.
         with open(dest, mode) as f:  # noqa: ASYNC230
             async for chunk in resp.aiter_bytes(chunk_size):
                 await asyncio.to_thread(f.write, chunk)
+                if progress_cb is not None:
+                    written += len(chunk)
+                    await progress_cb(base + written, total)
 
     async def put_clip(self, clip_id: int, payload: dict[str, Any]) -> dict[str, Any]:
         env = await self._call_json("PUT", f"/catdv/api/9/clips/{clip_id}", json=payload)
