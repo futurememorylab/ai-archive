@@ -137,6 +137,14 @@ tree under `tests/`. CatDV HTTP is mocked with `respx`.
 .venv/bin/pytest -q
 ```
 
+**End-to-end walkthrough tests** live in `tests/walkthrough/` — they
+drive the real app through Playwright (offline, no CatDV seat) and
+double as annotated videos. The assert-mode run is a pytest test that
+self-skips without Chromium/ffmpeg. When you change UI functionality,
+add/update/remove the affected scenario in the same PR (see
+[`tests/walkthrough/README.md`](../../tests/walkthrough/README.md) and
+the `/e2e` skill).
+
 ## Code style conventions you'll see
 
 - **No `if TYPE_CHECKING` cycles unless necessary** — `AppContext` uses

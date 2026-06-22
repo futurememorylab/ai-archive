@@ -194,6 +194,31 @@ unset, the feature stays silent.
 Async tests use `asyncio_mode = "auto"`, so they don't need a
 decorator. The CatDV adapter uses `respx` for httpx mocking.
 
+### End-to-end walkthrough tests
+
+`tests/walkthrough/` drives the **real app** through Playwright in its
+own in-process instance on port `8766` — **fully offline, no CatDV
+seat** (see `05-catdv-license-discipline.md`). Each scenario doubles as
+an annotated walkthrough video.
+
+```bash
+.venv/bin/python -m tests.walkthrough.run --assert      # headless pass/fail
+.venv/bin/python -m tests.walkthrough.run --record      # annotated videos + gallery
+```
+
+The assert-mode run is also a pytest test and self-skips when Chromium
+or ffmpeg are absent. One-time setup:
+
+```bash
+.venv/bin/pip install -e ".[dev]" && .venv/bin/playwright install chromium
+# ffmpeg: brew install ffmpeg
+```
+
+Full reference — architecture, how to add a scenario, and the rule to
+keep scenarios in sync with UI changes — is in
+[`tests/walkthrough/README.md`](../../tests/walkthrough/README.md). The
+`/e2e` skill is the day-to-day entry point.
+
 ## Key env vars (quick reference)
 
 The complete list is in [`.env.example`](../../.env.example). The ones

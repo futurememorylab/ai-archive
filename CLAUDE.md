@@ -427,6 +427,31 @@ before committing.
 Use TDD for all bug fixes and features: write a failing test,
 implement, then confirm green before committing.
 
+## End-to-end walkthrough tests
+
+`tests/walkthrough/` drives the **real app** through Playwright in its
+own in-process instance on port `8766` — **fully offline, no CatDV
+seat**, never the `:8765` dev server. Each scenario is one user story
+and doubles as an annotated walkthrough video. Run with the `/e2e`
+skill or directly:
+
+```bash
+.venv/bin/python -m tests.walkthrough.run --assert    # headless pass/fail
+.venv/bin/python -m tests.walkthrough.run --record    # annotated videos + gallery
+```
+
+**When you change UI functionality — a page template, an Alpine
+component, a route that renders a page, or a user-facing flow —
+add / update / remove the affected walkthrough scenario(s) in the same
+PR, and re-run `/e2e` (assert mode) before merging.** A scenario that no
+longer matches the UI is worse than none. New flow → new scenario
+(`/e2e new "<flow>"`); changed flow → update the scenario and its
+`data-test` hooks; removed flow → delete the scenario. The full
+reference (architecture, how to add a scenario, the seeded-DB and
+recording details) is `tests/walkthrough/README.md`. This complements
+the "Specs must include a manual acceptance flow" rule — the walkthrough
+is the executable form of that acceptance flow.
+
 ## Recording decisions at end of session
 
 When a session involves any non-trivial design call — a schema replacement,
