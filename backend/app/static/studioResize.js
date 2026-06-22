@@ -1,22 +1,29 @@
-// Studio split-pane resizers — hand-rolled, no Node dependency (ADR 0001).
+// Split-pane resizers — hand-rolled, no Node dependency (ADR 0001).
 //
 // A thin divider element (.studio-resizer with data-studio-resizer="player"
-// | "cmp") sits between two panes. Dragging it writes a CSS custom property
-// on the container, which drives that container's grid/flex track sizes:
+// | "cmp" | "detail-side") sits between two panes. Dragging it writes a CSS
+// custom property on the container, which drives that container's grid/flex
+// track sizes:
 //
 //   player divider → on .studio-right:
 //     - layout 'under': vertical drag → --studio-player-h (px)  [row-resize]
 //     - layout 'right': horizontal drag → --studio-player-w (px) [col-resize]
 //   cmp divider → on .studio-compare-row:
 //     - always horizontal drag → --studio-cmp-cur (% of row width) [col-resize]
+//   detail-side divider → on .detail (clip-detail page):
+//     - horizontal drag → --detail-side-w (px) sizing the RIGHT (anno) column
+//       [col-resize]; reuses the same component so the clip page doesn't grow
+//       a second resizer.
 //
 // One delegated `pointerdown` listener on `document` matches `.studio-resizer`,
 // so dividers that are HTMX-injected or CSS-toggled need no re-wiring. We use
 // plain pointer events + setPointerCapture; no Alpine init / htmx.process —
 // htmxAlpine.js stays the single HTMX↔Alpine lifecycle owner.
 //
-// Sizes round-trip through Alpine.store('studio') (playerH / playerW / cmpCur
-// + saveResize()), which persists them into localStorage['studio.layoutPrefs'].
+// Studio sizes round-trip through Alpine.store('studio') (playerH / playerW /
+// cmpCur + saveResize()) → localStorage['studio.layoutPrefs']. The clip-detail
+// divider has no studio store, so it persists straight to
+// localStorage['catdv:detailLayout'] (restored by an inline script on the page).
 
 // Pure helper: new size = (start + delta) clamped to [lo, hi]. Mirror of
 // tests/unit/test_studio_resize_clamp.py::clamp_size — keep the two in sync.
@@ -84,6 +91,27 @@ function clampSize(start, delta, lo, hi) {
         storeField: "cmpCur",
         isPct: true,
       };
+    } else if (kind === "detail-side") {
+      // Clip-detail page: divider between the player (left) and the annotation
+      // column (right). The CSS var sizes the RIGHT column, so dragging the
+      // divider left must WIDEN it → invert the delta. Persists to localStorage.
+      const container = el.closest(".detail");
+      if (!container) return;
+      const side = container.querySelector(".anno-col");
+      const containerW = container.getBoundingClientRect().width;
+      drag = {
+        kind,
+        el,
+        container,
+        axis: "x",
+        startPx: side ? side.getBoundingClientRect().width : 400,
+        containerSize: containerW,
+        startClient: evt.clientX,
+        cssVar: "--detail-side-w",
+        invert: true,
+        lo: 300,
+        hi: Math.max(300, containerW * 0.6),
+      };
     } else {
       return;
     }
@@ -110,11 +138,14 @@ function clampSize(start, delta, lo, hi) {
       drag.lastValue = (Math.round(pct * 10) / 10) + "%";
       drag.container.style.setProperty(drag.cssVar, drag.lastValue);
     } else {
-      const maxPx = Math.max(
-        PLAYER_MIN_PX,
-        drag.containerSize * PLAYER_MAX_FRAC,
-      );
-      const px = clampSize(drag.startPx, delta, PLAYER_MIN_PX, maxPx);
+      // `invert` is for dividers whose CSS var sizes the pane on the OTHER side
+      // of the drag direction (the clip-detail right column). `lo`/`hi` let a
+      // divider supply its own clamp bounds; studio dividers omit them and fall
+      // back to the player constants — behaviour unchanged.
+      const eff = drag.invert ? -delta : delta;
+      const lo = drag.lo ?? PLAYER_MIN_PX;
+      const hi = drag.hi ?? Math.max(PLAYER_MIN_PX, drag.containerSize * PLAYER_MAX_FRAC);
+      const px = clampSize(drag.startPx, eff, lo, hi);
       drag.lastValue = Math.round(px) + "px";
       drag.container.style.setProperty(drag.cssVar, drag.lastValue);
     }
@@ -128,10 +159,24 @@ function clampSize(start, delta, lo, hi) {
       /* already released */
     }
     document.body.classList.remove("studio-resizing");
-    const s = store();
-    if (s && drag.lastValue != null) {
-      s[drag.storeField] = drag.lastValue;
-      if (typeof s.saveResize === "function") s.saveResize();
+    if (drag.kind === "detail-side") {
+      // No studio store on the clip page — persist directly.
+      try {
+        if (drag.lastValue != null) {
+          localStorage.setItem(
+            "catdv:detailLayout",
+            JSON.stringify({ sideW: drag.lastValue }),
+          );
+        }
+      } catch (e) {
+        /* localStorage unavailable — the size still applies for this session */
+      }
+    } else {
+      const s = store();
+      if (s && drag.lastValue != null) {
+        s[drag.storeField] = drag.lastValue;
+        if (typeof s.saveResize === "function") s.saveResize();
+      }
     }
     drag = null;
   }

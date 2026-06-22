@@ -473,14 +473,19 @@ a { color: inherit; text-decoration: none; }
 /* ─── page-detail ────────────────────────────────────────────────────── */
 .detail {
   display: grid;
-  grid-template-columns: 1fr 400px;
+  grid-template-columns: 1fr 6px var(--detail-side-w, 400px);
   grid-template-rows: 44px 1fr;
   grid-template-areas:
-    "hdr   hdr"
-    "play  side";
+    "hdr   hdr  hdr"
+    "play  rez  side";
   height: 100%;
   background: var(--bg);
 }
+/* Player ↔ annotations divider. Reuses the .studio-resizer component
+   (studioResize.js handles data-studio-resizer="detail-side", writing
+   --detail-side-w); only the grid placement + column axis are page-specific. */
+.detail .studio-resizer.is-detail-side { grid-area: rez; cursor: col-resize; }
+.detail .studio-resizer.is-detail-side::after { width: 3px; height: 28px; }
 .detail-hdr {
   grid-area: hdr;
   display: flex; align-items: center; gap: 14px;
@@ -649,8 +654,16 @@ a { color: inherit; text-decoration: none; }
   display: flex; justify-content: space-between;
   padding: 0 4px;
   font-family: var(--f-mono); font-size: 9.5px;
-  color: var(--text-4);
   pointer-events: none;
+}
+/* Each label gets a backdrop pill in the timeline's own base colour so it stays
+   legible wherever it falls — over a marker band (blue draft / orange published)
+   or bare track — and in every theme, since both the pill and the text are
+   token-derived rather than a fixed light/dark assumption. */
+.timeline .tc-labels span {
+  color: var(--text-3);
+  background: color-mix(in oklab, var(--bg-2) 85%, transparent);
+  padding: 0 3px; border-radius: 3px;
 }
 
 .transport-row {
@@ -1226,13 +1239,25 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
   --accent-fg: #0b1722;
 }
 /* ─── Draft timeline track ───────────────────────────────────────────── */
-/* When draft is active, split the marker band: published on top half,
-   draft on bottom half. Otherwise published uses full height. */
-.detail.is-draft .timeline .ranges:not(.draft-ranges) { bottom: 50%; }
+/* The published band shows in both scopes now. Split the track (published on
+   the top half, draft on the bottom — prompt-studio style) ONLY in draft scope
+   AND when published markers actually exist (.has-published-markers). With none
+   version the draft band keeps the full height, so there's no empty reserved
+   strip on the (common) unpublished clip. */
+.detail.is-draft.has-published-markers .timeline .ranges:not(.draft-ranges) { bottom: 50%; }
 .timeline .draft-ranges {
   position: absolute; left: 0; right: 0;
-  top: 50%; bottom: 6px;
+  top: 6px; bottom: 6px;
   pointer-events: none;
+}
+.detail.is-draft.has-published-markers .timeline .draft-ranges { top: 50%; }
+/* Two-colour split so the bands read as distinct: published = orange (the live
+   colourway, matching the Published tab / accent), draft = blue (the draft
+   colourway). Scoped to .detail so Studio's range-cur stays its own colour. */
+.detail .timeline .ranges.range-cur .range {
+  background: color-mix(in oklab, var(--accent) 38%, transparent);
+  border-left: 2px solid var(--accent);
+  border-right: 2px solid var(--accent);
 }
 .timeline .range.draft-range {
   background: color-mix(in oklab, var(--info) 35%, transparent);
