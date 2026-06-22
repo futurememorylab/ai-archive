@@ -56,6 +56,7 @@ from backend.app.repositories.clip_versions import ClipVersionsRepo
 from backend.app.repositories.enum_values import EnumValuesRepo
 from backend.app.repositories.field_def_cache import FieldDefCacheRepo
 from backend.app.repositories.jobs import JobsRepo
+from backend.app.repositories.model_config import ModelConfigRepo
 from backend.app.repositories.pending_operations import PendingOperationsRepo
 from backend.app.repositories.poster_cache import PosterCacheRepo
 from backend.app.repositories.prefetch_queue import PrefetchQueueRepo
@@ -78,6 +79,7 @@ from backend.app.services.idle_disconnector import IdleDisconnector
 from backend.app.services.lru_eviction import LruEviction
 from backend.app.services.media_cache import MediaCacheBackend, build_media_cache_backend
 from backend.app.services.media_prefetcher import MediaPrefetcher
+from backend.app.services.pricing_service import PricingService
 from backend.app.services.proxy_cache_reconciler import ProxyCacheReconciler
 from backend.app.services.publish_service import PublishService
 from backend.app.services.restore_service import RestoreService
@@ -119,6 +121,7 @@ class CoreCtx:
     run_telemetry_repo: RunTelemetryRepo = field(default_factory=RunTelemetryRepo)
     user_roles_repo: UserRolesRepo = field(default_factory=UserRolesRepo)
     enum_values_repo: EnumValuesRepo = field(default_factory=EnumValuesRepo)
+    model_config_repo: ModelConfigRepo = field(default_factory=ModelConfigRepo)
     clip_versions_repo: ClipVersionsRepo = field(default_factory=ClipVersionsRepo)
     telemetry_ctx: TelemetryCtx = field(init=False)
     event_bus: EventBus = field(default_factory=EventBus)
@@ -135,6 +138,7 @@ class CoreCtx:
     cache_inspector: CacheInspector = field(init=False)
     cache_actions: CacheActions = field(init=False)
     enum_service: EnumService = field(init=False)
+    pricing_service: PricingService = field(init=False)
 
     @classmethod
     async def build(cls, settings: Settings) -> CoreCtx:
@@ -201,6 +205,12 @@ class CoreCtx:
             repo=ctx.enum_values_repo,
         )
         await ctx.enum_service.reconcile_seeds()
+        ctx.pricing_service = PricingService(
+            db_provider=lambda: ctx.db,
+            repo=ctx.model_config_repo,
+        )
+        await ctx.pricing_service.reconcile_seeds()
+        await ctx.pricing_service.reload()
         from backend.app.services.clip_versions_backfill import backfill_clip_versions
 
         await backfill_clip_versions(ctx.db, ctx.clip_versions_repo)
@@ -387,8 +397,16 @@ class LiveCtx:
         return self.core.enum_values_repo
 
     @property
+    def model_config_repo(self) -> ModelConfigRepo:
+        return self.core.model_config_repo
+
+    @property
     def enum_service(self) -> EnumService:
         return self.core.enum_service
+
+    @property
+    def pricing_service(self) -> PricingService:
+        return self.core.pricing_service
 
     @property
     def clip_versions_repo(self) -> ClipVersionsRepo:
