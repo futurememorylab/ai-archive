@@ -114,7 +114,7 @@ async def mint_ephemeral_token(*, setup: dict, settings: Any) -> str:
     token to the v1beta `BidiGenerateContent` endpoint via `?key=` (which
     reads it as an API key → close code 1007 "API key not valid"). The
     working combination is v1alpha + `...Constrained` + `?access_token=`,
-    verified empirically. See ADR 0111 (supersedes 0043).
+    verified empirically. See ADR 0112 (supersedes 0043).
     """
     if not getattr(settings, "gemini_api_key", None):
         raise RuntimeError("GEMINI_API_KEY is not configured; Live audio cannot connect")

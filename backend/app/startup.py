@@ -65,7 +65,7 @@ def log_live_token_mode(settings) -> None:
     The raw GEMINI_API_KEY is no longer sent to the browser:
     live_sessions.mint_ephemeral_token now mints a short-lived, config-bound
     ephemeral token server-side, which the browser presents as `?access_token=`
-    (see ADR 0111, supersedes 0043). When the key is present we log the secure
+    (see ADR 0112, supersedes 0043). When the key is present we log the secure
     posture at INFO; when it is missing we warn that Live audio is unavailable.
     """
     log = logging.getLogger(__name__)
@@ -73,7 +73,7 @@ def log_live_token_mode(settings) -> None:
         log.info(
             "Live audio authenticates with short-lived, config-bound ephemeral "
             "tokens (auth_tokens.create); the GEMINI_API_KEY stays server-side and "
-            "is never sent to the browser (ADR 0111)."
+            "is never sent to the browser (ADR 0112)."
         )
     else:
         log.warning(

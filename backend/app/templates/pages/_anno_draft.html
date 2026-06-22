@@ -11,7 +11,7 @@
   <button type="button" class="btn sm nav" :disabled="reviewPos() <= 1" @click="navClip(-1)" title="Previous clip">‹</button>
   <span class="review-pos" x-text="'Clip ' + reviewPos() + ' / ' + reviewLen()"></span>
   <button type="button" class="btn sm nav" :disabled="reviewPos() >= reviewLen()" @click="navClip(1)" title="Next clip">›</button>
-  <button type="button" class="btn good sm" :disabled="totalCount() === 0" @click="acceptApplyAll()"
+  <button type="button" class="btn good sm" data-test="apply-draft" :disabled="totalCount() === 0" @click="acceptApplyAll()"
           x-text="'✓ Accept &amp; apply all (' + totalCount() + ')'"></button>
 </div>
 

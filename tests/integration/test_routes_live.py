@@ -82,7 +82,7 @@ async def test_session_config_returns_token_and_setup(client_and_db, monkeypatch
 
     # Live now mints a short-lived, config-bound ephemeral token server-side.
     # The raw GEMINI_API_KEY authenticates THIS mint call (server→Google) and
-    # never reaches the browser. See ADR 0111 (supersedes 0043).
+    # never reaches the browser. See ADR 0112 (supersedes 0043).
     mint = respx.post(
         "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
     ).mock(return_value=Response(200, json={"name": "auth_tokens/ephemeral-XYZ"}))

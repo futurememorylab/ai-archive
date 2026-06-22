@@ -112,7 +112,7 @@ async def test_mint_ephemeral_token_mints_bound_single_use_token():
     """The raw GEMINI_API_KEY never goes to the browser. mint_ephemeral_token
     POSTs to v1alpha auth_tokens, binding the full `setup` into the token via
     `bidiGenerateContentSetup`, and returns the short-lived token name (which
-    the browser presents as `?access_token=`). See ADR 0111 (supersedes 0043).
+    the browser presents as `?access_token=`). See ADR 0112 (supersedes 0043).
     """
     route = respx.post(AUTH_TOKENS_ENDPOINT).mock(
         return_value=Response(200, json={"name": "auth_tokens/ephemeral-abc123"})

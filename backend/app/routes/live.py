@@ -24,7 +24,7 @@ WSS_URL_TEMPLATE = (
     # (not the raw key): presented via `?access_token=` against the v1alpha
     # BidiGenerateContentConstrained endpoint, which is the endpoint bound
     # tokens authenticate against. Verified empirically with
-    # gemini-3.1-flash-live-preview. See ADR 0111 (supersedes 0043).
+    # gemini-3.1-flash-live-preview. See ADR 0112 (supersedes 0043).
     "wss://generativelanguage.googleapis.com/ws/"
     "google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained"
     "?access_token={token}"
@@ -33,7 +33,7 @@ WSS_URL_TEMPLATE = (
 # Fields bound into the token server-side and deliberately withheld from the
 # browser: the proprietary system prompt and the tool/function declarations.
 # The browser sends only the remaining (non-secret) setup fields; the token
-# enforces the full config regardless. See ADR 0111.
+# enforces the full config regardless. See ADR 0112.
 _TOKEN_ONLY_SETUP_FIELDS = ("systemInstruction", "tools")
 
 

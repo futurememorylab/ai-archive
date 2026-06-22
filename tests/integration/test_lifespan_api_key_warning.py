@@ -1,7 +1,7 @@
 """Startup logs how Live audio authenticates.
 
 The raw GEMINI_API_KEY is NO LONGER shipped to the browser: Live sessions
-mint short-lived, config-bound ephemeral tokens server-side (ADR 0111,
+mint short-lived, config-bound ephemeral tokens server-side (ADR 0112,
 supersedes 0043). So boot logs the secure posture when the key is present,
 and warns only when the key is missing (Live audio is then unavailable)."""
 

@@ -55,7 +55,7 @@ plan must already be committed on `<N>-<slug>` by `gh-design`.
      "name": "implement-issue",
      "repositories": ["futurememorylab/ai-archive"],
      "trigger": { "type": "api" },
-     "prompt": "You are implementing a pre-written plan. First read the run context (the `text` field, e.g. `issue=#<N> branch=<branch>`) to get the issue number and branch. Steps: 1) `git fetch origin <branch> && git checkout <branch>`. 2) Read the implementation plan under docs/superpowers/plans/ on that branch. 3) Use the superpowers:subagent-driven-development skill to implement the plan task by task, in order. 4) After EACH task: make the task's commit, then immediately `git push origin <branch>`. Push after every task — not once at the end — so progress is visible remotely and committed work survives if the session restarts. Each task's tests must be green before you commit it. 5) When all tasks are done, open a pull request to main whose body contains `Closes #<N>`. 6) Comment the PR URL back on issue #<N>. 7) Move issue #<N> to the `Test` column of the `AI-Archive Flow` project board, using the `set_status` helper documented in .claude/skills/gh-design/SKILL.md. Do not merge."
+     "prompt": "You are implementing a pre-written plan. Read the run context `text` field (e.g. `issue=#<N> branch=<branch>`) for the issue number and intended branch. Steps: 1) `git fetch origin <branch> && git checkout <branch>`, then VERIFY `git rev-parse --abbrev-ref HEAD` equals <branch>; if the environment forces a different working branch, capture its real name to report in step 6. 2) Read the implementation plan under docs/superpowers/plans/ on that branch and count its tasks. 3) After Task 1 is committed with tests green, push and immediately open a DRAFT pull request to main. The PR body MUST contain `Closes #<N>` and a checklist with one box per plan task (`- [x] Task 1: <title>` / `- [ ] Task 2: <title>` ...). This early, stable PR is how the operator's watch tracks progress — branch-name-agnostic. 4) Implement the remaining tasks with the superpowers:subagent-driven-development skill, in order. After EACH task: commit (tests green first), `git push origin HEAD:<branch>` (explicit refspec so the push targets the named branch), then tick that task's box in the PR body with `gh pr edit`. Push after every task, not once at the end. 5) When all tasks pass, run the plan's full-suite gate, paste the result into the PR body, and mark the PR ready with `gh pr ready`. 6) Comment the PR URL on issue #<N>, stating the ACTUAL head branch and `N/N tasks green — ready for Test`. Do NOT move the project board — your identity lacks GitHub Projects write scope, so the move silently no-ops; the operator's watch does it. Do NOT merge."
    }
    ```
    Capture the returned `trigger_id`.
@@ -80,30 +80,54 @@ plan must already be committed on `<N>-<slug>` by `gh-design`.
 
 5. **Monitor for the PR.** There is no routine run-status API (the per-routine
    token has no read access; `fire` is the only endpoint), so watch the
-   **outcome on GitHub** instead. Set up a session watch that polls until the PR
-   appears, then stops:
+   **outcome on GitHub** instead.
+
+   **Discover the PR by issue linkage, NOT by the head branch.** Do not assume
+   the head is `<N>-<slug>` — the cloud environment frequently pushes to its own
+   `claude/<name>` branch regardless of the named branch (see Guardrails), so a
+   `--head "${N}-${SLUG}"` query silently misses the PR. Search by the issue the
+   PR closes instead — this is branch-name-agnostic:
    ```bash
-   gh pr list -R futurememorylab/ai-archive --head "${N}-${SLUG}" \
-     --state all --json number,url,state,title
+   gh pr list -R futurememorylab/ai-archive --state all --search "#${N} in:body" \
+     --json number,url,state,isDraft,headRefName,body
    ```
+   The routine opens this PR as a **draft after Task 1**, so the watch has a
+   stable handle for the whole run. Derive the real working branch from the PR's
+   `headRefName` once it appears.
+
+   **Progress comes from the PR, not commit-subject guessing.** The PR body
+   carries a per-task checklist the routine ticks after each task. Count it and
+   check CI:
+   ```bash
+   gh pr view <PR#> -R futurememorylab/ai-archive --json body,isDraft \
+     | jq -r '.body' | grep -c '^\s*- \[x\]'   # ticked boxes = tasks done
+   gh pr checks <PR#> -R futurememorylab/ai-archive   # test/CI status
+   ```
+   Report `N/<total> done — latest ticked task`. The **done signal is
+   `isDraft == false`** (routine ran `gh pr ready`), not merely "a PR exists".
+
    Use `CronCreate` (recurring, session-only, an off-minute interval like
-   `*/7 * * * *`) to re-run that check; when a PR shows up, report its number +
-   URL to the user, **move the issue to `Test` yourself** with `set_status N Test`,
-   and `CronDelete` the watch. Do the board move locally because the cloud routine
-   **cannot** — its identity lacks GitHub Projects write scope, so its own step-7
-   move silently no-ops and the issue is left stranded in Implementation. The local
-   operator's `gh` has Projects scope, so the watch is the reliable place to do it.
-   The trigger prompt pushes after **each task**, so surface incremental progress:
-   list the implementation commits on the branch beyond the design commits, map
-   each to its plan task, and report `N/<total> — latest: <task>`. Tell the user
-   this watch is session-local (in memory, not in GitHub, gone if Claude exits) —
-   for a portable notification they can instead subscribe to the issue / Watch the
-   repo on github.com.
+   `*/7 * * * *`) to re-run the check. When the PR is **ready** (not draft),
+   report its number + URL + `headRefName`, **move the issue to `Test` yourself**
+   with `set_status N Test`, and `CronDelete` the watch. Do the board move locally
+   because the cloud routine **cannot** — its identity lacks GitHub Projects write
+   scope, so it is told to skip that step; the local operator's `gh` has Projects
+   scope, so the watch is the reliable place to do it. Tell the user this watch is
+   session-local (in memory, not in GitHub, gone if Claude exits) — for a portable
+   notification they can instead subscribe to the issue / Watch the repo on
+   github.com.
+
+   **Fallback if no draft PR appears** within ~1–2 task intervals of firing: the
+   routine likely couldn't open it (token scope / push setting). Fall back to
+   commit-diffing the candidate branches — `git ls-remote --heads origin
+   'claude/*' "${N}-*"`, then `git log --oneline origin/main..origin/<branch>`
+   mapped to plan tasks — and tell the operator the draft-PR step isn't working.
 
 6. **Report and stop.** Tell the user the watch is running and that the rest is
-   hands-off: when the PR appears the watch moves the issue to **Test** (step 5);
-   they test manually and squash-merge, and `Closes #N` closes the issue so the
-   built-in *Item closed* workflow moves it to **Done**.
+   hands-off: when the PR is marked **ready** (un-drafted) the watch moves the
+   issue to **Test** (step 5); they test manually and squash-merge, and
+   `Closes #N` closes the issue so the built-in *Item closed* workflow moves it
+   to **Done**.
 
 ## Guardrails
 
@@ -111,8 +135,14 @@ plan must already be committed on `<N>-<slug>` by `gh-design`.
   missing plan wastes a session and confuses the board.
 - The cloud session runs as the connected GitHub identity and needs
   **unrestricted branch pushes** enabled on the claude.ai environment (one-time
-  operator setup) to push to `<N>-<slug>`. If the run reports it could only push
-  a `claude/`-prefixed branch, that setting is off — tell the operator.
+  operator setup) to push to `<N>-<slug>`. Even with it on, the environment
+  often still works on (and pushes to) an auto-generated `claude/<name>` branch
+  rather than the named branch — observed in practice. This is why the watch
+  (step 5) discovers the PR by `#<N> in:body`, not by head branch, and reads the
+  real branch from the PR's `headRefName`. The work is still correct (it bases
+  off the design commits and the PR `Closes #<N>`); only the branch name
+  deviates from the one-issue-one-branch convention. Flag it to the operator
+  when reporting the PR, but don't treat it as a failure.
 - The cloud session's allowed-tools must include **Bash** (for the `gh` PR /
   issue / board steps) — and **Task** if you want it to use
   `subagent-driven-development`; without Task it falls back to implementing the

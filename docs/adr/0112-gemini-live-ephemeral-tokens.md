@@ -1,4 +1,4 @@
-# 0111. Gemini Live: ephemeral tokens replace the browser-exposed key
+# 0112. Gemini Live: ephemeral tokens replace the browser-exposed key
 
 **Date:** 2026-06-22
 **Status:** Accepted — supersedes [0043](./0043-gemini-live-api-key-exposure-accepted-risk.md)
