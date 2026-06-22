@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Callable
 
 import aiosqlite
@@ -24,6 +25,40 @@ from backend.app.repositories.prefetch_queue import PrefetchQueueRepo
 from backend.app.services.errors import humanise
 
 log = logging.getLogger(__name__)
+
+
+class _ProgressTracker:
+    """Progress callback for one download. Records the latest absolute
+    bytes-on-disk in memory on every chunk, but throttles DB writes to at
+    most once per `min_interval_s` so a multi-GB stream produces a few dozen
+    UPDATEs, not thousands. The first call always writes."""
+
+    def __init__(
+        self,
+        repo: PrefetchQueueRepo,
+        *,
+        conn: aiosqlite.Connection,
+        rid: int,
+        min_interval_s: float = 0.75,
+        clock=time.monotonic,
+    ) -> None:
+        self._repo = repo
+        self._conn = conn
+        self._rid = rid
+        self._min_interval_s = min_interval_s
+        self._clock = clock
+        self._last_write: float | None = None
+        self.last_downloaded = 0
+        self.last_total = 0
+
+    async def __call__(self, downloaded: int, total: int) -> None:
+        self.last_downloaded = downloaded
+        self.last_total = total
+        now = self._clock()
+        if self._last_write is not None and (now - self._last_write) < self._min_interval_s:
+            return
+        self._last_write = now
+        await self._repo.update_progress(self._conn, self._rid, downloaded, total)
 
 
 class MediaPrefetcher:
@@ -117,8 +152,11 @@ class MediaPrefetcher:
             return clip_id_int if clip_id_str.isdigit() else 0
 
         try:
-            await self._backend.ensure_cached(clip_id_int)
-            await self._queue.mark_done(db, rid, bytes_downloaded=0)
+            tracker = _ProgressTracker(self._queue, conn=db, rid=rid)
+            await self._backend.ensure_cached(clip_id_int, progress_cb=tracker)
+            # Final flush: record the true on-disk size (covers clips that
+            # finished inside one throttle window, so Recent never shows 0).
+            await self._queue.mark_done(db, rid, bytes_downloaded=tracker.last_downloaded)
         except Exception as exc:  # noqa: BLE001
             # humanise(), not str(exc): a stalled-tunnel ReadTimeout has an
             # empty str(), which left the toast + sync drawer blank. exc_info
