@@ -42,7 +42,9 @@
 
 <div class="anno-section" x-show="tab === 'markers'" x-cloak>
   <template x-for="m in draftMarkers" :key="m.item_id">
-    <div class="ri-card ri-marker" :class="{ editing: editingItemId === m.item_id }"
+    <div class="ri-card ri-marker" data-anno-marker
+         :data-in="m.in_secs" :data-out="m.out_secs ?? ''"
+         :class="{ editing: editingItemId === m.item_id, active: isMarkerActive(m) }"
          @click="seek(m.in_secs)" title="Jump to marker and play">
       <div class="ri-card-top">
         <span class="cat" x-show="m.category" x-text="m.category"></span>

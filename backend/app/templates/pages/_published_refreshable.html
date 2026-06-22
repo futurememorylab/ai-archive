@@ -14,7 +14,10 @@
       "fields":  clip.fields,
       "notes":   clip.notes,
       "big_notes": clip.big_notes,
-     } %}
+     }, follow_player = true %}
+    {# follow_player=true: this panel is inside the clip-detail player x-data
+       scope, so the marker cards should highlight + auto-scroll with playback.
+       Studio includes _anno_panels.html directly (no follow_player). #}
     {% include "pages/_anno_panels.html" %}
   {% endwith %}
   <script type="application/json" id="published-markers-data">{{ clip.markers|tojson }}</script>

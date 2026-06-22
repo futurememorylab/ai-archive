@@ -2,6 +2,48 @@
 // Markers must arrive sorted ascending by in_secs (see clip_detail view-model);
 // prev/next-marker navigation depends on it.
 
+// ─── follow-playback pure helpers ──────────────────────────────────
+// Kept free of `this` and the DOM so the comfort-band logic is easy to
+// reason about. Behavioural coverage is the spec's manual acceptance flows;
+// tests/unit/test_anno_follow_playback.py pins their presence.
+
+// Index of the first marker whose [in,out] window contains `current`
+// (markers arrive in_secs-ascending, so "first" = earliest-starting). A
+// marker with no out_secs gets a 40ms window, matching isMarkerActive.
+// Returns -1 when the playhead is in a gap.
+function annoActiveAnchorIndex(markers, current) {
+  for (let i = 0; i < markers.length; i++) {
+    const m = markers[i];
+    if (m.in_secs == null) continue;
+    const out = m.out_secs != null ? m.out_secs : m.in_secs + 0.04;
+    if (current >= m.in_secs && current <= out) return i;
+  }
+  return -1;
+}
+
+// Comfort-band, nearest-edge scroll. The band is the viewport inset by
+// `bandMargin` top and bottom. If the anchor card is fully inside the band,
+// return null (no movement — this is why an already-visible marker, e.g. the
+// first one, never scrolls). Otherwise scroll the minimum needed to bring the
+// card to the nearest band edge. Jumps longer than one viewport are instant
+// ('auto') so a far seek doesn't slowly glide.
+function annoComputeScroll({ scrollTop, viewportHeight, cardTop, cardHeight, bandMargin }) {
+  const bandTop = bandMargin;
+  const bandBottom = viewportHeight - bandMargin;
+  const cardBottom = cardTop + cardHeight;
+  let target;
+  if (cardTop < bandTop) {
+    target = scrollTop + (cardTop - bandTop);          // bring top to band top
+  } else if (cardBottom > bandBottom) {
+    target = scrollTop + (cardBottom - bandBottom);    // bring bottom to band bottom
+  } else {
+    return null;                                        // already inside the band
+  }
+  if (target < 0) target = 0;
+  const behavior = Math.abs(target - scrollTop) > viewportHeight ? "auto" : "smooth";
+  return { scrollTo: target, behavior };
+}
+
 document.addEventListener("alpine:init", () => {
   Alpine.data("player", (fps, duration, markers, draftMarkers) => ({
     fps: fps || 25,
@@ -25,6 +67,16 @@ document.addEventListener("alpine:init", () => {
     // later timeline-drag task can both react to which item is being edited.
     editingItemId: null,
 
+    // ─── follow-playback state ────────────────────────────────────
+    // followSuspended: once the user manually scrolls the annotation list,
+    // auto-follow stops and STAYS stopped until an intentional navigation —
+    // the next play (the "play" listener below) or a timeline move (seek()).
+    // _selfScrolling: true during our own programmatic scroll so the scroll
+    // listener doesn't mistake it for the user.
+    followSuspended: false,
+    _selfScrolling: false,
+    _selfScrollTimer: null,
+
     activeMarkers() {
       return this.scope === "draft" ? this.draftMarkers : this.markers;
     },
@@ -42,7 +94,9 @@ document.addEventListener("alpine:init", () => {
       v.addEventListener("loadedmetadata", () => {
         if (!this.duration || isNaN(this.duration)) this.duration = v.duration;
       });
-      v.addEventListener("play",  () => { this.playing = true; });
+      // Starting playback is an intentional action — resume follow so the
+      // active marker re-centres, even if the user had scrolled away earlier.
+      v.addEventListener("play",  () => { this.playing = true; this.followSuspended = false; });
       v.addEventListener("pause", () => { this.playing = false; });
 
       // Buffering spinner. Under preload="none" the first play (or a seek to a
@@ -67,6 +121,21 @@ document.addEventListener("alpine:init", () => {
       v.addEventListener("pause",     buffOff);
       v.addEventListener("error",     buffOff);
       v.addEventListener("ended",     buffOff);
+
+      // Follow-playback: keep the active marker visible in the column.
+      // `current` updates ~4×/sec (frame-quantized above); `scope` re-centres
+      // when switching published⇄draft.
+      this.$watch("current", () => this.followActiveAnno());
+      this.$watch("scope", () => this.followActiveAnno());
+      const annoBody = this.$root && this.$root.querySelector(".anno-body");
+      if (annoBody) {
+        annoBody.addEventListener("scroll", () => {
+          if (this._selfScrolling) return;   // our own scroll, not the user's
+          // Stop following and stay stopped — the user is browsing the list.
+          // Resumes only on the next play or timeline move (see "play" + seek()).
+          this.followSuspended = true;
+        });
+      }
     },
 
     // ─── timeline marker drag (review draft markers, edit-activated) ─
@@ -185,6 +254,9 @@ document.addEventListener("alpine:init", () => {
     // { play: false } to position without playing — e.g. entering marker
     // edit mode jumps to the in-point so you can scrub, but must not play.
     seek(secs, { play = true } = {}) {
+      // A seek (timeline move or annotation-card click) is intentional
+      // navigation — resume follow so the list snaps to the active marker.
+      this.followSuspended = false;
       const v = this.$refs.video;
       if (!v) return;
       const clamped = Math.max(0, Math.min(secs, v.duration || this.duration || secs));
@@ -251,6 +323,47 @@ document.addEventListener("alpine:init", () => {
       if (m.in_secs == null) return false;
       const out = m.out_secs != null ? m.out_secs : m.in_secs + 0.04;
       return this.current >= m.in_secs && this.current <= out;
+    },
+
+    // Scroll the column, flagging it as our own so the scroll listener
+    // doesn't read it as a manual scroll. Smooth scroll emits events over a
+    // few hundred ms, so hold the flag longer for 'smooth' than 'auto'.
+    _programScroll(el, top, behavior) {
+      this._selfScrolling = true;
+      clearTimeout(this._selfScrollTimer);
+      el.scrollTo({ top, behavior });
+      this._selfScrollTimer = setTimeout(() => {
+        this._selfScrolling = false;
+      }, behavior === "smooth" ? 700 : 100);
+    },
+
+    // Keep the active marker card visible. Reads the visible scope/tab's cards
+    // straight from the DOM (hidden scopes are display:none → offsetParent
+    // null), picks the first active one, and applies a comfort-band scroll.
+    followActiveAnno() {
+      if (this.followSuspended) return;
+      const body = this.$root && this.$root.querySelector(".anno-body");
+      if (!body) return;
+      const cards = Array.from(body.querySelectorAll("[data-anno-marker]"))
+        .filter(el => el.offsetParent !== null);
+      if (!cards.length) return;
+      const markers = cards.map(el => ({
+        in_secs: parseFloat(el.dataset.in),
+        out_secs: el.dataset.out === "" ? null : parseFloat(el.dataset.out),
+      }));
+      const idx = annoActiveAnchorIndex(markers, this.current);
+      if (idx < 0) return;                    // playhead in a gap: don't move
+      const bodyRect = body.getBoundingClientRect();
+      const cardRect = cards[idx].getBoundingClientRect();
+      const plan = annoComputeScroll({
+        scrollTop: body.scrollTop,
+        viewportHeight: body.clientHeight,
+        cardTop: cardRect.top - bodyRect.top,
+        cardHeight: cardRect.height,
+        bandMargin: body.clientHeight * 0.2,
+      });
+      if (!plan) return;                      // already inside the comfort band
+      this._programScroll(body, plan.scrollTo, plan.behavior);
     },
 
     handleKey(e) {
