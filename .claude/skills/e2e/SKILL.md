@@ -38,7 +38,7 @@ server. There is no license seat involved — never start the dev server for thi
 
 1. Confirm Playwright + Chromium + ffmpeg are available:
    ```bash
-   .venv/bin/python -c "import playwright; print('playwright', playwright.__version__)"
+   .venv/bin/python -c "from importlib.metadata import version; print('playwright', version('playwright'))"
    .venv/bin/python -c "from playwright.sync_api import sync_playwright; \
      pw = sync_playwright().start(); print('chromium', pw.chromium.executable_path); pw.stop()" 2>/dev/null || echo "chromium missing"
    command -v ffmpeg >/dev/null && echo "ffmpeg ok" || echo "ffmpeg missing"
