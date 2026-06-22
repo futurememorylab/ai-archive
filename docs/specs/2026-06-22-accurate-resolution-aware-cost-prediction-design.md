@@ -173,6 +173,10 @@ model_config(
 
 - New **Admin "Prompts" tab** listing prompt versions, each with a
   **Calibrate** action.
+- The **admin picks the 3 calibration clips** in the Calibrate dialog
+  (representative of the footage that prompt runs on) — a fixed seeded set
+  would not represent each prompt's real input. The selection reuses the
+  existing clip-picker pattern.
 - Calibrate runs **3 clips × {low, medium, high} × 2 repeats = 18 runs**
   through the existing annotator/batch machinery, showing the **projected
   calibration cost** (from the very estimator being calibrated) before the
@@ -211,6 +215,24 @@ DB-sourced pricing).
 - Walkthrough scenario(s) updated/added for the new Admin "Models" and
   "Prompts" tabs, the resolution display on cost surfaces, and the
   (admin-enabled) real-cost button on the batch flow.
+
+### 7. Implementation order (4 PRs)
+
+The spec ships as four independently shippable, ordered slices:
+
+1. **PR1 — Pricing to the DB.** `model_config` table + migration + repo +
+   reconcile-from-`RATE_CARDS` seeds; `pricing.py` reads the DB; Admin
+   "Models" tab; seed-drift guard test. No change to run behaviour.
+2. **PR2 — Resolution becomes real.** `media_resolution` fixed enum;
+   thread into `gemini.py::annotate()`; nullable `PromptVersion` override;
+   capture into `run_telemetry.media_resolution_setting`; show the
+   resolution in force on cost surfaces.
+3. **PR3 — Accurate estimates everywhere.** Resolution-key the
+   `run_estimator` fallback chain; estimate-vs-actual delta on every cost
+   surface; query-count guard.
+4. **PR4 — Calibration + real cost.** Admin "Prompts" tab + calibration
+   runner; admin-enablable `countTokens` real-cost button on the
+   batch-creation flow.
 
 ## Consequences
 
