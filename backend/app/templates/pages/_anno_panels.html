@@ -21,14 +21,14 @@
 {% set _show_note_items = panels.note_items %}
 <div class="anno-tabs" role="tablist">
   {% if not _is_image %}
-  <button type="button" class="anno-tab" role="tab" data-test="tab-markers"
+  <button type="button" class="anno-tab" role="tab"
           :class="{ active: tab === 'markers' }"
           :aria-selected="tab === 'markers'"
           @click="tab = 'markers'">
     Markers <span class="count">{{ panels.markers|length }}</span>
   </button>
   {% endif %}
-  <button type="button" class="anno-tab" role="tab" data-test="tab-fields"
+  <button type="button" class="anno-tab" role="tab"
           :class="{ active: tab === 'fields' }"
           :aria-selected="tab === 'fields'"
           @click="tab = 'fields'">
@@ -134,7 +134,7 @@
           </label>
           <span class="ident mono">{{ f.identifier }}</span>
           <span class="ri-text">{{ f.value }}</span>
-          <button type="button" class="btn sm ghost" data-test="ri-edit-toggle"
+          <button type="button" class="btn sm ghost"
                   @click="editingItemId = (editingItemId === {{ f.item_id }} ? null : {{ f.item_id }})"
                   x-text="editingItemId === {{ f.item_id }} ? 'Done' : '✎ Edit'"></button>
         </div>

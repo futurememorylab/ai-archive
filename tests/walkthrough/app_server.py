@@ -52,6 +52,14 @@ class WalkthroughApp:
     def start(self) -> None:
         for k, v in _OFFLINE_ENV.items():
             os.environ.setdefault(k, v)
+        # Force-empty the external credentials (override, not setdefault): if a
+        # developer has real CATDV creds exported, init_external would be True
+        # and GeminiService/GcsService would be constructed (google.auth.default()).
+        # Empty creds keep the boot unconditionally offline. The CatDV seat is
+        # already safe via CATDV_OFFLINE=true, but this makes "fully offline" hold
+        # regardless of the ambient environment.
+        os.environ["CATDV_USERNAME"] = ""
+        os.environ["CATDV_PASSWORD"] = ""
         os.environ["DATA_DIR"] = str(self.data_dir)
         os.environ["BIND_PORT"] = str(self.port)
 
