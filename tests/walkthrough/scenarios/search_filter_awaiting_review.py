@@ -15,6 +15,7 @@ from tests.walkthrough.scenarios._search_support import (
 )
 
 SLUG = "search-filter-awaiting-review"
+TOPIC = "Search page"
 TITLE = "Filter to clips awaiting review"
 DESCRIPTION = (
     "An operator filters the clip list by annotation status to see only clips "

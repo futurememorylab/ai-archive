@@ -53,6 +53,7 @@ def run_scenarios(slugs: list[str], *, record: bool) -> list[dict]:
                     results.append(
                         {
                             "slug": mod.SLUG,
+                            "topic": getattr(mod, "TOPIC", "Other"),
                             "title": mod.TITLE,
                             "description": mod.DESCRIPTION,
                             "video": f"{mod.SLUG}.webm",

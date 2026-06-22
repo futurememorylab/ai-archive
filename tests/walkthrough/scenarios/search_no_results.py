@@ -9,6 +9,7 @@ from tests.walkthrough.scenarios._search_support import (
 )
 
 SLUG = "search-no-results"
+TOPIC = "Search page"
 TITLE = "Search with no matches"
 DESCRIPTION = (
     "An operator searches for a term no clip name contains. The list shows a "

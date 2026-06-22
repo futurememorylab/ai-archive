@@ -15,6 +15,7 @@ from tests.walkthrough.scenarios._search_support import (
 )
 
 SLUG = "search-filter-not-annotated"
+TOPIC = "Search page"
 TITLE = "Filter to clips with no annotations"
 DESCRIPTION = (
     "An operator filters the clip list by annotation status to find clips that "

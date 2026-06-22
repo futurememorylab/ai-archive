@@ -11,6 +11,7 @@ from tests.walkthrough.scenarios._search_support import (
 )
 
 SLUG = "search-restore-after-clear"
+TOPIC = "Search page"
 TITLE = "Clear the search to restore the full list"
 DESCRIPTION = (
     "After narrowing the list with a search, the operator clears the search box "

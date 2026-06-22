@@ -14,6 +14,7 @@ from tests.walkthrough.scenarios._search_support import (
 )
 
 SLUG = "search-filter-by-name"
+TOPIC = "Search page"
 TITLE = "Search the clip list by name"
 DESCRIPTION = (
     "An operator searches the clip list by typing part of a clip name. The list "

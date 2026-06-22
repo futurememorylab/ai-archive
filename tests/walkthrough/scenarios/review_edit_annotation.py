@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 SLUG = "review-edit-annotation"
+TOPIC = "Clip page"
 TITLE = "Review and edit an AI annotation"
 DESCRIPTION = (
     "An operator opens a clip with a pending AI draft, plays the proxy, reviews "
