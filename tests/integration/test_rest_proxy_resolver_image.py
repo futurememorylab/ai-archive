@@ -20,11 +20,11 @@ class _FakeCatdv:
         self.proxy_calls: list[int] = []
         self.original_calls: list[int] = []
 
-    async def download_proxy(self, clip_id: int, dest: Path) -> None:
+    async def download_proxy(self, clip_id: int, dest: Path, *, progress_cb=None) -> None:
         self.proxy_calls.append(clip_id)
         dest.write_bytes(b"PROXY-OK!")  # noqa: ASYNC240
 
-    async def download_original(self, media_id: int, dest: Path) -> None:
+    async def download_original(self, media_id: int, dest: Path, *, progress_cb=None) -> None:
         self.original_calls.append(media_id)
         dest.write_bytes(b"\xff\xd8\xffJPEG-ORIGINAL")  # noqa: ASYNC240
 

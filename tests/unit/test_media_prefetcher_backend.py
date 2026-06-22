@@ -20,7 +20,7 @@ class _Backend:
     def __init__(self, raise_exc=None):
         self.cached, self._raise = [], raise_exc
 
-    async def ensure_cached(self, clip_id):
+    async def ensure_cached(self, clip_id, progress_cb=None):
         self.cached.append(clip_id)
         if self._raise:
             raise self._raise

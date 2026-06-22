@@ -6,7 +6,7 @@ class _Resolver:
     def __init__(self, path=None, raise_exc=None):
         self._path, self._raise, self.calls = path, raise_exc, []
 
-    async def path_for_clip_id(self, clip_id):
+    async def path_for_clip_id(self, clip_id, progress_cb=None):
         self.calls.append(clip_id)
         if self._raise:
             raise self._raise

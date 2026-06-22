@@ -16,6 +16,7 @@ async def test_prefetch_queue_columns(db):
         "finished_at": "TEXT",
         "error": "TEXT",
         "bytes_downloaded": "INTEGER",
+        "bytes_total": "INTEGER",  # added by migration 0024 (issue #78)
     }
 
 
