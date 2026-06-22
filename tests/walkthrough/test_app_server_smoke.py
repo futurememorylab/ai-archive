@@ -54,6 +54,14 @@ def test_media_streams(app_url):
     assert len(body) > 1000
 
 
+def test_thumbnail_streams_jpeg(app_url):
+    # StubThumbnailService serves a real poster, so clip rows show a thumbnail
+    # instead of a broken-image placeholder.
+    status, body = _get(f"{app_url}/api/media/101/thumb")
+    assert status == 200
+    assert body[:2] == b"\xff\xd8"  # JPEG SOI marker
+
+
 def _post_json(url: str, payload: dict | None):
     import json
 

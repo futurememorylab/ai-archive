@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import os
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -19,10 +20,11 @@ import uvicorn
 
 from tests.walkthrough import seed
 from tests.walkthrough.fakes import (
+    CATALOG_ID,
     FakeArchive,
     LocalFileResolver,
     StubThumbnailService,
-    build_clip,
+    build_clips,
 )
 
 _OFFLINE_ENV = {
@@ -31,7 +33,7 @@ _OFFLINE_ENV = {
     "CATDV_BASE_URL": "http://localhost:0",
     "CATDV_USERNAME": "",
     "CATDV_PASSWORD": "",
-    "CATDV_CATALOG_ID": "881507",
+    "CATDV_CATALOG_ID": CATALOG_ID,
     "GCP_PROJECT_ID": "test-project",
     "GCS_BUCKET_NAME": "test-bucket",
     "INSTANCE_ID": "test-instance",
@@ -48,6 +50,7 @@ class WalkthroughApp:
         self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._app = None
+        self._thumb: Path | None = None
 
     def start(self) -> None:
         for k, v in _OFFLINE_ENV.items():
@@ -69,6 +72,20 @@ class WalkthroughApp:
         self._app = main_mod.app
 
         video = seed.make_proxy_video(self.data_dir / "proxy_101.mp4")
+        self._thumb = seed.make_thumbnail(self.data_dir / "thumb.jpg", video)
+        clips = build_clips(video)
+
+        # Seed a standalone template DB on its own connection, then connect a
+        # COPY of it for the run: seeding and the live run use separate database
+        # files. The app opens DATA_DIR/app.db (context.py), so the copy lands
+        # there. Done before boot — the app's lifespan opens the already-seeded
+        # copy; its idempotent migrations + stale-session cleanup leave the seed
+        # intact (run_startup_cleanup only prunes live_sessions). The catalog is
+        # seeded into clip_list_cache so the annotation-status filters resolve.
+        seed_template = self.data_dir / "seed_template.db"
+        run_db = self.data_dir / "app.db"
+        asyncio.run(seed.build_seed_db(seed_template, clips=clips, catalog_id=CATALOG_ID))
+        shutil.copyfile(seed_template, run_db)
 
         config = uvicorn.Config(
             self._app, host="127.0.0.1", port=self.port, log_level="warning"
@@ -85,18 +102,18 @@ class WalkthroughApp:
         self._thread.start()
         self._wait_until_started()
 
+        # The DB was seeded into app.db before boot (above); the app's own
+        # connection is the single live connection for this run.
         core = self._app.state.core_ctx
-        fut = asyncio.run_coroutine_threadsafe(seed.seed_draft(core.db), self._loop)
-        fut.result(timeout=30)
 
         from tests._helpers.live_ctx import install_live_ctx
 
         resolver = LocalFileResolver(video)
         live = install_live_ctx(
             self._app,
-            archive=FakeArchive(build_clip(video)),
+            archive=FakeArchive(clips),
             proxy_resolver=resolver,
-            thumbnail_service=StubThumbnailService(),
+            thumbnail_service=StubThumbnailService(self._thumb),
         )
         # build_context only wires media_cache_backend when init_external is
         # True (real proxy_resolver present); offline boot leaves it None, so
