@@ -125,26 +125,8 @@ function reviewMixin(clipId) {
       this._persist(it, "accepted", edited);
     },
     // ── delete (reject) + restore: nothing is unrecoverable ─────
-    // Deleting is gated by a confirm modal (clip_detail.html binds it to
-    // `deleteConfirmItem`). askDelete only stages the item; del() does the
-    // real reject once the user confirms. Recovery (Undo toast / Restore)
-    // stays as a second safety net.
-    deleteConfirmItem: null,
-    askDelete(item, ev) {
-      if (ev) ev.stopPropagation();
-      this.deleteConfirmItem = item;
-    },
-    deleteConfirmLabel() {
-      const it = this.deleteConfirmItem;
-      if (!it) return "";
-      const label = it.name || it.identifier || it.text || "this proposal";
-      return `Delete “${label}”? You can undo or restore it afterwards.`;
-    },
-    confirmDelete() {
-      const it = this.deleteConfirmItem;
-      this.deleteConfirmItem = null;
-      if (it) this.del(it);
-    },
+    // No confirm dialog: del() is fully recoverable via the Undo toast and
+    // the Restore strip, so a confirmation would only add friction.
     del(item, ev) {
       if (ev) ev.stopPropagation();
       const f = this._findDraft(item.item_id);

@@ -427,8 +427,7 @@ def test_clip_detail_review_mode_renders_item_controls(monkeypatch, tmp_path):
         assert "startEdit" in r.text  # ✎ Edit (buffered save/cancel edit)
         assert "saveEdit" in r.text  # Save
         assert "cancelEdit" in r.text  # Cancel
-        assert "askDelete(" in r.text  # Delete (confirm-gated, edit mode only)
-        assert "deleteConfirmLabel" in r.text  # confirm dialog body
+        assert "del(" in r.text  # Delete (edit mode only, recoverable via Undo/Restore)
         assert "restore(" in r.text  # Restore (deleted strip)
         assert "acceptApplyAll" in r.text
         # Review bar with the consolidated accept+apply action and clip navigation.

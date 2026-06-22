@@ -220,16 +220,5 @@
     </div>
   {% endcall %}
   {% endif %}
-
-  {# ── Delete-proposal confirm dialog (draft review) ─────────────────────── #}
-  {% call ui.modal('deleteConfirmItem', label='Delete proposal?', card_cls='sm') %}
-    <div class="modal-body">
-      <p x-text="deleteConfirmLabel()"></p>
-    </div>
-    <div class="modal-actions">
-      <button type="button" class="btn ghost" @click="deleteConfirmItem = null">Cancel</button>
-      <button type="button" class="btn danger" @click="confirmDelete()">Delete</button>
-    </div>
-  {% endcall %}
 </div>
 {% endblock %}
