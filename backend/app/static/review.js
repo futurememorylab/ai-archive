@@ -125,6 +125,8 @@ function reviewMixin(clipId) {
       this._persist(it, "accepted", edited);
     },
     // ── delete (reject) + restore: nothing is unrecoverable ─────
+    // No confirm dialog: del() is fully recoverable via the Undo toast and
+    // the Restore strip, so a confirmation would only add friction.
     del(item, ev) {
       if (ev) ev.stopPropagation();
       const f = this._findDraft(item.item_id);
