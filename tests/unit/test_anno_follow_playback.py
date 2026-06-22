@@ -78,3 +78,24 @@ def test_draft_marker_has_follow_hooks():
     assert "data-anno-marker" in draft
     assert ':data-in="m.in_secs"' in draft
     assert "active: isMarkerActive(m)" in draft
+
+
+def test_driver_wired_in_player():
+    # Watch on current drives the scroll; scope watch re-centres on tab switch.
+    assert 'this.$watch("current"' in PLAYER_JS
+    assert 'this.$watch("scope"' in PLAYER_JS
+    assert "followActiveAnno()" in PLAYER_JS
+
+
+def test_driver_reads_visible_cards_only():
+    # offsetParent filter excludes the hidden scope/tab (display:none).
+    assert "[data-anno-marker]" in PLAYER_JS
+    assert "offsetParent" in PLAYER_JS
+
+
+def test_manual_scroll_pause_and_resume_on_seek():
+    assert "followSuspended" in PLAYER_JS
+    assert "4000" in PLAYER_JS              # resume window
+    assert "_selfScrolling" in PLAYER_JS    # ignore our own programmatic scroll
+    # seek() (timeline / card click) is intentional nav -> resumes immediately.
+    assert "this.followSuspended = false" in PLAYER_JS
