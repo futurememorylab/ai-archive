@@ -40,7 +40,13 @@
             </td>
             <td class="mono muted-2">media-local</td>
             <td class="mono muted-2">{{ r.started_at or r.requested_at or "—" }}</td>
-            <td class="num mono">{{ "%.1f" % (r.bytes_downloaded / 1048576) }} MB</td>
+            <td class="num mono">
+              {% if r.status == "downloading" and r.bytes_total %}
+                {{ (100 * r.bytes_downloaded // r.bytes_total) }}%&nbsp;&nbsp;{{ "%.1f" % (r.bytes_downloaded / 1048576) }} MB
+              {% else %}
+                {{ "%.1f" % (r.bytes_downloaded / 1048576) }} MB
+              {% endif %}
+            </td>
             <td class="row-actions">
               {% if r.status == "queued" %}
                 <button type="button" class="btn sm"
