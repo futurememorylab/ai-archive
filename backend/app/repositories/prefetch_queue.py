@@ -28,6 +28,7 @@ def _row_to_dict(row) -> dict[str, Any]:
         "finished_at",
         "error",
         "bytes_downloaded",
+        "bytes_total",
     )
     return dict(zip(keys, row, strict=False))
 
@@ -44,6 +45,7 @@ def _row_to_dict_with_name(row) -> dict[str, Any]:
         "finished_at",
         "error",
         "bytes_downloaded",
+        "bytes_total",
         "clip_name",
     )
     return dict(zip(keys, row, strict=False))
@@ -52,7 +54,7 @@ def _row_to_dict_with_name(row) -> dict[str, Any]:
 _LIST_COLUMNS_WITH_NAME = """
     q.id, q.provider_id, q.provider_clip_id, q.status,
     q.requested_by, q.requested_at, q.started_at, q.finished_at,
-    q.error, q.bytes_downloaded,
+    q.error, q.bytes_downloaded, q.bytes_total,
     cc.name AS clip_name
 """
 
@@ -131,6 +133,23 @@ class PrefetchQueueRepo:
         # Re-read so callers see the updated status/started_at.
         return await self.get(conn, rid)
 
+    async def update_progress(
+        self,
+        conn: aiosqlite.Connection,
+        rid: int,
+        bytes_downloaded: int,
+        bytes_total: int,
+    ) -> None:
+        """Record mid-download progress on a `downloading` row. Throttling
+        is the caller's job (MediaPrefetcher); this is a plain UPDATE."""
+        await conn.execute(
+            "UPDATE prefetch_queue "
+            "   SET bytes_downloaded=?, bytes_total=? "
+            " WHERE id=?",
+            (int(bytes_downloaded), int(bytes_total), rid),
+        )
+        await conn.commit()
+
     async def requeue_orphans(self, conn: aiosqlite.Connection) -> int:
         """Reset orphaned `downloading` rows back to `queued`.
 
@@ -143,7 +162,8 @@ class PrefetchQueueRepo:
         """
         cur = await conn.execute(
             "UPDATE prefetch_queue "
-            "   SET status='queued', started_at=NULL "
+            "   SET status='queued', started_at=NULL, "
+            "       bytes_downloaded=0, bytes_total=0 "
             " WHERE status='downloading'"
         )
         await conn.commit()
@@ -154,7 +174,7 @@ class PrefetchQueueRepo:
             """
             SELECT id, provider_id, provider_clip_id, status,
                    requested_by, requested_at, started_at, finished_at,
-                   error, bytes_downloaded
+                   error, bytes_downloaded, bytes_total
               FROM prefetch_queue WHERE id = ?
             """,
             (rid,),

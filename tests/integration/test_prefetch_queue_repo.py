@@ -157,3 +157,35 @@ async def test_requeue_orphans_leaves_terminal_and_queued_rows_untouched(db):
     assert n == 0
     assert (await repo.get(db, queued))["status"] == "done"
     assert (await repo.get(db, done))["status"] == "queued"
+
+
+@pytest.mark.asyncio
+async def test_update_progress_writes_both_byte_fields(db):
+    repo = PrefetchQueueRepo()
+    rid = await repo.enqueue(db, key=("catdv", "1"), who="request")
+    await repo.claim_next(db)
+    await repo.update_progress(db, rid, 5_000_000, 27_000_000)
+    row = await repo.get(db, rid)
+    assert row["bytes_downloaded"] == 5_000_000
+    assert row["bytes_total"] == 27_000_000
+    assert row["status"] == "downloading"  # progress does not change status
+
+
+@pytest.mark.asyncio
+async def test_bytes_total_defaults_zero_and_is_listed(db):
+    repo = PrefetchQueueRepo()
+    await repo.enqueue(db, key=("catdv", "1"), who="request")
+    active = await repo.list_active(db)
+    assert active[0]["bytes_total"] == 0  # new column present, defaults 0
+
+
+@pytest.mark.asyncio
+async def test_requeue_orphans_resets_progress(db):
+    repo = PrefetchQueueRepo()
+    rid = await repo.enqueue(db, key=("catdv", "1"), who="request")
+    await repo.claim_next(db)
+    await repo.update_progress(db, rid, 9_000_000, 27_000_000)
+    await repo.requeue_orphans(db)
+    row = await repo.get(db, rid)
+    assert row["status"] == "queued"
+    assert row["bytes_downloaded"] == 0 and row["bytes_total"] == 0
