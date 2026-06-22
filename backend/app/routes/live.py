@@ -67,6 +67,11 @@ async def session_config(request: Request, clip_id: int) -> dict:
         prompt_body=version.body,
         settings=settings,
     )
+    # Split the pre-built initial user turn out of the setup dict: the browser
+    # must send `setup_payload` verbatim as the WSS `setup` frame, and an
+    # unknown `initial_context_turn` field there is rejected. It travels as its
+    # own response field and is sent only after `setupComplete` (see liveSession.js).
+    initial_context_turn = setup_payload.pop("initial_context_turn")
     token = await mint_ephemeral_token(setup=setup_payload, settings=settings)
 
     session_id = uuid.uuid4().hex
@@ -80,10 +85,10 @@ async def session_config(request: Request, clip_id: int) -> dict:
 
     return {
         "session_id": session_id,
-        "token": token,
+        # The key is carried in ws_url's `?key=` only; no bare duplicate.
         "ws_url": WSS_URL_TEMPLATE.format(token=token),
         "setup_payload": setup_payload,
-        "inactivity_s": settings.gemini_live_inactivity_s,
+        "initial_context_turn": initial_context_turn,
     }
 
 

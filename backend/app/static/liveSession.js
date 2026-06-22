@@ -21,12 +21,15 @@ function liveSession(clipId, config) {
     _workletNode: null,
     _mediaStream: null,
     _frameCount: 0,
-    _searchCalls: 0,
     _startedAt: 0,
     _elapsedTimer: null,
     _inactivityTimer: null,
     _endReason: null,
     _setupPayload: null,
+    _initialTurn: null,
+    _setupComplete: false,          // gate: no content/audio until server ACKs setup
+    _playing: [],                   // scheduled output BufferSources (for barge-in flush)
+    _nextPlayAt: 0,
 
     // ── public API ───────────────────────────────────────────────────────
     async start() {
@@ -34,13 +37,14 @@ function liveSession(clipId, config) {
       this.error = null;
       this.transcript = [];
       this._frameCount = 0;
-      this._searchCalls = 0;
+      this._setupComplete = false;
       this._endReason = null;
       this.state = "connecting";
       try {
         const config = await this._fetchConfig();
         this.sessionId = config.session_id;
         this._setupPayload = config.setup_payload;
+        this._initialTurn = config.initial_context_turn;
         await this._openMic();
         this._openWs(config.ws_url);
       } catch (e) {
@@ -132,7 +136,10 @@ function liveSession(clipId, config) {
     },
 
     _onCaptureChunk(arrayBuffer) {
-      if (!this._ws || this._ws.readyState !== 1) return;
+      // Drop chunks until the WSS is open AND the server has ACKed `setup`.
+      // Streaming realtimeInput before `setupComplete` is the race that made
+      // sessions flaky (Gemini closes with 1007/1008). See docs/decisions.md.
+      if (!this._ws || this._ws.readyState !== 1 || !this._setupComplete) return;
       // Live API current shape: realtimeInput.audio is a single Blob,
       // not the deprecated mediaChunks array. Same for .video / .text.
       const b64 = this._b64FromBuffer(arrayBuffer);
@@ -151,22 +158,26 @@ function liveSession(clipId, config) {
       return btoa(bin);
     },
 
+    _b64ToBytes(b64) {
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return bytes;
+    },
+
     _openWs(url) {
       console.log("[live] WSS opening:", url.replace(/key=[^&]+/, "key=…"));
       const ws = new WebSocket(url);
       this._ws = ws;
       ws.binaryType = "arraybuffer";
       ws.onopen = () => {
-        const setup = { ...this._setupPayload };
-        const initial = setup.initial_context_turn;
-        delete setup.initial_context_turn;
-        console.log("[live] WSS open. Sending setup:", JSON.stringify(setup, null, 2));
-        ws.send(JSON.stringify({ setup }));
-        this._sendInitialClientContent(initial);
-        this.state = "active";
-        this._startedAt = Date.now();
-        this._elapsedTimer = setInterval(() => this._tickElapsed(), 1000);
-        this._resetInactivity();
+        // Send ONLY the setup frame and wait. The session does not become
+        // active and no content/audio is sent until the server replies with
+        // `setupComplete` (handled in _onSetupComplete). Sending content here
+        // was the flakiness race. setup_payload is already the pure setup —
+        // the initial turn arrives as its own field (config.initial_context_turn).
+        console.log("[live] WSS open. Sending setup:", JSON.stringify(this._setupPayload, null, 2));
+        ws.send(JSON.stringify({ setup: this._setupPayload }));
       };
       ws.onmessage = (evt) => {
         // Live API actually delivers JSON over BINARY WebSocket frames
@@ -196,7 +207,8 @@ function liveSession(clipId, config) {
         if (this.state === "active") {
           this.close(this._endReason || "error");
         } else if (this.state === "connecting") {
-          // Failure before onopen — make sure we leave connecting state so
+          // Closed while still connecting (before onopen, or after setup but
+          // before setupComplete — e.g. a rejected setup). Leave connecting so
           // the user sees the error rather than a stuck spinner.
           this.state = "idle";
           this._teardown();
@@ -228,12 +240,29 @@ function liveSession(clipId, config) {
     _onWsMessage(evt) {
       let msg;
       try { msg = JSON.parse(evt.data); } catch { return; }
+      if (msg.setupComplete) this._onSetupComplete();
       if (msg.serverContent) this._handleServerContent(msg.serverContent);
       if (msg.toolCall) this._handleToolCall(msg.toolCall);
       this._resetInactivity();
     },
 
+    _onSetupComplete() {
+      // Server ACKed the setup frame — only NOW is it safe to send content and
+      // let mic audio flow. Guard against duplicate ACKs / late arrival.
+      if (this._setupComplete || this.state !== "connecting") return;
+      this._setupComplete = true;
+      this._sendInitialClientContent(this._initialTurn);
+      this.state = "active";
+      this._startedAt = Date.now();
+      this._elapsedTimer = setInterval(() => this._tickElapsed(), 1000);
+      this._resetInactivity();
+    },
+
     _handleServerContent(sc) {
+      // Barge-in: when the operator interrupts, Gemini sends interrupted:true
+      // and stops generating. Flush already-queued playback so the model goes
+      // quiet immediately instead of talking over the operator.
+      if (sc.interrupted) this._flushPlayback();
       if (sc.outputTranscription?.text) {
         this.transcript.push({ role: "model", text: sc.outputTranscription.text, ts: Date.now(), kind: "speech" });
       }
@@ -252,9 +281,10 @@ function liveSession(clipId, config) {
       if (!this._audioCtxOut) {
         this._audioCtxOut = new AudioContext({ sampleRate: 24000 });
       }
-      const bin = atob(b64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      // Created lazily inside a WS callback (not a user gesture), so it can
+      // start suspended under the autoplay policy → no sound. Resume it.
+      if (this._audioCtxOut.state === "suspended") this._audioCtxOut.resume();
+      const bytes = this._b64ToBytes(b64);
       const view = new DataView(bytes.buffer);
       const sampleCount = bytes.length / 2;
       const buf = this._audioCtxOut.createBuffer(1, sampleCount, 24000);
@@ -265,9 +295,20 @@ function liveSession(clipId, config) {
       const node = this._audioCtxOut.createBufferSource();
       node.buffer = buf;
       node.connect(this._audioCtxOut.destination);
-      const startAt = Math.max(this._audioCtxOut.currentTime, (this._nextPlayAt || 0));
+      const startAt = Math.max(this._audioCtxOut.currentTime, this._nextPlayAt);
       node.start(startAt);
       this._nextPlayAt = startAt + buf.duration;
+      this._playing.push(node);
+      node.onended = () => {
+        const i = this._playing.indexOf(node);
+        if (i >= 0) this._playing.splice(i, 1);
+      };
+    },
+
+    _flushPlayback() {
+      for (const node of this._playing) { try { node.stop(); } catch {} }
+      this._playing = [];
+      this._nextPlayAt = 0;
     },
 
     _handleToolCall(tc) {
@@ -293,7 +334,6 @@ function liveSession(clipId, config) {
         end_reason: this._endReason || "user_stop",
         transcript: this.transcript,
         frame_count: this._frameCount,
-        search_calls: this._searchCalls,
       };
       try {
         const blob = new Blob([JSON.stringify(body)], { type: "application/json" });
@@ -314,6 +354,7 @@ function liveSession(clipId, config) {
     },
 
     async _teardown() {
+      this._flushPlayback();
       try { this._workletNode?.disconnect(); } catch {}
       try { if (this._mediaStream) this._mediaStream.getTracks().forEach(t => t.stop()); } catch {}
       try { await this._audioCtxIn?.close(); } catch {}
@@ -323,6 +364,7 @@ function liveSession(clipId, config) {
       this._audioCtxIn = null;
       this._audioCtxOut = null;
       this._ws = null;
+      this._setupComplete = false;
       clearInterval(this._elapsedTimer);
       clearTimeout(this._inactivityTimer);
     },
