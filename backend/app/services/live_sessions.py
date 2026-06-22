@@ -9,6 +9,7 @@ flow through this process — see docs/decisions.md 2026-05-23.
 from __future__ import annotations
 
 import json as _json
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import aiosqlite
@@ -18,7 +19,10 @@ from backend.app.repositories.live_sessions import LiveSessionsRepo
 from backend.app.services.live_context import build_context_text
 
 AUTH_TOKENS_URL = "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
+# How long the minted token may keep an open session sending messages.
 TOKEN_TTL_MINUTES = 30
+# How long the browser has to OPEN the session after the token is minted.
+NEW_SESSION_WINDOW_MINUTES = 2
 
 SUMMARY_PROMPT_CS = (
     "Shrň následující konverzaci o archivním filmovém záběru "
@@ -88,28 +92,51 @@ def assemble_setup_payload(
     }
 
 
+def _rfc3339_z(dt: datetime) -> str:
+    """Format a UTC datetime as RFC 3339 with a trailing Z, e.g.
+    2026-06-22T10:00:00.000Z — the shape Google's auth_tokens API expects."""
+    return dt.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
 async def mint_ephemeral_token(*, setup: dict, settings: Any) -> str:
-    """Return the WSS-side key for browser→Gemini Live.
+    """Mint a short-lived, config-bound ephemeral token for the browser's
+    WSS handshake — so the raw GEMINI_API_KEY never leaves the backend.
 
-    Strategy: pass the raw `GEMINI_API_KEY` from settings directly. Ephemeral
-    tokens minted via `authTokens.create` open the WSS handshake but Google
-    closes the connection with code 1007 "API key not valid" the moment the
-    client sends its `setup` frame — verified empirically in browser. The
-    most likely cause is a binding mismatch between the setup bound at
-    mint time and the setup sent over WSS, but we've spent enough cycles
-    on it; the threat model for this single-operator local app over VPN
-    does not justify continuing.
+    The real key authenticates THIS request (server→Google) only. The token
+    is bound (`bidiGenerateContentSetup`) to the full `setup` — model,
+    generationConfig, systemInstruction and tools — so the browser cannot
+    change the model, voice, or system prompt, and only needs to send a
+    minimal `setup` frame. The returned `name` is presented by the browser
+    as `?access_token=` against the v1alpha BidiGenerateContentConstrained
+    endpoint. `uses=1` makes it single-session.
 
-    Trade-off recorded in `docs/decisions.md`. If we ever harden auth,
-    switch to ephemeral tokens (or short-lived OAuth bearers if Google
-    fixes the Vertex AI Live story).
+    ADR 0043 wrongly concluded ephemeral tokens were unworkable: it sent the
+    token to the v1beta `BidiGenerateContent` endpoint via `?key=` (which
+    reads it as an API key → close code 1007 "API key not valid"). The
+    working combination is v1alpha + `...Constrained` + `?access_token=`,
+    verified empirically. See ADR 0111 (supersedes 0043).
     """
     if not getattr(settings, "gemini_api_key", None):
         raise RuntimeError("GEMINI_API_KEY is not configured; Live audio cannot connect")
-    # Touch the unused `setup` arg to keep call-sites stable while we
-    # decide between this and a real ephemeral-token mint.
-    _ = setup
-    return settings.gemini_api_key
+    now = datetime.now(tz=UTC)
+    body = {
+        "uses": 1,
+        "expireTime": _rfc3339_z(now + timedelta(minutes=TOKEN_TTL_MINUTES)),
+        "newSessionExpireTime": _rfc3339_z(now + timedelta(minutes=NEW_SESSION_WINDOW_MINUTES)),
+        "bidiGenerateContentSetup": setup,
+    }
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        r = await client.post(
+            AUTH_TOKENS_URL,
+            params={"key": settings.gemini_api_key},
+            json=body,
+        )
+    if r.status_code != 200:
+        raise RuntimeError(f"auth_tokens.create failed: {r.status_code} {r.text}")
+    name = (r.json() or {}).get("name")
+    if not name:
+        raise RuntimeError(f"auth_tokens.create returned no token name: {r.text[:200]}")
+    return name
 
 
 def _generate_content_url(model: str) -> str:

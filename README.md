@@ -96,21 +96,25 @@ successfully reconnects.
 This is a local app with a deliberately narrow threat model: **single
 operator, on the operator's own laptop, behind the project VPN**.
 
-- `GEMINI_API_KEY`, when configured, is **shipped to the browser** by
-  the Live-session flow. Real ephemeral-token auth was attempted
-  (`authTokens.create`) but Google closes the WSS handshake with code
-  1007 "API key not valid" the moment the client sends `setup` — see
-  ADR 0043. Until that's resolved upstream, treat the key as
-  browser-readable. Do not deploy this app on a shared host, behind a
-  public network, or under any model where browser dev-tools access by
-  an untrusted user is a concern.
-- The boot log emits a `WARNING` naming this exposure every time the
-  key is configured, so the operator sees it on every start.
+- `GEMINI_API_KEY` is **never shipped to the browser**. The Live-session
+  flow mints a short-lived, single-use, config-bound **ephemeral token**
+  server-side (`auth_tokens.create`, v1alpha) and the browser presents
+  *that* token via `?access_token=` against the
+  `BidiGenerateContentConstrained` endpoint. The raw key only ever
+  authenticates the server→Google mint call. The model, voice, system
+  prompt, and tool declarations are bound into the token, so the browser
+  cannot change them — and the proprietary system prompt + tool
+  declarations are withheld from the browser entirely. See ADR 0111
+  (supersedes ADR 0043; the earlier "1007 / key not valid" failure was a
+  wrong endpoint+version+param combination, not a Google limitation).
+- The boot log confirms the ephemeral-token mode at `INFO` when the key
+  is configured, and `WARNING`s if the key is missing (Live unavailable).
 - CatDV credentials (`CATDV_PASSWORD`) live in `.env` and are read
   server-side only; they are NOT exposed to the browser.
 
-If you need to relax these constraints, the live-session auth flow has
-to be redesigned. That is a separate project, not a config change.
+The ephemeral-token flow removes the browser key exposure that previously
+constrained where this app could run; the rest of the threat model (CatDV
+seat limits, VPN dependency) still applies.
 
 ## Architecture & orientation
 

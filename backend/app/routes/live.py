@@ -20,15 +20,21 @@ from backend.app.services.live_sessions import (
 router = APIRouter(prefix="/api/live", tags=["live"])
 
 WSS_URL_TEMPLATE = (
-    # Browser-direct Live API: the GEMINI_API_KEY is presented via `?key=`
-    # against the v1beta BidiGenerateContent endpoint. The Live-capable
-    # native-audio models (gemini-2.5-flash-native-audio-*) are only
-    # surfaced on v1beta; v1alpha returns close code 1008 "model is not
-    # found for API version v1alpha". See docs/decisions.md 2026-05-23.
+    # Browser-direct Live API authenticated by a short-lived EPHEMERAL TOKEN
+    # (not the raw key): presented via `?access_token=` against the v1alpha
+    # BidiGenerateContentConstrained endpoint, which is the endpoint bound
+    # tokens authenticate against. Verified empirically with
+    # gemini-3.1-flash-live-preview. See ADR 0111 (supersedes 0043).
     "wss://generativelanguage.googleapis.com/ws/"
-    "google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
-    "?key={token}"
+    "google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained"
+    "?access_token={token}"
 )
+
+# Fields bound into the token server-side and deliberately withheld from the
+# browser: the proprietary system prompt and the tool/function declarations.
+# The browser sends only the remaining (non-secret) setup fields; the token
+# enforces the full config regardless. See ADR 0111.
+_TOKEN_ONLY_SETUP_FIELDS = ("systemInstruction", "tools")
 
 
 # Indirection points so tests can monkeypatch without touching pages.py internals.
@@ -72,7 +78,12 @@ async def session_config(request: Request, clip_id: int) -> dict:
     # unknown `initial_context_turn` field there is rejected. It travels as its
     # own response field and is sent only after `setupComplete` (see liveSession.js).
     initial_context_turn = setup_payload.pop("initial_context_turn")
+    # Bind the FULL setup (incl. system prompt + tools) into the ephemeral
+    # token, then strip the secret fields before sending setup to the browser.
     token = await mint_ephemeral_token(setup=setup_payload, settings=settings)
+    client_setup = {
+        k: v for k, v in setup_payload.items() if k not in _TOKEN_ONLY_SETUP_FIELDS
+    }
 
     session_id = uuid.uuid4().hex
     repo = LiveSessionsRepo()
@@ -85,9 +96,10 @@ async def session_config(request: Request, clip_id: int) -> dict:
 
     return {
         "session_id": session_id,
-        # The key is carried in ws_url's `?key=` only; no bare duplicate.
+        # Browser auths with the ephemeral token via ws_url's `?access_token=`;
+        # the raw key never leaves the backend, and there is no bare duplicate.
         "ws_url": WSS_URL_TEMPLATE.format(token=token),
-        "setup_payload": setup_payload,
+        "setup_payload": client_setup,
         "initial_context_turn": initial_context_turn,
     }
 

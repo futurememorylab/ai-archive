@@ -80,19 +80,31 @@ async def test_session_config_returns_token_and_setup(client_and_db, monkeypatch
     monkeypatch.setattr(live_routes, "load_clip_for_live", fake_load_clip)
     monkeypatch.setattr(live_routes, "load_draft_for_live", fake_load_draft)
 
-    # NOTE: no respx mock — Live uses the raw GEMINI_API_KEY directly as the
-    # WSS `?key=` value (see docs/decisions.md 2026-05-23, ephemeral-token
-    # path closed with code 1007 in practice).
+    # Live now mints a short-lived, config-bound ephemeral token server-side.
+    # The raw GEMINI_API_KEY authenticates THIS mint call (server→Google) and
+    # never reaches the browser. See ADR 0111 (supersedes 0043).
+    mint = respx.post(
+        "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
+    ).mock(return_value=Response(200, json={"name": "auth_tokens/ephemeral-XYZ"}))
 
     r = await ac.get("/api/live/session-config", params={"clip_id": 42})
     assert r.status_code == 200, r.text
     data = r.json()
+    assert mint.called
     assert data["session_id"]
     assert data["ws_url"].startswith("wss://generativelanguage.googleapis.com/ws/")
-    assert "key=test-key" in data["ws_url"]
-    assert "v1beta.GenerativeService.BidiGenerateContent" in data["ws_url"]
+    # Browser authenticates with the ephemeral token via ?access_token=, against
+    # the v1alpha Constrained endpoint — NOT the raw key, NOT ?key=.
+    assert "access_token=auth_tokens/ephemeral-XYZ" in data["ws_url"]
+    assert "v1alpha.GenerativeService.BidiGenerateContentConstrained" in data["ws_url"]
+    assert "key=test-key" not in data["ws_url"]
+    assert "test-key" not in r.text  # the real key never appears in the response
     assert data["setup_payload"]["model"].endswith("native-audio-latest")
-    # The API key is embedded in ws_url only — not duplicated as a bare `token`.
+    # Hardening: the proprietary system prompt + tool/function declarations are
+    # bound into the token server-side and must NOT be shipped to the browser.
+    assert "systemInstruction" not in data["setup_payload"]
+    assert "tools" not in data["setup_payload"]
+    # The API key is not duplicated as a bare `token`.
     assert "token" not in data
     # inactivity_s is a server-rendered template arg, not part of this response.
     assert "inactivity_s" not in data
@@ -141,9 +153,17 @@ async def test_session_config_works_offline_when_clip_cached(client_and_db, monk
     monkeypatch.setattr(live_routes, "load_clip_for_live", fake_load_clip)
     monkeypatch.setattr(live_routes, "load_draft_for_live", fake_load_draft)
 
+    # Minting the ephemeral token is a Google Developer API call (browser↔Google
+    # direct, not VPN-dependent), so Live works even while CatDV is offline.
+    respx.post(
+        "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
+    ).mock(return_value=Response(200, json={"name": "auth_tokens/ephemeral-OFF"}))
+
     r = await ac.get("/api/live/session-config", params={"clip_id": 42})
     assert r.status_code == 200, r.text
-    assert "key=test-key" in r.json()["ws_url"]
+    ws_url = r.json()["ws_url"]
+    assert "access_token=auth_tokens/ephemeral-OFF" in ws_url
+    assert "test-key" not in ws_url
 
 
 @pytest.mark.asyncio
