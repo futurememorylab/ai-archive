@@ -39,6 +39,10 @@ def _row(r: tuple) -> ModelConfigRow:
 
 class ModelConfigRepo:
     async def get(self, conn: aiosqlite.Connection, model: str) -> ModelConfigRow | None:
+        """Return the row for `model` regardless of its `removed` state, or None
+        if absent. Reconcile/admin paths need to see tombstones (so a deleted
+        model is not silently re-seeded); callers that want only live rows use
+        `all_live`."""
         cur = await conn.execute(
             f"SELECT {_COLS} FROM model_config WHERE model = ?", (model,)
         )

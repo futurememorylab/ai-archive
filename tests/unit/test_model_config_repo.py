@@ -42,6 +42,10 @@ async def test_all_live_excludes_removed(db):
     await repo.soft_delete(db, "gone", commit=True)
     models = {r.model for r in await repo.all_live(db)}
     assert models == {"keep"}
+    # get() intentionally still returns the tombstone (so reconcile won't
+    # silently re-seed a deleted model); only all_live filters it out.
+    gone = await repo.get(db, "gone")
+    assert gone is not None and gone.removed == 1
 
 
 async def test_update_rates_bumps_version(db):
