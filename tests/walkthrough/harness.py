@@ -74,6 +74,14 @@ def step_overlay_html(n: int, label: str) -> str:
     )
 
 
+# In record mode, dwell after each step's action so the resulting (post-HTMX-
+# swap) state paints and is captured under that step's overlay, and dwell once
+# more before stopping so the final state is recorded. These are recording-only
+# (skipped in assert mode) — they don't gate any assertion.
+_STEP_DWELL_MS = 900
+_FINAL_DWELL_MS = 1200
+
+
 class Walkthrough:
     def __init__(self, page, *, record: bool, video_path: str | None = None) -> None:
         self.page = page
@@ -107,9 +115,15 @@ class Walkthrough:
                 html=step_overlay_html(self.step_count, label)
             )
         action(self.page)
+        if self.record:
+            # Let the action's result (e.g. an HTMX table swap) paint and be
+            # recorded under this step's overlay before advancing.
+            self.page.wait_for_timeout(_STEP_DWELL_MS)
 
     def finish(self) -> str | None:
         if not self.record:
             return None
+        # Dwell on the final state so it's captured before the screencast stops.
+        self.page.wait_for_timeout(_FINAL_DWELL_MS)
         self.page.screencast.stop()
         return self.video_path
