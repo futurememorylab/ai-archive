@@ -108,6 +108,10 @@ document.addEventListener('alpine:init', () => {
             (rid == null || r.id === rid),
         );
         if (!mine) continue;
+        if (mine.status === 'downloading' && mine.bytes_total > 0) {
+          const pct = Math.floor((100 * mine.bytes_downloaded) / mine.bytes_total);
+          this.busyLabel = `Caching… (${pct}%)`;
+        }
         if (mine.status === 'done') return;
         if (mine.status === 'error') throw new Error(mine.error || 'prefetch failed');
         if (mine.status === 'cancelled') throw new Error('cancelled');
