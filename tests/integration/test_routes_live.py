@@ -87,13 +87,20 @@ async def test_session_config_returns_token_and_setup(client_and_db, monkeypatch
     r = await ac.get("/api/live/session-config", params={"clip_id": 42})
     assert r.status_code == 200, r.text
     data = r.json()
-    assert data["token"] == "test-key"
     assert data["session_id"]
     assert data["ws_url"].startswith("wss://generativelanguage.googleapis.com/ws/")
     assert "key=test-key" in data["ws_url"]
     assert "v1beta.GenerativeService.BidiGenerateContent" in data["ws_url"]
     assert data["setup_payload"]["model"].endswith("native-audio-latest")
-    assert data["setup_payload"]["initial_context_turn"]["parts"][0]["text"].startswith(
+    # The API key is embedded in ws_url only — not duplicated as a bare `token`.
+    assert "token" not in data
+    # inactivity_s is a server-rendered template arg, not part of this response.
+    assert "inactivity_s" not in data
+    # The initial context turn is a separate top-level field, NOT smuggled
+    # inside setup_payload (which must be a pure BidiGenerateContentSetup so
+    # the browser can send it verbatim as the `setup` frame).
+    assert "initial_context_turn" not in data["setup_payload"]
+    assert data["initial_context_turn"]["parts"][0]["text"].startswith(
         "=== Publikované anotace"
     )
     repo = LiveSessionsRepo()
@@ -136,7 +143,7 @@ async def test_session_config_works_offline_when_clip_cached(client_and_db, monk
 
     r = await ac.get("/api/live/session-config", params={"clip_id": 42})
     assert r.status_code == 200, r.text
-    assert r.json()["token"] == "test-key"
+    assert "key=test-key" in r.json()["ws_url"]
 
 
 @pytest.mark.asyncio

@@ -555,6 +555,32 @@ a { color: inherit; text-decoration: none; }
 .player-offline-title { font-size: 14px; font-weight: 600; color: var(--text); }
 .player-offline-hint { font-size: 12px; color: var(--text-3); }
 
+/* Frame-sent flash — a brief camera-flash over the player, pulsed when the
+   current frame is captured + sent to Gemini during a live session. Sits above
+   the video + HUD (z-index 4) but never intercepts pointer events. Re-triggered
+   by toggling .flash off→on with a reflow (see liveSession._flashFrameSent). */
+.frame-flash {
+  position: absolute; inset: 0;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+.frame-flash.flash { animation: frame-flash 420ms ease-out; }
+@keyframes frame-flash {
+  0%   { opacity: 0; }
+  10%  { opacity: 0.55; }
+  100% { opacity: 0; }
+}
+/* Photosensitivity / reduced-motion: keep a faint, quick acknowledgement
+   instead of a full bright flash. */
+@media (prefers-reduced-motion: reduce) {
+  .frame-flash.flash { animation: frame-flash-soft 240ms ease-out; }
+  @keyframes frame-flash-soft {
+    0% { opacity: 0; } 10% { opacity: 0.22; } 100% { opacity: 0; }
+  }
+}
+
 /* HUD overlay */
 .hud { position: absolute; font-family: var(--f-mono); pointer-events: none; }
 .hud-tl { top: 26px; left: 26px; }
@@ -1332,6 +1358,36 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
   background: transparent; color: var(--text-3); border: none;
   cursor: pointer; font-size: 11px; padding: 0 .4rem;
   position: absolute; right: .6rem; top: .4rem;
+}
+
+/* Live transcript as a chat dialog: you (user) on the right, the assistant
+   (model) on the left, system notes centered + muted. */
+.live-chat { display: flex; flex-direction: column; gap: .3rem; }
+.live-strip-lines.live-chat li { padding: 0; }
+.chat-msg { display: flex; }
+.chat-bubble {
+  max-width: 82%;
+  padding: .28rem .55rem;
+  border-radius: var(--r-3);
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.chat-user { justify-content: flex-end; }
+.chat-user .chat-bubble {
+  background: var(--accent); color: var(--accent-fg);
+  border-bottom-right-radius: var(--r-1);
+}
+.chat-model { justify-content: flex-start; }
+.chat-model .chat-bubble {
+  background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--line);
+  border-bottom-left-radius: var(--r-1);
+}
+.chat-system { justify-content: center; }
+.chat-system .chat-bubble {
+  background: transparent; color: var(--text-3);
+  font-size: 11px; font-style: italic; padding: .1rem .3rem;
 }
 
 /* History tab */
