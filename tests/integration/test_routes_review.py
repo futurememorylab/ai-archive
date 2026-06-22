@@ -423,10 +423,12 @@ def test_clip_detail_review_mode_renders_item_controls(monkeypatch, tmp_path):
         assert r.status_code == 200
         # Card panel structural markers (new Alpine-driven design).
         assert "ri-card" in r.text
+        assert "ri-pencil" in r.text  # ✎ pencil opens edit mode
         assert "startEdit" in r.text  # ✎ Edit (buffered save/cancel edit)
         assert "saveEdit" in r.text  # Save
         assert "cancelEdit" in r.text  # Cancel
-        assert "del(" in r.text  # Delete
+        assert "askDelete(" in r.text  # Delete (confirm-gated, edit mode only)
+        assert "deleteConfirmLabel" in r.text  # confirm dialog body
         assert "restore(" in r.text  # Restore (deleted strip)
         assert "acceptApplyAll" in r.text
         # Review bar with the consolidated accept+apply action and clip navigation.

@@ -2479,8 +2479,15 @@ body.studio-resizing {
   border: 1px solid color-mix(in oklab, var(--info) 26%, var(--line)); border-radius: var(--r-2); padding: 8px 10px; margin: 0 14px 12px; }
 .edit-hint b { color: var(--text); font-weight: 600; }
 .edit-hint .eh-ico { color: var(--info); flex: none; }
-.ri-card { border: 1px solid var(--line); border-radius: var(--r-2); background: var(--panel); padding: 10px 12px; margin-bottom: 8px;
+.ri-card { position: relative; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--panel); padding: 10px 12px; margin-bottom: 8px;
   display: flex; flex-direction: column; gap: 6px; transition: border-color 120ms, box-shadow 120ms, opacity 120ms; }
+/* Bottom-right pencil: the only action affordance on a card at rest. Edit/Delete
+   live inside the editor (.ri-actions), shown once the pencil opens edit mode.
+   Dimmed by default, full on card hover / keyboard focus so it never fights the
+   proposal text for attention. */
+.ri-pencil { position: absolute; right: 8px; bottom: 8px; z-index: 1; opacity: 0.5;
+  transition: opacity 120ms; font-size: 13px; }
+.ri-card:hover .ri-pencil, .ri-pencil:focus-visible { opacity: 1; }
 .ri-card.editing { border-color: #9a6cff; box-shadow: 0 0 0 2px color-mix(in oklab, #9a6cff 30%, transparent); }
 /* A draft marker card is click-to-seek (jump to in-point + play); mirror the
    published .marker affordance. The editor/action controls reset the cursor

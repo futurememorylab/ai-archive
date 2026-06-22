@@ -26,12 +26,12 @@
 
 <div class="edit-hint" x-show="totalCount() > 0">
   <span class="eh-ico">✎</span>
-  <span>Review each proposal below. <b>Delete</b> the ones you don't want
-    (<b>Undo</b> or <b>Restore</b> brings them back); on a marker, <b>Edit</b>,
-    drag the highlighted bar's edges on the <b>timeline</b> to set in/out, then
-    <b>Save</b> (or <b>Cancel</b> to revert). <b>Accept &amp; apply all</b> writes
-    everything still listed to CatDV. The <b>‹ ›</b> arrows move between clips
-    in the review set.</span>
+  <span>Review each proposal below. Click the <b>✎</b> pencil to edit one —
+    there you can change it, <b>Delete</b> it (<b>Undo</b> or <b>Restore</b>
+    brings it back), and on a marker drag the highlighted bar's edges on the
+    <b>timeline</b> to set in/out — then <b>Save</b> (or <b>Cancel</b> to
+    revert). <b>Accept &amp; apply all</b> writes everything still listed to
+    CatDV. The <b>‹ ›</b> arrows move between clips in the review set.</span>
 </div>
 
 <div class="anno-tabs" role="tablist" x-show="totalCount() > 0 || deletedTotal() > 0">
@@ -59,11 +59,13 @@
           <span class="ri-hint">Drag the highlighted bar on the timeline · ←/→ nudge (Shift = 1 frame)</span>
         </div>
       </div>
-      <div class="ri-actions" @click.stop>
-        <button type="button" class="btn good sm" x-show="editingItemId === m.item_id" @click="saveEdit()">Save</button>
-        <button type="button" class="btn sm ghost" x-show="editingItemId === m.item_id" @click="cancelEdit()">Cancel</button>
-        <button type="button" class="btn sm ghost" x-show="editingItemId !== m.item_id" @click="startEdit(m.item_id)">✎ Edit</button>
-        <button type="button" class="btn sm danger" x-show="editingItemId !== m.item_id" @click="del(m, $event)">Delete</button>
+      <button type="button" class="btn icon sm ghost ri-pencil" x-show="editingItemId !== m.item_id"
+              @click.stop="startEdit(m.item_id)" title="Edit" aria-label="Edit">✎</button>
+      <div class="ri-actions" x-show="editingItemId === m.item_id" x-cloak @click.stop>
+        <button type="button" class="btn sm danger" @click="askDelete(m, $event)">Delete</button>
+        <span class="grow"></span>
+        <button type="button" class="btn sm ghost" @click="cancelEdit()">Cancel</button>
+        <button type="button" class="btn good sm" @click="saveEdit()">Save</button>
       </div>
     </div>
   </template>
@@ -88,11 +90,13 @@
       <div class="ri-editor" x-show="editingItemId === f.item_id" x-cloak>
         <label class="field"><span class="field-label">Value</span><input class="txt" type="text" x-model="f.value"></label>
       </div>
-      <div class="ri-actions">
-        <button type="button" class="btn good sm" x-show="editingItemId === f.item_id" @click="saveEdit()">Save</button>
-        <button type="button" class="btn sm ghost" x-show="editingItemId === f.item_id" @click="cancelEdit()">Cancel</button>
-        <button type="button" class="btn sm ghost" x-show="editingItemId !== f.item_id" @click="startEdit(f.item_id)">✎ Edit</button>
-        <button type="button" class="btn sm danger" x-show="editingItemId !== f.item_id" @click="del(f, $event)">Delete</button>
+      <button type="button" class="btn icon sm ghost ri-pencil" x-show="editingItemId !== f.item_id"
+              @click.stop="startEdit(f.item_id)" title="Edit" aria-label="Edit">✎</button>
+      <div class="ri-actions" x-show="editingItemId === f.item_id" x-cloak>
+        <button type="button" class="btn sm danger" @click="askDelete(f, $event)">Delete</button>
+        <span class="grow"></span>
+        <button type="button" class="btn sm ghost" @click="cancelEdit()">Cancel</button>
+        <button type="button" class="btn good sm" @click="saveEdit()">Save</button>
       </div>
     </div>
   </template>
@@ -114,11 +118,13 @@
       <div class="ri-editor" x-show="editingItemId === n.item_id" x-cloak>
         <label class="field"><span class="field-label">Note</span><textarea class="txt-area" style="min-height:160px" x-model="n.text"></textarea></label>
       </div>
-      <div class="ri-actions">
-        <button type="button" class="btn good sm" x-show="editingItemId === n.item_id" @click="saveEdit()">Save</button>
-        <button type="button" class="btn sm ghost" x-show="editingItemId === n.item_id" @click="cancelEdit()">Cancel</button>
-        <button type="button" class="btn sm ghost" x-show="editingItemId !== n.item_id" @click="startEdit(n.item_id)">✎ Edit</button>
-        <button type="button" class="btn sm danger" x-show="editingItemId !== n.item_id" @click="del(n, $event)">Delete</button>
+      <button type="button" class="btn icon sm ghost ri-pencil" x-show="editingItemId !== n.item_id"
+              @click.stop="startEdit(n.item_id)" title="Edit" aria-label="Edit">✎</button>
+      <div class="ri-actions" x-show="editingItemId === n.item_id" x-cloak>
+        <button type="button" class="btn sm danger" @click="askDelete(n, $event)">Delete</button>
+        <span class="grow"></span>
+        <button type="button" class="btn sm ghost" @click="cancelEdit()">Cancel</button>
+        <button type="button" class="btn good sm" @click="saveEdit()">Save</button>
       </div>
     </div>
   </template>
