@@ -98,20 +98,24 @@ A pure helper makes this testable too:
 activeAnchorIndex(markers, current) -> index | null
 ```
 
-### 4. Manual-scroll pause
+### 4. Manual-scroll suspend
 
-Chosen behaviour: manual scroll suspends auto-follow **briefly**, then resumes.
+Chosen behaviour (revised post-implementation): a manual scroll stops
+auto-follow and it **stays stopped until the user's next intentional
+navigation** — there is no timed auto-resume. (This replaces the original
+"pause ~4s" idea; the researcher is browsing the list and the app should not
+yank it back on a timer.)
 
-- A `selfScrolling` flag is set while `followActiveAnno()` performs a
+- A `_selfScrolling` flag is set while `followActiveAnno()` performs a
   programmatic scroll, and cleared after it settles — so the app never mistakes
   its own scroll for the user's.
-- A genuine user `wheel` / `touchmove` / `scroll` (when `selfScrolling` is
-  false) sets `followSuspended = true` and (re)arms a ~4s timer.
-- When the timer elapses with no further manual scrolling, `followSuspended`
-  returns to false and following resumes on the next tick.
-- **Intentional navigation resumes immediately:** `seek()` (timeline click or
-  annotation-card click) clears `followSuspended` so the list snaps to the new
-  position right away.
+- A genuine user `scroll` (when `_selfScrolling` is false) sets
+  `followSuspended = true` and leaves it set.
+- **Resume only on intentional navigation:**
+  - the next **play** — the `<video>` `play` listener clears `followSuspended`;
+  - a **timeline move** (or annotation-card click) — `seek()` clears it.
+  Continued playback after a manual scroll does *not* resume on its own; the
+  user must play again or move the timeline.
 
 ### 5. Driver & scope
 
@@ -133,7 +137,7 @@ Chosen behaviour: manual scroll suspends auto-follow **briefly**, then resumes.
 | User seeks far via timeline | One instant scroll to the new active card. |
 | Click annotation card | Video seeks to its start (existing); follow resumes immediately and card is already in view → little/no scroll. |
 | Long list, sequential play-through | One calm card-by-card scroll as each becomes active. |
-| User manually scrolls away mid-play | Follow pauses ~4s, then resumes. |
+| User manually scrolls away mid-play | Follow stops and stays stopped until the next play or timeline move. |
 
 ## Out of scope
 
@@ -196,9 +200,10 @@ list to overflow the column. Reference clip:
 6. **Gap = no movement.** Pause/scrub to a point between two markers.
    *Expected:* no card is highlighted and the list does not scroll.
 
-7. **Manual-scroll pause.** During playback, scroll the column away from the
-   active card. *Expected:* the list stays where you put it for ~4s (does not
-   immediately snap back), then resumes following on the next tick.
+7. **Manual-scroll suspend.** During playback, scroll the column away from the
+   active card. *Expected:* the list stays where you put it and does **not**
+   snap back while playback continues. Following resumes only when you play
+   again (after a pause) or move the timeline.
 
 8. **Draft scope.** Switch to the draft tab on a clip with draft markers and
    repeat flows 1–3. *Expected:* draft cards highlight and the draft list

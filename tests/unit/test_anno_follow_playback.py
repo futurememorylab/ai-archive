@@ -42,30 +42,49 @@ _PANELS = {
 }
 
 
-def _render_panels(review_mode=None):
+def _render_panels(review_mode=None, follow_player=None):
     ctx = {
         "panels": _PANELS, "scope": "published",
         "clip": {"fps": 25.0, "kind": "video"}, "show_history": False,
     }
     if review_mode is not None:
         ctx["review_mode"] = review_mode
+    if follow_player is not None:
+        ctx["follow_player"] = follow_player
     return templates.env.get_template("pages/_anno_panels.html").render(**ctx)
 
 
-def test_published_marker_has_follow_hooks_in_review_mode():
-    html = _render_panels()  # defaults review_mode=True (clip page)
+def test_published_marker_has_follow_hooks_when_follow_player():
+    # The clip-detail published panel sets follow_player=true (see
+    # _published_refreshable.html); that's what renders the follow hooks.
+    html = _render_panels(follow_player=True)
     assert "data-anno-marker" in html
     assert 'data-in="1.5"' in html
     assert 'data-out="5.6"' in html
     assert "isMarkerActive({in_secs: 1.5, out_secs: 5.6" in html
 
 
+def test_published_follow_hooks_independent_of_review_mode():
+    # Regression (the bug): normal published viewing renders with
+    # review_mode=False but MUST still highlight. The gate is follow_player,
+    # NOT review_mode — those are different concepts.
+    html = _render_panels(review_mode=False, follow_player=True)
+    assert "data-anno-marker" in html
+    assert "isMarkerActive" in html
+
+
 def test_published_marker_follow_hooks_absent_in_studio():
-    # Studio (review_mode=False) shares this partial but has no player scope;
-    # isMarkerActive there would break Alpine.initTree.
+    # Studio renders this partial directly (no _published_refreshable, so no
+    # follow_player) and has no player scope; isMarkerActive there would
+    # break Alpine.initTree.
     html = _render_panels(review_mode=False)
     assert "data-anno-marker" not in html
     assert "isMarkerActive" not in html
+
+
+def test_published_refreshable_enables_follow_player():
+    pr = (ROOT / "backend/app/templates/pages/_published_refreshable.html").read_text()
+    assert "follow_player" in pr
 
 
 def test_css_has_active_card_rule():
@@ -93,9 +112,11 @@ def test_driver_reads_visible_cards_only():
     assert "offsetParent" in PLAYER_JS
 
 
-def test_manual_scroll_pause_and_resume_on_seek():
+def test_manual_scroll_stops_until_intentional_nav():
+    # Manual scroll stops follow and STAYS stopped — no auto-resume timer.
     assert "followSuspended" in PLAYER_JS
-    assert "4000" in PLAYER_JS              # resume window
-    assert "_selfScrolling" in PLAYER_JS    # ignore our own programmatic scroll
-    # seek() (timeline / card click) is intentional nav -> resumes immediately.
-    assert "this.followSuspended = false" in PLAYER_JS
+    assert "_selfScrolling" in PLAYER_JS     # ignore our own programmatic scroll
+    assert "4000" not in PLAYER_JS, "the timed auto-resume must be gone"
+    # Resume only on intentional navigation: the next play, or a timeline move.
+    assert "this.playing = true; this.followSuspended = false" in PLAYER_JS
+    assert "this.followSuspended = false" in PLAYER_JS   # also in seek()

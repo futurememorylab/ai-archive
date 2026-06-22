@@ -68,12 +68,13 @@ document.addEventListener("alpine:init", () => {
     editingItemId: null,
 
     // ─── follow-playback state ────────────────────────────────────
-    // followSuspended: true while a manual scroll temporarily wins over
-    // auto-follow. _selfScrolling: true during our own programmatic scroll so
-    // the scroll listener doesn't mistake it for the user.
+    // followSuspended: once the user manually scrolls the annotation list,
+    // auto-follow stops and STAYS stopped until an intentional navigation —
+    // the next play (the "play" listener below) or a timeline move (seek()).
+    // _selfScrolling: true during our own programmatic scroll so the scroll
+    // listener doesn't mistake it for the user.
     followSuspended: false,
     _selfScrolling: false,
-    _followResumeTimer: null,
     _selfScrollTimer: null,
 
     activeMarkers() {
@@ -93,7 +94,9 @@ document.addEventListener("alpine:init", () => {
       v.addEventListener("loadedmetadata", () => {
         if (!this.duration || isNaN(this.duration)) this.duration = v.duration;
       });
-      v.addEventListener("play",  () => { this.playing = true; });
+      // Starting playback is an intentional action — resume follow so the
+      // active marker re-centres, even if the user had scrolled away earlier.
+      v.addEventListener("play",  () => { this.playing = true; this.followSuspended = false; });
       v.addEventListener("pause", () => { this.playing = false; });
 
       // Buffering spinner. Under preload="none" the first play (or a seek to a
@@ -128,11 +131,9 @@ document.addEventListener("alpine:init", () => {
       if (annoBody) {
         annoBody.addEventListener("scroll", () => {
           if (this._selfScrolling) return;   // our own scroll, not the user's
+          // Stop following and stay stopped — the user is browsing the list.
+          // Resumes only on the next play or timeline move (see "play" + seek()).
           this.followSuspended = true;
-          clearTimeout(this._followResumeTimer);
-          this._followResumeTimer = setTimeout(() => {
-            this.followSuspended = false;
-          }, 4000);
         });
       }
     },
@@ -253,10 +254,9 @@ document.addEventListener("alpine:init", () => {
     // { play: false } to position without playing — e.g. entering marker
     // edit mode jumps to the in-point so you can scrub, but must not play.
     seek(secs, { play = true } = {}) {
-      // A seek (timeline click or annotation-card click) is intentional
-      // navigation — cancel any manual-scroll pause so the list snaps to it.
+      // A seek (timeline move or annotation-card click) is intentional
+      // navigation — resume follow so the list snaps to the active marker.
       this.followSuspended = false;
-      clearTimeout(this._followResumeTimer);
       const v = this.$refs.video;
       if (!v) return;
       const clamped = Math.max(0, Math.min(secs, v.duration || this.duration || secs));

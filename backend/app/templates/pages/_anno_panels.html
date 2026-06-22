@@ -8,6 +8,14 @@
    inline edit/drag machinery, which binds to the clip page's player scope.
    Studio passes review_mode=False for a read-only, click-to-seek view. #}
 {% set review_mode = review_mode if review_mode is defined else true %}
+{# follow_player gates the playback-follow hooks (data-anno-marker + active
+   highlight) on the published cards. Set true ONLY by the clip-detail published
+   panel (_published_refreshable.html), which lives inside the player x-data
+   scope so isMarkerActive resolves. Studio renders this partial directly
+   without it, keeping the player-only isMarkerActive ref out of its read-only
+   output. NOT the same as review_mode: normal published viewing is
+   review_mode=False but must still follow playback. #}
+{% set follow_player = follow_player if follow_player is defined else false %}
 {% set has_notes = panels.notes or panels.big_notes or panels.note_items %}
 {% set _is_image = clip is defined and clip is not none and clip.kind == 'image' %}
 {% set _show_note_items = panels.note_items %}
@@ -48,7 +56,7 @@
 <div class="anno-section" role="tabpanel" x-show="tab === 'markers'" x-cloak>
   {% for m in panels.markers %}
     <article class="marker"
-             {% if review_mode %}data-anno-marker
+             {% if follow_player %}data-anno-marker
              data-in="{{ m.in_secs }}" data-out="{{ m.out_secs if m.out_secs is not none else '' }}"
              :class="{ active: isMarkerActive({in_secs: {{ m.in_secs }}, out_secs: {{ m.out_secs if m.out_secs is not none else 'null' }} }) }"{% endif %}
              @click="seek({{ m.in_secs }})">
