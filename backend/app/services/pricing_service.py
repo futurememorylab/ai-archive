@@ -69,6 +69,7 @@ class PricingService:
                     input_cached_per_1m=r.input_cached_per_1m,
                     output_per_1m=r.output_per_1m,
                     source_url=r.source_url,
+                    pricing_version=r.pricing_version,
                 )
                 for r in rows
             }

@@ -36,6 +36,7 @@ class RateCard:
     input_cached_per_1m: float
     output_per_1m: float
     source_url: str  # provenance: where this rate was read (spec §5 audit trail)
+    pricing_version: str = PRICING_VERSION
 
 
 # Seed values — the offline fallback and the source the PricingService
@@ -112,4 +113,4 @@ def compute_cost(
         + cached * card.input_cached_per_1m
         + usage.billable_out * card.output_per_1m
     ) / 1_000_000
-    return cost, PRICING_VERSION
+    return cost, card.pricing_version

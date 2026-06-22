@@ -37,6 +37,29 @@ async def test_reload_populates_active_cache_from_db(db):
     assert cards["gemini-2.5-flash-lite"].output_per_1m == seed.output_per_1m
 
 
+async def test_edit_rates_version_flows_into_compute_cost(db):
+    from backend.app.services.pricing import compute_cost
+    from backend.app.services.telemetry_capture import TokenUsage
+
+    svc = _service(db)
+    await svc.reconcile_seeds()
+    await svc.reload()
+
+    usage = TokenUsage(tokens_in=1000)
+    _, v0 = compute_cost(usage, "gemini-2.5-flash-lite")
+    assert v0 == "2026-06"  # seed version
+
+    await svc.edit_rates(
+        "gemini-2.5-flash-lite",
+        input_text_video_image_per_1m=0.20,
+        input_audio_per_1m=0.30,
+        input_cached_per_1m=0.01,
+        output_per_1m=0.40,
+    )
+    _, v1 = compute_cost(usage, "gemini-2.5-flash-lite")
+    assert v1.startswith("edit-")  # bumped version now visible to compute_cost
+
+
 async def test_reconcile_does_not_clobber_edits(db):
     svc = _service(db)
     await svc.reconcile_seeds()

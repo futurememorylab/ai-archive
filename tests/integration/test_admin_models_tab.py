@@ -1,4 +1,4 @@
-"""Admin Models tab — list + edit per-model Gemini rates (pricing-to-DB PR2)."""
+"""Admin Models tab — list + edit per-model Gemini rates (pricing-to-DB PR1)."""
 
 import asyncio
 import importlib
