@@ -11,6 +11,12 @@
     {# Access is the default tab and a full-page link, so its Alpine popovers/modal
        init cleanly on load (HTMX-injecting them double-binds — the "black box"). #}
     <a class="ctab{% if active == 'access' %} active{% endif %}" href="/admin">Access &amp; Permissions</a>
+    <a class="ctab{% if active == 'models' %} active{% endif %}"
+       href="/admin/models"
+       hx-get="/admin/models"
+       hx-target="#admin-enum-region"
+       hx-swap="innerHTML"
+       hx-push-url="false">Models</a>
     {% for d in definitions %}
       <a class="ctab{% if d.key == active_key %} active{% endif %}"
          href="/admin/enums/{{ d.key }}"

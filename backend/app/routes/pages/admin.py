@@ -54,6 +54,54 @@ async def admin_page(request: Request):
     return templates.TemplateResponse(request, "pages/admin.html", data)
 
 
+async def _models_view(ctx) -> dict:
+    rows = [
+        {
+            "model": r.model,
+            "input_text_video_image_per_1m": r.input_text_video_image_per_1m,
+            "input_audio_per_1m": r.input_audio_per_1m,
+            "input_cached_per_1m": r.input_cached_per_1m,
+            "output_per_1m": r.output_per_1m,
+            "default_media_resolution": r.default_media_resolution,
+            "pricing_version": r.pricing_version,
+        }
+        for r in await ctx.pricing_service.rows()
+    ]
+    return {"rows": rows}
+
+
+@router.get("/admin/models", response_class=HTMLResponse)
+async def admin_models_table(request: Request):
+    require_role(request, "admin")
+    ctx = get_core_ctx(request)
+    return templates.TemplateResponse(
+        request, "pages/_admin_models_table.html", await _models_view(ctx)
+    )
+
+
+@router.post("/admin/models/{model}/rates", response_class=HTMLResponse)
+async def admin_edit_model_rates(
+    request: Request,
+    model: str,
+    input_text_video_image_per_1m: float = Form(...),
+    input_audio_per_1m: float = Form(...),
+    input_cached_per_1m: float = Form(...),
+    output_per_1m: float = Form(...),
+):
+    require_role(request, "admin")
+    ctx = get_core_ctx(request)
+    await ctx.pricing_service.edit_rates(
+        model,
+        input_text_video_image_per_1m=input_text_video_image_per_1m,
+        input_audio_per_1m=input_audio_per_1m,
+        input_cached_per_1m=input_cached_per_1m,
+        output_per_1m=output_per_1m,
+    )
+    return templates.TemplateResponse(
+        request, "pages/_admin_models_table.html", await _models_view(ctx)
+    )
+
+
 @router.get("/admin/enums/{key}", response_class=HTMLResponse)
 async def admin_enum_table(request: Request, key: str):
     require_role(request, "admin")

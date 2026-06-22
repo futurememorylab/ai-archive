@@ -1,0 +1,48 @@
+{# backend/app/templates/pages/_admin_models_table.html #}
+{% import "components/_ui.html" as ui %}
+<div class="admin-models">
+  <p class="meta">Per-model Gemini rates (USD per 1M tokens). Editing bumps the
+    pricing version; historical run costs are not changed.</p>
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>Model</th>
+        <th>Text/Video/Image</th>
+        <th>Audio</th>
+        <th>Cached</th>
+        <th>Output</th>
+        <th>Default res</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      {# No <form> inside a <tr> (invalid HTML — the browser hoists it out and
+         breaks the row). The Save button is an HTMX trigger that includes the
+         row's named inputs via hx-include="closest tr". #}
+      <tr>
+        <td class="mono-cell">{{ r.model }}</td>
+        <td><input class="txt" type="number" step="0.0001" min="0"
+                   name="input_text_video_image_per_1m"
+                   value="{{ r.input_text_video_image_per_1m }}"></td>
+        <td><input class="txt" type="number" step="0.0001" min="0"
+                   name="input_audio_per_1m"
+                   value="{{ r.input_audio_per_1m }}"></td>
+        <td><input class="txt" type="number" step="0.0001" min="0"
+                   name="input_cached_per_1m"
+                   value="{{ r.input_cached_per_1m }}"></td>
+        <td><input class="txt" type="number" step="0.0001" min="0"
+                   name="output_per_1m"
+                   value="{{ r.output_per_1m }}"></td>
+        <td class="mono-cell">{{ r.default_media_resolution }}</td>
+        <td class="admin-actions">
+          <button type="button" class="btn primary sm"
+                  hx-post="/admin/models/{{ r.model }}/rates"
+                  hx-include="closest tr"
+                  hx-target="#admin-enum-region" hx-swap="innerHTML">Save</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
