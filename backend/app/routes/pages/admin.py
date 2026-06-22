@@ -63,7 +63,6 @@ async def _models_view(ctx) -> dict:
             "input_cached_per_1m": r.input_cached_per_1m,
             "output_per_1m": r.output_per_1m,
             "default_media_resolution": r.default_media_resolution,
-            "pricing_version": r.pricing_version,
         }
         for r in await ctx.pricing_service.rows()
     ]
@@ -83,13 +82,16 @@ async def admin_models_table(request: Request):
 async def admin_edit_model_rates(
     request: Request,
     model: str,
-    input_text_video_image_per_1m: float = Form(...),
-    input_audio_per_1m: float = Form(...),
-    input_cached_per_1m: float = Form(...),
-    output_per_1m: float = Form(...),
+    input_text_video_image_per_1m: float = Form(..., ge=0),
+    input_audio_per_1m: float = Form(..., ge=0),
+    input_cached_per_1m: float = Form(..., ge=0),
+    output_per_1m: float = Form(..., ge=0),
 ):
     require_role(request, "admin")
     ctx = get_core_ctx(request)
+    live_models = {r.model for r in await ctx.pricing_service.rows()}
+    if model not in live_models:
+        raise HTTPException(404, f"unknown model {model!r}")
     await ctx.pricing_service.edit_rates(
         model,
         input_text_video_image_per_1m=input_text_video_image_per_1m,
