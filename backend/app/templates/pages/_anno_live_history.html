@@ -34,9 +34,11 @@
                     Generovat shrnutí
                   </button>
                 </div>
-                <div class="live-transcript">
+                <div class="live-transcript live-chat">
                   <template x-for="(line, i) in detail.transcript" :key="i">
-                    <div><b x-text="line.role + ':'"></b> <span x-text="line.text"></span></div>
+                    <div class="chat-msg" :class="'chat-' + line.role">
+                      <span class="chat-bubble" x-text="line.text"></span>
+                    </div>
                   </template>
                 </div>
               </div>

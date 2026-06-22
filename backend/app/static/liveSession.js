@@ -21,26 +21,37 @@ function liveSession(clipId, config) {
     _workletNode: null,
     _mediaStream: null,
     _frameCount: 0,
-    _searchCalls: 0,
     _startedAt: 0,
     _elapsedTimer: null,
     _inactivityTimer: null,
     _endReason: null,
     _setupPayload: null,
+    _initialTurn: null,
+    _setupComplete: false,          // gate: no content/audio until server ACKs setup
+    _playing: [],                   // scheduled output BufferSources (for barge-in flush)
+    _nextPlayAt: 0,
 
     // ── public API ───────────────────────────────────────────────────────
     async start() {
       if (this.state !== "idle") return;
+      // Unlock output audio HERE, synchronously, inside the Live-button gesture.
+      // WebKit/Safari only lets an AudioContext leave the suspended state when
+      // resumed during a user gesture; doing it later (in the WS callback that
+      // receives Gemini's audio) is ignored → silent voice, and reliably silent
+      // on the 2nd session once the original gesture is stale. Must run before
+      // the first `await` below, or the gesture is already spent. See ADR 0110.
+      this._ensureOutputAudio();
       this.error = null;
       this.transcript = [];
       this._frameCount = 0;
-      this._searchCalls = 0;
+      this._setupComplete = false;
       this._endReason = null;
       this.state = "connecting";
       try {
         const config = await this._fetchConfig();
         this.sessionId = config.session_id;
         this._setupPayload = config.setup_payload;
+        this._initialTurn = config.initial_context_turn;
         await this._openMic();
         this._openWs(config.ws_url);
       } catch (e) {
@@ -87,7 +98,19 @@ function liveSession(clipId, config) {
         },
       }));
       this._frameCount += 1;
+      this._flashFrameSent();
       this._resetInactivity();
+    },
+
+    // Pulse the player's camera-flash overlay to confirm the current frame was
+    // captured + sent to Gemini. Re-trigger by removing the class, forcing a
+    // reflow, then re-adding — so rapid successive sends each flash.
+    _flashFrameSent() {
+      const el = document.querySelector(".frame-flash");
+      if (!el) return;
+      el.classList.remove("flash");
+      void el.offsetWidth; // force reflow so the animation restarts
+      el.classList.add("flash");
     },
 
     _captureFrameJpegB64() {
@@ -132,7 +155,10 @@ function liveSession(clipId, config) {
     },
 
     _onCaptureChunk(arrayBuffer) {
-      if (!this._ws || this._ws.readyState !== 1) return;
+      // Drop chunks until the WSS is open AND the server has ACKed `setup`.
+      // Streaming realtimeInput before `setupComplete` is the race that made
+      // sessions flaky (Gemini closes with 1007/1008). See docs/decisions.md.
+      if (!this._ws || this._ws.readyState !== 1 || !this._setupComplete) return;
       // Live API current shape: realtimeInput.audio is a single Blob,
       // not the deprecated mediaChunks array. Same for .video / .text.
       const b64 = this._b64FromBuffer(arrayBuffer);
@@ -151,22 +177,26 @@ function liveSession(clipId, config) {
       return btoa(bin);
     },
 
+    _b64ToBytes(b64) {
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return bytes;
+    },
+
     _openWs(url) {
       console.log("[live] WSS opening:", url.replace(/key=[^&]+/, "key=…"));
       const ws = new WebSocket(url);
       this._ws = ws;
       ws.binaryType = "arraybuffer";
       ws.onopen = () => {
-        const setup = { ...this._setupPayload };
-        const initial = setup.initial_context_turn;
-        delete setup.initial_context_turn;
-        console.log("[live] WSS open. Sending setup:", JSON.stringify(setup, null, 2));
-        ws.send(JSON.stringify({ setup }));
-        this._sendInitialClientContent(initial);
-        this.state = "active";
-        this._startedAt = Date.now();
-        this._elapsedTimer = setInterval(() => this._tickElapsed(), 1000);
-        this._resetInactivity();
+        // Send ONLY the setup frame and wait. The session does not become
+        // active and no content/audio is sent until the server replies with
+        // `setupComplete` (handled in _onSetupComplete). Sending content here
+        // was the flakiness race. setup_payload is already the pure setup —
+        // the initial turn arrives as its own field (config.initial_context_turn).
+        console.log("[live] WSS open. Sending setup:", JSON.stringify(this._setupPayload, null, 2));
+        ws.send(JSON.stringify({ setup: this._setupPayload }));
       };
       ws.onmessage = (evt) => {
         // Live API actually delivers JSON over BINARY WebSocket frames
@@ -196,7 +226,8 @@ function liveSession(clipId, config) {
         if (this.state === "active") {
           this.close(this._endReason || "error");
         } else if (this.state === "connecting") {
-          // Failure before onopen — make sure we leave connecting state so
+          // Closed while still connecting (before onopen, or after setup but
+          // before setupComplete — e.g. a rejected setup). Leave connecting so
           // the user sees the error rather than a stuck spinner.
           this.state = "idle";
           this._teardown();
@@ -218,6 +249,7 @@ function liveSession(clipId, config) {
       const msg = { clientContent: { turns: [{ role: "user", parts }], turnComplete: true } };
       try { this._ws.send(JSON.stringify(msg)); } catch {}
       this._frameCount += frame ? 1 : 0;
+      if (frame) this._flashFrameSent(); // conversation start sent the current frame
     },
 
     _tickElapsed() {
@@ -228,17 +260,38 @@ function liveSession(clipId, config) {
     _onWsMessage(evt) {
       let msg;
       try { msg = JSON.parse(evt.data); } catch { return; }
+      if (msg.setupComplete) this._onSetupComplete();
       if (msg.serverContent) this._handleServerContent(msg.serverContent);
       if (msg.toolCall) this._handleToolCall(msg.toolCall);
       this._resetInactivity();
     },
 
+    _onSetupComplete() {
+      // Server ACKed the setup frame — only NOW is it safe to send content and
+      // let mic audio flow. Guard against duplicate ACKs / late arrival.
+      if (this._setupComplete || this.state !== "connecting") return;
+      this._setupComplete = true;
+      this._sendInitialClientContent(this._initialTurn);
+      this.state = "active";
+      this._startedAt = Date.now();
+      this._elapsedTimer = setInterval(() => this._tickElapsed(), 1000);
+      this._resetInactivity();
+    },
+
     _handleServerContent(sc) {
-      if (sc.outputTranscription?.text) {
-        this.transcript.push({ role: "model", text: sc.outputTranscription.text, ts: Date.now(), kind: "speech" });
-      }
-      if (sc.inputTranscription?.text) {
-        this.transcript.push({ role: "user", text: sc.inputTranscription.text, ts: Date.now(), kind: "speech" });
+      // Barge-in: when the operator interrupts, Gemini sends interrupted:true
+      // and stops generating. Flush already-queued playback so the model goes
+      // quiet immediately instead of talking over the operator.
+      if (sc.interrupted) this._flushPlayback();
+      // Gemini streams transcription as many tiny deltas. Appending consecutive
+      // same-role speech into ONE bubble (rather than one push per delta) is what
+      // turns "one word per line" into a readable dialog. A turn boundary closes
+      // the open bubble so the next delta starts a fresh one.
+      if (sc.outputTranscription?.text) this._appendSpeech("model", sc.outputTranscription.text);
+      if (sc.inputTranscription?.text) this._appendSpeech("user", sc.inputTranscription.text);
+      if (sc.turnComplete || sc.generationComplete) {
+        const last = this.transcript[this.transcript.length - 1];
+        if (last && last.kind === "speech") last.done = true;
       }
       const turns = sc.modelTurn?.parts || [];
       for (const part of turns) {
@@ -248,13 +301,47 @@ function liveSession(clipId, config) {
       }
     },
 
-    _enqueueAudio(b64) {
+    // Append a transcription delta to the open same-role bubble, or start a new
+    // one. Mutating last.text is reactive (Alpine proxies array elements), so
+    // the on-screen bubble grows in place instead of spawning a line per word.
+    _appendSpeech(role, text) {
+      const last = this.transcript[this.transcript.length - 1];
+      if (last && last.role === role && last.kind === "speech" && !last.done) {
+        last.text += text;
+      } else {
+        this.transcript.push({ role, text, ts: Date.now(), kind: "speech", done: false });
+      }
+    },
+
+    // Create / resume / prime the OUTPUT AudioContext. Called from start()
+    // inside the user gesture (the only context in which WebKit will actually
+    // start it), and defensively from _enqueueAudio. The context is REUSED
+    // across sessions — teardown suspends it, it is never closed — so a 2nd
+    // session inherits an already-unlocked context instead of a fresh suspended
+    // one. Gemini streams 24 kHz PCM, hence the fixed sampleRate.
+    _ensureOutputAudio() {
       if (!this._audioCtxOut) {
         this._audioCtxOut = new AudioContext({ sampleRate: 24000 });
       }
-      const bin = atob(b64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      if (this._audioCtxOut.state === "suspended") this._audioCtxOut.resume();
+      // Prime with a 1-sample silent buffer so older WebKit unlocks playback.
+      try {
+        const b = this._audioCtxOut.createBuffer(1, 1, 24000);
+        const s = this._audioCtxOut.createBufferSource();
+        s.buffer = b;
+        s.connect(this._audioCtxOut.destination);
+        s.start(0);
+      } catch {}
+      return this._audioCtxOut;
+    },
+
+    _enqueueAudio(b64) {
+      // Defensive: start() already unlocked this within the gesture; resume
+      // again in case the context auto-suspended between sessions.
+      if (!this._audioCtxOut || this._audioCtxOut.state !== "running") {
+        this._ensureOutputAudio();
+      }
+      const bytes = this._b64ToBytes(b64);
       const view = new DataView(bytes.buffer);
       const sampleCount = bytes.length / 2;
       const buf = this._audioCtxOut.createBuffer(1, sampleCount, 24000);
@@ -265,9 +352,20 @@ function liveSession(clipId, config) {
       const node = this._audioCtxOut.createBufferSource();
       node.buffer = buf;
       node.connect(this._audioCtxOut.destination);
-      const startAt = Math.max(this._audioCtxOut.currentTime, (this._nextPlayAt || 0));
+      const startAt = Math.max(this._audioCtxOut.currentTime, this._nextPlayAt);
       node.start(startAt);
       this._nextPlayAt = startAt + buf.duration;
+      this._playing.push(node);
+      node.onended = () => {
+        const i = this._playing.indexOf(node);
+        if (i >= 0) this._playing.splice(i, 1);
+      };
+    },
+
+    _flushPlayback() {
+      for (const node of this._playing) { try { node.stop(); } catch {} }
+      this._playing = [];
+      this._nextPlayAt = 0;
     },
 
     _handleToolCall(tc) {
@@ -293,7 +391,6 @@ function liveSession(clipId, config) {
         end_reason: this._endReason || "user_stop",
         transcript: this.transcript,
         frame_count: this._frameCount,
-        search_calls: this._searchCalls,
       };
       try {
         const blob = new Blob([JSON.stringify(body)], { type: "application/json" });
@@ -314,15 +411,20 @@ function liveSession(clipId, config) {
     },
 
     async _teardown() {
+      this._flushPlayback();
       try { this._workletNode?.disconnect(); } catch {}
       try { if (this._mediaStream) this._mediaStream.getTracks().forEach(t => t.stop()); } catch {}
       try { await this._audioCtxIn?.close(); } catch {}
-      try { await this._audioCtxOut?.close(); } catch {}
+      // Do NOT close the output context — a closed AudioContext can never be
+      // reused, and re-creating one in the next session's WS callback is exactly
+      // what left Safari silent. Suspend it (frees the audio device) and keep
+      // the reference so the next start() can resume the already-unlocked one.
+      try { await this._audioCtxOut?.suspend(); } catch {}
       this._workletNode = null;
       this._mediaStream = null;
       this._audioCtxIn = null;
-      this._audioCtxOut = null;
       this._ws = null;
+      this._setupComplete = false;
       clearInterval(this._elapsedTimer);
       clearTimeout(this._inactivityTimer);
     },

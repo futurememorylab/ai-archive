@@ -35,7 +35,7 @@ missing. One-time setup:
   on a daemon thread (real socket on `127.0.0.1:8766`) and injects fakes via
   `install_live_ctx`. The UI needs a numeric clip key (`int(clip.key[1])`),
   which the filesystem provider can't supply — hence injection, not env. See
-  ADR 0109.
+  ADR 0111.
 - **Fully offline, no seat.** No CatDV / GCS / Gemini; credentials are
   force-blanked at boot so nothing external is constructed.
 - **Mocked archive + media** (`fakes.py`). `FakeArchive` serves an in-memory

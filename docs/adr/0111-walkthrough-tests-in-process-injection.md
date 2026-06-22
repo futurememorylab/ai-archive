@@ -1,4 +1,4 @@
-# 0109. Walkthrough tests run the app in-process with injected fakes
+# 0111. Walkthrough tests run the app in-process with injected fakes
 
 - **Date:** 2026-06-22
 - **Status:** Accepted
