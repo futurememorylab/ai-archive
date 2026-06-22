@@ -58,7 +58,14 @@
           {% endif %}
           {% if media_ready and clip.duration_secs %}
             <button type="button" class="btn good"
-                    @click="liveSession.start()">🎤 Live</button>
+                    @click="liveSession.start()">
+              {#- Gemini four-pointed "spark" mark. currentColor + the .btn
+                  flex gap handle colour/spacing — no extra CSS needed. -#}
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"
+                   aria-hidden="true" focusable="false">
+                <path d="M12 0c.5 6.26 5.74 11.5 12 12-6.26.5-11.5 5.74-12 12-.5-6.26-5.74-11.5-12-12C6.26 11.5 11.5 6.26 12 0z"/>
+              </svg>
+              Live</button>
           {% endif %}
         </span>
         <span class="grow"></span>
@@ -77,7 +84,16 @@
         </span>
         <button type="button" class="btn"
                 :disabled="liveSession.state !== 'active'"
-                @click="liveSession.sendFrame()">📸 Send frame</button>
+                @click="liveSession.sendFrame()">
+          {#- Eye icon: "send what I'm looking at" to Gemini. currentColor + the
+              .btn flex gap handle colour/spacing, same as the Live star. -#}
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
+               stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+               stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          Send frame</button>
         <button type="button" class="btn danger"
                 @click="liveSession.close('user_stop')">■ Stop</button>
         <span class="grow"></span>
@@ -88,9 +104,11 @@
 
   <div class="live-strip" x-show="liveSession.state !== 'idle'" x-cloak
        :class="{ expanded: liveSession.expanded }">
-    <ul class="live-strip-lines">
+    <ul class="live-strip-lines live-chat">
       <template x-for="(line, i) in liveSession.transcript.slice(-3)" :key="i">
-        <li><b x-text="line.role + ':'"></b> <span x-text="line.text"></span></li>
+        <li class="chat-msg" :class="'chat-' + line.role">
+          <span class="chat-bubble" x-text="line.text"></span>
+        </li>
       </template>
     </ul>
     <button type="button" class="live-expand"
@@ -98,9 +116,11 @@
       <span x-show="!liveSession.expanded">▾ expand</span>
       <span x-show="liveSession.expanded">▴ collapse</span>
     </button>
-    <div class="live-strip-full" x-show="liveSession.expanded" x-cloak>
+    <div class="live-strip-full live-chat" x-show="liveSession.expanded" x-cloak>
       <template x-for="(line, i) in liveSession.transcript" :key="i">
-        <div><b x-text="line.role + ':'"></b> <span x-text="line.text"></span></div>
+        <div class="chat-msg" :class="'chat-' + line.role">
+          <span class="chat-bubble" x-text="line.text"></span>
+        </div>
       </template>
     </div>
   </div>
