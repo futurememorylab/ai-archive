@@ -30,3 +30,51 @@ def test_compute_scroll_uses_viewport_threshold_for_behavior():
     # Smooth for small corrections, instant ('auto') for jumps > 1 viewport.
     assert '"auto"' in PLAYER_JS and '"smooth"' in PLAYER_JS
     assert "viewportHeight" in PLAYER_JS
+
+
+_PANELS = {
+    "markers": [{
+        "name": "Scene 1", "in_secs": 1.5, "out_secs": 5.6,
+        "category": "x", "description": "d", "item_id": 7, "decision": "pending",
+    }],
+    "fields": [], "notes": None, "big_notes": None, "note_items": [],
+    "fps": 25.0,
+}
+
+
+def _render_panels(review_mode=None):
+    ctx = {
+        "panels": _PANELS, "scope": "published",
+        "clip": {"fps": 25.0, "kind": "video"}, "show_history": False,
+    }
+    if review_mode is not None:
+        ctx["review_mode"] = review_mode
+    return templates.env.get_template("pages/_anno_panels.html").render(**ctx)
+
+
+def test_published_marker_has_follow_hooks_in_review_mode():
+    html = _render_panels()  # defaults review_mode=True (clip page)
+    assert "data-anno-marker" in html
+    assert 'data-in="1.5"' in html
+    assert 'data-out="5.6"' in html
+    assert "isMarkerActive({in_secs: 1.5, out_secs: 5.6" in html
+
+
+def test_published_marker_follow_hooks_absent_in_studio():
+    # Studio (review_mode=False) shares this partial but has no player scope;
+    # isMarkerActive there would break Alpine.initTree.
+    html = _render_panels(review_mode=False)
+    assert "data-anno-marker" not in html
+    assert "isMarkerActive" not in html
+
+
+def test_css_has_active_card_rule():
+    assert ".marker.active" in APP_CSS
+    assert ".ri-card.ri-marker.active" in APP_CSS
+
+
+def test_draft_marker_has_follow_hooks():
+    draft = (ROOT / "backend/app/templates/pages/_anno_draft.html").read_text()
+    assert "data-anno-marker" in draft
+    assert ':data-in="m.in_secs"' in draft
+    assert "active: isMarkerActive(m)" in draft

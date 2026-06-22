@@ -47,7 +47,11 @@
 {% if not _is_image %}
 <div class="anno-section" role="tabpanel" x-show="tab === 'markers'" x-cloak>
   {% for m in panels.markers %}
-    <article class="marker" @click="seek({{ m.in_secs }})">
+    <article class="marker"
+             {% if review_mode %}data-anno-marker
+             data-in="{{ m.in_secs }}" data-out="{{ m.out_secs if m.out_secs is not none else '' }}"
+             :class="{ active: isMarkerActive({in_secs: {{ m.in_secs }}, out_secs: {{ m.out_secs if m.out_secs is not none else 'null' }} }) }"{% endif %}
+             @click="seek({{ m.in_secs }})">
       <header>
         <span class="kind marker-kind">MARKER</span>
         {% if m.category %}<span class="cat">{{ m.category }}</span>{% endif %}

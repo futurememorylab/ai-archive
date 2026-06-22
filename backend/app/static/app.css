@@ -2488,6 +2488,15 @@ body.studio-resizing {
 .ri-card.ri-marker { cursor: pointer; }
 .ri-card.ri-marker:hover { border-color: var(--accent); }
 .ri-card.ri-marker .ri-editor, .ri-card.ri-marker .ri-actions { cursor: default; }
+
+/* Follow-playback: the marker whose segment is under the playhead. Inset
+   shadow (not a border) so highlighting never reflows the card. Mirrors the
+   timeline .range.active accent. */
+.marker.active,
+.ri-card.ri-marker.active {
+  box-shadow: inset 3px 0 0 0 var(--accent);
+  background: color-mix(in oklab, var(--accent) 12%, var(--panel));
+}
 .ri-card-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ri-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; margin-top: 2px; }
 .ri-actions .btn { flex: none; }
