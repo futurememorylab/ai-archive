@@ -45,3 +45,6 @@ logs/
 
 # Claude Code agent worktrees (local, per-machine)
 .claude/worktrees/
+
+# Playwright walkthrough recordings (regenerated on demand)
+tests/walkthrough/artifacts/

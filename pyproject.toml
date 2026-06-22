@@ -27,6 +27,7 @@ dev = [
   "pytest>=8.3",
   "pytest-asyncio>=0.24",
   "pytest-timeout>=2.3",
+  "playwright>=1.59",
   "ruff>=0.7",
   "respx>=0.21",
   "basedpyright>=1.18",
