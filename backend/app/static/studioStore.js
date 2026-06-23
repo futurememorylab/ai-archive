@@ -101,9 +101,14 @@ document.addEventListener('alpine:init', () => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const e = await r.json();
         if (key !== _studioEstimateKey) return;  // selection changed mid-flight
-        this.estimateLabel =
-          `~${fmtUsd(e.cost_usd_p50)}–${fmtUsd(e.cost_usd_p90)} (${e.confidence})`
-          + (e.media_resolution ? ` · ${e.media_resolution} res` : "");
+        if (e.pricing_missing) {
+          this.estimateLabel = `cost unknown — no rate card (${e.confidence})`
+            + (e.media_resolution ? ` · ${e.media_resolution} res` : "");
+        } else {
+          this.estimateLabel =
+            `~${fmtUsd(e.cost_usd_p50)}–${fmtUsd(e.cost_usd_p90)} (${e.confidence})`
+            + (e.media_resolution ? ` · ${e.media_resolution} res` : "");
+        }
       } catch (err) {
         console.error('estimate failed', err);  // advisory only
         if (key !== _studioEstimateKey) return;  // selection changed mid-flight

@@ -205,6 +205,8 @@ async def _prompts_view(ctx) -> dict:
                 for res, s in stats.items()
                 if res is not None
             }
+            _mc = await ctx.model_config_repo.get(ctx.db, v.model)
+            pricing_missing = _mc is None or bool(_mc.removed)
             rows.append(
                 {
                     "prompt_name": p.name,
@@ -213,6 +215,7 @@ async def _prompts_view(ctx) -> dict:
                     "state": v.state,
                     "model": v.model,
                     "per_res": per_res,
+                    "pricing_missing": pricing_missing,
                 }
             )
     return {"rows": rows}
@@ -327,7 +330,11 @@ async def admin_calibrate_estimate(
     # p50 is the total for all clip_ids at the prompt's effective resolution;
     # approximate per-clip cost = p50 / n, scaled by the real run count.
     projected = (p50 / n * total_runs) if (p50 is not None and n) else None
-    return {"projected_cost_usd": projected, "runs": total_runs}
+    return {
+        "projected_cost_usd": projected,
+        "runs": total_runs,
+        "pricing_missing": est["pricing_missing"],
+    }
 
 
 @router.get("/admin/enums/{key}", response_class=HTMLResponse)

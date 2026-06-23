@@ -227,6 +227,7 @@
           const sumOrNull = (a, b) => (a === null || b === null ? null : a + b);
           let p50 = 0, p90 = 0, tokensIn = 0, nUnknown = 0;
           let nSamples = Infinity, confidence = "good";
+          let pricingMissing = false;
           const resolutions = new Set();
           for (const p of parts) {
             p50 = sumOrNull(p50, p.cost_usd_p50 ?? null);
@@ -236,11 +237,13 @@
             nSamples = Math.min(nSamples, p.n_samples);
             if (order[p.confidence] < order[confidence]) confidence = p.confidence;
             if (p.media_resolution) resolutions.add(p.media_resolution);
+            if (p.pricing_missing) pricingMissing = true;
           }
           this.estimate = {
             cost_usd_p50: p50, cost_usd_p90: p90, tokens_in: tokensIn,
             n_samples: nSamples === Infinity ? 0 : nSamples,
             n_unknown: nUnknown, confidence,
+            pricing_missing: pricingMissing,
             media_resolution: resolutions.size === 1 ? [...resolutions][0]
               : (resolutions.size === 0 ? null : "mixed"),
           };
@@ -253,6 +256,11 @@
       estimateLabel() {
         if (!this.estimate) return "";
         const e = this.estimate;
+        if (e.pricing_missing) {
+          let s = `cost unknown — no rate card · confidence: ${e.confidence}`;
+          if (e.n_unknown) s += ` · ${e.n_unknown} clip(s) not cached — guessed`;
+          return s;
+        }
         let s = `Estimated: ${fmtUsd(e.cost_usd_p50)} – ${fmtUsd(e.cost_usd_p90)}`
           + ` · ~${(e.tokens_in / 1e6).toFixed(1)}M tokens in`
           + ` · confidence: ${e.confidence}`;

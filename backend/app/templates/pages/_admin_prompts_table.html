@@ -22,7 +22,14 @@
         <td>{{ r.state }}</td>
         <td class="mono-cell">{{ r.model }}</td>
         <td>
-          {% if r.per_res %}
+          {% if r.pricing_missing %}
+            <span class="pill warn">no rate card</span>
+            <a href="/admin/models"
+               hx-get="/admin/models"
+               hx-target="#admin-enum-region"
+               hx-swap="innerHTML"
+               class="muted">set pricing</a>
+          {% elif r.per_res %}
             {% for res in ['low', 'medium', 'high'] if res in r.per_res %}
               {% set s = r.per_res[res] %}
               <div>

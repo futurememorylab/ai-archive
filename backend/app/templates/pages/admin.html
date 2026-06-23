@@ -111,7 +111,10 @@
       },
       estimateLabel() {
         const e = this.estimate;
-        if (!e || e.projected_cost_usd == null) return "";
+        if (!e) return "";
+        if (e.pricing_missing || e.projected_cost_usd == null) {
+          return "No rate card for this model — cost not projected. Set pricing in Gemini models.";
+        }
         return "Projected: ~" + fmtUsd(e.projected_cost_usd) + " over " + e.runs + " runs";
       },
 

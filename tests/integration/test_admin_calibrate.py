@@ -281,3 +281,70 @@ def test_calibrate_estimate_empty_clip_ids(monkeypatch, tmp_path):
         assert r.status_code == 200
         body = r.json()
         assert body == {"projected_cost_usd": None, "runs": 0}
+
+
+# ── pricing_missing surface tests ────────────────────────────────────────────
+
+
+async def _seed_unpriced_prompt(db_path) -> int:
+    """Seed a prompt on a model with NO rate card row (absent from SEED_RATE_CARDS)."""
+    import aiosqlite
+
+    from backend.app.repositories.prompts import PromptsRepo
+
+    async with aiosqlite.connect(db_path) as conn:
+        repo = PromptsRepo()
+        _pid, vid = await repo.create_with_initial_version(
+            conn,
+            name="UnpricedPrompt",
+            description="prompt on unpriced model",
+            body="Describe this clip.",
+            target_map={"scenes": {"kind": "markers"}},
+            output_schema={"type": "object"},
+            model="gemini-unpriced-test-model",
+            media_resolution="low",
+        )
+        return vid
+
+
+def test_prompts_tab_no_rate_card_shows_warning(monkeypatch, tmp_path):
+    """A prompt whose model has NO rate card → GET /admin/prompts renders
+    'no rate card' / 'set pricing' and does NOT render '$0.00' for that row."""
+    with _client(monkeypatch, tmp_path) as client:
+        asyncio.run(_seed_unpriced_prompt(tmp_path / "app.db"))
+        r = client.get("/admin/prompts")
+        assert r.status_code == 200
+        assert "no rate card" in r.text
+        assert "set pricing" in r.text
+        # Must NOT show a dollar amount for the missing-rate-card row
+        assert "$0.00" not in r.text
+        assert "$0.000" not in r.text
+
+
+def test_calibrate_estimate_pricing_missing_true(monkeypatch, tmp_path):
+    """POST .../calibrate/estimate for an unpriced model returns pricing_missing: true."""
+    with _client(monkeypatch, tmp_path) as client:
+        vid = asyncio.run(_seed_unpriced_prompt(tmp_path / "app.db"))
+        asyncio.run(_seed_clip(tmp_path / "app.db", 11, "a.mov"))
+        r = client.post(
+            f"/admin/prompts/{vid}/calibrate/estimate",
+            json={"clip_ids": [11]},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["pricing_missing"] is True
+        assert body["projected_cost_usd"] is None
+
+
+def test_calibrate_estimate_pricing_present_false(monkeypatch, tmp_path):
+    """POST .../calibrate/estimate for a priced model returns pricing_missing: false."""
+    with _client(monkeypatch, tmp_path) as client:
+        vid = asyncio.run(_seed_prompt(tmp_path / "app.db"))  # gemini-2.5-flash-lite
+        asyncio.run(_seed_clip(tmp_path / "app.db", 11, "a.mov"))
+        r = client.post(
+            f"/admin/prompts/{vid}/calibrate/estimate",
+            json={"clip_ids": [11]},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["pricing_missing"] is False
