@@ -14,7 +14,6 @@ from backend.app.archive.model import (
     MediaRef,
     Timecode,
 )
-from backend.app.archive.providers.catdv.text_repair import demojibake
 from backend.app.timecode import secs_to_smpte
 
 DEFAULT_FPS = 25.0
@@ -66,15 +65,12 @@ def from_catdv_clip(raw: dict[str, Any], *, fetched_at: datetime) -> CanonicalCl
 
 
 def _marker_from_catdv(raw: dict[str, Any], fps: float) -> Marker:
-    # Repair compounding UTF-8 mojibake CatDV introduces on marker text (see
-    # text_repair). Done on read so the UI shows clean text and any re-send
-    # carries the cleaned value.
     return Marker(
-        name=demojibake(str(raw.get("name", ""))) or "",
+        name=str(raw.get("name", "")),
         in_=_timecode_from_catdv(raw.get("in") or {}, fps),
         out=_timecode_from_catdv(raw["out"], fps) if isinstance(raw.get("out"), dict) else None,
-        description=demojibake(raw.get("description")),
-        category=demojibake(raw.get("category")),
+        description=raw.get("description"),
+        category=raw.get("category"),
         color=raw.get("color"),
     )
 

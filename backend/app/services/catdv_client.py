@@ -198,13 +198,19 @@ class CatdvClient:
     ) -> Envelope:
         """Issue a JSON request. Re-login once on AUTH (unless reauth=False); raise on ERROR."""
         url = f"{self._base}{path}"
-        resp = await self.http.request(method, url, json=json)
+        # Declare UTF-8 explicitly. With a bare `application/json` Content-Type,
+        # CatDV's servlet decodes the request body as ISO-8859-1 (the servlet
+        # default) and stores our UTF-8 as compounding mojibake on every write.
+        # The bytes are unchanged; this only tells CatDV how to read them, fixing
+        # the corruption at the source (confirmed against the live server).
+        headers = {"Content-Type": "application/json; charset=utf-8"} if json is not None else None
+        resp = await self.http.request(method, url, json=json, headers=headers)
         env = _envelope_or_raise(resp)
         if env.requires_reauth:
             if not reauth:
                 raise CatdvAuthError(env.error_message or "not authenticated")
             await self.login()
-            resp = await self.http.request(method, url, json=json)
+            resp = await self.http.request(method, url, json=json, headers=headers)
             env = _envelope_or_raise(resp)
         if env.is_busy:
             raise CatdvBusyError(env.error_message or "CatDV session limit reached")
