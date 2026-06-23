@@ -290,6 +290,7 @@ async def estimate_for_clip_ids(
         "tokens_out_p90": est.tokens_out_p90,
         "cost_usd_p50": est.cost_usd_p50,
         "cost_usd_p90": est.cost_usd_p90,
+        "pricing_missing": est.cost_usd_p50 is None,
         "confidence": est.confidence,
         "n_samples": est.n_samples,
         "n_clips": est.n_clips,

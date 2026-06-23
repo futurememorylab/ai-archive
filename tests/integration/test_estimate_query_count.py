@@ -101,6 +101,40 @@ async def test_uncached_clips_estimated_as_unknown(db):
     assert result["n_unknown"] == 1
 
 
+@pytest.mark.asyncio
+async def test_estimate_pricing_missing_flag(db):
+    # Model with NO rate card → costs are None but tokens are still computed.
+    # The returned dict must flag pricing_missing=True so UIs can distinguish
+    # "cost unknown" from "free".
+    prompts = PromptsRepo()
+    _, vid = await prompts.create_with_initial_version(
+        db,
+        name="t3",
+        description=None,
+        body="describe",
+        target_map={"scenes": {"kind": "markers"}},
+        output_schema={"type": "object"},
+        model="no-card-model",  # absent from SEED_RATE_CARDS → pricing missing
+    )
+    cache = ClipCacheRepo()
+    from tests.integration.test_clip_cache_get_many import _seed as _seed_clip
+
+    await _seed_clip(db, cache, 1)
+    result = await estimate_for_clip_ids(
+        db,
+        clip_cache_repo=cache,
+        run_telemetry_repo=RunTelemetryRepo(),
+        prompts_repo=prompts,
+        model_config_repo=ModelConfigRepo(),
+        provider_id="catdv",
+        clip_ids=[1],
+        prompt_version_id=vid,
+    )
+    assert result["pricing_missing"] is True
+    assert result["cost_usd_p50"] is None
+    assert result["tokens_in"] > 0
+
+
 def _setenv(monkeypatch, tmp_path):
     monkeypatch.setenv("APP_ENV", "dev")
     monkeypatch.setenv("CATDV_BASE_URL", "http://localhost:0")

@@ -432,6 +432,27 @@ async def _process_item(
     duration_secs = meta.duration_secs
     media_kind = meta.media_kind
 
+    # Effective media resolution: per-version override > model default >
+    # 'medium'. Invalid stored values are ignored (never reach the SDK map).
+    # Resolved BEFORE the estimate so the estimate reads same-resolution
+    # history and the resolution feedback loop is not a partial no-op.
+    from backend.app.services.resolution import (
+        resolution_valid_for_kind,
+        resolve_media_resolution,
+    )
+
+    if force_resolution is not None:
+        media_resolution = force_resolution
+    else:
+        _mc = await model_config_repo.get(db, version.model)
+        _model_default = _mc.default_media_resolution if _mc and not _mc.removed else None
+        media_resolution = resolve_media_resolution(version.media_resolution, _model_default)
+    if not resolution_valid_for_kind(media_resolution, media_kind):
+        # Vertex rejects HIGH for non-image media; medium is the safe ceiling.
+        # Covers both branches above — even a stray calibration force_resolution
+        # of 'high' on a non-image clip is sanitized here.
+        media_resolution = "medium"
+
     # Pre-call estimate (spec §6; stamped onto the telemetry row so
     # est-vs-actual is one query). Blind to the outcome by construction.
     est: run_estimator.RunEstimate | None = None
@@ -449,6 +470,7 @@ async def _process_item(
             prompt_body=version.body,
             schema=version.output_schema,
             model=version.model,
+            media_resolution=media_resolution,
         )
     except Exception:  # noqa: BLE001 — estimation must never block a run
         log.exception("pre-run estimate failed for clip %s", item.catdv_clip_id)
@@ -465,17 +487,6 @@ async def _process_item(
         clip_name=meta.clip_name,
         prompt_chars_rendered=len(rendered_body),
     )
-    # Effective media resolution: per-version override > model default >
-    # 'medium'. Invalid stored values are ignored (never reach the SDK map).
-    from backend.app.services.resolution import resolve_media_resolution
-
-    if force_resolution is not None:
-        media_resolution = force_resolution
-    else:
-        _mc = await model_config_repo.get(db, version.model)
-        _model_default = _mc.default_media_resolution if _mc and not _mc.removed else None
-        media_resolution = resolve_media_resolution(version.media_resolution, _model_default)
-
     t0 = time.monotonic()
     # The Vertex AI client is synchronous and each call takes seconds; run it
     # off the event loop so concurrent jobs and ordinary page requests stay
@@ -651,7 +662,7 @@ async def _finalize_studio(
         duration_s=elapsed_s,
         tokens_in=usage.tokens_in,
         tokens_out=usage.billable_out,
-        cost_usd=cost_usd or 0.0,
+        cost_usd=cost_usd,
     )
 
     await jobs_repo.update_item_status(db, item.id, "review_ready")

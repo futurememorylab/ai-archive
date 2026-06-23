@@ -59,7 +59,7 @@ TCTX = TelemetryCtx(
 )
 
 
-async def _setup(db, tmp_path, *, kind=None, media_resolution=None):
+async def _setup(db, tmp_path, *, kind=None, media_resolution=None, model="gemini-2.5-flash-lite"):
     prompts = PromptsRepo()
     _, vid = await prompts.create_with_initial_version(
         db,
@@ -68,7 +68,7 @@ async def _setup(db, tmp_path, *, kind=None, media_resolution=None):
         body="describe scenes",
         target_map={"scenes": {"kind": "markers"}},
         output_schema={"type": "object"},
-        model="gemini-2.5-flash-lite",
+        model=model,
         media_resolution=media_resolution,
     )
     jobs = JobsRepo()
@@ -78,7 +78,7 @@ async def _setup(db, tmp_path, *, kind=None, media_resolution=None):
     if kind == "studio":
         sruns = StudioRunsRepo()
         rid = await sruns.create_pending(
-            db, prompt_version_id=vid, clip_id=101, model="gemini-2.5-flash-lite"
+            db, prompt_version_id=vid, clip_id=101, model=model
         )
         await sruns.attach_job(db, rid, job_id=job_id)
     return job_id, f
@@ -180,7 +180,8 @@ class FakeGeminiCapturing:
 async def test_media_resolution_setting_from_model_default(db, tmp_path):
     # Seed the model's default media resolution to 'high'; the version has no
     # override, so the effective resolution should resolve to 'high' and reach
-    # both the gemini call and the telemetry row.
+    # both the gemini call and the telemetry row. Uses an IMAGE clip because
+    # HIGH is only valid for stills — on video it would (correctly) downgrade.
     mc = ModelConfigRepo()
     await mc.set_rates(
         db,
@@ -194,9 +195,14 @@ async def test_media_resolution_setting_from_model_default(db, tmp_path):
     )
     await mc.set_resolution(db, "gemini-2.5-flash-lite", "high", commit=True)
 
-    job_id, f = await _setup(db, tmp_path, kind=None)
+    f = tmp_path / "c1.jpg"
+    f.write_bytes(b"fake")
+    job_id, _ = await _setup(db, tmp_path, kind=None)
+    archive = FakeArchiveMedia(
+        {101: {"name": "clip", "media_path": "clip-101.jpg", "mime_type": "image/jpeg"}}
+    )
     gemini = FakeGeminiCapturing()
-    await run_job(job_id=job_id, **_run_kwargs(db, {101: f}, gemini))
+    await run_job(job_id=job_id, **_high_default_kwargs(db, {101: f}, gemini, archive))
 
     # The fake gemini received the resolved resolution.
     assert gemini.media_resolution == "high"
@@ -333,3 +339,147 @@ async def test_studio_non_json_records_error_telemetry(db, tmp_path):
     rows = await cur.fetchall()
     assert len(rows) == 1  # exactly one row — no double-record
     assert rows[0] == ("studio", "error", "NonJsonOutput", None, 3000)
+
+
+# --- Fix 1/2/3 regression coverage --------------------------------------
+
+
+class FakeArchiveMedia:
+    """Like FakeArchive but lets each clip declare its media path, so the
+    worker classifies the media kind (image vs video) the way it would in
+    production. ``upstream_handle`` drives ``classify_media_kind``."""
+
+    def __init__(self, clips: dict[int, dict]):
+        self.clips = clips
+
+    async def get_clip(self, clip_id_str: str):
+        import datetime as _dt
+
+        from backend.app.archive.model import CanonicalClip, MediaRef
+
+        clip = self.clips[int(clip_id_str)]
+        return CanonicalClip(
+            key=("catdv", clip_id_str),
+            name=clip.get("name", ""),
+            duration_secs=float(clip.get("duration_secs") or 0.0),
+            fps=float(clip.get("fps") or 25.0),
+            markers=tuple(),
+            fields={},
+            notes={},
+            media=MediaRef(
+                mime_type=clip.get("mime_type", "video/quicktime"),
+                size_bytes=None,
+                cached_path=None,
+                upstream_handle=clip.get("media_path", clip_id_str),
+            ),
+            provider_data=clip,
+            fetched_at=_dt.datetime.now(_dt.UTC),
+        )
+
+
+def _high_default_kwargs(db, files, gemini, archive):
+    kw = _run_kwargs(db, files, gemini)
+    kw["archive"] = archive
+    return kw
+
+
+async def _seed_high_model(db):
+    mc = ModelConfigRepo()
+    await mc.set_rates(
+        db,
+        "gemini-2.5-flash-lite",
+        input_text_video_image_per_1m=0.1,
+        input_audio_per_1m=0.1,
+        input_cached_per_1m=0.1,
+        output_per_1m=0.1,
+        pricing_version="test",
+        commit=True,
+    )
+    await mc.set_resolution(db, "gemini-2.5-flash-lite", "high", commit=True)
+
+
+@pytest.mark.asyncio
+async def test_high_resolution_downgraded_for_video(db, tmp_path):
+    # Model default = 'high', a VIDEO clip, normal run (no force_resolution).
+    # Vertex rejects HIGH for non-image media → the worker must downgrade to
+    # 'medium' before the gemini call AND record 'medium' in telemetry.
+    await _seed_high_model(db)
+    f = tmp_path / "c1.mov"
+    f.write_bytes(b"fake")
+    job_id, _ = await _setup(db, tmp_path, kind=None)
+    archive = FakeArchiveMedia({101: {"name": "clip", "media_path": "clip-101.mov"}})
+    gemini = FakeGeminiCapturing()
+    await run_job(job_id=job_id, **_high_default_kwargs(db, {101: f}, gemini, archive))
+
+    assert gemini.media_resolution == "medium"
+    cur = await db.execute("SELECT media_resolution_setting FROM run_telemetry")
+    assert (await cur.fetchone()) == ("medium",)
+
+
+@pytest.mark.asyncio
+async def test_high_resolution_kept_for_image(db, tmp_path):
+    # Same 'high' model default, but an IMAGE clip — HIGH is valid for stills,
+    # so it must pass through untouched to gemini and telemetry.
+    await _seed_high_model(db)
+    f = tmp_path / "c1.jpg"
+    f.write_bytes(b"fake")
+    job_id, _ = await _setup(db, tmp_path, kind=None)
+    archive = FakeArchiveMedia(
+        {101: {"name": "clip", "media_path": "clip-101.jpg", "mime_type": "image/jpeg"}}
+    )
+    gemini = FakeGeminiCapturing()
+    await run_job(job_id=job_id, **_high_default_kwargs(db, {101: f}, gemini, archive))
+
+    assert gemini.media_resolution == "high"
+    cur = await db.execute("SELECT media_resolution_setting FROM run_telemetry")
+    assert (await cur.fetchone()) == ("high",)
+
+
+@pytest.mark.asyncio
+async def test_inrun_estimate_uses_resolved_resolution(db, tmp_path):
+    # The pre-call estimate must run AFTER media_resolution is resolved and be
+    # passed the resolved value. We assert no regression from the reorder: the
+    # run completes green, telemetry carries both the est_* fields and the
+    # (downgraded) media_resolution_setting, and the estimate received it.
+    import backend.app.services.run_estimator as run_estimator
+
+    captured: dict = {}
+    orig = run_estimator.estimate_clips
+
+    async def _spy(*args, **kwargs):
+        captured["media_resolution"] = kwargs.get("media_resolution")
+        return await orig(*args, **kwargs)
+
+    run_estimator.estimate_clips = _spy
+    try:
+        await _seed_high_model(db)
+        f = tmp_path / "c1.mov"
+        f.write_bytes(b"fake")
+        job_id, _ = await _setup(db, tmp_path, kind=None)
+        archive = FakeArchiveMedia({101: {"name": "clip", "media_path": "clip-101.mov"}})
+        gemini = FakeGeminiCapturing()
+        await run_job(job_id=job_id, **_high_default_kwargs(db, {101: f}, gemini, archive))
+    finally:
+        run_estimator.estimate_clips = orig
+
+    # The estimate saw the resolved (downgraded) resolution, not None.
+    assert captured["media_resolution"] == "medium"
+
+    cur = await db.execute(
+        "SELECT est_tokens_in, media_resolution_setting, status FROM run_telemetry"
+    )
+    row = await cur.fetchone()
+    assert row[0] is not None and row[0] > 0  # est stamped
+    assert row[1] == "medium"
+    assert row[2] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_finalize_studio_null_cost_when_no_rate_card(db, tmp_path):
+    # A studio run for a model with NO rate card → compute_cost returns None →
+    # studio_run.cost_usd must be NULL, not 0.0 (which would be indistinguishable
+    # from a genuinely free run). 'no-card-model' is absent from SEED_RATE_CARDS.
+    job_id, f = await _setup(db, tmp_path, kind="studio", model="no-card-model")
+    await run_job(job_id=job_id, **_run_kwargs(db, {101: f}, FakeGemini()))
+    cur = await db.execute("SELECT cost_usd FROM studio_run")
+    assert (await cur.fetchone())[0] is None
