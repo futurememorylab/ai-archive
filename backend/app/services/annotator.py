@@ -212,6 +212,8 @@ async def run_job(
     telemetry_ctx: TelemetryCtx,
     model_config_repo: ModelConfigRepo,
     only_clip_ids: set[int] | None = None,
+    force_resolution: str | None = None,
+    record_only: bool = False,
 ) -> None:
     """Run a job to completion (or cancellation). Serial per job."""
     job = await jobs_repo.get_job(db, job_id)
@@ -256,6 +258,8 @@ async def run_job(
                 model_config_repo=model_config_repo,
                 event_bus=event_bus,
                 topic=topic,
+                force_resolution=force_resolution,
+                record_only=record_only,
             )
         except Exception as exc:  # noqa: BLE001
             log.exception(
@@ -364,6 +368,8 @@ async def _process_item(
     model_config_repo: ModelConfigRepo,
     event_bus,
     topic,
+    force_resolution: str | None = None,
+    record_only: bool = False,
 ) -> None:
     # Compute the AI-store key cheaply (no archive call). Full per-clip
     # metadata is resolved lazily below, AFTER the proxy/AI-store cache-miss
@@ -463,9 +469,12 @@ async def _process_item(
     # 'medium'. Invalid stored values are ignored (never reach the SDK map).
     from backend.app.services.resolution import resolve_media_resolution
 
-    _mc = await model_config_repo.get(db, version.model)
-    _model_default = _mc.default_media_resolution if _mc and not _mc.removed else None
-    media_resolution = resolve_media_resolution(version.media_resolution, _model_default)
+    if force_resolution is not None:
+        media_resolution = force_resolution
+    else:
+        _mc = await model_config_repo.get(db, version.model)
+        _model_default = _mc.default_media_resolution if _mc and not _mc.removed else None
+        media_resolution = resolve_media_resolution(version.media_resolution, _model_default)
 
     t0 = time.monotonic()
     # The Vertex AI client is synchronous and each call takes seconds; run it
@@ -488,7 +497,28 @@ async def _process_item(
         structured = None
 
     ai_store_kind = getattr(ai_store, "id", None)
-    if kind == "studio":
+    if record_only:
+        # Calibration path: record the telemetry row + mark the item done, but
+        # write NO studio-runs / review-items / annotations. Used to measure
+        # cost/quality at a forced resolution without mutating review state.
+        await jobs_repo.update_item_status(db, item.id, "review_ready")
+        await event_bus.publish(topic, {"item_id": item.id, "status": "review_ready"})
+        await _record_telemetry(
+            db,
+            run_telemetry_repo,
+            telemetry_ctx,
+            kind="studio",
+            item=item,
+            version=version,
+            status="ok",
+            result=result,
+            duration_s=elapsed_s,
+            capture=capture,
+            est=est,
+            ai_store_kind=ai_store_kind,
+            media_resolution_setting=media_resolution,
+        )
+    elif kind == "studio":
         await _finalize_studio(
             db,
             item,

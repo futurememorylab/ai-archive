@@ -238,6 +238,83 @@ async def test_media_resolution_override_beats_model_default(db, tmp_path):
     assert row == ("low",)
 
 
+@pytest.mark.asyncio
+async def test_force_resolution_overrides_resolver(db, tmp_path):
+    # Model default = 'high', version override = 'low'; force_resolution="medium"
+    # must beat BOTH and reach the gemini call AND the telemetry row.
+    mc = ModelConfigRepo()
+    await mc.set_rates(
+        db,
+        "gemini-2.5-flash-lite",
+        input_text_video_image_per_1m=0.1,
+        input_audio_per_1m=0.1,
+        input_cached_per_1m=0.1,
+        output_per_1m=0.1,
+        pricing_version="test",
+        commit=True,
+    )
+    await mc.set_resolution(db, "gemini-2.5-flash-lite", "high", commit=True)
+
+    job_id, f = await _setup(db, tmp_path, kind=None, media_resolution="low")
+    gemini = FakeGeminiCapturing()
+    await run_job(
+        job_id=job_id,
+        **_run_kwargs(db, {101: f}, gemini),
+        force_resolution="medium",
+    )
+
+    # The forced resolution reached the gemini SDK call.
+    assert gemini.media_resolution == "medium"
+
+    # And the telemetry row captured the forced value.
+    cur = await db.execute("SELECT media_resolution_setting FROM run_telemetry")
+    row = await cur.fetchone()
+    assert row == ("medium",)
+
+
+@pytest.mark.asyncio
+async def test_record_only_writes_telemetry_but_no_studio_or_review(db, tmp_path):
+    # record_only=True on a studio-kind job: after the Gemini call we record
+    # telemetry + mark the item done, but write NO studio-run completion and
+    # NO review_items.
+    job_id, f = await _setup(db, tmp_path, kind="studio")
+    gemini = FakeGeminiCapturing()
+    await run_job(
+        job_id=job_id,
+        **_run_kwargs(db, {101: f}, gemini),
+        record_only=True,
+    )
+
+    # Exactly one telemetry row for the job, status 'ok', resolution set.
+    cur = await db.execute(
+        "SELECT status, media_resolution_setting FROM run_telemetry WHERE job_id = ?",
+        (job_id,),
+    )
+    rows = await cur.fetchall()
+    assert len(rows) == 1
+    assert rows[0][0] == "ok"
+    assert rows[0][1] is not None
+
+    # No review_items written for this clip.
+    cur = await db.execute(
+        "SELECT COUNT(*) FROM review_items WHERE catdv_clip_id = ?", (101,)
+    )
+    assert (await cur.fetchone())[0] == 0
+
+    # The studio_run for this job/clip was NOT completed — it stays pending
+    # (the finalize path that writes output_json + flips status to 'ok' was
+    # skipped entirely).
+    cur = await db.execute(
+        "SELECT status, output_json FROM studio_run WHERE job_id = ?", (job_id,)
+    )
+    sr = await cur.fetchone()
+    assert sr == ("pending", None)
+
+    # The item was still marked successfully done.
+    items = await JobsRepo().list_items(db, job_id)
+    assert items[0].status == "review_ready"
+
+
 class FakeGeminiNonJson:
     def annotate(self, *, file_ref, prompt, schema, model, media_resolution=None):
         return {
