@@ -238,7 +238,10 @@ def test_sync_chip_shows_queued_and_problem_counts(monkeypatch, tmp_path: Path):
         finally:
             loop.close()
 
-        r = client.get("/ui/sync-chip")
+        # HTMX polls this fragment with HX-Request (the topbar context processor
+        # skips HX renders); fetch it the same way so the handler's own counts
+        # render rather than the page-scoped inline cache.
+        r = client.get("/ui/sync-chip", headers={"HX-Request": "true"})
 
     assert r.status_code == 200
     assert "sync-chip-trigger" in r.text

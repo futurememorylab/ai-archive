@@ -126,6 +126,13 @@ class CoreCtx:
     telemetry_ctx: TelemetryCtx = field(init=False)
     event_bus: EventBus = field(default_factory=EventBus)
 
+    # Cached topbar counts (sync chip + "to review" pill) for inline first-paint.
+    # Refreshed by an async dependency on the page routers BEFORE each full-page
+    # render, so the (synchronous) Jinja context processor reads memory instead
+    # of opening its own per-render sqlite connection (finding #10). None until
+    # the first refresh → the chip falls back to its async poll.
+    topbar_counts: dict[str, object] | None = None
+
     _running_jobs: dict[int, object] = field(default_factory=dict)
 
     write_queue: WriteQueue = field(init=False)
@@ -214,7 +221,19 @@ class CoreCtx:
         from backend.app.services.clip_versions_backfill import backfill_clip_versions
 
         await backfill_clip_versions(ctx.db, ctx.clip_versions_repo)
+        await ctx.refresh_topbar_counts()
         return ctx
+
+    async def refresh_topbar_counts(self) -> None:
+        """Recompute and cache the topbar sync-chip + review-pill counts. Called
+        async (an aiosqlite query on the pooled connection) by a page-router
+        dependency before each full-page render, so the synchronous Jinja
+        context processor reads memory instead of a per-render sqlite connect.
+        See finding #10."""
+        self.topbar_counts = {
+            "sync_counts": await self.pending_ops_repo.count_actionable(self.db),
+            "review_count": await self.review_items_repo.count_clips_for_review(self.db),
+        }
 
     def _wire_cache_services(
         self,
@@ -291,6 +310,10 @@ class LiveCtx:
     @property
     def db_cm(self) -> object:
         return self.core.db_cm
+
+    @property
+    def topbar_counts(self) -> dict[str, object] | None:
+        return self.core.topbar_counts
 
     @property
     def prompts_repo(self) -> PromptsRepo:
