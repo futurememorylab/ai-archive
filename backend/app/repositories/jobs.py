@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 import aiosqlite
 
 from backend.app.models.job import ItemStatus, Job, JobItem, JobStatus
+from backend.app.repositories._batch import chunked_in_clause
 
 
 def _now_iso() -> str:
@@ -128,6 +129,24 @@ class JobsRepo:
             )
             for r in await cur.fetchall()
         ]
+
+    async def clip_status_by_jobs(
+        self, conn: aiosqlite.Connection, job_ids: list[int]
+    ) -> dict[int, str]:
+        """Merged `{catdv_clip_id: status}` across the given jobs' items in one
+        chunked query — instead of a `list_items()` per job. Backs the batch
+        run-status pills (clips list + the polled fragment), which are otherwise
+        an N+1 over the batch's jobs on every poll. See ADR 0046."""
+        out: dict[int, str] = {}
+        for fragment, params in chunked_in_clause((j,) for j in job_ids):
+            cur = await conn.execute(
+                f"SELECT catdv_clip_id, status FROM job_items "
+                f"WHERE job_id IN ({fragment}) ORDER BY job_id, id",
+                params,
+            )
+            for clip_id, status in await cur.fetchall():
+                out[int(clip_id)] = status
+        return out
 
     async def update_item_status(
         self,

@@ -2,6 +2,7 @@ import pytest
 
 from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.prompts import PromptsRepo
+from tests._helpers.query_count import assert_query_count
 
 
 async def _seed_version(
@@ -220,3 +221,20 @@ async def test_failed_items_for_jobs_resolves_clip_name(db):
 @pytest.mark.asyncio
 async def test_failed_items_for_jobs_empty_input(db):
     assert await JobsRepo().failed_items_for_jobs(db, []) == []
+
+
+@pytest.mark.asyncio
+async def test_clip_status_by_jobs_is_one_query(db):
+    """Merged clip→status across a batch's jobs is ONE chunked query, not a
+    list_items() per job — the polled batch-status fragment was an N+1 over the
+    batch's jobs on every tick."""
+    jobs = JobsRepo()
+    _, vid = await _seed_version(db)
+    j1 = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[101, 102], run_group="rg")
+    j2 = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[201], run_group="rg")
+    its1 = await jobs.list_items(db, j1)
+    await jobs.update_item_status(db, its1[0].id, "applied")
+    async with assert_query_count(db, max_n=1):
+        m = await jobs.clip_status_by_jobs(db, [j1, j2])
+    assert m == {101: "applied", 102: "pending", 201: "pending"}
+    assert await jobs.clip_status_by_jobs(db, []) == {}

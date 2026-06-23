@@ -320,10 +320,7 @@ async def clips_list(
     # When viewing a batch, surface each clip's per-item run status (queued /
     # processing / done / failed) from the job's items, merged across all the
     # per-kind jobs of the bulk action.
-    batch_status_map: dict[int, str] = {}
-    for jid in batch_ids:
-        for it in await ctx.jobs_repo.list_items(ctx.db, jid):
-            batch_status_map[it.catdv_clip_id] = it.status
+    batch_status_map = await ctx.jobs_repo.clip_status_by_jobs(ctx.db, batch_ids)
     # While any item is still in-flight, the per-clip pills change underneath a
     # static page — flag it so the tbody self-polls and refreshes the pills
     # without a manual reload. Stops automatically once the batch settles.
@@ -794,10 +791,7 @@ async def batch_statuses_fragment(request: Request, batch: str = ""):
     the batch is running, and tells the poller to stop once it settles."""
     ctx = get_core_ctx(request)
     job_ids = [int(b) for b in batch.split(",") if b.strip().isdigit()]
-    status_map: dict[int, str] = {}
-    for jid in job_ids:
-        for it in await ctx.jobs_repo.list_items(ctx.db, jid):
-            status_map[it.catdv_clip_id] = it.status
+    status_map = await ctx.jobs_repo.clip_status_by_jobs(ctx.db, job_ids)
     cells = {cid: _batch_status_view(s) for cid, s in status_map.items()}
     running = any(s in _RUNNING_ITEM_STATUSES for s in status_map.values())
     return templates.TemplateResponse(
