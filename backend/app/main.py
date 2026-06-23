@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from time import perf_counter
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
@@ -100,6 +100,22 @@ async def lifespan(app: FastAPI):
         await (live or core).aclose()
 
 
+async def _refresh_topbar_counts(request: Request) -> None:
+    """Refresh the cached topbar counts before a full-page render, so the
+    synchronous Jinja context processor reads a current value from memory
+    instead of opening its own per-render sqlite connection (finding #10).
+    Skipped for HTMX fragments (they don't draw the topbar); never fatal."""
+    if request.headers.get("hx-request") == "true":
+        return
+    core = getattr(request.app.state, "core_ctx", None)
+    if core is None:
+        return
+    try:
+        await core.refresh_topbar_counts()
+    except Exception:  # noqa: BLE001 — a count refresh must never break a page
+        logging.getLogger(__name__).debug("topbar count refresh failed", exc_info=True)
+
+
 def register_routers(app: FastAPI) -> None:
     app.include_router(prompts_router)
     app.include_router(catdv_router)
@@ -119,7 +135,7 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(cache_ui_router)
     app.include_router(enums_router)
     for r in page_routers:
-        app.include_router(r)
+        app.include_router(r, dependencies=[Depends(_refresh_topbar_counts)])
     app.include_router(live_router)
 
 

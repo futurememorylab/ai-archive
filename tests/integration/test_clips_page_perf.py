@@ -12,9 +12,13 @@ Query inventory (no filters, no batch, all bounded by page size):
      media-local / media-ai / pins / pending-counts), all chunked_in_clause
   3. jobs_repo.list_jobs — one query
   4. review_items_repo.list_pending_clips — one query
+  5. CoreCtx.refresh_topbar_counts (the page-router dependency) — 2 reads
+     (count_actionable + count_clips_for_review) for the topbar chip/pill. These
+     replaced a per-render *synchronous* sqlite3 connection that was invisible to
+     this guard; constant, not per-row. See finding #10.
   ─────────────────────────────────────────────────────────────────────────
-  Total = 8 statements; none grow with clip count (page capped at limit=10,
-  well inside one 400-key chunk).
+  None grow with clip count (page capped at limit=10, well inside one 400-key
+  chunk). The equality-across-N test pins that O(1) property directly.
 """
 
 from __future__ import annotations
@@ -203,17 +207,17 @@ def _count_render(monkeypatch, tmp_path, n: int) -> int:
 
 @pytest.mark.parametrize("n_clips", [10, 100, 1000])
 def test_clips_list_query_count_bounded(monkeypatch, tmp_path, n_clips):
-    """GET / issues ≤ 10 SQL statements at every clip-count (N=10/100/1000).
+    """GET / issues ≤ 14 SQL statements at every clip-count (N=10/100/1000).
 
     The page is limited to 10 rows (limit=10), well inside a single
-    chunked_in_clause batch.  Actual count at the time of writing: 8.
-    Bound is set to 10 (actual + 2 headroom) so a single per-row DB call
+    chunked_in_clause batch.  Actual count at the time of writing: 12.
+    Bound is set to 14 (actual + 2 headroom) so a single per-row DB call
     (adds 10 statements for a 10-row page) trips the assertion.
     """
     count = _count_render(monkeypatch, tmp_path, n_clips)
 
-    assert count <= 10, (
-        f"[n={n_clips}] query count {count} > 10; "
+    assert count <= 14, (
+        f"[n={n_clips}] query count {count} > 14; "
         "an N+1 may have been introduced in the clips-list render. "
         "See ADR 0046."
     )
