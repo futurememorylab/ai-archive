@@ -60,15 +60,11 @@ _LIST_COLUMNS_WITH_NAME = """
 
 
 class PrefetchQueueRepo:
-    async def enqueue(
-        self,
-        conn: aiosqlite.Connection,
-        *,
-        key: ClipKey,
-        who: str,
-    ) -> int:
-        """Enqueue a prefetch. If an active row already exists for the
-        clip, return its id (idempotent)."""
+    async def _active_row_id(
+        self, conn: aiosqlite.Connection, key: ClipKey
+    ) -> int | None:
+        """Id of the clip's existing active (queued/downloading) row, if any.
+        Shared dedup lookup for the idempotent enqueue / start_inline paths."""
         cur = await conn.execute(
             """
             SELECT id FROM prefetch_queue
@@ -79,8 +75,20 @@ class PrefetchQueueRepo:
             (key[0], key[1]),
         )
         existing = await cur.fetchone()
+        return int(existing[0]) if existing is not None else None
+
+    async def enqueue(
+        self,
+        conn: aiosqlite.Connection,
+        *,
+        key: ClipKey,
+        who: str,
+    ) -> int:
+        """Enqueue a prefetch. If an active row already exists for the
+        clip, return its id (idempotent)."""
+        existing = await self._active_row_id(conn, key)
         if existing is not None:
-            return int(existing[0])
+            return existing
         cur = await conn.execute(
             """
             INSERT INTO prefetch_queue
@@ -108,18 +116,9 @@ class PrefetchQueueRepo:
 
         Idempotent like `enqueue`: if an active row already exists for the clip
         (e.g. the user also clicked Cache), its id is returned and reused."""
-        cur = await conn.execute(
-            """
-            SELECT id FROM prefetch_queue
-             WHERE provider_id = ? AND provider_clip_id = ?
-               AND status IN ('queued', 'downloading')
-             LIMIT 1
-            """,
-            (key[0], key[1]),
-        )
-        existing = await cur.fetchone()
+        existing = await self._active_row_id(conn, key)
         if existing is not None:
-            return int(existing[0])
+            return existing
         now = _now_iso()
         cur = await conn.execute(
             """

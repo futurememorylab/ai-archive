@@ -29,6 +29,7 @@ function clipAnnotate(clipId, clipKind) {
     cachePct: null,
     _timer: null,
     _cachePoll: null,
+    _cachePolling: false,
     _didUpload: false,
     _cachedAnnounced: false,
     _promptName: null,
@@ -94,23 +95,26 @@ function clipAnnotate(clipId, clipKind) {
 
     // Poll the live cache queue while caching, so the button shows the same
     // percentage as the queue page + the Cache button (shared helper).
+    // `_cachePolling` guards re-entry across the async await; `_cachePoll`
+    // holds the pending timeout so _stopCachePoll can cancel it.
     _startCachePoll() {
-      if (this._cachePoll) return;
+      if (this._cachePolling) return;
+      this._cachePolling = true;
       const tick = async () => {
-        this._cachePoll = null;
-        if (!this.running || this.phase !== "caching") { this.cachePct = null; return; }
+        if (!this.running || this.phase !== "caching") return this._stopCachePoll();
         const p = await window.cacheProgressForClip(clipId);
         if (p && p.pct != null) this.cachePct = p.pct;
         if (this.running && this.phase === "caching") {
           this._cachePoll = setTimeout(tick, 1200);
         } else {
-          this.cachePct = null;
+          this._stopCachePoll();
         }
       };
-      this._cachePoll = setTimeout(tick, 0);
+      tick();
     },
 
     _stopCachePoll() {
+      this._cachePolling = false;
       if (this._cachePoll) { clearTimeout(this._cachePoll); this._cachePoll = null; }
       this.cachePct = null;
     },
