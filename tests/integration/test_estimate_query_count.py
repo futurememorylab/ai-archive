@@ -2,14 +2,16 @@
 scale with clip count (ADR 0046)."""
 
 import importlib
+from datetime import UTC, datetime
 
 import pytest
 
+from backend.app.archive.model import CanonicalClip, MediaRef
 from backend.app.repositories.clip_cache import ClipCacheRepo
 from backend.app.repositories.model_config import ModelConfigRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.run_telemetry import RunTelemetryRepo
-from backend.app.services.run_estimator import estimate_for_clip_ids
+from backend.app.services.run_estimator import IMAGE_TILE_TOKENS, estimate_for_clip_ids
 from tests._helpers.query_count import assert_query_count
 from tests.integration.test_clip_cache_get_many import _seed
 
@@ -196,3 +198,77 @@ def test_estimate_route_happy_path_and_404(monkeypatch, tmp_path):
             json={"prompt_version_id": 999999, "clip_ids": []},
         )
         assert r.status_code == 404
+
+
+async def _seed_image_clip(db, repo: ClipCacheRepo, clip_id: int, width: int, height: int) -> None:
+    """Seed a JPEG image clip with real pixel dimensions in provider_data.media."""
+    clip = CanonicalClip(
+        key=("catdv", str(clip_id)),
+        name=f"photo_{clip_id}.jpg",
+        duration_secs=0.0,
+        fps=25.0,
+        markers=(),
+        fields={},
+        notes={},
+        media=MediaRef(
+            mime_type="image/jpeg",
+            size_bytes=None,
+            cached_path=None,
+            upstream_handle=f"photo_{clip_id}.jpg",
+        ),
+        provider_data={"media": {"width": width, "height": height}},
+        fetched_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    await repo.upsert(db, clip=clip, catalog_id="test-catalog")
+
+
+@pytest.mark.asyncio
+async def test_image_clip_dimensions_used_in_token_estimate(db):
+    """estimate_for_clip_ids must use provider_data.media width/height to
+    compute multi-tile token counts for image clips; a 1536x1536 image spans
+    4 tiles (ceil(1536/768)=2 per axis) and must yield more tokens_in than a
+    768x768 image (1 tile per axis)."""
+    prompts = PromptsRepo()
+    _, vid = await prompts.create_with_initial_version(
+        db,
+        name="img-dim-test",
+        description=None,
+        body="describe",
+        target_map={"scenes": {"kind": "markers"}},
+        output_schema={"type": "object"},
+        model="gemini-2.5-flash-lite",
+    )
+    cache = ClipCacheRepo()
+    # 1536x1536: ceil(1536/768)=2 per axis → 4 tiles → 4 * IMAGE_TILE_TOKENS image tokens
+    await _seed_image_clip(db, cache, clip_id=101, width=1536, height=1536)
+    # 768x768: ceil(768/768)=1 per axis → 1 tile → 1 * IMAGE_TILE_TOKENS image tokens
+    await _seed_image_clip(db, cache, clip_id=102, width=768, height=768)
+
+    result_large = await estimate_for_clip_ids(
+        db,
+        clip_cache_repo=cache,
+        run_telemetry_repo=RunTelemetryRepo(),
+        prompts_repo=prompts,
+        model_config_repo=ModelConfigRepo(),
+        provider_id="catdv",
+        clip_ids=[101],
+        prompt_version_id=vid,
+    )
+    result_small = await estimate_for_clip_ids(
+        db,
+        clip_cache_repo=cache,
+        run_telemetry_repo=RunTelemetryRepo(),
+        prompts_repo=prompts,
+        model_config_repo=ModelConfigRepo(),
+        provider_id="catdv",
+        clip_ids=[102],
+        prompt_version_id=vid,
+    )
+
+    # 1536x1536 → 4 tiles; 768x768 → 1 tile. tokens_in difference = 3 * IMAGE_TILE_TOKENS.
+    diff = result_large["tokens_in"] - result_small["tokens_in"]
+    assert diff == 3 * IMAGE_TILE_TOKENS, (
+        f"Expected 3-tile difference ({3 * IMAGE_TILE_TOKENS} tokens) between "
+        f"1536x1536 and 768x768 images, got {diff} "
+        f"(large={result_large['tokens_in']}, small={result_small['tokens_in']})"
+    )

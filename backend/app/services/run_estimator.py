@@ -216,6 +216,26 @@ def _classify_cached_row(row) -> str:
     return classify_media_kind(str(path) if path else None)
 
 
+def _dimensions_from_cached_row(row) -> tuple[int | None, int | None]:
+    """Extract pixel width/height from a clip_cache row's provider_data.media dict.
+
+    CatDV stores image/video dimensions in the raw provider_data under the
+    "media" key (e.g. provider_data["media"]["width"]). The canonical MediaRef
+    sub-dict does NOT carry dimensions, so we reach into provider_data.
+
+    Returns (None, None) for any missing/non-integer value — callers must
+    handle None gracefully (used only for the image-tile estimate, where
+    None → 1-tile fallback in _image_tiles).
+    """
+    cj = row["canonical_json"] or {}
+    provider_media = (cj.get("provider_data") or {}).get("media") or {}
+    raw_w = provider_media.get("width")
+    raw_h = provider_media.get("height")
+    w = int(raw_w) if isinstance(raw_w, (int, float)) and raw_w else None
+    h = int(raw_h) if isinstance(raw_h, (int, float)) and raw_h else None
+    return w, h
+
+
 async def media_kinds_for_clip_ids(conn, *, clip_cache_repo, provider_id, clip_ids):
     """{clip_id: media_kind} DB-first (offline-safe). Uncached clips default to
     'video+audio' — the safe non-image default (never offered HIGH)."""
@@ -268,11 +288,14 @@ async def estimate_for_clip_ids(
                 )
             )
             continue
+        w, h = _dimensions_from_cached_row(row)
         clips.append(
             ClipEstimateInput(
                 clip_id=cid,
                 media_kind=_classify_cached_row(row),
                 duration_secs=row["duration_secs"],
+                width=w,
+                height=h,
             )
         )
     est = await estimate_clips(
