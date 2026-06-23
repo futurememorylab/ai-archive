@@ -38,6 +38,8 @@ def test_lists_full_catalog_including_unpriced(monkeypatch, tmp_path):
         # an unpriced catalog model, flagged
         assert "gemini-3.5-flash" in r.text
         assert "no rate card" in r.text
+        # resolution help text explaining low/medium/high semantics
+        assert "still images only" in r.text
 
 
 def test_edit_existing_rate_persists_and_updates_cache(monkeypatch, tmp_path):

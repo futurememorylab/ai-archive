@@ -120,6 +120,9 @@ a { color: inherit; text-decoration: none; }
 .pill.changed { color: var(--changed);
   border-color: color-mix(in oklab, var(--changed) 35%, transparent); }
 .pill.changed .led { background: var(--changed); box-shadow: 0 0 6px var(--changed); }
+.pill.warn { color: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 35%, transparent); }
+.pill.warn .led { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
 .to-review-chip { text-decoration: none; cursor: pointer; gap: 4px; }
 .to-review-chip:hover { filter: brightness(1.15); }
 /* User menu: a rounded pill trigger consistent with .conn-pill, not a plain btn. */
@@ -907,6 +910,7 @@ a { color: inherit; text-decoration: none; }
 /* Own class, NOT .row-actions — that shared class is opacity:0 until row-hover
    (cache/vlist convention) and would render the kebab + its menu invisible. */
 .admin-table .admin-actions { text-align: right; white-space: nowrap; }
+.admin-table input[type="number"].txt { width: 8ch; text-align: right; }
 .admin-add-row { display: flex; align-items: flex-end; gap: 8px; margin-top: 6px; }
 
 .crumb .sep { color: var(--text-4); padding: 0 4px; }
@@ -1006,6 +1010,10 @@ a { color: inherit; text-decoration: none; }
 }
 .txt:focus { outline: none; border-color: var(--accent); }
 .txt:read-only, .txt[readonly] { color: var(--text-2); background: var(--panel-2); }
+/* Hide native number-input spinner arrows app-wide for .txt fields. */
+.txt[type="number"]::-webkit-inner-spin-button,
+.txt[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.txt[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
 /* Reusable form-field component (label + textarea + help text). */
 .field { display: flex; flex-direction: column; gap: 4px; }
