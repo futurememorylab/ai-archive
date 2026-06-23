@@ -92,6 +92,7 @@ class RunTelemetryRepo:
         *,
         model: str,
         media_kind: str,
+        media_resolution: str | None = None,
         limit: int = 50,
     ) -> list[float]:
         """tokens_in_<media>/second for recent ok runs — calibrates the
@@ -103,15 +104,20 @@ class RunTelemetryRepo:
             "audio": "COALESCE(tokens_in_audio, 0)",
             "image": "COALESCE(tokens_in_image, 0)",
         }.get(media_kind, "COALESCE(tokens_in_video, 0)")
+        res_clause = " AND media_resolution_setting = ?" if media_resolution is not None else ""
+        params: list = [model, media_kind]
+        if media_resolution is not None:
+            params.append(media_resolution)
+        params.append(limit)
         # id is insertion order == recency today; occurred_at may differ
         # if Phase-2 ever back-fills older events.
         cur = await conn.execute(
             f"SELECT CAST(({col_expr}) AS REAL) / media_duration_secs "
             "FROM run_telemetry "
             "WHERE model = ? AND media_kind = ? AND status = 'ok' "
-            f"AND COALESCE(media_duration_secs, 0) > 0 AND ({col_expr}) > 0 "
+            f"AND COALESCE(media_duration_secs, 0) > 0 AND ({col_expr}) > 0{res_clause} "
             "ORDER BY id DESC LIMIT ?",
-            (model, media_kind, limit),
+            tuple(params),
         )
         return [r[0] for r in await cur.fetchall()]
 
@@ -122,6 +128,7 @@ class RunTelemetryRepo:
         model: str,
         media_kind: str,
         prompt_hash: str | None = None,
+        media_resolution: str | None = None,
         limit: int = 50,
     ) -> list[float]:
         """Billable output per media-second (per-item for images) for
@@ -145,6 +152,9 @@ class RunTelemetryRepo:
         if prompt_hash is not None:
             where.append("prompt_hash = ?")
             params.append(prompt_hash)
+        if media_resolution is not None:
+            where.append("media_resolution_setting = ?")
+            params.append(media_resolution)
         params.append(limit)
         cur = await conn.execute(
             f"SELECT {value} FROM run_telemetry WHERE {' AND '.join(where)} "

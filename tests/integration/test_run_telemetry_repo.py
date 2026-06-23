@@ -120,3 +120,35 @@ async def test_input_ratios_audio_branch(db):
     )
     ratios = await repo.recent_input_ratios(db, model="gemini-2.5-flash-lite", media_kind="audio")
     assert ratios == [32.0]
+
+
+async def _insert_run(db, **over):
+    """Insert a run_telemetry row with sensible defaults + caller overrides."""
+    repo = RunTelemetryRepo()
+    await repo.insert(db, _rec(**over))
+
+
+@pytest.mark.asyncio
+async def test_recent_output_rates_filtered_by_resolution(db):
+    repo = RunTelemetryRepo()
+    await _insert_run(db, model="m", media_kind="video", media_resolution_setting="high",
+                      media_duration_secs=10.0, tokens_out=1000, tokens_thinking=0)
+    await _insert_run(db, model="m", media_kind="video", media_resolution_setting="low",
+                      media_duration_secs=10.0, tokens_out=100, tokens_thinking=0)
+    high = await repo.recent_output_rates(db, model="m", media_kind="video", media_resolution="high")
+    low = await repo.recent_output_rates(db, model="m", media_kind="video", media_resolution="low")
+    assert high == [100.0]   # 1000/10
+    assert low == [10.0]     # 100/10
+    both = await repo.recent_output_rates(db, model="m", media_kind="video")  # no filter
+    assert sorted(both) == [10.0, 100.0]
+
+
+@pytest.mark.asyncio
+async def test_recent_input_ratios_filtered_by_resolution(db):
+    repo = RunTelemetryRepo()
+    await _insert_run(db, model="m", media_kind="video", media_resolution_setting="high",
+                      media_duration_secs=10.0, tokens_in_video=2000)
+    await _insert_run(db, model="m", media_kind="video", media_resolution_setting="low",
+                      media_duration_secs=10.0, tokens_in_video=500)
+    assert await repo.recent_input_ratios(db, model="m", media_kind="video", media_resolution="high") == [200.0]
+    assert await repo.recent_input_ratios(db, model="m", media_kind="video", media_resolution="low") == [50.0]
