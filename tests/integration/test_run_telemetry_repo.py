@@ -163,3 +163,30 @@ async def test_est_cost_sums_by_job(db):
                       cost_usd=0.10, est_cost_usd_p50=0.05)
     sums = await repo.est_cost_sums_by_job(db, [7])
     assert sums[7] == pytest.approx(0.20)  # 0.15 + 0.05
+
+
+@pytest.mark.asyncio
+async def test_stats_by_resolution(db):
+    repo = RunTelemetryRepo()
+    await _insert_run(db, prompt_version_id=5, media_kind="video", status="ok",
+                      media_resolution_setting="low", cost_usd=0.10)
+    await _insert_run(db, prompt_version_id=5, media_kind="video", status="ok",
+                      media_resolution_setting="low", cost_usd=0.20)
+    await _insert_run(db, prompt_version_id=5, media_kind="video", status="ok",
+                      media_resolution_setting="high", cost_usd=1.00)
+    stats = await repo.stats_by_resolution(db, prompt_version_id=5)
+    assert stats["low"] == {"count": 2, "cost_usd": pytest.approx(0.30)}
+    assert stats["high"] == {"count": 1, "cost_usd": pytest.approx(1.00)}
+
+
+@pytest.mark.asyncio
+async def test_stats_by_resolution_excludes_errors_and_other_versions(db):
+    repo = RunTelemetryRepo()
+    await _insert_run(db, prompt_version_id=5, media_kind="video", status="ok",
+                      media_resolution_setting="low", cost_usd=0.10)
+    await _insert_run(db, prompt_version_id=5, media_kind="video", status="error",
+                      media_resolution_setting="low", cost_usd=0.0)
+    await _insert_run(db, prompt_version_id=6, media_kind="video", status="ok",
+                      media_resolution_setting="low", cost_usd=9.0)
+    stats = await repo.stats_by_resolution(db, prompt_version_id=5)
+    assert stats == {"low": {"count": 1, "cost_usd": pytest.approx(0.10)}}
