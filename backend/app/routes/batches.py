@@ -44,6 +44,11 @@ async def _load_batches_ctx(ctx, limit: int) -> dict:
         spent = sum(cost_by_job.get(jid, 0.0) for jid in v["job_ids"])
         v["cost_usd"] = spent if spent else None
 
+    est_by_job = await ctx.run_telemetry_repo.est_cost_sums_by_job(ctx.db, all_job_ids)
+    for v in views:
+        est = sum(est_by_job.get(jid, 0.0) for jid in v["job_ids"])
+        v["est_cost_usd"] = est if est else None
+
     total_batches = await ctx.jobs_repo.count_total_batches(ctx.db)
     metrics = {
         "total_batches": total_batches,

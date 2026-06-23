@@ -152,3 +152,14 @@ async def test_recent_input_ratios_filtered_by_resolution(db):
                       media_duration_secs=10.0, tokens_in_video=500)
     assert await repo.recent_input_ratios(db, model="m", media_kind="video", media_resolution="high") == [200.0]
     assert await repo.recent_input_ratios(db, model="m", media_kind="video", media_resolution="low") == [50.0]
+
+
+@pytest.mark.asyncio
+async def test_est_cost_sums_by_job(db):
+    repo = RunTelemetryRepo()
+    await _insert_run(db, job_id=7, model="m", media_kind="video", status="ok",
+                      cost_usd=0.20, est_cost_usd_p50=0.15)
+    await _insert_run(db, job_id=7, model="m", media_kind="video", status="ok",
+                      cost_usd=0.10, est_cost_usd_p50=0.05)
+    sums = await repo.est_cost_sums_by_job(db, [7])
+    assert sums[7] == pytest.approx(0.20)  # 0.15 + 0.05

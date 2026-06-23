@@ -66,6 +66,23 @@ class RunTelemetryRepo:
                 out[int(jid)] = out.get(int(jid), 0.0) + float(total)
         return out
 
+    async def est_cost_sums_by_job(
+        self, conn: aiosqlite.Connection, job_ids: list[int]
+    ) -> dict[int, float]:
+        """{job_id: total est_cost_usd_p50}. Powers the batches-list
+        estimate-vs-actual delta (the pre-run p50 estimate captured per run)."""
+        out: dict[int, float] = {}
+        for fragment, params in chunked_in_clause((j,) for j in job_ids):
+            cur = await conn.execute(
+                f"SELECT job_id, COALESCE(SUM(est_cost_usd_p50), 0) "
+                f"FROM run_telemetry WHERE job_id IN ({fragment}) "
+                f"GROUP BY job_id",
+                tuple(params),
+            )
+            for jid, total in await cur.fetchall():
+                out[int(jid)] = out.get(int(jid), 0.0) + float(total)
+        return out
+
     async def cost_totals_by_clip(
         self, conn: aiosqlite.Connection, job_ids: list[int]
     ) -> dict[int, float]:

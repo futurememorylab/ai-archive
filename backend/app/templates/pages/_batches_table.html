@@ -49,7 +49,10 @@
           </div>
         </div>
       </td>
-      <td class="bt-cost mono">{{ b.cost_usd|usd }}</td>
+      <td class="bt-cost mono">
+        {{ b.cost_usd|usd }}
+        {% if b.cost_usd is not none and b.est_cost_usd %}<span class="muted" title="estimated (p50) vs actual">(est {{ b.est_cost_usd|usd }})</span>{% endif %}
+      </td>
       <td>
         <span class="pill {{ b.status_state }}">
           {% if b.running %}<span class="ca-spinner" aria-hidden="true"></span>{% endif %}
