@@ -1,48 +1,66 @@
 {# backend/app/templates/pages/_admin_models_table.html #}
 {% import "components/_ui.html" as ui %}
 <div class="admin-models">
-  <p class="meta">Per-model Gemini rates (USD per 1M tokens). Editing bumps the
+  <p class="meta">Gemini models offered in prompts, with per-model pricing
+    (USD per 1M tokens) and default media resolution. Editing rates bumps the
     pricing version; historical run costs are not changed.</p>
   <table class="admin-table">
     <thead>
       <tr>
-        <th>Model</th>
-        <th>Text/Video/Image</th>
-        <th>Audio</th>
-        <th>Cached</th>
-        <th>Output</th>
-        <th>Default res</th>
-        <th></th>
+        <th>Model</th><th>Default</th><th>Enabled</th>
+        <th>Text/Video/Image</th><th>Audio</th><th>Cached</th><th>Output</th>
+        <th>Default res</th><th></th>
       </tr>
     </thead>
     <tbody>
       {% for r in rows %}
-      {# No <form> inside a <tr> (invalid HTML — the browser hoists it out and
-         breaks the row). The Save button is an HTMX trigger that includes the
-         row's named inputs via hx-include="closest tr". #}
+      {# No <form> inside <tr> (invalid HTML). Save is an HTMX button that submits
+         the row's named inputs via hx-include="closest tr". #}
       <tr>
-        <td class="mono-cell">{{ r.model }}</td>
+        <td class="mono-cell">
+          {{ r.model }}
+          {% if not r.has_card %}<span class="pill warn" title="No pricing rate card yet — enter rates and Save">no rate card</span>{% endif %}
+        </td>
+        <td>{% if r.is_default %}★{% endif %}</td>
+        <td>{{ 'on' if r.enabled else 'off' }}</td>
         <td><input class="txt" type="number" step="0.0001" min="0"
                    name="input_text_video_image_per_1m"
                    value="{{ r.input_text_video_image_per_1m }}"></td>
         <td><input class="txt" type="number" step="0.0001" min="0"
-                   name="input_audio_per_1m"
-                   value="{{ r.input_audio_per_1m }}"></td>
+                   name="input_audio_per_1m" value="{{ r.input_audio_per_1m }}"></td>
         <td><input class="txt" type="number" step="0.0001" min="0"
-                   name="input_cached_per_1m"
-                   value="{{ r.input_cached_per_1m }}"></td>
+                   name="input_cached_per_1m" value="{{ r.input_cached_per_1m }}"></td>
         <td><input class="txt" type="number" step="0.0001" min="0"
-                   name="output_per_1m"
-                   value="{{ r.output_per_1m }}"></td>
+                   name="output_per_1m" value="{{ r.output_per_1m }}"></td>
         <td class="mono-cell">{{ r.default_media_resolution }}</td>
         <td class="admin-actions">
           <button type="button" class="btn primary sm"
                   hx-post="/admin/models/{{ r.model }}/rates"
                   hx-include="closest tr"
                   hx-target="#admin-enum-region" hx-swap="innerHTML">Save</button>
+          <div class="popover" x-data="popover()">
+            <button type="button" class="btn icon ghost sm" aria-label="Actions for {{ r.model }}"
+                    :class="open && 'open'" @click="toggle()">{% include "icons/_dots.svg" %}</button>
+            <div class="popover-panel menu align-right" x-show="open" x-cloak
+                 @click.outside="close()" @keydown.escape.window="close()">
+              {%- set d_attrs = 'hx-post="/admin/models/' ~ r.model ~ '/default" hx-target="#admin-enum-region" hx-swap="innerHTML"' ~ (' disabled' if r.is_default else '') -%}
+              {{ ui.menu_item('Make default', attrs=d_attrs) }}
+              {%- set e_attrs = 'hx-post="/admin/models/' ~ r.model ~ '/enabled" hx-vals=\'{"enabled":"' ~ ('false' if r.enabled else 'true') ~ '"}\' hx-target="#admin-enum-region" hx-swap="innerHTML"' -%}
+              {{ ui.menu_item('Disable' if r.enabled else 'Enable', attrs=e_attrs) }}
+              {{ ui.menu_sep() }}
+              {%- set del_attrs = 'hx-delete="/admin/models/' ~ r.model ~ '" hx-target="#admin-enum-region" hx-swap="innerHTML"' -%}
+              {{ ui.menu_item('Delete', danger=true, attrs=del_attrs) }}
+            </div>
+          </div>
         </td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  <form class="admin-add-row" hx-post="/admin/models"
+        hx-target="#admin-enum-region" hx-swap="innerHTML"
+        hx-on::after-request="if(event.detail.successful) this.reset()">
+    {{ ui.field('Add model', 'model', input_attrs='placeholder="gemini-x.y-flash"') }}
+    <button class="btn primary" type="submit">Add</button>
+  </form>
 </div>

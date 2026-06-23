@@ -10,10 +10,7 @@
       {% for r in rows %}
       {% set base = '/admin/enums/' ~ key ~ '/values/' ~ r.value %}
       <tr>
-        <td class="mono-cell">
-          {{ r.value }}
-          {% if r.no_rate_card %}<span class="pill warn" title="No pricing rate card; cost will not be tracked">no rate card</span>{% endif %}
-        </td>
+        <td class="mono-cell">{{ r.value }}</td>
         <td>{{ r.label or '' }}</td>
         <td>{% if r.is_default %}★{% endif %}</td>
         <td>{{ 'on' if r.enabled else 'off' }}</td>

@@ -99,5 +99,35 @@ class PricingService:
         )
         await self.reload()
 
+    async def set_rates(
+        self,
+        model: str,
+        *,
+        input_text_video_image_per_1m: float,
+        input_audio_per_1m: float,
+        input_cached_per_1m: float,
+        output_per_1m: float,
+    ) -> None:
+        """Create-or-update a model's rate card (bumped pricing_version), then
+        refresh the active cache."""
+        conn = self._db()
+        await self._repo.set_rates(
+            conn,
+            model,
+            input_text_video_image_per_1m=input_text_video_image_per_1m,
+            input_audio_per_1m=input_audio_per_1m,
+            input_cached_per_1m=input_cached_per_1m,
+            output_per_1m=output_per_1m,
+            pricing_version=f"edit-{_now()}",
+            commit=True,
+        )
+        await self.reload()
+
+    async def remove_model(self, model: str) -> None:
+        """Soft-delete a model's rate card and refresh the cache."""
+        conn = self._db()
+        await self._repo.soft_delete(conn, model, commit=True)
+        await self.reload()
+
     async def rows(self) -> list[ModelConfigRow]:
         return await self._repo.all_live(self._db())

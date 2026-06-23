@@ -108,6 +108,45 @@ class ModelConfigRepo:
         if commit:
             await conn.commit()
 
+    async def set_rates(
+        self,
+        conn: aiosqlite.Connection,
+        model: str,
+        *,
+        input_text_video_image_per_1m: float,
+        input_audio_per_1m: float,
+        input_cached_per_1m: float,
+        output_per_1m: float,
+        pricing_version: str,
+        commit: bool,
+    ) -> None:
+        """Create-or-update a rate card (and revive a tombstone). On INSERT,
+        source_url='' and default_media_resolution='medium'; on UPDATE those two
+        are preserved (not in the SET list)."""
+        await conn.execute(
+            "INSERT INTO model_config (model, input_text_video_image_per_1m, "
+            "input_audio_per_1m, input_cached_per_1m, output_per_1m, source_url, "
+            "default_media_resolution, pricing_version, updated_at, removed, created_at) "
+            "VALUES (?, ?, ?, ?, ?, '', 'medium', ?, datetime('now'), 0, datetime('now')) "
+            "ON CONFLICT(model) DO UPDATE SET "
+            "input_text_video_image_per_1m = excluded.input_text_video_image_per_1m, "
+            "input_audio_per_1m = excluded.input_audio_per_1m, "
+            "input_cached_per_1m = excluded.input_cached_per_1m, "
+            "output_per_1m = excluded.output_per_1m, "
+            "pricing_version = excluded.pricing_version, "
+            "updated_at = datetime('now'), removed = 0",
+            (
+                model,
+                input_text_video_image_per_1m,
+                input_audio_per_1m,
+                input_cached_per_1m,
+                output_per_1m,
+                pricing_version,
+            ),
+        )
+        if commit:
+            await conn.commit()
+
     async def soft_delete(
         self, conn: aiosqlite.Connection, model: str, *, commit: bool
     ) -> None:

@@ -16,8 +16,8 @@
        hx-get="/admin/models"
        hx-target="#admin-enum-region"
        hx-swap="innerHTML"
-       hx-push-url="false">Models</a>
-    {% for d in definitions %}
+       hx-push-url="false">Gemini models</a>
+    {% for d in definitions if d.key != 'gemini_generation_model' %}
       <a class="ctab{% if d.key == active_key %} active{% endif %}"
          href="/admin/enums/{{ d.key }}"
          hx-get="/admin/enums/{{ d.key }}"

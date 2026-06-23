@@ -14,9 +14,10 @@ from backend.app.routes.pages.admin_access import _members_ctx as _access_member
 from backend.app.routes.pages.templates import templates
 from backend.app.services.enum_service import EnumError
 from backend.app.services.errors import humanise
-from backend.app.services.pricing import rate_cards
 
 router = APIRouter(tags=["pages"])
+
+GEMINI_MODEL_KEY = "gemini_generation_model"
 
 
 async def _enum_view(ctx, key: str) -> dict:
@@ -24,15 +25,8 @@ async def _enum_view(ctx, key: str) -> dict:
     if key not in defs:
         raise HTTPException(404, f"no editable enum {key!r}")
     values = await ctx.enum_service.values(key)
-    is_model_enum = key == "gemini_generation_model"
     rows = [
-        {
-            "value": v.value,
-            "label": v.label,
-            "enabled": v.enabled,
-            "is_default": v.is_default,
-            "no_rate_card": is_model_enum and v.value not in rate_cards(),
-        }
+        {"value": v.value, "label": v.label, "enabled": v.enabled, "is_default": v.is_default}
         for v in values
     ]
     return {"definition": defs[key], "rows": rows, "key": key}
@@ -55,17 +49,25 @@ async def admin_page(request: Request):
 
 
 async def _models_view(ctx) -> dict:
-    rows = [
-        {
-            "model": r.model,
-            "input_text_video_image_per_1m": r.input_text_video_image_per_1m,
-            "input_audio_per_1m": r.input_audio_per_1m,
-            "input_cached_per_1m": r.input_cached_per_1m,
-            "output_per_1m": r.output_per_1m,
-            "default_media_resolution": r.default_media_resolution,
-        }
-        for r in await ctx.pricing_service.rows()
-    ]
+    """Spine = the Gemini model catalog (the editable enum); each model joined to
+    its model_config rate card (may be absent)."""
+    cards = {r.model: r for r in await ctx.pricing_service.rows()}
+    rows = []
+    for v in await ctx.enum_service.values(GEMINI_MODEL_KEY):
+        c = cards.get(v.value)
+        rows.append(
+            {
+                "model": v.value,
+                "enabled": v.enabled,
+                "is_default": v.is_default,
+                "has_card": c is not None,
+                "input_text_video_image_per_1m": c.input_text_video_image_per_1m if c else "",
+                "input_audio_per_1m": c.input_audio_per_1m if c else "",
+                "input_cached_per_1m": c.input_cached_per_1m if c else "",
+                "output_per_1m": c.output_per_1m if c else "",
+                "default_media_resolution": c.default_media_resolution if c else "—",
+            }
+        )
     return {"rows": rows}
 
 
@@ -73,6 +75,23 @@ async def _models_view(ctx) -> dict:
 async def admin_models_table(request: Request):
     require_role(request, "admin")
     ctx = get_core_ctx(request)
+    return templates.TemplateResponse(
+        request, "pages/_admin_models_table.html", await _models_view(ctx)
+    )
+
+
+@router.post("/admin/models", response_class=HTMLResponse)
+async def admin_add_model(
+    request: Request,
+    model: str = Form(...),
+    label: str | None = Form(None),
+):
+    require_role(request, "admin")
+    ctx = get_core_ctx(request)
+    try:
+        await ctx.enum_service.add_value(GEMINI_MODEL_KEY, model.strip(), label=(label or None))
+    except EnumError as exc:
+        raise HTTPException(400, humanise(exc)) from exc
     return templates.TemplateResponse(
         request, "pages/_admin_models_table.html", await _models_view(ctx)
     )
@@ -89,16 +108,56 @@ async def admin_edit_model_rates(
 ):
     require_role(request, "admin")
     ctx = get_core_ctx(request)
-    live_models = {r.model for r in await ctx.pricing_service.rows()}
-    if model not in live_models:
+    catalog = {v.value for v in await ctx.enum_service.values(GEMINI_MODEL_KEY)}
+    if model not in catalog:
         raise HTTPException(404, f"unknown model {model!r}")
-    await ctx.pricing_service.edit_rates(
+    await ctx.pricing_service.set_rates(
         model,
         input_text_video_image_per_1m=input_text_video_image_per_1m,
         input_audio_per_1m=input_audio_per_1m,
         input_cached_per_1m=input_cached_per_1m,
         output_per_1m=output_per_1m,
     )
+    return templates.TemplateResponse(
+        request, "pages/_admin_models_table.html", await _models_view(ctx)
+    )
+
+
+@router.post("/admin/models/{model}/default", response_class=HTMLResponse)
+async def admin_model_set_default(request: Request, model: str):
+    require_role(request, "admin")
+    ctx = get_core_ctx(request)
+    try:
+        await ctx.enum_service.set_default(GEMINI_MODEL_KEY, model)
+    except EnumError as exc:
+        raise HTTPException(400, humanise(exc)) from exc
+    return templates.TemplateResponse(
+        request, "pages/_admin_models_table.html", await _models_view(ctx)
+    )
+
+
+@router.post("/admin/models/{model}/enabled", response_class=HTMLResponse)
+async def admin_model_set_enabled(request: Request, model: str, enabled: bool = Form(...)):
+    require_role(request, "admin")
+    ctx = get_core_ctx(request)
+    try:
+        await ctx.enum_service.set_enabled(GEMINI_MODEL_KEY, model, enabled=enabled)
+    except EnumError as exc:
+        raise HTTPException(400, humanise(exc)) from exc
+    return templates.TemplateResponse(
+        request, "pages/_admin_models_table.html", await _models_view(ctx)
+    )
+
+
+@router.delete("/admin/models/{model}", response_class=HTMLResponse)
+async def admin_remove_model(request: Request, model: str):
+    require_role(request, "admin")
+    ctx = get_core_ctx(request)
+    try:
+        await ctx.enum_service.remove_value(GEMINI_MODEL_KEY, model)
+    except EnumError as exc:
+        raise HTTPException(400, humanise(exc)) from exc
+    await ctx.pricing_service.remove_model(model)
     return templates.TemplateResponse(
         request, "pages/_admin_models_table.html", await _models_view(ctx)
     )

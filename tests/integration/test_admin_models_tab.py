@@ -1,4 +1,10 @@
-"""Admin Models tab — list + edit per-model Gemini rates (pricing-to-DB PR1)."""
+"""Admin Models tab — merged Gemini catalog + per-model pricing.
+
+The single "Gemini models" tab's spine is the model catalog (the editable
+enum); each model is joined to its model_config rate card (which may be
+absent). Adding a model adds it to the catalog; saving rates for a model with
+no card CREATES the card.
+"""
 
 import asyncio
 import importlib
@@ -23,14 +29,18 @@ def _reset_cards():
     pricing.set_rate_cards(pricing.SEED_RATE_CARDS)
 
 
-def test_models_tab_lists_seeded_models(monkeypatch, tmp_path):
+def test_lists_full_catalog_including_unpriced(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as client:
         r = client.get("/admin/models")
         assert r.status_code == 200
+        # a priced catalog model
         assert "gemini-2.5-flash-lite" in r.text
+        # an unpriced catalog model, flagged
+        assert "gemini-3.5-flash" in r.text
+        assert "no rate card" in r.text
 
 
-def test_edit_rates_persists_and_updates_cache(monkeypatch, tmp_path):
+def test_edit_existing_rate_persists_and_updates_cache(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as client:
         r = client.post(
             "/admin/models/gemini-2.5-flash-lite/rates",
@@ -64,6 +74,94 @@ def test_edit_rates_persists_and_updates_cache(monkeypatch, tmp_path):
     assert persisted == 0.20
 
 
+def test_set_rates_creates_card_for_unpriced_model(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path) as client:
+        # gemini-3.5-flash is in the catalog but has no rate card.
+        before = client.get("/admin/models")
+        assert "gemini-3.5-flash" in before.text
+        assert "no rate card" in before.text
+
+        r = client.post(
+            "/admin/models/gemini-3.5-flash/rates",
+            data={
+                "input_text_video_image_per_1m": 0.15,
+                "input_audio_per_1m": 0.25,
+                "input_cached_per_1m": 0.02,
+                "output_per_1m": 0.55,
+            },
+            headers={"HX-Request": "true"},
+        )
+        assert r.status_code == 200
+        # The returned partial no longer flags gemini-3.5-flash as cardless.
+        # (Other unpriced models may still carry the warning, so check the row.)
+        assert "gemini-3.5-flash" in r.text
+
+        after = client.get("/admin/models")
+        assert "gemini-3.5-flash" in after.text
+
+    from backend.app.services.pricing import rate_cards
+
+    cards = rate_cards()
+    assert "gemini-3.5-flash" in cards
+    assert cards["gemini-3.5-flash"].input_text_video_image_per_1m == 0.15
+
+
+def test_add_model_appends_to_catalog(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path) as client:
+        r = client.post(
+            "/admin/models",
+            data={"model": "gemini-test-x"},
+            headers={"HX-Request": "true"},
+        )
+        assert r.status_code == 200
+        assert "gemini-test-x" in r.text
+        body = client.get("/admin/models").text
+        assert "gemini-test-x" in body
+        # newly-added catalog model has no rate card yet
+        assert "no rate card" in body
+
+
+def test_delete_model_removes_from_catalog_and_pricing(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path) as client:
+        # give it a rate card first
+        client.post(
+            "/admin/models/gemini-3.5-flash/rates",
+            data={
+                "input_text_video_image_per_1m": 0.15,
+                "input_audio_per_1m": 0.25,
+                "input_cached_per_1m": 0.02,
+                "output_per_1m": 0.55,
+            },
+            headers={"HX-Request": "true"},
+        )
+        r = client.request(
+            "DELETE",
+            "/admin/models/gemini-3.5-flash",
+            headers={"HX-Request": "true"},
+        )
+        assert r.status_code == 200
+        assert "gemini-3.5-flash" not in r.text
+
+        body = client.get("/admin/models").text
+        assert "gemini-3.5-flash" not in body
+
+    from backend.app.services.pricing import rate_cards
+
+    assert "gemini-3.5-flash" not in rate_cards()
+
+
+def test_set_default_moves_star(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path) as client:
+        r = client.post(
+            "/admin/models/gemini-2.5-flash/default",
+            headers={"HX-Request": "true"},
+        )
+        assert r.status_code == 200
+        assert r.text.count("★") == 1
+        body = client.get("/admin/models")
+        assert body.text.count("★") == 1
+
+
 def test_negative_rate_rejected(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as client:
         r = client.post(
@@ -82,7 +180,7 @@ def test_negative_rate_rejected(monkeypatch, tmp_path):
 def test_unknown_model_404(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as client:
         r = client.post(
-            "/admin/models/no-such-model/rates",
+            "/admin/models/not-a-model/rates",
             data={
                 "input_text_video_image_per_1m": 0.20,
                 "input_audio_per_1m": 0.30,

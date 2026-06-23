@@ -64,3 +64,71 @@ async def test_update_rates_bumps_version(db):
     row = await repo.get(db, "m1")
     assert row.input_text_video_image_per_1m == 0.20
     assert row.pricing_version == "edit-2026-06-22T10:00:00Z"
+
+
+async def test_set_rates_inserts_new_live_row(db):
+    repo = ModelConfigRepo()
+    await repo.set_rates(
+        db,
+        "fresh-model",
+        input_text_video_image_per_1m=0.11,
+        input_audio_per_1m=0.22,
+        input_cached_per_1m=0.03,
+        output_per_1m=0.44,
+        pricing_version="edit-x",
+        commit=True,
+    )
+    row = await repo.get(db, "fresh-model")
+    assert row is not None
+    assert row.removed == 0
+    assert row.input_text_video_image_per_1m == 0.11
+    assert row.output_per_1m == 0.44
+    assert row.pricing_version == "edit-x"
+    # INSERT defaults
+    assert row.source_url == ""
+    assert row.default_media_resolution == "medium"
+    assert {r.model for r in await repo.all_live(db)} == {"fresh-model"}
+
+
+async def test_set_rates_updates_and_preserves_metadata(db):
+    repo = ModelConfigRepo()
+    seed = _card("m1")  # source_url="https://example.test", default_media_resolution="medium"
+    await repo.upsert_seed(db, seed, commit=True)
+    await repo.set_rates(
+        db,
+        "m1",
+        input_text_video_image_per_1m=0.99,
+        input_audio_per_1m=0.88,
+        input_cached_per_1m=0.07,
+        output_per_1m=0.66,
+        pricing_version="edit-y",
+        commit=True,
+    )
+    row = await repo.get(db, "m1")
+    assert row.input_text_video_image_per_1m == 0.99
+    assert row.output_per_1m == 0.66
+    assert row.pricing_version == "edit-y"
+    # preserved (not in the UPDATE SET list)
+    assert row.source_url == "https://example.test"
+    assert row.default_media_resolution == "medium"
+
+
+async def test_set_rates_revives_soft_deleted_row(db):
+    repo = ModelConfigRepo()
+    await repo.upsert_seed(db, _card("m1"), commit=True)
+    await repo.soft_delete(db, "m1", commit=True)
+    assert {r.model for r in await repo.all_live(db)} == set()
+    await repo.set_rates(
+        db,
+        "m1",
+        input_text_video_image_per_1m=0.50,
+        input_audio_per_1m=0.30,
+        input_cached_per_1m=0.01,
+        output_per_1m=0.40,
+        pricing_version="edit-z",
+        commit=True,
+    )
+    row = await repo.get(db, "m1")
+    assert row.removed == 0
+    assert row.input_text_video_image_per_1m == 0.50
+    assert {r.model for r in await repo.all_live(db)} == {"m1"}

@@ -60,6 +60,38 @@ async def test_edit_rates_version_flows_into_compute_cost(db):
     assert v1.startswith("edit-")  # bumped version now visible to compute_cost
 
 
+async def test_set_rates_creates_card_for_unpriced_model(db):
+    svc = _service(db)
+    await svc.reconcile_seeds()
+    await svc.reload()
+    assert "gemini-3.5-flash" not in pricing.rate_cards()
+
+    await svc.set_rates(
+        "gemini-3.5-flash",
+        input_text_video_image_per_1m=0.15,
+        input_audio_per_1m=0.25,
+        input_cached_per_1m=0.02,
+        output_per_1m=0.55,
+    )
+    rows = {r.model for r in await svc.rows()}
+    assert "gemini-3.5-flash" in rows
+    cards = pricing.rate_cards()  # reload happened implicitly
+    assert "gemini-3.5-flash" in cards
+    assert cards["gemini-3.5-flash"].input_text_video_image_per_1m == 0.15
+
+
+async def test_remove_model_drops_from_rows_and_cache(db):
+    svc = _service(db)
+    await svc.reconcile_seeds()
+    await svc.reload()
+    assert "gemini-2.5-flash-lite" in pricing.rate_cards()
+
+    await svc.remove_model("gemini-2.5-flash-lite")
+    rows = {r.model for r in await svc.rows()}
+    assert "gemini-2.5-flash-lite" not in rows
+    assert "gemini-2.5-flash-lite" not in pricing.rate_cards()
+
+
 async def test_reconcile_does_not_clobber_edits(db):
     svc = _service(db)
     await svc.reconcile_seeds()
