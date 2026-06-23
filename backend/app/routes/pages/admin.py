@@ -200,6 +200,7 @@ async def _prompts_view(ctx) -> dict:
                 res: {
                     "count": s["count"],
                     "cost_usd": s["cost_usd"],
+                    "est_cost_usd": s["est_cost_usd"],
                     "confidence": confidence_for_samples(s["count"]),
                 }
                 for res, s in stats.items()
@@ -214,6 +215,7 @@ async def _prompts_view(ctx) -> dict:
                     "version_num": v.version_num,
                     "state": v.state,
                     "model": v.model,
+                    "media_kind": p.media_kind,
                     "per_res": per_res,
                     "pricing_missing": pricing_missing,
                 }

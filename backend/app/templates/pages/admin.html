@@ -73,10 +73,14 @@
       calLabel: "",
       estimate: null,        // { projected_cost_usd, runs } | null
 
-      openCalibrate(versionId, label) {
+      openCalibrate(versionId, label, mediaKind) {
         this.sel = {};
         this.q = ""; this.cacheF = "any"; this.annoF = "any";
         this.selOnly = false; this.offset = 0;
+        // Auto-filter the picker to the prompt's media kind (image/video).
+        // 'any' (or missing) means no filter. Set BEFORE the first fetchPage()
+        // so the initial page is already filtered.
+        this.kind = (mediaKind && mediaKind !== "any") ? mediaKind : null;
         this.calVersionId = versionId;
         this.calLabel = label || "";
         this.estimate = null;

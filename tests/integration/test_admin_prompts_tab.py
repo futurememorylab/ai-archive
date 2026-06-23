@@ -22,7 +22,7 @@ def _client(monkeypatch, tmp_path) -> TestClient:
     return TestClient(main_mod.app)
 
 
-async def _seed_prompt(db_path) -> None:
+async def _seed_prompt(db_path, *, media_kind: str = "any") -> None:
     """Insert one prompt + version into the app's on-disk DB."""
     import aiosqlite
 
@@ -39,6 +39,7 @@ async def _seed_prompt(db_path) -> None:
             output_schema={"type": "object"},
             model="gemini-2.5-flash-lite",
             media_resolution="low",
+            media_kind=media_kind,
         )
 
 
@@ -69,3 +70,29 @@ def test_prompts_tab_shows_version_number(monkeypatch, tmp_path):
         r = client.get("/admin/prompts")
         assert r.status_code == 200
         assert "v1" in r.text  # version_num rendered
+
+
+def test_prompts_view_rows_carry_media_kind(monkeypatch, tmp_path):
+    """_prompts_view must expose each prompt's media_kind so openCalibrate can
+    auto-filter the picker to it (image/video)."""
+    import asyncio as _asyncio
+
+    from backend.app.routes.pages.admin import _prompts_view
+
+    with _client(monkeypatch, tmp_path) as client:
+        asyncio.run(_seed_prompt(tmp_path / "app.db", media_kind="image"))
+        ctx = client.app.state.core_ctx
+        view = _asyncio.run(_prompts_view(ctx))
+        rows = [r for r in view["rows"] if r["prompt_name"] == "MyPrompt"]
+        assert rows, "seeded prompt not in view"
+        assert rows[0]["media_kind"] == "image"
+
+
+def test_prompts_tab_calibrate_button_passes_media_kind(monkeypatch, tmp_path):
+    """The Calibrate button forwards the prompt's media_kind as the 3rd arg to
+    openCalibrate, so the picker is filtered to that kind."""
+    with _client(monkeypatch, tmp_path) as client:
+        asyncio.run(_seed_prompt(tmp_path / "app.db", media_kind="image"))
+        r = client.get("/admin/prompts")
+        assert r.status_code == 200
+        assert "'image')\">Calibrate" in r.text

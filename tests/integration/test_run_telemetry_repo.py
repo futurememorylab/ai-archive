@@ -169,24 +169,30 @@ async def test_est_cost_sums_by_job(db):
 async def test_stats_by_resolution(db):
     repo = RunTelemetryRepo()
     await _insert_run(db, prompt_version_id=5, media_kind="video", status="ok",
-                      media_resolution_setting="low", cost_usd=0.10)
+                      media_resolution_setting="low", cost_usd=0.10, est_cost_usd_p50=0.08)
     await _insert_run(db, prompt_version_id=5, media_kind="video", status="ok",
-                      media_resolution_setting="low", cost_usd=0.20)
+                      media_resolution_setting="low", cost_usd=0.20, est_cost_usd_p50=0.25)
     await _insert_run(db, prompt_version_id=5, media_kind="video", status="ok",
-                      media_resolution_setting="high", cost_usd=1.00)
+                      media_resolution_setting="high", cost_usd=1.00, est_cost_usd_p50=0.90)
     stats = await repo.stats_by_resolution(db, prompt_version_id=5)
-    assert stats["low"] == {"count": 2, "cost_usd": pytest.approx(0.30)}
-    assert stats["high"] == {"count": 1, "cost_usd": pytest.approx(1.00)}
+    assert stats["low"] == {
+        "count": 2, "cost_usd": pytest.approx(0.30), "est_cost_usd": pytest.approx(0.33),
+    }
+    assert stats["high"] == {
+        "count": 1, "cost_usd": pytest.approx(1.00), "est_cost_usd": pytest.approx(0.90),
+    }
 
 
 @pytest.mark.asyncio
 async def test_stats_by_resolution_excludes_errors_and_other_versions(db):
     repo = RunTelemetryRepo()
     await _insert_run(db, prompt_version_id=5, media_kind="video", status="ok",
-                      media_resolution_setting="low", cost_usd=0.10)
+                      media_resolution_setting="low", cost_usd=0.10, est_cost_usd_p50=0.07)
     await _insert_run(db, prompt_version_id=5, media_kind="video", status="error",
-                      media_resolution_setting="low", cost_usd=0.0)
+                      media_resolution_setting="low", cost_usd=0.0, est_cost_usd_p50=0.50)
     await _insert_run(db, prompt_version_id=6, media_kind="video", status="ok",
-                      media_resolution_setting="low", cost_usd=9.0)
+                      media_resolution_setting="low", cost_usd=9.0, est_cost_usd_p50=9.0)
     stats = await repo.stats_by_resolution(db, prompt_version_id=5)
-    assert stats == {"low": {"count": 1, "cost_usd": pytest.approx(0.10)}}
+    assert stats == {
+        "low": {"count": 1, "cost_usd": pytest.approx(0.10), "est_cost_usd": pytest.approx(0.07)}
+    }

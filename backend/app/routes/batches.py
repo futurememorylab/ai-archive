@@ -84,12 +84,17 @@ async def batches_picker(
     anno: str | None = None,
     offset: int = 0,
     limit: int = 12,
+    kind: str | None = None,
 ):
     """Server-paginated clip rows for the New-batch picker modal AND the
     Studio archive-picker modal (the shared pickable-clip-list renderer —
     see docs/specs/2026-06-04-studio-archive-picker-reuse-design.md). Lists
     the CatDV catalog, so it needs live services (typed 503 offline).
-    Selection is tracked client-side; this renders one page of rows."""
+    Selection is tracked client-side; this renders one page of rows.
+
+    ``kind`` ("image" | "video" | "any"/None) restricts to one media kind —
+    used by the calibration picker, which auto-filters to the prompt's
+    media_kind. Omitted by the Batches / Studio pickers (unchanged)."""
     ctx = get_live_ctx(request)
     catalog_id = str(ctx.settings.catdv_catalog_id)
     host_local = getattr(getattr(ctx, "proxy_resolver", None), "is_host_local", False)
@@ -104,6 +109,7 @@ async def batches_picker(
             anno_f=normalize_anno(anno),
             batch_ids=[],
             host_local_proxies=host_local,
+            kind=kind,
         )
     except ProviderError as exc:
         raise HTTPException(502, f"archive error: {exc}") from exc

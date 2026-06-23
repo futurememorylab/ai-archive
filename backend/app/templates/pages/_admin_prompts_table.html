@@ -2,8 +2,10 @@
 {% import "components/_ui.html" as ui %}
 <div class="admin-prompts" x-data="adminPromptsTab()">
   <p class="meta">Active prompts and their versions, with per-resolution
-    calibration results (run count, total cost, confidence). Use Calibrate
-    to run a calibration sweep for a version.</p>
+    calibration results (run count, guessed vs. actual cost, confidence). Use
+    Calibrate to run a calibration sweep for a version.</p>
+  <p class="meta">Confidence: rough (&lt;3 runs) · fair (3–9) · good (10+) —
+    how many calibration runs back each estimate.</p>
   {% if rows %}
   <table class="admin-table">
     <thead>
@@ -35,7 +37,7 @@
               <div>
                 <span class="pill">{{ res }}</span>
                 {{ s.count }} run{{ 's' if s.count != 1 else '' }}
-                · {{ s.cost_usd | usd }}
+                · est {{ s.est_cost_usd | usd }} → actual {{ s.cost_usd | usd }}
                 · {{ s.confidence }}
               </div>
             {% endfor %}
@@ -47,7 +49,7 @@
           <button type="button" class="btn primary sm"
                   data-version-id="{{ r.version_id }}"
                   data-test="calibrate-open"
-                  @click="openCalibrate({{ r.version_id }}, '{{ r.prompt_name }} · v{{ r.version_num }}')">Calibrate</button>
+                  @click="openCalibrate({{ r.version_id }}, '{{ r.prompt_name }} · v{{ r.version_num }}', '{{ r.media_kind }}')">Calibrate</button>
         </td>
       </tr>
       {% endfor %}

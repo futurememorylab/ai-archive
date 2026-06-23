@@ -106,17 +106,25 @@ class RunTelemetryRepo:
     async def stats_by_resolution(
         self, conn: aiosqlite.Connection, *, prompt_version_id: int
     ) -> dict[str | None, dict]:
-        """{media_resolution_setting: {"count": n, "cost_usd": total}} for ok
-        runs of a prompt version — powers the calibration results panel."""
+        """{media_resolution_setting: {"count": n, "cost_usd": actual,
+        "est_cost_usd": guessed}} for ok runs of a prompt version — powers
+        the calibration results panel. cost_usd is the actual billed spend;
+        est_cost_usd is the SUM of the pre-run p50 estimates captured per run
+        (est_cost_usd_p50), so the panel can show guessed-vs-actual."""
         cur = await conn.execute(
-            "SELECT media_resolution_setting, COUNT(*), COALESCE(SUM(cost_usd), 0) "
+            "SELECT media_resolution_setting, COUNT(*), "
+            "COALESCE(SUM(cost_usd), 0), COALESCE(SUM(est_cost_usd_p50), 0) "
             "FROM run_telemetry WHERE prompt_version_id = ? AND status = 'ok' "
             "GROUP BY media_resolution_setting",
             (prompt_version_id,),
         )
         out: dict[str | None, dict] = {}
-        for res, count, cost in await cur.fetchall():
-            out[res] = {"count": int(count), "cost_usd": float(cost)}
+        for res, count, cost, est in await cur.fetchall():
+            out[res] = {
+                "count": int(count),
+                "cost_usd": float(cost),
+                "est_cost_usd": float(est),
+            }
         return out
 
     async def recent_input_ratios(
