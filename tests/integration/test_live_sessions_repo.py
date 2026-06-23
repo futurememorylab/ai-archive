@@ -51,14 +51,12 @@ async def test_mark_ended_persists_transcript_and_reason(conn):
         end_reason="user_stop",
         transcript_json=json.dumps(transcript, ensure_ascii=False),
         frame_count=2,
-        search_calls=1,
     )
     s = await repo.get(conn, "abc")
     assert s.state == "ended"
     assert s.end_reason == "user_stop"
     assert s.ended_at is not None
     assert s.frame_count == 2
-    assert s.search_calls == 1
     assert json.loads(s.transcript_json) == transcript
 
 
