@@ -137,6 +137,7 @@ async def estimate_job(request: Request, body: EstimateRequest):
             clip_cache_repo=ctx.clip_cache_repo,
             run_telemetry_repo=ctx.run_telemetry_repo,
             prompts_repo=ctx.prompts_repo,
+            model_config_repo=ctx.model_config_repo,
             provider_id=ctx.settings.archive_provider,
             clip_ids=body.clip_ids,
             prompt_version_id=body.prompt_version_id,

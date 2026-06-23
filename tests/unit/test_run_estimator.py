@@ -14,17 +14,25 @@ from backend.app.services.run_estimator import (
 
 
 class FakeRepo:
-    """recent_* return canned lists keyed by (media_kind, prompt_hash or '*')."""
+    """recent_* return canned lists keyed on resolution.
+
+    input_ratios keyed by (media_kind, media_resolution); output_rates keyed
+    by (media_kind, prompt_hash or '*', media_resolution).
+    """
 
     def __init__(self, input_ratios=None, output_rates=None):
         self.input_ratios = input_ratios or {}
         self.output_rates = output_rates or {}
 
-    async def recent_input_ratios(self, conn, *, model, media_kind, limit=50):
-        return self.input_ratios.get(media_kind, [])
+    async def recent_input_ratios(
+        self, conn, *, model, media_kind, media_resolution=None, limit=50
+    ):
+        return self.input_ratios.get((media_kind, media_resolution), [])
 
-    async def recent_output_rates(self, conn, *, model, media_kind, prompt_hash=None, limit=50):
-        return self.output_rates.get((media_kind, prompt_hash or "*"), [])
+    async def recent_output_rates(
+        self, conn, *, model, media_kind, prompt_hash=None, media_resolution=None, limit=50
+    ):
+        return self.output_rates.get((media_kind, prompt_hash or "*", media_resolution), [])
 
 
 VIDEO = ClipEstimateInput(clip_id=1, media_kind="video+audio", duration_secs=60.0)
@@ -49,7 +57,7 @@ async def test_zero_history_uses_seeds_and_is_rough():
 
 @pytest.mark.asyncio
 async def test_input_calibration_overrides_seed():
-    repo = FakeRepo(input_ratios={"video+audio": [250.0] * 10})
+    repo = FakeRepo(input_ratios={("video+audio", None): [250.0] * 10})
     est = await estimate_clips(
         None,
         repo,
@@ -65,8 +73,8 @@ async def test_input_calibration_overrides_seed():
 async def test_prompt_level_history_wins_and_confidence_good():
     repo = FakeRepo(
         output_rates={
-            ("video+audio", "HASH"): [10.0] * 12,  # level 1: 12 samples
-            ("video+audio", "*"): [99.0] * 50,  # level 2 would say 99/s
+            ("video+audio", "HASH", None): [10.0] * 12,  # level 1: 12 samples
+            ("video+audio", "*", None): [99.0] * 50,  # level 2 would say 99/s
         }
     )
     est = await estimate_clips(
@@ -86,8 +94,8 @@ async def test_prompt_level_history_wins_and_confidence_good():
 async def test_fallback_to_model_level_is_fair():
     repo = FakeRepo(
         output_rates={
-            ("video+audio", "HASH"): [10.0],  # only 1 sample — below min 3
-            ("video+audio", "*"): [20.0, 20.0, 20.0],  # level 2 wins
+            ("video+audio", "HASH", None): [10.0],  # only 1 sample — below min 3
+            ("video+audio", "*", None): [20.0, 20.0, 20.0],  # level 2 wins
         }
     )
     est = await estimate_clips(
@@ -105,7 +113,7 @@ async def test_fallback_to_model_level_is_fair():
 
 @pytest.mark.asyncio
 async def test_image_unknown_dims_one_tile_and_per_item_output():
-    repo = FakeRepo(output_rates={("image", "*"): [500.0, 600.0, 700.0]})
+    repo = FakeRepo(output_rates={("image", "*", None): [500.0, 600.0, 700.0]})
     est = await estimate_clips(
         None,
         repo,
@@ -150,7 +158,7 @@ async def test_empty_clips_returns_zeroed_estimate():
 async def test_audio_clip_calibrated_below_seed_cost_not_negative():
     # Calibrated audio input ratio (20/s) below the 32/s seed must not
     # produce a negative video bucket in the cost split.
-    repo = FakeRepo(input_ratios={"audio": [20.0] * 5})
+    repo = FakeRepo(input_ratios={("audio", None): [20.0] * 5})
     audio = ClipEstimateInput(clip_id=3, media_kind="audio", duration_secs=60.0)
     est = await estimate_clips(
         None,
@@ -168,7 +176,7 @@ async def test_audio_clip_calibrated_below_seed_cost_not_negative():
 async def test_mixed_kinds_confidence_uses_weakest_kind():
     repo = FakeRepo(
         output_rates={
-            ("video+audio", "*"): [10.0] * 50,  # strong history
+            ("video+audio", "*", None): [10.0] * 50,  # strong history
             # image: no history at all → level 3
         }
     )
@@ -187,7 +195,7 @@ async def test_mixed_kinds_confidence_uses_weakest_kind():
 async def test_p90_exceeds_p50_on_skewed_history():
     repo = FakeRepo(
         output_rates={
-            ("video+audio", "*"): [1.0, 1.0, 1.0, 10.0, 10.0, 10.0, 10.0, 100.0, 100.0, 100.0],
+            ("video+audio", "*", None): [1.0, 1.0, 1.0, 10.0, 10.0, 10.0, 10.0, 100.0, 100.0, 100.0],
         }
     )
     est = await estimate_clips(
@@ -199,3 +207,20 @@ async def test_p90_exceeds_p50_on_skewed_history():
         model="m",
     )
     assert est.tokens_out_p90 > est.tokens_out_p50
+
+
+@pytest.mark.asyncio
+async def test_estimate_uses_resolution_keyed_history():
+    repo = FakeRepo(output_rates={("video+audio", "*", "low"): [5.0] * 5,
+                                  ("video+audio", "*", "high"): [50.0] * 5})
+    low = await estimate_clips(None, repo, [VIDEO], prompt_body="", schema={}, model="m", media_resolution="low")
+    high = await estimate_clips(None, repo, [VIDEO], prompt_body="", schema={}, model="m", media_resolution="high")
+    assert low.tokens_out_p50 == 300    # 60s * 5/s
+    assert high.tokens_out_p50 == 3000  # 60s * 50/s
+
+
+@pytest.mark.asyncio
+async def test_resolution_with_no_history_falls_back_to_seeds_rough():
+    repo = FakeRepo(output_rates={("video+audio", "*", "high"): [50.0] * 5})
+    est = await estimate_clips(None, repo, [VIDEO], prompt_body="", schema={}, model="m", media_resolution="low")
+    assert est.confidence == "rough"  # no 'low' history → seeds

@@ -91,6 +91,7 @@ async def estimate_clips(
     schema: dict,
     model: str,
     prompt_hash_override: str | None = None,
+    media_resolution: str | None = None,
 ) -> RunEstimate:
     if not clips:
         return RunEstimate(
@@ -114,15 +115,23 @@ async def estimate_clips(
     stats: dict[str, _KindStats] = {}
     for kind in kinds:
         if kind != "image":
-            ratios = await repo.recent_input_ratios(conn, model=model, media_kind=kind)
+            ratios = await repo.recent_input_ratios(
+                conn, model=model, media_kind=kind, media_resolution=media_resolution
+            )
             if len(ratios) >= _MIN_SAMPLES:
                 input_ratio[kind] = _pct(ratios, 0.5)
         rates = await repo.recent_output_rates(
-            conn, model=model, media_kind=kind, prompt_hash=p_hash
+            conn,
+            model=model,
+            media_kind=kind,
+            prompt_hash=p_hash,
+            media_resolution=media_resolution,
         )
         level = 1
         if len(rates) < _MIN_SAMPLES:
-            rates = await repo.recent_output_rates(conn, model=model, media_kind=kind)
+            rates = await repo.recent_output_rates(
+                conn, model=model, media_kind=kind, media_resolution=media_resolution
+            )
             level = 2
         if len(rates) >= _MIN_SAMPLES:
             stats[kind] = _KindStats(
@@ -206,6 +215,7 @@ async def estimate_for_clip_ids(
     clip_cache_repo,
     run_telemetry_repo,
     prompts_repo,
+    model_config_repo,
     provider_id: str,
     clip_ids: list[int],
     prompt_version_id: int,
@@ -215,6 +225,13 @@ async def estimate_for_clip_ids(
     conservative default duration rather than failing the whole estimate.
     Returns n_unknown: count of clip_ids not present in the local cache."""
     version = await prompts_repo.get_version(conn, prompt_version_id)
+
+    from backend.app.services.resolution import resolve_media_resolution
+
+    _mc = await model_config_repo.get(conn, version.model)
+    _model_default = _mc.default_media_resolution if _mc and not _mc.removed else None
+    media_resolution = resolve_media_resolution(version.media_resolution, _model_default)
+
     cached = await clip_cache_repo.get_many_by_ids(conn, provider_id, clip_ids)
     clips: list[ClipEstimateInput] = []
     n_unknown = 0
@@ -250,6 +267,7 @@ async def estimate_for_clip_ids(
         prompt_body=version.body,
         schema=version.output_schema,
         model=version.model,
+        media_resolution=media_resolution,
     )
     return {
         "tokens_in": est.tokens_in,
@@ -261,4 +279,5 @@ async def estimate_for_clip_ids(
         "n_samples": est.n_samples,
         "n_clips": est.n_clips,
         "n_unknown": n_unknown,
+        "media_resolution": media_resolution,
     }

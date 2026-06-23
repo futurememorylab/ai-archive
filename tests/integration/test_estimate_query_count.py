@@ -6,6 +6,7 @@ import importlib
 import pytest
 
 from backend.app.repositories.clip_cache import ClipCacheRepo
+from backend.app.repositories.model_config import ModelConfigRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.run_telemetry import RunTelemetryRepo
 from backend.app.services.run_estimator import estimate_for_clip_ids
@@ -34,6 +35,7 @@ async def test_estimate_for_clip_ids_smoke_and_query_count(db):
         clip_cache_repo=cache,
         run_telemetry_repo=RunTelemetryRepo(),
         prompts_repo=prompts,
+        model_config_repo=ModelConfigRepo(),
         provider_id="catdv",
         clip_ids=list(range(1, 11)),
         prompt_version_id=vid,
@@ -44,25 +46,27 @@ async def test_estimate_for_clip_ids_smoke_and_query_count(db):
     assert result_small["n_unknown"] == 0
 
     # Query count must be the same for 10 and 100 clips.
-    # Breakdown: 1 prompt version read + 1 clip_cache chunk read +
-    # 1 input_ratio + 2 output_rates (prompt-hash miss then model-only)
-    # = 5 queries, regardless of clip count.
-    async with assert_query_count(db, 5):
+    # Breakdown: 1 prompt version read + 1 model_config default-resolution
+    # read + 1 clip_cache chunk read + 1 input_ratio + 2 output_rates
+    # (prompt-hash miss then model-only) = 6 queries, regardless of clip count.
+    async with assert_query_count(db, 6):
         await estimate_for_clip_ids(
             db,
             clip_cache_repo=cache,
             run_telemetry_repo=RunTelemetryRepo(),
             prompts_repo=prompts,
+            model_config_repo=ModelConfigRepo(),
             provider_id="catdv",
             clip_ids=list(range(1, 11)),
             prompt_version_id=vid,
         )
-    async with assert_query_count(db, 5):
+    async with assert_query_count(db, 6):
         await estimate_for_clip_ids(
             db,
             clip_cache_repo=cache,
             run_telemetry_repo=RunTelemetryRepo(),
             prompts_repo=prompts,
+            model_config_repo=ModelConfigRepo(),
             provider_id="catdv",
             clip_ids=list(range(1, 101)),
             prompt_version_id=vid,
@@ -86,6 +90,7 @@ async def test_uncached_clips_estimated_as_unknown(db):
         clip_cache_repo=ClipCacheRepo(),
         run_telemetry_repo=RunTelemetryRepo(),
         prompts_repo=prompts,
+        model_config_repo=ModelConfigRepo(),
         provider_id="catdv",
         clip_ids=[777],
         prompt_version_id=vid,
