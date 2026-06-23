@@ -49,6 +49,17 @@ def test_admin_lists_and_adds_member(monkeypatch, tmp_path: Path):
         assert "annie@x.com" in members
 
 
+def test_access_console_has_no_google_group_step(monkeypatch, tmp_path: Path):
+    """User management is now fully app-side (the IAP edge is allAuthenticatedUsers),
+    so the console must not tell admins to ALSO add people to a Google Group — that
+    instruction is stale and misleading (spec 2026-06-22)."""
+    holder = {"email": "boss@x.com"}
+    main_mod = _app(monkeypatch, tmp_path, holder)
+    with TestClient(main_mod.app) as client:
+        page = client.get("/admin/access").text
+    assert "Google Group" not in page
+
+
 def test_self_protection(monkeypatch, tmp_path: Path):
     holder = {"email": "boss@x.com"}
     main_mod = _app(monkeypatch, tmp_path, holder)

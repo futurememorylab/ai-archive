@@ -185,7 +185,7 @@ function liveSession(clipId, config) {
     },
 
     _openWs(url) {
-      console.log("[live] WSS opening:", url.replace(/key=[^&]+/, "key=…"));
+      console.log("[live] WSS opening:", url.replace(/(access_token|key)=[^&]+/, "$1=…"));
       const ws = new WebSocket(url);
       this._ws = ws;
       ws.binaryType = "arraybuffer";

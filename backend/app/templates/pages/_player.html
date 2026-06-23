@@ -80,7 +80,7 @@
               title="step back 1 frame (,)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>
       </button>
-      <button type="button" class="btn play"
+      <button type="button" class="btn play" data-test="player-play"
               :disabled="!canPlay"
               @click="togglePlay()"
               :title="canPlay ? 'play/pause (Space)' : 'Reconnect to play this clip'">

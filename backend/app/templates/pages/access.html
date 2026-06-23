@@ -41,14 +41,17 @@
             Request sent. An admin will review it.</div>
           {% else %}
           {# Plain form POST (no JS): the standalone denial page stays robust
-             even with no scripts/offline. The POST re-renders this page with
-             state='requested'. #}
+             even with no scripts/offline. The POST records the request and
+             303-redirects to GET /access?state=requested (POST-Redirect-GET),
+             so a refresh is safe and we never sit on the POST-only URL. #}
           <form method="post" action="/access/request">
             {{ ui.button('Request access', variant='primary', type='submit') }}
           </form>
           {% endif %}
           {{ ui.button('Try again', href='/', variant='ghost') }}
-          {{ ui.button('Use a different account', href='?gcp-iap-mode=CLEAR_LOGIN_COOKIE', variant='ghost') }}
+          {# Absolute href: must not depend on the current path (the URL bar may
+             be /access/request mid-flow), or this 405s. See spec 2026-06-22 §2b. #}
+          {{ ui.button('Use a different account', href='/?gcp-iap-mode=CLEAR_LOGIN_COOKIE', variant='ghost') }}
         </div>
         <div class="auth-foot">Need access sooner? Contact your workspace admin.</div>
       </div>

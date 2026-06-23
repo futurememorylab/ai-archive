@@ -15,9 +15,9 @@
       <p>Google verifies every visitor's identity at the edge before any request reaches CatDV.</p>
     </div>
     <div class="admin-info">
-      <strong>Application roles · IAM</strong>
-      <p>Roles below are stored in the app and control in-app permissions. Adding a member
-         here assigns a role — an admin must also add them to the Google Group to let them in.</p>
+      <strong>Application roles</strong>
+      <p>Roles below are stored in the app and control in-app permissions. Add a member
+         here — or approve their access request — and they're in. No Google console step.</p>
     </div>
   </div>
 
@@ -56,7 +56,7 @@
           {% for r in role_order %}<option value="{{ r }}" {{ 'selected' if r=='member' }}>{{ role_meta[r].label }} — {{ role_meta[r].desc }}</option>{% endfor %}
         </select>
       </label>
-      <p class="field-help">They'll be added to the app's access list. To let them sign in, an admin must also add their email to the Google Group.</p>
+      <p class="field-help">They'll be added to the app's access list and can sign in right away with their Google account — no Google console step.</p>
       <div class="modal-actions">
         {{ ui.button('Cancel', variant='ghost', attrs='type="button" @click="showAdd = false"') }}
         {{ ui.button('Send invite', variant='primary', type='submit') }}

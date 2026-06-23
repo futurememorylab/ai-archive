@@ -46,6 +46,10 @@ def test_access_denied_renders(monkeypatch, tmp_path: Path):
     # "Use a different account" → IAP cookie clear (re-auth as someone else)
     assert "Use a different account" in r.text
     assert "gcp-iap-mode=CLEAR_LOGIN_COOKIE" in r.text
+    # Absolute (not path-relative) so it still works when the URL bar is on
+    # /access/request after a request — guards the "switch account → 405" bug
+    # (spec 2026-06-22 §2b).
+    assert "/?gcp-iap-mode=CLEAR_LOGIN_COOKIE" in r.text
     assert "Contact your workspace admin" in r.text
     # Standalone — no app chrome for an unauthorized user.
     assert '<aside class="rail">' not in r.text

@@ -34,6 +34,9 @@ The reference material these docs are condensed from:
   22 of them, MADR-lite format under [`../adr/`](../adr/)).
 - [`../specs/`](../specs/) — feature design specs.
 - [`../plans/`](../plans/) — per-PR implementation plans.
+- [`../../tests/walkthrough/README.md`](../../tests/walkthrough/README.md) —
+  end-to-end Playwright walkthrough tests (offline, no CatDV seat) that
+  double as annotated videos; how to run and how to add scenarios.
 - [`../DEPLOY.md`](../DEPLOY.md) — production deployment.
 - [`../../CLAUDE.md`](../../CLAUDE.md) — repo-scoped agent guidance;
   also the canonical place for the CatDV seat discipline rules.

@@ -47,3 +47,15 @@ def test_request_access_is_allowlisted(monkeypatch, tmp_path: Path):
         # the POST itself must not be gated (would loop)
         r = client.post("/access/request")
         assert r.status_code == 200
+
+
+def test_request_access_redirects_to_access_get(monkeypatch, tmp_path: Path):
+    """POST-Redirect-GET: the request is recorded, then the browser is 303'd to
+    GET /access so it never sits on the POST-only /access/request URL. Guards the
+    'request access → use a different account → 405' bug found during cutover
+    (spec 2026-06-22 §2b)."""
+    main_mod = _app(monkeypatch, tmp_path, "newbie@x.com")
+    with TestClient(main_mod.app) as client:
+        r = client.post("/access/request", follow_redirects=False)
+        assert r.status_code == 303
+        assert r.headers["location"] == "/access?state=requested"

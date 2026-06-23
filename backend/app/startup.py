@@ -59,21 +59,24 @@ async def run_checks(
     return result
 
 
-def warn_browser_secret_exposure(settings) -> None:
-    """Log a WARNING when GEMINI_API_KEY is configured.
+def log_live_token_mode(settings) -> None:
+    """Log how Live audio authenticates, at boot.
 
-    live_sessions.mint_ephemeral_token returns the raw key to the
-    browser because the ephemeral-token flow (authTokens.create) closes
-    the WSS handshake with code 1007 'API key not valid' the moment the
-    client sends `setup`. The accepted threat model is single-operator
-    local app over VPN — see ADR 0043. This log line ensures the
-    exposure is visible to the operator on every boot, not just to
-    someone reading the code comment in live_sessions.py.
+    The raw GEMINI_API_KEY is no longer sent to the browser:
+    live_sessions.mint_ephemeral_token now mints a short-lived, config-bound
+    ephemeral token server-side, which the browser presents as `?access_token=`
+    (see ADR 0112, supersedes 0043). When the key is present we log the secure
+    posture at INFO; when it is missing we warn that Live audio is unavailable.
     """
+    log = logging.getLogger(__name__)
     if getattr(settings, "gemini_api_key", None):
-        logging.getLogger(__name__).warning(
-            "GEMINI_API_KEY is configured; the raw key will be exposed to the "
-            "browser during Live sessions. This is accepted under the "
-            "single-operator local + VPN threat model — see ADR 0043. If your "
-            "deployment falls outside that model, unset GEMINI_API_KEY."
+        log.info(
+            "Live audio authenticates with short-lived, config-bound ephemeral "
+            "tokens (auth_tokens.create); the GEMINI_API_KEY stays server-side and "
+            "is never sent to the browser (ADR 0112)."
+        )
+    else:
+        log.warning(
+            "GEMINI_API_KEY is not configured; Live audio will be unavailable "
+            "(cannot mint ephemeral tokens)."
         )
