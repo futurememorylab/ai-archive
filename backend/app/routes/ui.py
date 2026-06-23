@@ -127,7 +127,9 @@ async def sync_chip(request: Request):
 @router.get("/clip-badge/{provider_id}/{provider_clip_id}", response_class=HTMLResponse)
 async def clip_badge(request: Request, provider_id: str, provider_clip_id: str):
     ctx = get_core_ctx(request)
-    counts = await ctx.pending_ops_repo.count_pending_by_clip(ctx.db, provider_id=provider_id)
+    counts = await ctx.pending_ops_repo.count_pending_by_clip(
+        ctx.db, provider_id=provider_id, clip_ids=[provider_clip_id]
+    )
     bucket = counts.get(provider_clip_id, {"pending": 0, "conflict": 0})
     return templates.TemplateResponse(
         request,

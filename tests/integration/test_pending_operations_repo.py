@@ -197,6 +197,27 @@ async def test_count_pending_by_clip(db):
 
 
 @pytest.mark.asyncio
+async def test_count_pending_by_clip_scoped_to_clip_ids(db):
+    """Passing clip_ids bounds the scan to the page's clips instead of the whole
+    provider backlog; omitting it scans all (backward compat). Review finding:
+    unbounded count_pending on every clips-list render."""
+    repo = PendingOperationsRepo()
+    await repo.insert_many(
+        db,
+        rows=[
+            {**_row(), "provider_clip_id": "1"},
+            {**_row(), "provider_clip_id": "2"},
+            {**_row(), "provider_clip_id": "3"},
+        ],
+    )
+    scoped = await repo.count_pending_by_clip(db, provider_id="catdv", clip_ids=["1", "3"])
+    assert set(scoped) == {"1", "3"}  # clip "2" not scanned
+    all_clips = await repo.count_pending_by_clip(db, provider_id="catdv")
+    assert set(all_clips) == {"1", "2", "3"}
+    assert await repo.count_pending_by_clip(db, provider_id="catdv", clip_ids=[]) == {}
+
+
+@pytest.mark.asyncio
 async def test_status_counts_for_clip(db):
     repo = PendingOperationsRepo()
     a = {**_row(), "provider_clip_id": "7"}
