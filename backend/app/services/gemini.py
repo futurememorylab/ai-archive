@@ -7,6 +7,13 @@ from typing import Any
 
 from google import genai  # type: ignore[import-not-found]
 
+# Our 'low'|'medium'|'high' → the google-genai MediaResolution enum string.
+_SDK_MEDIA_RESOLUTION = {
+    "low": "MEDIA_RESOLUTION_LOW",
+    "medium": "MEDIA_RESOLUTION_MEDIUM",
+    "high": "MEDIA_RESOLUTION_HIGH",
+}
+
 
 class GeminiError(RuntimeError):
     pass
@@ -46,7 +53,14 @@ class GeminiService:
         prompt: str,
         schema: dict[str, Any],
         model: str,
+        media_resolution: str | None = None,
     ) -> dict[str, Any]:
+        config: dict[str, Any] = {
+            "response_mime_type": "application/json",
+            "response_schema": schema,
+        }
+        if media_resolution is not None:
+            config["media_resolution"] = _SDK_MEDIA_RESOLUTION[media_resolution]
         try:
             response = self._client.models.generate_content(
                 model=model,
@@ -54,10 +68,7 @@ class GeminiService:
                     {"text": prompt},
                     file_ref,
                 ],
-                config={
-                    "response_mime_type": "application/json",
-                    "response_schema": schema,
-                },
+                config=config,
             )
         except Exception as exc:  # noqa: BLE001
             raise _classify(exc) from exc
