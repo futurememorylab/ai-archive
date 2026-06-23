@@ -147,6 +147,18 @@ class ModelConfigRepo:
         if commit:
             await conn.commit()
 
+    async def set_resolution(
+        self, conn: aiosqlite.Connection, model: str, resolution: str, *, commit: bool
+    ) -> None:
+        """Update only the model's default media resolution (live rows only)."""
+        await conn.execute(
+            "UPDATE model_config SET default_media_resolution = ?, "
+            "updated_at = datetime('now') WHERE model = ? AND removed = 0",
+            (resolution, model),
+        )
+        if commit:
+            await conn.commit()
+
     async def soft_delete(
         self, conn: aiosqlite.Connection, model: str, *, commit: bool
     ) -> None:

@@ -129,5 +129,18 @@ class PricingService:
         await self._repo.soft_delete(conn, model, commit=True)
         await self.reload()
 
+    async def set_resolution(self, model: str, resolution: str) -> None:
+        """Admin edit of a model's default media resolution. Resolution is not a
+        rate, so the rate cache needs no refresh — just persist."""
+        await self._repo.set_resolution(self._db(), model, resolution, commit=True)
+
+    async def default_resolution(self, model: str) -> str:
+        """The model's default media resolution, or 'medium' if the model has no
+        live rate card (offline-safe DB lookup)."""
+        row = await self._repo.get(self._db(), model)
+        if row is None or row.removed:
+            return "medium"
+        return row.default_media_resolution
+
     async def rows(self) -> list[ModelConfigRow]:
         return await self._repo.all_live(self._db())

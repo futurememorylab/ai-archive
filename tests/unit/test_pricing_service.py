@@ -108,3 +108,16 @@ async def test_reconcile_does_not_clobber_edits(db):
     await svc.reconcile_seeds()  # second boot
     row = await ModelConfigRepo().get(db, "gemini-2.5-flash-lite")
     assert row.input_text_video_image_per_1m == 9.99  # edit survived
+
+
+async def test_set_and_get_default_resolution(db):
+    svc = _service(db)
+    await svc.reconcile_seeds()
+    await svc.set_resolution("gemini-2.5-flash-lite", "low")
+    assert await svc.default_resolution("gemini-2.5-flash-lite") == "low"
+
+
+async def test_default_resolution_falls_back_to_medium_for_unknown(db):
+    svc = _service(db)
+    await svc.reconcile_seeds()
+    assert await svc.default_resolution("not-a-model") == "medium"

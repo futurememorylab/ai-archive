@@ -132,3 +132,12 @@ async def test_set_rates_revives_soft_deleted_row(db):
     assert row.removed == 0
     assert row.input_text_video_image_per_1m == 0.50
     assert {r.model for r in await repo.all_live(db)} == {"m1"}
+
+
+async def test_set_resolution_updates_only_resolution(db):
+    repo = ModelConfigRepo()
+    await repo.upsert_seed(db, _card("m1"), commit=True)
+    await repo.set_resolution(db, "m1", "high", commit=True)
+    row = await repo.get(db, "m1")
+    assert row.default_media_resolution == "high"
+    assert row.input_text_video_image_per_1m == 0.10  # rates untouched
