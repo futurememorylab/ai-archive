@@ -147,17 +147,27 @@ model_config(
 
 ### 3. Resolution-aware estimator (free) + admin-enablable real cost
 
-**Free default path (`run_estimator.py`):**
-- Key seed constants and learned rates on `(model, kind, resolution)`
-  instead of `(model, kind)`. The existing fallback chain becomes:
+**Free default path (`run_estimator.py`)** *(shipped — PR3)*:
+- Key the **learned rates** on `(model, kind, resolution)` instead of
+  `(model, kind)`. The fallback chain became:
   prompt-hash + model + kind + resolution → model + kind + resolution →
-  resolution-scaled seed constants.
-- Input estimate = analytical formula (resolution-scaled tiles/seconds per
-  the documented rates) corrected by the learned per-prompt/resolution
-  multiplier from telemetry. Output estimate stays statistical (p50/p90)
-  from history — output tokens cannot be known pre-call.
+  **seed constants (resolution-blind, see below)**.
+- **Scope decision (ADR 0115):** the cold-start *seed constants* stay
+  resolution-blind — only the *learned history* is resolution-keyed. Once
+  ≥3 runs exist at a resolution, that resolution's real token rates take
+  over; before then the (already-`rough`) seed estimate is resolution-blind.
+  This softens the original "resolution-scaled seed constants" wording: a
+  per-model-per-resolution seed table is fragile and generation-specific,
+  and only affects the zero-history case. The history-keying is where the
+  accuracy actually comes from.
+- Input estimate = analytical formula corrected by the learned
+  per-prompt/resolution multiplier from telemetry. Output estimate stays
+  statistical (p50/p90) from history — output tokens cannot be known
+  pre-call.
 - This is **not a new estimation path** — it extends the existing chain and
-  reuses `run_telemetry`. No parallel estimator.
+  reuses `run_telemetry`. No parallel estimator. The effective resolution is
+  resolved server-side in the estimate endpoint (same resolver as a run) and
+  returned to the UI.
 - Confidence (`rough`/`fair`/`good`) is now per `(prompt, resolution)`. A
   resolution with no samples reports `rough` until calibrated or exercised.
 
@@ -247,10 +257,11 @@ The spec ships as four independently shippable, ordered slices:
    override end-to-end at the data/engine level — settable + tested via the
    version repo API; the per-*model* default is user-settable now via the
    admin dropdown).
-3. **PR3 — Accurate estimates everywhere.** Resolution-key the
-   `run_estimator` fallback chain; estimate-vs-actual delta on every cost
-   surface; **show the resolution in force on each cost surface** (moved
-   here from PR2); query-count guard.
+3. **PR3 — Accurate estimates everywhere** *(shipped)*. Resolution-key the
+   `run_estimator` learned-history chain (seeds stay resolution-blind, ADR
+   0115); estimate-vs-actual delta on the batches list; show the resolution
+   in force on the pre-run estimate labels (studio + batch modal); the N+1
+   query-count guard updated (constant +1 model_config read, N=10==N=100).
 4. **PR4 — Calibration + real cost.** Admin "Prompts" tab + calibration
    runner; admin-enablable `countTokens` real-cost button on the
    batch-creation flow.
