@@ -14,6 +14,17 @@ def _now_iso() -> str:
 
 TRANSIENT_STATUSES = ("resolving", "uploading", "prompting")
 
+# Explicit partition of ItemStatus into the topbar phase buckets. Every status
+# belongs to exactly one bucket (guarded by test_phase_statuses_partition_item_status),
+# so a new status can't silently fall into 'done' the way a catch-all would.
+_PHASE_STATUSES: dict[str, tuple[str, ...]] = {
+    "queued": ("pending",),
+    "caching": ("resolving", "uploading"),
+    "annotating": ("prompting",),
+    "error": ("error",),
+    "done": ("annotated", "review_ready", "applied", "rejected"),
+}
+
 
 class JobsRepo:
     async def create_job(
@@ -193,13 +204,9 @@ class JobsRepo:
             (job_id,),
         )
         rows = {s: int(n) for s, n in await cur.fetchall()}
-        in_flight = ("pending", "resolving", "uploading", "prompting", "error")
         return {
-            "caching": rows.get("resolving", 0) + rows.get("uploading", 0),
-            "annotating": rows.get("prompting", 0),
-            "queued": rows.get("pending", 0),
-            "error": rows.get("error", 0),
-            "done": sum(n for s, n in rows.items() if s not in in_flight),
+            phase: sum(rows.get(s, 0) for s in statuses)
+            for phase, statuses in _PHASE_STATUSES.items()
         }
 
     async def reset_transient(self, conn: aiosqlite.Connection) -> int:
