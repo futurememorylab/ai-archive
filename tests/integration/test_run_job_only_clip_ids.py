@@ -8,6 +8,7 @@ from backend.app.archive.model import CanonicalClip, MediaRef
 from backend.app.models.telemetry import TelemetryCtx
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.jobs import JobsRepo
+from backend.app.repositories.model_config import ModelConfigRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.run_telemetry import RunTelemetryRepo
@@ -72,7 +73,7 @@ class _Archive:
 
 
 class _Gemini:
-    def annotate(self, *, file_ref, prompt, schema, model):
+    def annotate(self, *, file_ref, prompt, schema, model, media_resolution=None):
         out = json.dumps({"scenes": [{"name": "s", "in": {"secs": 0.0}, "out": {"secs": 1.0}}]})
         return {"text": out, "raw": {"candidates": [{"text": out}]}}
 
@@ -114,6 +115,7 @@ async def test_run_job_only_clip_ids_processes_just_that_clip(db, tmp_path):
         uploaded_clips_repo=UploadedClipsRepo(),
         run_telemetry_repo=RunTelemetryRepo(),
         telemetry_ctx=TelemetryCtx(install_id="inst-test"),
+        model_config_repo=ModelConfigRepo(),
         only_clip_ids={102},
     )
 

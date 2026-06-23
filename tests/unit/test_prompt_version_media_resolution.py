@@ -42,6 +42,33 @@ async def test_version_media_resolution_roundtrip(db):
     assert (await repo.get_version(db, new_vid)).media_resolution == "low"
 
 
+async def test_duplicate_carries_media_resolution(db):
+    repo = PromptsRepo()
+    prompt_id, vid = await repo.create_with_initial_version(
+        db,
+        name="src",
+        description=None,
+        body="b",
+        target_map={},
+        output_schema={"type": "object"},
+        model="gemini-2.5-flash-lite",
+    )
+    # Set an override on the source's draft v1.
+    await repo.update_version(
+        db,
+        vid,
+        body="b",
+        target_map={},
+        output_schema={"type": "object"},
+        model="gemini-2.5-flash-lite",
+        media_resolution="high",
+    )
+
+    new_prompt_id, new_vid = await repo.duplicate(db, prompt_id)
+    assert new_prompt_id != prompt_id
+    assert (await repo.get_version(db, new_vid)).media_resolution == "high"
+
+
 async def test_create_with_initial_version_accepts_media_resolution(db):
     repo = PromptsRepo()
     _, vid = await repo.create_with_initial_version(

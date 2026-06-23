@@ -8,6 +8,7 @@ import pytest
 from backend.app.models.telemetry import TelemetryCtx
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.jobs import JobsRepo
+from backend.app.repositories.model_config import ModelConfigRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.run_telemetry import RunTelemetryRepo
@@ -41,7 +42,7 @@ class FakeGemini:
     def __init__(self, fail: bool = False):
         self.fail = fail
 
-    def annotate(self, *, file_ref, prompt, schema, model):
+    def annotate(self, *, file_ref, prompt, schema, model, media_resolution=None):
         if self.fail:
             raise RuntimeError("boom")
         return {
@@ -98,6 +99,7 @@ def _run_kwargs(db, files, gemini):
         uploaded_clips_repo=UploadedClipsRepo(),
         run_telemetry_repo=RunTelemetryRepo(),
         telemetry_ctx=TCTX,
+        model_config_repo=ModelConfigRepo(),
     )
 
 
@@ -159,8 +161,53 @@ async def test_telemetry_insert_failure_does_not_fail_run(db, tmp_path, monkeypa
     assert items[0].status == "review_ready"  # run still succeeded
 
 
+class FakeGeminiCapturing:
+    """Records the media_resolution it was called with."""
+
+    def __init__(self):
+        self.media_resolution = "UNSET"
+
+    def annotate(self, *, file_ref, prompt, schema, model, media_resolution=None):
+        self.media_resolution = media_resolution
+        return {
+            "text": json.dumps({"scenes": []}),
+            "raw": {"usageMetadata": USAGE, "candidates": [{"finishReason": "STOP"}]},
+        }
+
+
+@pytest.mark.asyncio
+async def test_media_resolution_setting_from_model_default(db, tmp_path):
+    # Seed the model's default media resolution to 'high'; the version has no
+    # override, so the effective resolution should resolve to 'high' and reach
+    # both the gemini call and the telemetry row.
+    mc = ModelConfigRepo()
+    await mc.set_rates(
+        db,
+        "gemini-2.5-flash-lite",
+        input_text_video_image_per_1m=0.1,
+        input_audio_per_1m=0.1,
+        input_cached_per_1m=0.1,
+        output_per_1m=0.1,
+        pricing_version="test",
+        commit=True,
+    )
+    await mc.set_resolution(db, "gemini-2.5-flash-lite", "high", commit=True)
+
+    job_id, f = await _setup(db, tmp_path, kind=None)
+    gemini = FakeGeminiCapturing()
+    await run_job(job_id=job_id, **_run_kwargs(db, {101: f}, gemini))
+
+    # The fake gemini received the resolved resolution.
+    assert gemini.media_resolution == "high"
+
+    # And the telemetry row captured it.
+    cur = await db.execute("SELECT media_resolution_setting FROM run_telemetry")
+    row = await cur.fetchone()
+    assert row == ("high",)
+
+
 class FakeGeminiNonJson:
-    def annotate(self, *, file_ref, prompt, schema, model):
+    def annotate(self, *, file_ref, prompt, schema, model, media_resolution=None):
         return {
             "text": "definitely not json",
             "raw": {"usageMetadata": USAGE, "candidates": [{"finishReason": "STOP"}]},

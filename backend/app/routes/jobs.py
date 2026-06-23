@@ -63,6 +63,7 @@ async def _run_in_bg(ctx, job_id: int, *, only_clip_ids: set[int] | None = None)
             uploaded_clips_repo=ctx.uploaded_clips_repo,
             run_telemetry_repo=ctx.run_telemetry_repo,
             telemetry_ctx=ctx.telemetry_ctx,
+            model_config_repo=ctx.model_config_repo,
             only_clip_ids=only_clip_ids,
         )
     finally:

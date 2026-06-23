@@ -391,6 +391,7 @@ class PromptsRepo:
             target_map=src_version.target_map,
             output_schema=src_version.output_schema,
             model=src_version.model,
+            media_resolution=src_version.media_resolution,
             initial_state="draft",
             media_kind=src_prompt.media_kind,
         )

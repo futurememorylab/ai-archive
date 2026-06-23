@@ -25,6 +25,7 @@ from backend.app.models.annotation import Annotation
 from backend.app.models.telemetry import RunTelemetryRecord, TelemetryCtx
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.jobs import JobsRepo
+from backend.app.repositories.model_config import ModelConfigRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.run_telemetry import RunTelemetryRepo
@@ -128,6 +129,7 @@ async def _record_telemetry(
     est=None,
     ai_store_kind: str | None = None,
     review_item_count: int | None = None,
+    media_resolution_setting: str | None = None,
 ) -> None:
     """Write one run_telemetry row. Telemetry/bookkeeping must NEVER fail
     a run, so every path here is wrapped in try/except + log."""
@@ -184,6 +186,7 @@ async def _record_telemetry(
             est_confidence=getattr(est, "confidence", None),
             output_chars=rendered_len,
             review_item_count=review_item_count,
+            media_resolution_setting=media_resolution_setting,
         )
         await repo.insert(db, rec)
     except Exception:  # noqa: BLE001 — telemetry must never fail the run
@@ -207,6 +210,7 @@ async def run_job(
     uploaded_clips_repo,
     run_telemetry_repo: RunTelemetryRepo,
     telemetry_ctx: TelemetryCtx,
+    model_config_repo: ModelConfigRepo,
     only_clip_ids: set[int] | None = None,
 ) -> None:
     """Run a job to completion (or cancellation). Serial per job."""
@@ -249,6 +253,7 @@ async def run_job(
                 uploaded_clips_repo=uploaded_clips_repo,
                 run_telemetry_repo=run_telemetry_repo,
                 telemetry_ctx=telemetry_ctx,
+                model_config_repo=model_config_repo,
                 event_bus=event_bus,
                 topic=topic,
             )
@@ -356,6 +361,7 @@ async def _process_item(
     uploaded_clips_repo,
     run_telemetry_repo: RunTelemetryRepo,
     telemetry_ctx: TelemetryCtx,
+    model_config_repo: ModelConfigRepo,
     event_bus,
     topic,
 ) -> None:
@@ -453,6 +459,14 @@ async def _process_item(
         clip_name=meta.clip_name,
         prompt_chars_rendered=len(rendered_body),
     )
+    # Effective media resolution: per-version override > model default >
+    # 'medium'. Invalid stored values are ignored (never reach the SDK map).
+    from backend.app.services.resolution import resolve_media_resolution
+
+    _mc = await model_config_repo.get(db, version.model)
+    _model_default = _mc.default_media_resolution if _mc and not _mc.removed else None
+    media_resolution = resolve_media_resolution(version.media_resolution, _model_default)
+
     t0 = time.monotonic()
     # The Vertex AI client is synchronous and each call takes seconds; run it
     # off the event loop so concurrent jobs and ordinary page requests stay
@@ -463,6 +477,7 @@ async def _process_item(
         prompt=rendered_body,
         schema=version.output_schema,
         model=version.model,
+        media_resolution=media_resolution,
     )
     elapsed_s = time.monotonic() - t0
 
@@ -492,6 +507,7 @@ async def _process_item(
             capture=capture,
             est=est,
             ai_store_kind=ai_store_kind,
+            media_resolution_setting=media_resolution,
         )
     else:
         await _finalize_annotation(
@@ -514,6 +530,7 @@ async def _process_item(
             est=est,
             ai_store_kind=ai_store_kind,
             elapsed_s=elapsed_s,
+            media_resolution_setting=media_resolution,
         )
 
 
@@ -536,6 +553,7 @@ async def _finalize_studio(
     capture: CaptureMeta,
     est=None,
     ai_store_kind: str | None = None,
+    media_resolution_setting: str | None = None,
 ) -> None:
     """Studio path: persist to studio_run + review_items (linked by
     studio_run_id), skip annotations. The studio UI renders from
@@ -573,6 +591,7 @@ async def _finalize_studio(
             capture=capture,
             est=est,
             ai_store_kind=ai_store_kind,
+            media_resolution_setting=media_resolution_setting,
         )
         return
 
@@ -623,6 +642,7 @@ async def _finalize_studio(
         est=est,
         ai_store_kind=ai_store_kind,
         review_item_count=len(review),
+        media_resolution_setting=media_resolution_setting,
     )
 
 
@@ -647,6 +667,7 @@ async def _finalize_annotation(
     est=None,
     ai_store_kind: str | None = None,
     elapsed_s: float | None = None,
+    media_resolution_setting: str | None = None,
 ) -> None:
     """Original annotation path: write to annotations + review_items."""
     annotation_id = await annotations_repo.insert(
@@ -704,4 +725,5 @@ async def _finalize_annotation(
         est=est,
         ai_store_kind=ai_store_kind,
         review_item_count=review_count,
+        media_resolution_setting=media_resolution_setting,
     )

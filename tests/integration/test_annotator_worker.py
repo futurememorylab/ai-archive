@@ -7,6 +7,7 @@ from backend.app.archive.model import CanonicalClip, MediaRef
 from backend.app.models.telemetry import TelemetryCtx
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.jobs import JobsRepo
+from backend.app.repositories.model_config import ModelConfigRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.run_telemetry import RunTelemetryRepo
@@ -131,7 +132,7 @@ async def test_run_job_processes_two_clips_end_to_end(db, tmp_path):
     }
 
     class FakeGeminiStructured:
-        def annotate(self, *, file_ref, prompt, schema, model):
+        def annotate(self, *, file_ref, prompt, schema, model, media_resolution=None):
             import json
 
             return {
@@ -158,6 +159,7 @@ async def test_run_job_processes_two_clips_end_to_end(db, tmp_path):
         uploaded_clips_repo=UploadedClipsRepo(),
         run_telemetry_repo=RunTelemetryRepo(),
         telemetry_ctx=_TELEMETRY_CTX,
+        model_config_repo=ModelConfigRepo(),
     )
 
     items = await jobs_repo.list_items(db, job_id)
@@ -215,6 +217,7 @@ async def test_run_job_marks_item_error_when_gemini_raises(db, tmp_path):
         uploaded_clips_repo=UploadedClipsRepo(),
         run_telemetry_repo=RunTelemetryRepo(),
         telemetry_ctx=_TELEMETRY_CTX,
+        model_config_repo=ModelConfigRepo(),
     )
     items = await jobs_repo.list_items(db, job_id)
     assert items[0].status == "error"

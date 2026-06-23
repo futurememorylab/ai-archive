@@ -136,6 +136,7 @@ def test_studio_render_after_run_shows_markers_and_fields(app_and_client):
             uploaded_clips_repo=ctx.uploaded_clips_repo,
             run_telemetry_repo=ctx.run_telemetry_repo,
             telemetry_ctx=ctx.telemetry_ctx,
+            model_config_repo=ctx.model_config_repo,
         )
     )
 

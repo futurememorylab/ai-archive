@@ -33,7 +33,7 @@ class FakeGeminiStructured:
     def __init__(self, structured: dict):
         self._structured = structured
 
-    def annotate(self, *, file_ref, prompt, schema, model):
+    def annotate(self, *, file_ref, prompt, schema, model, media_resolution=None):
         text = json.dumps(self._structured)
         return {"text": text, "raw": {"candidates": [{"text": text}]}}
 
@@ -114,6 +114,7 @@ async def _seed_and_run(ctx, archive, proxy_path):
         uploaded_clips_repo=ctx.uploaded_clips_repo,
         run_telemetry_repo=ctx.run_telemetry_repo,
         telemetry_ctx=ctx.telemetry_ctx,
+        model_config_repo=ctx.model_config_repo,
     )
 
 
