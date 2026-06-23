@@ -111,9 +111,19 @@ model_config(
   the code dict. `compute_cost()` keeps its signature; only the rate source
   moves. Pricing stays **DB-only and offline-safe** (a DB lookup, no
   network), consistent with `EnumService` on `CoreCtx`.
-- New **Admin "Models" tab**: one row per model with the four rate fields
-  (editable) and a `default_media_resolution` dropdown. The existing
-  "missing rate card" warning for un-priced models moves here.
+- **Admin "Gemini models" tab** (revised — see ADR 0114): rather than a
+  *second* tab alongside the existing editable-enum tab for
+  `gemini_generation_model`, the model catalog (the enum) and its per-model
+  rate cards are merged into **one** tab. Its spine is the catalog (every
+  selectable model); each row joins to its `model_config` rate card, which
+  may be absent → a "no rate card" pill, and saving rates **creates** the
+  card (an upsert). The catalog actions (make-default / enable-disable /
+  delete) and the add-model row live inline; deleting a model removes it
+  from both the catalog and `model_config`. The generic enum tab for that
+  key is retired (the `/admin/enums/gemini_generation_model` route still
+  works but is no longer linked). One row per model carries the four rate
+  fields (editable) and a `default_media_resolution` dropdown (read-only in
+  PR1; editable in PR2).
 - Snapshot-at-write: saving a row bumps `pricing_version`
   (e.g. `edit-2026-06-22T10:30:00Z`) and `updated_at`. Existing
   `run_telemetry.cost_usd` / `pricing_version` rows are never rewritten.
@@ -253,12 +263,18 @@ The spec ships as four independently shippable, ordered slices:
 
 ## Manual acceptance flows
 
-1. **Per-model config is DB-editable (Models tab).**
-   Setup: app running, signed in as admin, open `/admin` → "Models" tab.
-   Actions: change `gemini-2.5-flash-lite`'s `output_per_1m` and set its
-   `default_media_resolution` to `high`; save. Reload the tab.
-   Expected: the new values persist; a model with no rate card shows the
-   "missing rate card" warning here; the bare enum tabs are unchanged.
+1. **One merged "Gemini models" tab — catalog + pricing (ADR 0114).**
+   Setup: app running, signed in as admin, open `/admin` → "Gemini models"
+   tab. There is exactly ONE Gemini-model tab (no separate "Gemini
+   generation models" enum tab).
+   Actions: (a) change `gemini-2.5-flash-lite`'s `output_per_1m`; save;
+   reload — the new value persists. (b) Find an unpriced catalog model
+   (e.g. `gemini-3.5-flash`): it shows a "no rate card" pill; enter rates
+   and save — the pill disappears and the card now exists. (c) Add a model
+   via the add-row, then delete it — it leaves both the catalog and
+   `model_config`. (d) Make a different model the default — the star moves.
+   Expected: all four behaviours hold; the other (non-Gemini) editable-enum
+   tabs are unchanged.
 
 2. **Resolution is applied and captured.**
    Setup: a prompt with no resolution override, its model defaulting to
