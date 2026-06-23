@@ -17,6 +17,11 @@ We use the ≤200K (standard) rate here — the vast majority of annotation
 runs stay well within that threshold. If a run exceeds 200K tokens the
 cost estimate will be lower than the actual bill; tokens are stored so
 the cost can be recomputed with the correct tier when needed.
+
+All rates below are Global standard (us-central1 / global routing).
+europe-west3 'non-global' adds +10% for GA Gemini-3 models from
+2026-07-01; bump the affected cards in the admin UI if pinning a
+regional endpoint.
 """
 
 import logging
@@ -63,6 +68,45 @@ SEED_RATE_CARDS: dict[str, RateCard] = {
         input_audio_per_1m=1.25,
         input_cached_per_1m=0.13,
         output_per_1m=10.00,
+        source_url="https://cloud.google.com/vertex-ai/generative-ai/pricing",
+    ),
+    # ── Gemini 3.x / 3.5 series ─────────────────────────────────────────────
+    "gemini-3-flash-preview": RateCard(
+        input_text_video_image_per_1m=0.50,
+        input_audio_per_1m=1.00,
+        input_cached_per_1m=0.05,
+        output_per_1m=3.00,
+        source_url="https://cloud.google.com/vertex-ai/generative-ai/pricing",
+    ),
+    "gemini-3.1-pro-preview": RateCard(
+        # Tiered: ≤200K tokens=$2.00 input/$12.00 output, >200K=2x; using ≤200K rate.
+        input_text_video_image_per_1m=2.00,
+        input_audio_per_1m=2.00,
+        input_cached_per_1m=0.20,
+        output_per_1m=12.00,
+        source_url="https://cloud.google.com/vertex-ai/generative-ai/pricing",
+    ),
+    "gemini-3.1-flash-lite": RateCard(
+        input_text_video_image_per_1m=0.25,
+        input_audio_per_1m=0.50,
+        input_cached_per_1m=0.025,
+        output_per_1m=1.50,
+        source_url="https://cloud.google.com/vertex-ai/generative-ai/pricing",
+    ),
+    "gemini-3.1-flash-lite-preview": RateCard(
+        # Deprecated preview ID (same rates as GA gemini-3.1-flash-lite);
+        # retained because still in the model catalog.
+        input_text_video_image_per_1m=0.25,
+        input_audio_per_1m=0.50,
+        input_cached_per_1m=0.025,
+        output_per_1m=1.50,
+        source_url="https://cloud.google.com/vertex-ai/generative-ai/pricing",
+    ),
+    "gemini-3.5-flash": RateCard(
+        input_text_video_image_per_1m=1.50,
+        input_audio_per_1m=1.50,
+        input_cached_per_1m=0.15,
+        output_per_1m=9.00,
         source_url="https://cloud.google.com/vertex-ai/generative-ai/pricing",
     ),
 }

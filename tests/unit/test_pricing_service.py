@@ -61,23 +61,26 @@ async def test_edit_rates_version_flows_into_compute_cost(db):
 
 
 async def test_set_rates_creates_card_for_unpriced_model(db):
+    # Use a synthetic model id that is deliberately absent from SEED_RATE_CARDS
+    # (not a real catalog model — avoids false-passing when new seeds are added).
+    _SYNTHETIC = "gemini-unpriced-test-model"
     svc = _service(db)
     await svc.reconcile_seeds()
     await svc.reload()
-    assert "gemini-3.5-flash" not in pricing.rate_cards()
+    assert _SYNTHETIC not in pricing.rate_cards()
 
     await svc.set_rates(
-        "gemini-3.5-flash",
+        _SYNTHETIC,
         input_text_video_image_per_1m=0.15,
         input_audio_per_1m=0.25,
         input_cached_per_1m=0.02,
         output_per_1m=0.55,
     )
     rows = {r.model for r in await svc.rows()}
-    assert "gemini-3.5-flash" in rows
+    assert _SYNTHETIC in rows
     cards = pricing.rate_cards()  # reload happened implicitly
-    assert "gemini-3.5-flash" in cards
-    assert cards["gemini-3.5-flash"].input_text_video_image_per_1m == 0.15
+    assert _SYNTHETIC in cards
+    assert cards[_SYNTHETIC].input_text_video_image_per_1m == 0.15
 
 
 async def test_remove_model_drops_from_rows_and_cache(db):

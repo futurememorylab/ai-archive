@@ -31,12 +31,19 @@ def _reset_cards():
 
 def test_lists_full_catalog_including_unpriced(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as client:
+        # Add a synthetic catalog entry that has no rate card — all seed models
+        # are now priced, so we inject one via the admin endpoint.
+        client.post(
+            "/admin/models",
+            data={"model": "gemini-unpriced-test-model"},
+            headers={"HX-Request": "true"},
+        )
         r = client.get("/admin/models")
         assert r.status_code == 200
         # a priced catalog model
         assert "gemini-2.5-flash-lite" in r.text
         # an unpriced catalog model, flagged
-        assert "gemini-3.5-flash" in r.text
+        assert "gemini-unpriced-test-model" in r.text
         assert "no rate card" in r.text
         # resolution help text explaining low/medium/high semantics
         assert "still images only" in r.text
@@ -77,14 +84,22 @@ def test_edit_existing_rate_persists_and_updates_cache(monkeypatch, tmp_path):
 
 
 def test_set_rates_creates_card_for_unpriced_model(monkeypatch, tmp_path):
+    # Use a synthetic model id added via the admin endpoint — all seed catalog
+    # models are now priced, so we need a fresh cardless entry to test this path.
+    _SYNTHETIC = "gemini-unpriced-test-model"
     with _client(monkeypatch, tmp_path) as client:
-        # gemini-3.5-flash is in the catalog but has no rate card.
+        # Add the synthetic model to the catalog (no rate card yet).
+        client.post(
+            "/admin/models",
+            data={"model": _SYNTHETIC},
+            headers={"HX-Request": "true"},
+        )
         before = client.get("/admin/models")
-        assert "gemini-3.5-flash" in before.text
+        assert _SYNTHETIC in before.text
         assert "no rate card" in before.text
 
         r = client.post(
-            "/admin/models/gemini-3.5-flash/rates",
+            f"/admin/models/{_SYNTHETIC}/rates",
             data={
                 "input_text_video_image_per_1m": 0.15,
                 "input_audio_per_1m": 0.25,
@@ -94,18 +109,18 @@ def test_set_rates_creates_card_for_unpriced_model(monkeypatch, tmp_path):
             headers={"HX-Request": "true"},
         )
         assert r.status_code == 200
-        # The returned partial no longer flags gemini-3.5-flash as cardless.
+        # The returned partial no longer flags the model as cardless.
         # (Other unpriced models may still carry the warning, so check the row.)
-        assert "gemini-3.5-flash" in r.text
+        assert _SYNTHETIC in r.text
 
         after = client.get("/admin/models")
-        assert "gemini-3.5-flash" in after.text
+        assert _SYNTHETIC in after.text
 
     from backend.app.services.pricing import rate_cards
 
     cards = rate_cards()
-    assert "gemini-3.5-flash" in cards
-    assert cards["gemini-3.5-flash"].input_text_video_image_per_1m == 0.15
+    assert _SYNTHETIC in cards
+    assert cards[_SYNTHETIC].input_text_video_image_per_1m == 0.15
 
 
 def test_add_model_appends_to_catalog(monkeypatch, tmp_path):

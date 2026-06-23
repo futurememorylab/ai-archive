@@ -7,8 +7,13 @@ editable enum) and per-model *pricing* (the `model_config` rate cards). The
 catalog is the spine — every catalog model is listed, joined to its rate card
 when one exists. A catalog model with no rate card is shown with a "no rate
 card" pill (Save then creates the card). This scenario proves an admin can
-reach the tab, sees a priced seed model with its Save control, and sees an
-unpriced catalog model flagged as cardless — the visible payoff of the merge.
+reach the tab, sees a priced seed model with its Save control, and sees a
+newly-added model flagged as cardless — the visible payoff of the merge.
+
+NOTE: all seed catalog models are now priced (Gemini 3.x/3.5 cards added in
+PR8). The "no rate card" UX is demonstrated by adding a new model via the
+admin form first — that is an authentic admin workflow and proves the pill
+still fires on any cardless entry.
 """
 
 from __future__ import annotations
@@ -23,15 +28,16 @@ TITLE = "Manage Gemini models and rates in one tab"
 DESCRIPTION = (
     "An admin opens the Admin console and switches to the unified 'Gemini "
     "models' tab, where the model catalog and per-model pricing live together: "
-    "a priced seed model with editable rate inputs and a Save control, plus an "
-    "unpriced catalog model flagged with a 'no rate card' pill."
+    "a priced seed model with editable rate inputs and a Save control, plus a "
+    "newly-added model flagged with a 'no rate card' pill."
 )
 
 # A model that is always present with a seed rate card (PricingService seeds).
 SEED_MODEL = "gemini-2.5-flash-lite"
-# A catalog model that is seeded WITHOUT a rate card — proves the merge: it
-# still appears in the unified tab, flagged as cardless.
-UNPRICED_MODEL = "gemini-3.5-flash"
+# A synthetic model id added during the scenario — it has no rate card,
+# so the 'no rate card' pill appears. This avoids relying on a real catalog
+# model being unpriced (all seed models now have cards).
+UNPRICED_MODEL = "gemini-walkthrough-unpriced"
 
 
 def _origin(p) -> str:
@@ -48,6 +54,14 @@ def _open_models_tab(p) -> None:
     p.get_by_role("link", name="Gemini models", exact=True).click()
     # The tab HTMX-swaps the merged catalog + rate-card table into the region.
     expect(p.locator(".admin-models")).to_be_visible()
+
+
+def _add_unpriced_model(p) -> None:
+    # Add a new catalog model that has no rate card yet, so the 'no rate card'
+    # pill is visible in the table.
+    p.locator("input[name='model']").fill(UNPRICED_MODEL)
+    p.get_by_role("button", name="Add model").click()
+    expect(p.locator("td.mono-cell").filter(has_text=UNPRICED_MODEL)).to_have_count(1)
 
 
 def _expect_model_row(p, model: str) -> None:
@@ -94,6 +108,10 @@ def run(wt):
         _expect_resolution_select,
     )
     wt.step(
-        f"The unpriced catalog model '{UNPRICED_MODEL}' shows a 'no rate card' pill",
+        f"Add a new catalog model '{UNPRICED_MODEL}' (no rate card yet)",
+        _add_unpriced_model,
+    )
+    wt.step(
+        f"The new model '{UNPRICED_MODEL}' shows a 'no rate card' pill",
         _expect_unpriced_flagged,
     )
