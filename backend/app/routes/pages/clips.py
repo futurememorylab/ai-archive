@@ -346,7 +346,9 @@ async def clips_list(
     # consulted only for the live version number. See services/publish_status.py.
     clip_ids = [row["id"] for row in ctx_dict["clips"]]
     live_nums = await ctx.clip_versions_repo.live_version_num_by_clip(ctx.db, clip_ids)
-    pending_by_clip = await ctx.pending_ops_repo.count_pending_by_clip(ctx.db, provider_id="catdv")
+    pending_by_clip = await ctx.pending_ops_repo.count_pending_by_clip(
+        ctx.db, provider_id="catdv", clip_ids=[str(c) for c in clip_ids]
+    )
 
     for row in ctx_dict["clips"]:
         row["batch_status"] = _batch_status_view(batch_status_map.get(row["id"]))
