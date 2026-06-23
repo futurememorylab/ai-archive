@@ -64,15 +64,16 @@ def _row_to_version(row) -> PromptVersion:
         target_map=json.loads(row[5]),
         output_schema=json.loads(row[6]),
         model=row[7],
-        created_at=row[8],
-        updated_at=row[9],
+        media_resolution=row[8],
+        created_at=row[9],
+        updated_at=row[10],
     )
 
 
 _PROMPT_COLS = "id, name, description, archived, created_at, updated_at, media_kind"
 _VERSION_COLS = (
     "id, prompt_id, version_num, state, body, target_map, "
-    "output_schema, model, created_at, updated_at"
+    "output_schema, model, media_resolution, created_at, updated_at"
 )
 
 
@@ -89,6 +90,7 @@ class PromptsRepo:
         target_map: Any,
         output_schema: Any,
         model: str,
+        media_resolution: str | None = None,
         initial_state: str = "draft",
         media_kind: str = "any",
     ) -> tuple[int, int]:
@@ -103,8 +105,8 @@ class PromptsRepo:
         assert prompt_id is not None
         cur = await conn.execute(
             "INSERT INTO prompt_versions(prompt_id, version_num, state, body, target_map, "
-            "output_schema, model, created_at, updated_at) "
-            "VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?)",
+            "output_schema, model, media_resolution, created_at, updated_at) "
+            "VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 prompt_id,
                 initial_state,
@@ -112,6 +114,7 @@ class PromptsRepo:
                 _target_map_to_json(target_map),
                 json.dumps(output_schema),
                 model,
+                media_resolution,
                 now,
                 now,
             ),
@@ -275,8 +278,8 @@ class PromptsRepo:
         now = _now_iso()
         cur = await conn.execute(
             "INSERT INTO prompt_versions(prompt_id, version_num, state, body, "
-            "target_map, output_schema, model, created_at, updated_at) "
-            "VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?)",
+            "target_map, output_schema, model, media_resolution, created_at, updated_at) "
+            "VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)",
             (
                 prompt_id,
                 next_num,
@@ -284,6 +287,7 @@ class PromptsRepo:
                 _target_map_to_json(src.target_map),
                 json.dumps(src.output_schema),
                 src.model,
+                src.media_resolution,
                 now,
                 now,
             ),
@@ -302,18 +306,20 @@ class PromptsRepo:
         target_map: Any,
         output_schema: Any,
         model: str,
+        media_resolution: str | None = None,
     ) -> None:
         v = await self.get_version(conn, version_id)
         if v.state != "draft":
             raise VersionImmutableError(version_id, v.state)
         await conn.execute(
             "UPDATE prompt_versions SET body = ?, target_map = ?, output_schema = ?, "
-            "model = ?, updated_at = ? WHERE id = ?",
+            "model = ?, media_resolution = ?, updated_at = ? WHERE id = ?",
             (
                 body,
                 _target_map_to_json(target_map),
                 json.dumps(output_schema),
                 model,
+                media_resolution,
                 _now_iso(),
                 version_id,
             ),

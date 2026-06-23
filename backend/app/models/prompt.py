@@ -57,6 +57,7 @@ class PromptVersion(BaseModel):
     target_map: TargetMap
     output_schema: dict[str, Any]
     model: str
+    media_resolution: str | None = None
     created_at: str
     updated_at: str
 
