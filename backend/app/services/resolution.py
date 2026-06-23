@@ -17,3 +17,12 @@ def resolve_media_resolution(
         if candidate in _VALID:
             return candidate
     return DEFAULT_MEDIA_RESOLUTION
+
+
+def resolution_valid_for_kind(resolution: str, media_kind: str) -> bool:
+    """Gemini accepts HIGH media resolution only for single still images;
+    LOW/MEDIUM are valid for every media kind. (See the 400 INVALID_ARGUMENT
+    'HIGH media resolution only for single images' from the Vertex API.)"""
+    if resolution == "high":
+        return media_kind == "image"
+    return True

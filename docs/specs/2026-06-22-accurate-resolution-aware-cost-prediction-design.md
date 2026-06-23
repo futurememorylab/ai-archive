@@ -264,10 +264,14 @@ The spec ships as four independently shippable, ordered slices:
    query-count guard updated (constant +1 model_config read, N=10==N=100).
 4. **PR4 — Calibration + real cost.** Split into two slices:
    - **PR4a — Calibration** *(shipped — ADR 0116)*. Admin "Prompts" tab; pick
-     3 clips → projected-cost confirm → a sweep of 3 resolutions × 2 repeats ×
-     3 clips = 18 telemetry-only runs (`record_only` + `force_resolution` on the
-     run path — no annotations/studio-runs/review-items written); per-resolution
-     results panel (count / cost / confidence unlocked).
+     **any number of clips (≥1)** → projected-cost confirm → a sweep of each
+     resolution × 2 repeats over the eligible clips, telemetry-only runs
+     (`record_only` + `force_resolution` on the run path — no
+     annotations/studio-runs/review-items written); per-resolution results panel
+     (count / cost / confidence unlocked). **HIGH media resolution applies only
+     to image clips** — Vertex rejects HIGH for video/audio — so per-clip
+     validity drops HIGH for non-image clips (an all-video selection runs
+     low+medium only).
    - **PR4b — Real cost** *(pending)*. Admin-enablable `countTokens` real-cost
      button on the batch-creation flow.
 

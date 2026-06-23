@@ -206,6 +206,27 @@ async def estimate_clips(
     )
 
 
+def _classify_cached_row(row) -> str:
+    """Media kind for one clip_cache row. name is last-ditch: clip titles
+    sometimes carry an extension (fs provider). Misclassification falls
+    through to 'video+audio', the safe non-image default for estimation."""
+    cj = row["canonical_json"] or {}
+    media = cj.get("media") or {}
+    path = media.get("cached_path") or media.get("upstream_handle") or cj.get("name")
+    return classify_media_kind(str(path) if path else None)
+
+
+async def media_kinds_for_clip_ids(conn, *, clip_cache_repo, provider_id, clip_ids):
+    """{clip_id: media_kind} DB-first (offline-safe). Uncached clips default to
+    'video+audio' — the safe non-image default (never offered HIGH)."""
+    cached = await clip_cache_repo.get_many_by_ids(conn, provider_id, clip_ids)
+    out: dict[int, str] = {}
+    for cid in clip_ids:
+        row = cached.get(cid)
+        out[cid] = "video+audio" if row is None else _classify_cached_row(row)
+    return out
+
+
 _UNKNOWN_CLIP_DURATION_SECS = 60.0  # conservative default for uncached clips
 
 
@@ -247,16 +268,10 @@ async def estimate_for_clip_ids(
                 )
             )
             continue
-        cj = row["canonical_json"] or {}
-        media = cj.get("media") or {}
-        # name is last-ditch: clip titles sometimes carry an extension
-        # (fs provider). Misclassification falls through to "video+audio",
-        # the safe default for estimation.
-        path = media.get("cached_path") or media.get("upstream_handle") or cj.get("name")
         clips.append(
             ClipEstimateInput(
                 clip_id=cid,
-                media_kind=classify_media_kind(str(path) if path else None),
+                media_kind=_classify_cached_row(row),
                 duration_secs=row["duration_secs"],
             )
         )

@@ -116,7 +116,7 @@
       },
 
       async launchCalibrate() {
-        if (this.selCount() !== 3 || this.calVersionId == null) return;
+        if (!this.selCount() || this.calVersionId == null) return;
         const ids = this.selectedClips().map((c) => c.id);
         const form = new URLSearchParams();
         for (const id of ids) form.append("clip_ids", id);
@@ -135,8 +135,9 @@
             region.innerHTML = await r.text();
             window.htmxAlpine.reinit(region);
           }
+          const n = r.headers.get("X-Calibration-Jobs");
           this.calOpen = false;
-          Alpine.store("toast").push("Calibration sweep launched — 6 jobs.", { level: "success" });
+          Alpine.store("toast").push("Calibration sweep launched" + (n ? " — " + n + " jobs." : "."), { level: "success" });
         } catch (e) {
           Alpine.store("toast").push("Couldn't launch calibration: " + e.message, { level: "error" });
         }

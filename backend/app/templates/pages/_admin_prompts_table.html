@@ -55,7 +55,7 @@
     <div class="modal-hdr">
       <h2 class="modal-title">Calibrate <span class="mono" x-text="calLabel"></span></h2>
       <span class="grow"></span>
-      <span class="meta mono" x-text="selCount() + ' / 3 selected'"></span>
+      <span class="meta mono" x-text="selCount() + ' selected'"></span>
     </div>
     <div class="modal-body nb-body">
       {% include "pages/_clip_picker_main.html" %}
@@ -68,7 +68,7 @@
       <div class="muted mono" x-effect="refreshEstimate()" x-text="estimateLabel()"></div>
       <button type="button" class="btn primary"
               data-test="calibrate-confirm"
-              :disabled="selCount() !== 3"
+              :disabled="!selCount()"
               @click="launchCalibrate()">Launch sweep</button>
     </div>
   {% endcall %}

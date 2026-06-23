@@ -20,7 +20,11 @@ from backend.app.routes.pages.templates import templates
 from backend.app.services.calibration import confidence_for_samples
 from backend.app.services.enum_service import EnumError
 from backend.app.services.errors import humanise
-from backend.app.services.run_estimator import estimate_for_clip_ids
+from backend.app.services.resolution import resolution_valid_for_kind
+from backend.app.services.run_estimator import (
+    estimate_for_clip_ids,
+    media_kinds_for_clip_ids,
+)
 
 router = APIRouter(tags=["pages"])
 
@@ -231,34 +235,53 @@ async def admin_prompts_table(request: Request):
 async def admin_calibrate(
     request: Request, version_id: int, clip_ids: list[int] = Form(...)
 ):
-    """Launch a calibration sweep: 3 resolutions × 2 repeats = 6 jobs, each
-    running the 3 chosen clips telemetry-only (record_only). Needs the live
-    Gemini API; 503 when offline."""
+    """Launch a calibration sweep over any number of clips (≥1): for each
+    resolution × 2 repeats, run the eligible clips telemetry-only
+    (record_only). HIGH applies only to image clips — a resolution with no
+    eligible clip is skipped (e.g. an all-video selection → low+medium only,
+    4 jobs, no high). Needs the live Gemini API; 503 when offline."""
     require_role(request, "admin")
     core = get_core_ctx(request)
     live = request.app.state.live_ctx
     if live is None:
         raise HTTPException(503, "Gemini offline — calibration needs the live API")
-    if len(clip_ids) != 3:
-        raise HTTPException(422, "calibration needs exactly 3 clips")
+    if not clip_ids:
+        raise HTTPException(422, "calibration needs at least one clip")
     try:
         await core.prompts_repo.get_version(core.db, version_id)
     except LookupError:
         raise HTTPException(404, "prompt version not found") from None
+    kinds = await media_kinds_for_clip_ids(
+        core.db,
+        clip_cache_repo=core.clip_cache_repo,
+        provider_id=core.settings.archive_provider,
+        clip_ids=clip_ids,
+    )
     run_group = f"calibration:{version_id}:{int(_time.time())}"
+    jobs_created = 0
     for res in CALIBRATION_RESOLUTIONS:
+        eligible = [
+            c
+            for c in clip_ids
+            if resolution_valid_for_kind(res, kinds.get(c, "video+audio"))
+        ]
+        if not eligible:
+            continue
         for _ in range(CALIBRATION_REPEATS):
             job_id = await core.jobs_repo.create_job(
                 core.db,
                 prompt_version_id=version_id,
-                clip_ids=clip_ids,
+                clip_ids=eligible,
                 kind="studio",
                 run_group=run_group,
             )
             start_job_in_background(
                 core, live, job_id, force_resolution=res, record_only=True
             )
-    return await _prompts_response(request, core)
+            jobs_created += 1
+    resp = await _prompts_response(request, core)
+    resp.headers["X-Calibration-Jobs"] = str(jobs_created)
+    return resp
 
 
 @router.post("/admin/prompts/{version_id}/calibrate/estimate")
@@ -285,12 +308,26 @@ async def admin_calibrate_estimate(
         )
     except LookupError:
         raise HTTPException(404, "prompt version not found") from None
-    sweeps = len(CALIBRATION_RESOLUTIONS) * CALIBRATION_REPEATS
+    kinds = await media_kinds_for_clip_ids(
+        ctx.db,
+        clip_cache_repo=ctx.clip_cache_repo,
+        provider_id=ctx.settings.archive_provider,
+        clip_ids=clip_ids,
+    )
+    total_runs = 0
+    for res in CALIBRATION_RESOLUTIONS:
+        eligible = sum(
+            1
+            for c in clip_ids
+            if resolution_valid_for_kind(res, kinds.get(c, "video+audio"))
+        )
+        total_runs += eligible * CALIBRATION_REPEATS
     p50 = est["cost_usd_p50"]
-    return {
-        "projected_cost_usd": (p50 * sweeps) if p50 is not None else None,
-        "runs": sweeps * len(clip_ids),
-    }
+    n = len(clip_ids)
+    # p50 is the total for all clip_ids at the prompt's effective resolution;
+    # approximate per-clip cost = p50 / n, scaled by the real run count.
+    projected = (p50 / n * total_runs) if (p50 is not None and n) else None
+    return {"projected_cost_usd": projected, "runs": total_runs}
 
 
 @router.get("/admin/enums/{key}", response_class=HTMLResponse)

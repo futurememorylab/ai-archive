@@ -51,9 +51,21 @@ threaded through `start_job_in_background`:
   `_record_telemetry(kind="studio", status="ok", media_resolution_setting=...)`,
   and the `_finalize_studio`/`_finalize_annotation` calls are unreachable.
 
-Calibration creates 6 `kind="studio"` jobs (3 resolutions × 2 repeats), each with
-the 3 clips, tagged with a shared `run_group="calibration:<version>:<ts>"`, each
-launched `record_only=True, force_resolution=<res>`. The telemetry rows carry
+Calibration creates `kind="studio"` jobs (each resolution × 2 repeats) over **any
+number of selected clips (≥1)** — the picker behaves like the Batches "New batch"
+picker, not a fixed-3 rule. Each job is tagged with a shared
+`run_group="calibration:<version>:<ts>"` and launched
+`record_only=True, force_resolution=<res>`.
+
+**Per-clip resolution validity (refinement).** HIGH media resolution is valid
+**only for single still images** — Vertex returns `400 INVALID_ARGUMENT "the model
+supports HIGH media resolution only for single images"` for video/audio. So for
+each resolution we build the subset of selected clips it's valid for
+(`resolution_valid_for_kind`: HIGH ⇒ image only; LOW/MEDIUM ⇒ all) and create the
+2 repeat-jobs only for that subset, skipping a resolution entirely when no clip
+qualifies. An all-video selection therefore yields only low+medium (4 jobs, no
+high); a HIGH job NEVER contains a video/audio clip. The launch route reports the
+actual job count via the `X-Calibration-Jobs` response header. The telemetry rows carry
 `kind="studio"` (they are studio-style records) and the forced
 `media_resolution_setting`. The results panel reads `run_telemetry` grouped by
 `media_resolution_setting` per prompt version.
@@ -77,6 +89,18 @@ branch sits above the untouched `elif kind == 'studio' / else` finalize arms.
   studio job throws AND a `studio_run` exists — but calibration's `create_job`
   never makes a `studio_run`, so `find_latest_id_for_job_clip` returns None and
   the branch is skipped in practice.
-- **Real spend:** the sweep makes 18 real Gemini calls per invocation, behind an
-  admin action + a projected-cost confirm. Tests use a fake Gemini (the launch is
-  monkeypatched in `test_admin_calibrate`).
+- **Real spend:** the sweep makes real Gemini calls per invocation (up to 3
+  resolutions × 2 repeats × N clips), behind an admin action + a projected-cost
+  confirm. Tests use a fake Gemini (the launch is monkeypatched in
+  `test_admin_calibrate`).
+- **Per-clip eligibility refinement (2026-06-23):** the original 3-clip,
+  fixed-6-job design was relaxed to any clip count (≥1) and per-clip resolution
+  validity. The trigger was a live `400 INVALID_ARGUMENT "HIGH media resolution
+  only for single images"` from Vertex on a video calibration run — HIGH must be
+  scoped to image clips, so the sweep now skips HIGH for any non-image clip and
+  drops a resolution with no eligible clip. The projected-cost estimate scales by
+  the real (per-clip-valid) run count, and the launch returns the count via
+  `X-Calibration-Jobs`. `resolution_valid_for_kind` (in `services/resolution.py`)
+  is the single source of truth, asserted by `test_resolution_validity.py` and the
+  `test_calibrate_video_clips_skip_high` / `test_calibrate_mixed_high_only_images`
+  integration tests (a HIGH job never carries a video clip).
