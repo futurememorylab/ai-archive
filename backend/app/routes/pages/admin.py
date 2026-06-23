@@ -15,6 +15,7 @@ from backend.app.deps import get_core_ctx
 from backend.app.models.media import MediaResolution
 from backend.app.routes.pages.admin_access import _members_ctx as _access_members_ctx
 from backend.app.routes.pages.templates import templates
+from backend.app.services.calibration import confidence_for_samples
 from backend.app.services.enum_service import EnumError
 from backend.app.services.errors import humanise
 
@@ -173,6 +174,49 @@ async def admin_remove_model(request: Request, model: str):
         raise HTTPException(400, humanise(exc)) from exc
     await ctx.pricing_service.remove_model(model)
     return await _models_response(request, ctx)
+
+
+async def _prompts_view(ctx) -> dict:
+    rows = []
+    for p in await ctx.prompts_repo.list_active(ctx.db):
+        _p, versions = await ctx.prompts_repo.get_with_versions(ctx.db, p.id)
+        for v in versions:
+            stats = await ctx.run_telemetry_repo.stats_by_resolution(
+                ctx.db, prompt_version_id=v.id
+            )
+            per_res = {
+                res: {
+                    "count": s["count"],
+                    "cost_usd": s["cost_usd"],
+                    "confidence": confidence_for_samples(s["count"]),
+                }
+                for res, s in stats.items()
+                if res is not None
+            }
+            rows.append(
+                {
+                    "prompt_name": p.name,
+                    "version_id": v.id,
+                    "version_num": v.version_num,
+                    "state": v.state,
+                    "model": v.model,
+                    "per_res": per_res,
+                }
+            )
+    return {"rows": rows}
+
+
+async def _prompts_response(request: Request, ctx):
+    return templates.TemplateResponse(
+        request, "pages/_admin_prompts_table.html", await _prompts_view(ctx)
+    )
+
+
+@router.get("/admin/prompts", response_class=HTMLResponse)
+async def admin_prompts_table(request: Request):
+    require_role(request, "admin")
+    ctx = get_core_ctx(request)
+    return await _prompts_response(request, ctx)
 
 
 @router.get("/admin/enums/{key}", response_class=HTMLResponse)

@@ -1,0 +1,50 @@
+{# backend/app/templates/pages/_admin_prompts_table.html #}
+{% import "components/_ui.html" as ui %}
+<div class="admin-prompts">
+  <p class="meta">Active prompts and their versions, with per-resolution
+    calibration results (run count, total cost, confidence). Use Calibrate
+    to run a calibration sweep for a version.</p>
+  {% if rows %}
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>Prompt · version</th>
+        <th>State</th>
+        <th>Model</th>
+        <th>Calibration</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td class="mono-cell">{{ r.prompt_name }} · v{{ r.version_num }}</td>
+        <td>{{ r.state }}</td>
+        <td class="mono-cell">{{ r.model }}</td>
+        <td>
+          {% if r.per_res %}
+            {% for res in ['low', 'medium', 'high'] if res in r.per_res %}
+              {% set s = r.per_res[res] %}
+              <div>
+                <span class="pill">{{ res }}</span>
+                {{ s.count }} run{{ 's' if s.count != 1 else '' }}
+                · {{ s.cost_usd | usd }}
+                · {{ s.confidence }}
+              </div>
+            {% endfor %}
+          {% else %}
+            <span class="muted">not calibrated</span>
+          {% endif %}
+        </td>
+        <td class="admin-actions">
+          <button type="button" class="btn primary sm"
+                  data-version-id="{{ r.version_id }}">Calibrate</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No active prompts found.</p>
+  {% endif %}
+</div>
