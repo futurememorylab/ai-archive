@@ -190,3 +190,53 @@ def test_unknown_model_404(monkeypatch, tmp_path):
             headers={"HX-Request": "true"},
         )
         assert r.status_code == 404
+
+
+def test_set_resolution_persists(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path) as client:
+        r = client.post(
+            "/admin/models/gemini-2.5-flash-lite/resolution",
+            data={"media_resolution": "high"},
+            headers={"HX-Request": "true"},
+        )
+        assert r.status_code == 200
+        # The returned partial renders the select with 'high' selected.
+        assert '<option value="high" selected>high</option>' in r.text
+
+        body = client.get("/admin/models").text
+        assert '<option value="high" selected>high</option>' in body
+
+    # Durability: a fresh connection to the on-disk DB sees the committed value.
+    import aiosqlite
+
+    async def _check():
+        async with aiosqlite.connect(tmp_path / "app.db") as fresh:
+            cur = await fresh.execute(
+                "SELECT default_media_resolution FROM model_config WHERE model = ?",
+                ("gemini-2.5-flash-lite",),
+            )
+            (persisted,) = await cur.fetchone()
+        return persisted
+
+    persisted = asyncio.run(_check())
+    assert persisted == "high"
+
+
+def test_resolution_rejects_bad_value(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path) as client:
+        r = client.post(
+            "/admin/models/gemini-2.5-flash-lite/resolution",
+            data={"media_resolution": "ultra"},
+            headers={"HX-Request": "true"},
+        )
+        assert r.status_code == 422
+
+
+def test_resolution_unknown_model_404(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path) as client:
+        r = client.post(
+            "/admin/models/not-a-model/resolution",
+            data={"media_resolution": "high"},
+            headers={"HX-Request": "true"},
+        )
+        assert r.status_code == 404

@@ -5,11 +5,14 @@ and `require_role("admin")` narrows every handler to the `manage` capability
 (ADR 0085). The Access & Permissions section lives in `admin_access.py`.
 """
 
+from typing import get_args
+
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from backend.app.auth.guards import require_role
 from backend.app.deps import get_core_ctx
+from backend.app.models.media import MediaResolution
 from backend.app.routes.pages.admin_access import _members_ctx as _access_members_ctx
 from backend.app.routes.pages.templates import templates
 from backend.app.services.enum_service import EnumError
@@ -120,6 +123,21 @@ async def admin_edit_model_rates(
         input_cached_per_1m=input_cached_per_1m,
         output_per_1m=output_per_1m,
     )
+    return await _models_response(request, ctx)
+
+
+@router.post("/admin/models/{model}/resolution", response_class=HTMLResponse)
+async def admin_set_model_resolution(
+    request: Request, model: str, media_resolution: str = Form(...)
+):
+    require_role(request, "admin")
+    ctx = get_core_ctx(request)
+    if media_resolution not in get_args(MediaResolution):
+        raise HTTPException(422, f"bad media_resolution {media_resolution!r}")
+    has_card = any(r.model == model for r in await ctx.pricing_service.rows())
+    if not has_card:
+        raise HTTPException(404, f"no rate card for {model!r}")
+    await ctx.pricing_service.set_resolution(model, media_resolution)
     return await _models_response(request, ctx)
 
 

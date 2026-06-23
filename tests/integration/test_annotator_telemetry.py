@@ -59,7 +59,7 @@ TCTX = TelemetryCtx(
 )
 
 
-async def _setup(db, tmp_path, *, kind=None):
+async def _setup(db, tmp_path, *, kind=None, media_resolution=None):
     prompts = PromptsRepo()
     _, vid = await prompts.create_with_initial_version(
         db,
@@ -69,6 +69,7 @@ async def _setup(db, tmp_path, *, kind=None):
         target_map={"scenes": {"kind": "markers"}},
         output_schema={"type": "object"},
         model="gemini-2.5-flash-lite",
+        media_resolution=media_resolution,
     )
     jobs = JobsRepo()
     f = tmp_path / "c1.mov"
@@ -204,6 +205,37 @@ async def test_media_resolution_setting_from_model_default(db, tmp_path):
     cur = await db.execute("SELECT media_resolution_setting FROM run_telemetry")
     row = await cur.fetchone()
     assert row == ("high",)
+
+
+@pytest.mark.asyncio
+async def test_media_resolution_override_beats_model_default(db, tmp_path):
+    # Seed the model default to 'high', but give the prompt VERSION an explicit
+    # 'low' override. The override must win all the way through to the gemini
+    # call AND the telemetry row — the 'high' model default is shadowed.
+    mc = ModelConfigRepo()
+    await mc.set_rates(
+        db,
+        "gemini-2.5-flash-lite",
+        input_text_video_image_per_1m=0.1,
+        input_audio_per_1m=0.1,
+        input_cached_per_1m=0.1,
+        output_per_1m=0.1,
+        pricing_version="test",
+        commit=True,
+    )
+    await mc.set_resolution(db, "gemini-2.5-flash-lite", "high", commit=True)
+
+    job_id, f = await _setup(db, tmp_path, kind=None, media_resolution="low")
+    gemini = FakeGeminiCapturing()
+    await run_job(job_id=job_id, **_run_kwargs(db, {101: f}, gemini))
+
+    # The override reached the gemini SDK call.
+    assert gemini.media_resolution == "low"
+
+    # And the telemetry row captured the override, not the model default.
+    cur = await db.execute("SELECT media_resolution_setting FROM run_telemetry")
+    row = await cur.fetchone()
+    assert row == ("low",)
 
 
 class FakeGeminiNonJson:

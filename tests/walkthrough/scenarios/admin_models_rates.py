@@ -58,6 +58,14 @@ def _expect_save_control(p) -> None:
     expect(p.get_by_role("button", name="Save").first).to_be_visible()
 
 
+def _expect_resolution_select(p) -> None:
+    # A priced model row exposes its default media resolution as an editable
+    # <select> (not a read-only cell); changing it POSTs the new resolution.
+    expect(
+        p.locator(".admin-models select[name='media_resolution']").first
+    ).to_be_visible()
+
+
 def _expect_unpriced_flagged(p) -> None:
     # The unpriced catalog model is listed AND flagged as having no rate card.
     expect(p.locator("td.mono-cell").filter(has_text=UNPRICED_MODEL)).to_have_count(1)
@@ -80,6 +88,10 @@ def run(wt):
     wt.step(
         "Each rate card has a Save control",
         _expect_save_control,
+    )
+    wt.step(
+        "The default media resolution is an editable dropdown",
+        _expect_resolution_select,
     )
     wt.step(
         f"The unpriced catalog model '{UNPRICED_MODEL}' shows a 'no rate card' pill",

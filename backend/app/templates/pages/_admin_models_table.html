@@ -32,7 +32,18 @@
                    name="input_cached_per_1m" value="{{ r.input_cached_per_1m }}"></td>
         <td><input class="txt" type="number" step="0.0001" min="0"
                    name="output_per_1m" value="{{ r.output_per_1m }}"></td>
-        <td class="mono-cell">{{ r.default_media_resolution }}</td>
+        <td>
+          {% if r.has_card %}
+          <select class="txt" name="media_resolution"
+                  hx-post="/admin/models/{{ r.model }}/resolution"
+                  hx-trigger="change"
+                  hx-target="#admin-enum-region" hx-swap="innerHTML">
+            {% for opt in ['low','medium','high'] %}
+            <option value="{{ opt }}"{% if opt == r.default_media_resolution %} selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+          {% else %}<span class="mono-cell">—</span>{% endif %}
+        </td>
         <td class="admin-actions">
           <button type="button" class="btn primary sm"
                   hx-post="/admin/models/{{ r.model }}/rates"
