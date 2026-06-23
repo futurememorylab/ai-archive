@@ -17,7 +17,6 @@
 #}
 <span class="cache-ctl" id="cache-ctl-{{ clip.id }}"
       x-data="cacheActions({ id: {{ clip.id }}, kind: '{{ clip.kind }}' })"
-      @clip-cache-uploading.window="if ($event.detail.id === id) onAnnotateUpload()"
       @clip-cache-refresh.window="if ($event.detail.id === id) onAnnotateCached()">
   <span class="cache-badge-host">
     {% with cache = clip.cache %}{% include "pages/_cache_badge.html" %}{% endwith %}

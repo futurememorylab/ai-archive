@@ -63,6 +63,7 @@ async def _run_in_bg(ctx, job_id: int, *, only_clip_ids: set[int] | None = None)
             uploaded_clips_repo=ctx.uploaded_clips_repo,
             run_telemetry_repo=ctx.run_telemetry_repo,
             telemetry_ctx=ctx.telemetry_ctx,
+            prefetch_queue_repo=ctx.prefetch_queue_repo,
             only_clip_ids=only_clip_ids,
         )
     finally:
@@ -103,6 +104,17 @@ async def list_active_jobs(request: Request):
             }
         )
     return out
+
+
+@router.get("/active-for-clip/{clip_id}")
+async def active_job_for_clip(request: Request, clip_id: int):
+    """The running job (if any) touching this clip, as {job_id, item_status},
+    or {}. Lets the clip page resume the annotate button after a reload.
+
+    Registered before /{job_id} so it isn't shadowed by the catch-all."""
+    ctx = get_core_ctx(request)
+    found = await ctx.jobs_repo.find_running_item_for_clip(ctx.db, clip_id)
+    return found or {}
 
 
 @router.get("/events")

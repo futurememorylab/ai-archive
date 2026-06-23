@@ -27,7 +27,7 @@ from backend.app.services.errors import humanise
 log = logging.getLogger(__name__)
 
 
-class _ProgressTracker:
+class ProgressTracker:
     """Progress callback for one download. Records the latest absolute
     bytes-on-disk in memory on every chunk, but throttles DB writes to at
     most once per `min_interval_s` so a multi-GB stream produces a few dozen
@@ -152,7 +152,7 @@ class MediaPrefetcher:
             return clip_id_int if clip_id_str.isdigit() else 0
 
         try:
-            tracker = _ProgressTracker(self._queue, conn=db, rid=rid)
+            tracker = ProgressTracker(self._queue, conn=db, rid=rid)
             await self._backend.ensure_cached(clip_id_int, progress_cb=tracker)
             # Final flush: record the true on-disk size (covers clips that
             # finished inside one throttle window, so Recent never shows 0).

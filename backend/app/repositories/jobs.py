@@ -160,6 +160,26 @@ class JobsRepo:
             for r in await cur.fetchall()
         ]
 
+    async def find_running_item_for_clip(
+        self, conn: aiosqlite.Connection, clip_id: int
+    ) -> dict | None:
+        """The most recent running job touching `clip_id`, as
+        `{"job_id", "item_status", "started_at"}`, or None. Powers the clip
+        page's annotate-button resume after a reload (GET
+        /api/jobs/active-for-clip). `started_at` (the job's created_at) lets the
+        button resume its elapsed timer from the true run start, not from 0."""
+        cur = await conn.execute(
+            "SELECT ji.job_id, ji.status, j.created_at "
+            "  FROM job_items ji JOIN jobs j ON j.id = ji.job_id "
+            " WHERE ji.catdv_clip_id = ? AND j.status = 'running' "
+            " ORDER BY ji.job_id DESC LIMIT 1",
+            (clip_id,),
+        )
+        row = await cur.fetchone()
+        if row is None:
+            return None
+        return {"job_id": int(row[0]), "item_status": row[1], "started_at": row[2]}
+
     async def progress(self, conn: aiosqlite.Connection, job_id: int) -> tuple[int, int, int]:
         """(done, total, errors) for a job. 'done' = items past the
         in-flight statuses (pending/resolving/uploading/prompting)."""
@@ -206,6 +226,32 @@ class JobsRepo:
         await conn.commit()
         return cur.rowcount or 0
 
+    async def cancel_orphaned_running(self, conn: aiosqlite.Connection) -> int:
+        """Cancel jobs left 'running' by a killed worker, AND their unfinished
+        items. A job runs as a fire-and-forget background task; at boot nothing
+        is in-flight (single process, by construction — same reasoning as the
+        prefetcher's orphan recovery), so any still-'running' job is an orphan
+        from a crash / restart / dev --reload. Left alone it shows as active
+        forever and the clip page keeps 'resuming' a job that will never finish.
+
+        Both the job AND its unfinished items flip to 'cancelled' so the state
+        is internally consistent: a terminal job must not keep a 'pending' /
+        in-flight item, or the Batches view (which counts those as in-flight)
+        would still show the batch "Running" while the clip page — keyed on the
+        job status — shows it stopped. Already-finished items (done /
+        review_ready / error) are left as-is. Returns the count of jobs
+        cancelled."""
+        await conn.execute(
+            "UPDATE job_items SET status = 'cancelled' "
+            " WHERE status IN ('pending', 'resolving', 'uploading', 'prompting') "
+            "   AND job_id IN (SELECT id FROM jobs WHERE status = 'running')"
+        )
+        cur = await conn.execute(
+            "UPDATE jobs SET status = 'cancelled' WHERE status = 'running'"
+        )
+        await conn.commit()
+        return cur.rowcount or 0
+
     # --- Batches hub aggregation (read-only, offline-safe) -------------
     # A "batch" = a group of jobs sharing a run_group, OR a singleton job with
     # no run_group (keyed 'job:<id>'). Studio jobs are excluded. Each method
@@ -230,8 +276,9 @@ class JobsRepo:
             COALESCE(j.run_group, 'job:' || j.id) AS batch_key,
             COUNT(*) AS ran,  -- total items dispatched across all statuses
             SUM(CASE WHEN ji.status = 'error' THEN 1 ELSE 0 END) AS failed,
+            SUM(CASE WHEN ji.status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled,
             SUM(CASE WHEN ji.status NOT IN
-                ('pending','resolving','uploading','prompting','error')
+                ('pending','resolving','uploading','prompting','error','cancelled')
                 THEN 1 ELSE 0 END) AS completed,
             SUM(CASE WHEN ji.status IN
                 ('pending','resolving','uploading','prompting')
@@ -306,6 +353,7 @@ class JobsRepo:
           pv.model                      AS model,
           COALESCE(i.ran, 0)            AS ran,
           COALESCE(i.failed, 0)         AS failed,
+          COALESCE(i.cancelled, 0)      AS cancelled,
           COALESCE(i.completed, 0)      AS completed,
           COALESCE(i.in_flight, 0)      AS in_flight,
           COALESCE(r.awaiting_clips, 0) AS awaiting_clips,

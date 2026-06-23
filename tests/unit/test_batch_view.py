@@ -24,6 +24,34 @@ def test_basic_counts_and_reviewed_clamp():
     assert v["pct_reviewed"] == 55     # round(6/11*100)
 
 
+def test_status_cancelled_orphan_is_not_running_or_applied():
+    # A job interrupted by a restart is cancelled (job + its in-flight items).
+    # The batch must read "Cancelled" — never "Running" (the bug: a leftover
+    # pending item counted as in_flight) and never green "Applied".
+    v = batch_view(_row(
+        running_jobs=0, in_flight=0, cancelled=1,
+        ran=1, completed=0, failed=0, awaiting_clips=0,
+    ))
+    assert v["running"] is False
+    assert v["status_label"] == "Cancelled"
+    assert v["status_state"] != "ok"
+
+
+def test_awaiting_review_takes_precedence_over_cancelled():
+    # A partly-done batch (some clips annotated + awaiting, one cancelled) should
+    # still point the user at the actionable review, not "Cancelled".
+    v = batch_view(_row(
+        running_jobs=0, in_flight=0, cancelled=1,
+        ran=4, completed=3, failed=0, awaiting_clips=1,
+    ))
+    assert v["status_label"] == "1 to review"
+
+
+def test_cancelled_field_absent_is_back_compat():
+    v = batch_view(_row(running_jobs=0, completed=10, awaiting_clips=0))
+    assert v["status_label"] == "Applied"
+
+
 def test_status_running():
     v = batch_view(_row(running_jobs=1, completed=4, failed=1))
     assert v["running"] is True

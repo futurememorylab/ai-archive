@@ -22,7 +22,7 @@ class FakeResolver:
     def __init__(self, files: dict[int, Path]):
         self.files = files
 
-    async def path_for_clip_id(self, clip_id: int) -> Path:
+    async def path_for_clip_id(self, clip_id: int, progress_cb=None) -> Path:
         return self.files[clip_id]
 
     def is_managed(self, path):

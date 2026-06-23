@@ -111,6 +111,40 @@ async def test_ensure_uploaded_first_time_uploads_and_records(adapter_factory, t
 
 
 @pytest.mark.asyncio
+async def test_ensure_uploaded_offloads_blocking_upload_off_event_loop(adapter_factory, tmp_path):
+    """The GCS upload (and the whole-file sha256) are blocking and can take
+    minutes for a multi-GB clip. They MUST run in a worker thread, not on the
+    event loop — otherwise the server can't answer any request (e.g. a page
+    reload) while an annotate uploads to the AI store."""
+    import asyncio
+    import threading
+
+    adapter, gcs, repo, db = adapter_factory()
+    local = tmp_path / "1.mov"
+    local.write_bytes(b"hello")
+    main_ident = threading.get_ident()
+    seen = {}
+
+    def _record_thread(*, clip_id, local_path, mime):
+        seen["ident"] = threading.get_ident()
+        return gcs.gs_uri(clip_id)
+
+    gcs.upload_if_absent = _record_thread
+
+    # If the upload is awaited via to_thread, a concurrent coroutine keeps
+    # running; if it blocks the loop, this gather still resolves but the upload
+    # ran on the main thread — the ident check below is the real assertion.
+    await asyncio.gather(
+        adapter.ensure_uploaded(
+            clip_key=("catdv", "1"), local_path=local, mime="video/quicktime"
+        ),
+        asyncio.sleep(0),
+    )
+
+    assert seen["ident"] != main_ident, "upload must run off the event loop (asyncio.to_thread)"
+
+
+@pytest.mark.asyncio
 async def test_ensure_uploaded_dedups_when_sha256_matches(adapter_factory, tmp_path):
     adapter, gcs, repo, db = adapter_factory()
     local = tmp_path / "1.mov"

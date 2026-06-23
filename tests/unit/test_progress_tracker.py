@@ -3,7 +3,7 @@ per interval, but tracks the latest bytes in memory on every call."""
 
 import pytest
 
-from backend.app.services.media_prefetcher import _ProgressTracker
+from backend.app.services.media_prefetcher import ProgressTracker
 
 
 class _SpyRepo:
@@ -18,7 +18,7 @@ class _SpyRepo:
 async def test_tracker_throttles_db_writes_but_tracks_latest():
     clock = {"t": 0.0}
     repo = _SpyRepo()
-    tracker = _ProgressTracker(
+    tracker = ProgressTracker(
         repo, conn=None, rid=1, min_interval_s=0.75, clock=lambda: clock["t"]
     )
 

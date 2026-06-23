@@ -20,16 +20,50 @@ document.addEventListener('alpine:init', () => {
     busy: false,
     busyLabel: 'Working…',
 
-    // Annotation of an uncached clip uploads the proxy to the cache as a side
-    // effect (clipAnnotate dispatches these window events). Mirror the cache
-    // button's own feedback: show the busy spinner while it uploads, then pull
-    // the fresh badge so the layer flips to its cached/Purge state.
-    onAnnotateUpload() {
-      if (this.busy) return;
+    // Caching is a background job that outlives the page: if the user reloads
+    // or navigates away and back while a prefetch for this clip is still in
+    // flight, the server re-renders the plain Cache button with no progress.
+    // On mount, check the live queue and resume the spinner + poll so the
+    // in-progress state survives a reload (testing finding, issue #78).
+    async init() {
+      let res;
+      try {
+        res = await fetch('/api/cache/prefetch/queue');
+      } catch {
+        return; // offline / transient — nothing to resume
+      }
+      if (!res.ok) return;
+      let q;
+      try {
+        q = await res.json();
+      } catch {
+        return;
+      }
+      const mine = (q.active || []).find(
+        (r) =>
+          String(r.provider_clip_id) === String(this.id) &&
+          (r.status === 'queued' || r.status === 'downloading') &&
+          // An annotate job drives its own progress in the annotate button —
+          // don't also spin the cache badge for it (one indicator, not two).
+          r.requested_by !== 'annotate',
+      );
+      if (!mine) return;
       this.busy = true;
       this.busyLabel = 'Caching…';
+      try {
+        await this._watch(mine.id);
+      } catch (e) {
+        this.busy = false;
+        Alpine.store('toast').push(`Caching failed: ${e.message || e}`, {
+          level: 'error',
+        });
+      }
     },
 
+    // Annotation of an uncached clip caches it as its first step, but the
+    // annotate button shows that progress itself — the cache badge must NOT
+    // also spin (one indicator, not two). So we react only when caching is
+    // DONE, to flip the badge to its cached state.
     onAnnotateCached() {
       // _refresh() re-fetches the control and swaps the node (busy resets to
       // false on the fresh node), or clears busy itself on a fetch failure.
@@ -51,13 +85,23 @@ document.addEventListener('alpine:init', () => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const rid = (data.ids || [])[0] ?? null;
-        await this._pollUntilDone(rid);
-        toast.push(`${cap(this.kind)} cached.`, { level: 'success' });
-        await this._refresh();
+        await this._watch(rid);
       } catch (e) {
         this.busy = false;
         toast.push(`Caching failed: ${e.message || e}`, { level: 'error' });
       }
+    },
+
+    // Poll a running prefetch to completion, then toast + swap in the fresh
+    // (now-cached) control. Shared by cacheNow() and the init() resume path;
+    // assumes busy is already set. Throws on prefetch error/timeout so the
+    // caller's catch can surface it.
+    async _watch(rid) {
+      await this._pollUntilDone(rid);
+      Alpine.store('toast').push(`${cap(this.kind)} cached.`, {
+        level: 'success',
+      });
+      await this._refresh();
     },
 
     async purge() {

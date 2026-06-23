@@ -94,6 +94,46 @@ class PrefetchQueueRepo:
         assert cur.lastrowid is not None
         return int(cur.lastrowid)
 
+    async def start_inline(
+        self,
+        conn: aiosqlite.Connection,
+        *,
+        key: ClipKey,
+        who: str,
+    ) -> int:
+        """Create a row for a download the caller performs itself, inline —
+        NOT via the prefetch worker (the annotator caches as the first step of
+        a job). The row is born `downloading` so the single-worker `claim_next`
+        (which only takes `queued`) never double-fetches the same clip.
+
+        Idempotent like `enqueue`: if an active row already exists for the clip
+        (e.g. the user also clicked Cache), its id is returned and reused."""
+        cur = await conn.execute(
+            """
+            SELECT id FROM prefetch_queue
+             WHERE provider_id = ? AND provider_clip_id = ?
+               AND status IN ('queued', 'downloading')
+             LIMIT 1
+            """,
+            (key[0], key[1]),
+        )
+        existing = await cur.fetchone()
+        if existing is not None:
+            return int(existing[0])
+        now = _now_iso()
+        cur = await conn.execute(
+            """
+            INSERT INTO prefetch_queue
+              (provider_id, provider_clip_id, status,
+               requested_by, requested_at, started_at, bytes_downloaded)
+            VALUES (?, ?, 'downloading', ?, ?, ?, 0)
+            """,
+            (key[0], key[1], who, now, now),
+        )
+        await conn.commit()
+        assert cur.lastrowid is not None
+        return int(cur.lastrowid)
+
     async def claim_next(self, conn: aiosqlite.Connection) -> dict[str, Any] | None:
         """Atomically take the oldest queued row and mark it downloading.
 
