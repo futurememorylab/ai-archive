@@ -120,24 +120,38 @@ def test_active_jobs_exposes_run_group_for_calibration_jobs(monkeypatch, tmp_pat
                 ctx.db, name="cal", description=None, body="p",
                 target_map={"x": {"kind": "markers"}}, output_schema={}, model="m",
             )
-            jid = await ctx.jobs_repo.create_job(
+            # Real calibration jobs are kind="studio" (ADR 0116). Plain studio
+            # runs are hidden from the topbar, but calibration ones must show —
+            # so seed BOTH and assert only the calibration one is listed.
+            cal = await ctx.jobs_repo.create_job(
                 ctx.db,
                 prompt_version_id=vid,
                 clip_ids=[10],
+                kind="studio",
                 run_group="calibration:5:42",
             )
-            await ctx.jobs_repo.update_status(ctx.db, jid, "running")
-            return jid
+            draft = await ctx.jobs_repo.create_job(
+                ctx.db,
+                prompt_version_id=vid,
+                clip_ids=[11],
+                kind="studio",
+                run_group=None,
+            )
+            await ctx.jobs_repo.update_status(ctx.db, cal, "running")
+            await ctx.jobs_repo.update_status(ctx.db, draft, "running")
+            return cal, draft
 
-        jid = client.portal.call(seed)
+        cal, draft = client.portal.call(seed)
 
         r = client.get("/api/jobs/active")
 
     assert r.status_code == 200
     body = r.json()
-    assert len(body) == 1
-    assert body[0]["id"] == jid
-    assert body[0]["run_group"] == "calibration:5:42"
+    ids = {row["id"] for row in body}
+    assert cal in ids  # calibration studio job IS surfaced
+    assert draft not in ids  # plain studio draft run stays hidden
+    cal_row = next(row for row in body if row["id"] == cal)
+    assert cal_row["run_group"] == "calibration:5:42"
 
 
 def test_jobs_events_route_resolves_before_job_id(monkeypatch, tmp_path):

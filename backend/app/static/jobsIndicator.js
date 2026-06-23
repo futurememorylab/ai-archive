@@ -46,7 +46,11 @@ function jobsIndicator() {
       } catch { /* offline — leave current state */ }
     },
 
-    activeIds() { return Object.keys(this.jobs).map(Number); },
+    _isCalibration(id) { return (this.jobs[id]?.run_group || "").startsWith("calibration:"); },
+    // The batch indicator counts real batches only; calibration sweeps surface
+    // via their own pill (calibratingCount), so exclude them here to avoid
+    // double-display and mislabelling a sweep as an "Annotating" batch.
+    activeIds() { return Object.keys(this.jobs).map(Number).filter((id) => !this._isCalibration(id)); },
     visible() { return this.activeIds().length > 0 || this.failed; },
     done() { return this.activeIds().reduce((n, id) => n + (this.jobs[id].done || 0), 0); },
     total() { return this.activeIds().reduce((n, id) => n + (this.jobs[id].total || 0), 0); },

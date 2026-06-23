@@ -143,8 +143,13 @@ class JobsRepo:
 
     async def list_running(self, conn: aiosqlite.Connection) -> list[Job]:
         cur = await conn.execute(
+            # Plain studio (draft) runs stay hidden from the topbar indicator,
+            # but calibration sweeps — which reuse kind='studio' (ADR 0116) —
+            # are a deliberate admin action and must surface, so include any
+            # job tagged with a calibration run_group.
             "SELECT id, prompt_version_id, status, total_clips, notes, kind, run_group "
-            "FROM jobs WHERE status = 'running' AND COALESCE(kind, '') != 'studio' "
+            "FROM jobs WHERE status = 'running' "
+            "AND (COALESCE(kind, '') != 'studio' OR run_group LIKE 'calibration:%') "
             "ORDER BY id DESC",
         )
         return [
