@@ -451,6 +451,13 @@ async def _process_item(
         # Vertex rejects HIGH for non-image media; medium is the safe ceiling.
         # Covers both branches above — even a stray calibration force_resolution
         # of 'high' on a non-image clip is sanitized here.
+        log.info(
+            "downgrading media_resolution %s->medium for %s clip %s "
+            "(HIGH is image-only)",
+            media_resolution,
+            media_kind,
+            item.catdv_clip_id,
+        )
         media_resolution = "medium"
 
     # Pre-call estimate (spec §6; stamped onto the telemetry row so
