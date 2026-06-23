@@ -233,13 +233,24 @@ The spec ships as four independently shippable, ordered slices:
 1. **PR1 — Pricing to the DB.** `model_config` table + migration + repo +
    reconcile-from-`RATE_CARDS` seeds; `pricing.py` reads the DB; Admin
    "Models" tab; seed-drift guard test. No change to run behaviour.
-2. **PR2 — Resolution becomes real.** `media_resolution` fixed enum;
-   thread into `gemini.py::annotate()`; nullable `PromptVersion` override;
-   capture into `run_telemetry.media_resolution_setting`; show the
-   resolution in force on cost surfaces.
+2. **PR2 — Resolution becomes real** *(shipped)*. `media_resolution` fixed
+   enum; thread into `gemini.py::annotate()`; nullable `PromptVersion`
+   override (resolved override → model default → `medium`, invalid values
+   ignored); capture into `run_telemetry.media_resolution_setting`; the
+   admin "Gemini models" tab's default-resolution column became an editable
+   dropdown. **Two pieces were deliberately moved out of PR2:** (a) "show
+   the resolution in force on cost surfaces" → **PR3** (the estimate label
+   is rendered from the estimator response, which PR3 makes
+   resolution-aware — adding the label there avoids a half-wired step ahead
+   of the thing that computes it); (b) the **prompt-editor UI control** for
+   setting the per-prompt override → a later UI slice (PR2 wired the
+   override end-to-end at the data/engine level — settable + tested via the
+   version repo API; the per-*model* default is user-settable now via the
+   admin dropdown).
 3. **PR3 — Accurate estimates everywhere.** Resolution-key the
    `run_estimator` fallback chain; estimate-vs-actual delta on every cost
-   surface; query-count guard.
+   surface; **show the resolution in force on each cost surface** (moved
+   here from PR2); query-count guard.
 4. **PR4 — Calibration + real cost.** Admin "Prompts" tab + calibration
    runner; admin-enablable `countTokens` real-cost button on the
    batch-creation flow.
