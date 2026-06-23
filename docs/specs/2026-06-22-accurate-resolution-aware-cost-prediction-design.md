@@ -262,9 +262,14 @@ The spec ships as four independently shippable, ordered slices:
    0115); estimate-vs-actual delta on the batches list; show the resolution
    in force on the pre-run estimate labels (studio + batch modal); the N+1
    query-count guard updated (constant +1 model_config read, N=10==N=100).
-4. **PR4 — Calibration + real cost.** Admin "Prompts" tab + calibration
-   runner; admin-enablable `countTokens` real-cost button on the
-   batch-creation flow.
+4. **PR4 — Calibration + real cost.** Split into two slices:
+   - **PR4a — Calibration** *(shipped — ADR 0116)*. Admin "Prompts" tab; pick
+     3 clips → projected-cost confirm → a sweep of 3 resolutions × 2 repeats ×
+     3 clips = 18 telemetry-only runs (`record_only` + `force_resolution` on the
+     run path — no annotations/studio-runs/review-items written); per-resolution
+     results panel (count / cost / confidence unlocked).
+   - **PR4b — Real cost** *(pending)*. Admin-enablable `countTokens` real-cost
+     button on the batch-creation flow.
 
 ## Consequences
 
