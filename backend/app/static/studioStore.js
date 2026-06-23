@@ -102,7 +102,8 @@ document.addEventListener('alpine:init', () => {
         const e = await r.json();
         if (key !== _studioEstimateKey) return;  // selection changed mid-flight
         this.estimateLabel =
-          `~${fmtUsd(e.cost_usd_p50)}–${fmtUsd(e.cost_usd_p90)} (${e.confidence})`;
+          `~${fmtUsd(e.cost_usd_p50)}–${fmtUsd(e.cost_usd_p90)} (${e.confidence})`
+          + (e.media_resolution ? ` · ${e.media_resolution} res` : "");
       } catch (err) {
         console.error('estimate failed', err);  // advisory only
         if (key !== _studioEstimateKey) return;  // selection changed mid-flight
