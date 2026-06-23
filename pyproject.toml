@@ -27,6 +27,7 @@ dev = [
   "pytest>=8.3",
   "pytest-asyncio>=0.24",
   "pytest-timeout>=2.3",
+  "pytest-xdist>=3.6",  # parallel runs: `-n auto` for the full pre-commit sweep
   "playwright>=1.59",
   "ruff>=0.7",
   "respx>=0.21",
