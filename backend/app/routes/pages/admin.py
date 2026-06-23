@@ -71,13 +71,17 @@ async def _models_view(ctx) -> dict:
     return {"rows": rows}
 
 
+async def _models_response(request: Request, ctx):
+    return templates.TemplateResponse(
+        request, "pages/_admin_models_table.html", await _models_view(ctx)
+    )
+
+
 @router.get("/admin/models", response_class=HTMLResponse)
 async def admin_models_table(request: Request):
     require_role(request, "admin")
     ctx = get_core_ctx(request)
-    return templates.TemplateResponse(
-        request, "pages/_admin_models_table.html", await _models_view(ctx)
-    )
+    return await _models_response(request, ctx)
 
 
 @router.post("/admin/models", response_class=HTMLResponse)
@@ -92,9 +96,7 @@ async def admin_add_model(
         await ctx.enum_service.add_value(GEMINI_MODEL_KEY, model.strip(), label=(label or None))
     except EnumError as exc:
         raise HTTPException(400, humanise(exc)) from exc
-    return templates.TemplateResponse(
-        request, "pages/_admin_models_table.html", await _models_view(ctx)
-    )
+    return await _models_response(request, ctx)
 
 
 @router.post("/admin/models/{model}/rates", response_class=HTMLResponse)
@@ -118,9 +120,7 @@ async def admin_edit_model_rates(
         input_cached_per_1m=input_cached_per_1m,
         output_per_1m=output_per_1m,
     )
-    return templates.TemplateResponse(
-        request, "pages/_admin_models_table.html", await _models_view(ctx)
-    )
+    return await _models_response(request, ctx)
 
 
 @router.post("/admin/models/{model}/default", response_class=HTMLResponse)
@@ -131,9 +131,7 @@ async def admin_model_set_default(request: Request, model: str):
         await ctx.enum_service.set_default(GEMINI_MODEL_KEY, model)
     except EnumError as exc:
         raise HTTPException(400, humanise(exc)) from exc
-    return templates.TemplateResponse(
-        request, "pages/_admin_models_table.html", await _models_view(ctx)
-    )
+    return await _models_response(request, ctx)
 
 
 @router.post("/admin/models/{model}/enabled", response_class=HTMLResponse)
@@ -144,9 +142,7 @@ async def admin_model_set_enabled(request: Request, model: str, enabled: bool = 
         await ctx.enum_service.set_enabled(GEMINI_MODEL_KEY, model, enabled=enabled)
     except EnumError as exc:
         raise HTTPException(400, humanise(exc)) from exc
-    return templates.TemplateResponse(
-        request, "pages/_admin_models_table.html", await _models_view(ctx)
-    )
+    return await _models_response(request, ctx)
 
 
 @router.delete("/admin/models/{model}", response_class=HTMLResponse)
@@ -158,9 +154,7 @@ async def admin_remove_model(request: Request, model: str):
     except EnumError as exc:
         raise HTTPException(400, humanise(exc)) from exc
     await ctx.pricing_service.remove_model(model)
-    return templates.TemplateResponse(
-        request, "pages/_admin_models_table.html", await _models_view(ctx)
-    )
+    return await _models_response(request, ctx)
 
 
 @router.get("/admin/enums/{key}", response_class=HTMLResponse)
