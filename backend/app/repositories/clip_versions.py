@@ -38,7 +38,9 @@ def _now_iso() -> str:
 
 
 class ClipVersionsRepo:
-    async def insert(self, conn: aiosqlite.Connection, v: ClipVersion) -> int:
+    async def insert(
+        self, conn: aiosqlite.Connection, v: ClipVersion, *, commit: bool = True
+    ) -> int:
         cur = await conn.execute(
             """
             INSERT INTO clip_versions
@@ -65,7 +67,8 @@ class ClipVersionsRepo:
                 v.synced_at,
             ),
         )
-        await conn.commit()
+        if commit:
+            await conn.commit()
         assert cur.lastrowid is not None
         return cur.lastrowid
 
