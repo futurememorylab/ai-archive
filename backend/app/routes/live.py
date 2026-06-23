@@ -115,7 +115,6 @@ class TranscriptPayload(BaseModel):
     end_reason: Literal["user_stop", "voice_stop", "inactivity", "navigate", "error"]
     transcript: list[TranscriptEntry]
     frame_count: int = 0
-    search_calls: int = 0
 
 
 @router.post("/sessions/{session_id}/transcript")
@@ -139,7 +138,6 @@ async def post_transcript(
             ensure_ascii=False,
         ),
         frame_count=body.frame_count,
-        search_calls=body.search_calls,
     )
     return {"ok": True}
 
@@ -207,5 +205,4 @@ async def get_session(request: Request, session_id: str) -> dict:
         "transcript": json.loads(s.transcript_json or "[]"),
         "summary_cs": s.summary_cs,
         "frame_count": s.frame_count,
-        "search_calls": s.search_calls,
     }

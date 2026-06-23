@@ -11,7 +11,6 @@ def test_live_session_minimal_construct():
     assert s.clip_id == 42
     assert s.state == "pending"
     assert s.frame_count == 0
-    assert s.search_calls == 0
     assert s.transcript_json is None
     assert s.summary_cs is None
 
@@ -39,7 +38,6 @@ def test_live_session_full_construct_roundtrip():
         transcript_json='[{"role":"user","text":"ahoj","ts":1}]',
         summary_cs="Krátký test.",
         frame_count=2,
-        search_calls=1,
         created_at=now,
     )
     assert s.end_reason == "user_stop"
