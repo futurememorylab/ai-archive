@@ -338,6 +338,7 @@ async def _run_in_bg(ctx, job_id: int) -> None:
             uploaded_clips_repo=ctx.uploaded_clips_repo,
             run_telemetry_repo=ctx.run_telemetry_repo,
             telemetry_ctx=ctx.telemetry_ctx,
+            prefetch_queue_repo=ctx.prefetch_queue_repo,
         )
     finally:
         ctx._running_jobs.pop(job_id, None)

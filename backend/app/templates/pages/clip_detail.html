@@ -26,7 +26,7 @@
          liveSession: liveSession({{ clip.id }}, { inactivityS: {{ gemini_live_inactivity_s|default(60) }} })
        }
      )'
-     x-init="_reviewInit(); if (new URLSearchParams(location.search).get('scope') === 'draft') scope = 'draft'"
+     x-init="_reviewInit(); _annotateInit(); if (new URLSearchParams(location.search).get('scope') === 'draft') scope = 'draft'"
      @keydown.window="handleKey($event)">
   {# Restore the saved annotation-column width before the panes paint (set by
      the detail-side resizer; see studioResize.js). currentScript is the .detail

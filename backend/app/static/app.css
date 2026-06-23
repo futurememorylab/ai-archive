@@ -1437,6 +1437,15 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
   pointer-events: none;
 }
 
+/* The queue panel is a 2s background poll, not a user action — exempt it from
+   the request-dim above so the table doesn't blink to 0.6 opacity on every
+   tick while a download is in progress. */
+#prefetch-panel.htmx-request {
+  opacity: 1;
+  cursor: default;
+  pointer-events: auto;
+}
+
 /* full-page navigation: immediate press feedback on the clicked row/link */
 .is-navigating {
   opacity: 0.6;

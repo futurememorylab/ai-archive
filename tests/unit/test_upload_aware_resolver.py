@@ -15,7 +15,7 @@ class _Inner:
     def __init__(self):
         self.calls = []
 
-    async def path_for_clip_id(self, clip_id: int) -> Path:
+    async def path_for_clip_id(self, clip_id: int, progress_cb=None) -> Path:
         self.calls.append(clip_id)
         return Path("/archive/served.mov")
 

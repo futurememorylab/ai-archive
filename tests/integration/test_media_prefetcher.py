@@ -12,7 +12,7 @@ class _FakeBackend:
         self._fail_on = fail_on or set()
         self.calls: list[int] = []
 
-    async def ensure_cached(self, clip_id: int) -> None:
+    async def ensure_cached(self, clip_id: int, progress_cb=None) -> None:
         self.calls.append(clip_id)
         if clip_id in self._fail_on:
             raise RuntimeError(f"boom on {clip_id}")
@@ -70,7 +70,7 @@ async def test_tick_records_humanised_error_not_blank(db):
     from backend.app.services.media_prefetcher import MediaPrefetcher
 
     class _TimeoutBackend:
-        async def ensure_cached(self, clip_id: int) -> None:
+        async def ensure_cached(self, clip_id: int, progress_cb=None) -> None:
             raise httpx.ReadTimeout("")  # str(exc) == ""
 
     repo = PrefetchQueueRepo()
@@ -101,7 +101,7 @@ async def test_loop_processes_one_at_a_time(db):
     overlap = {"max_concurrent": 0, "current": 0}
 
     class _TrackingBackend(_FakeBackend):
-        async def ensure_cached(self, clip_id):
+        async def ensure_cached(self, clip_id, progress_cb=None):
             overlap["current"] += 1
             overlap["max_concurrent"] = max(
                 overlap["max_concurrent"],
@@ -169,3 +169,24 @@ async def test_stop_returns_promptly_between_rows(db):
     await pf.start()
     await asyncio.sleep(0.05)
     await pf.stop()  # must not hang
+
+
+@pytest.mark.asyncio
+async def test_tick_records_progress_and_final_size(db):
+    from backend.app.services.media_prefetcher import MediaPrefetcher
+
+    class _ProgressBackend:
+        async def ensure_cached(self, clip_id, progress_cb=None):
+            # Simulate a streamed download reporting absolute bytes.
+            await progress_cb(10_000_000, 27_000_000)
+            await progress_cb(27_000_000, 27_000_000)
+
+    repo = PrefetchQueueRepo()
+    rid = await repo.enqueue(db, key=("catdv", "5"), who="request")
+    pf = MediaPrefetcher(queue_repo=repo, backend=_ProgressBackend(), db_provider=lambda: db)
+    await pf.tick_once()
+
+    row = await repo.get(db, rid)
+    assert row["status"] == "done"
+    assert row["bytes_downloaded"] == 27_000_000  # final flush
+    assert row["bytes_total"] == 27_000_000

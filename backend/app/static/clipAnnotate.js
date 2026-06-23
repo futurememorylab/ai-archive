@@ -26,7 +26,10 @@ function clipAnnotate(clipId, clipKind) {
     runError: null,
     jobId: null,
     runElapsed: "0:00",
+    cachePct: null,
     _timer: null,
+    _cachePoll: null,
+    _cachePolling: false,
     _didUpload: false,
     _cachedAnnounced: false,
     _promptName: null,
@@ -35,6 +38,86 @@ function clipAnnotate(clipId, clipKind) {
     historyHtml: "",
     rerunConfirmOpen: false,
     _pendingPrompt: null,
+
+    // Annotation is a background job that outlives the page. On mount, ask the
+    // server whether a job for this clip is still running and, if so, resume
+    // the button (phase label, elapsed timer, cache %, draft-on-finish) by
+    // reattaching to its event stream — so a reload mid-run doesn't look idle.
+    //
+    // NOT named init(): this component is Object.assign-merged into the clip
+    // page's x-data alongside player()/reviewMixin(), and Alpine allows one
+    // init() — player owns it. Mirror reviewMixin's _reviewInit() pattern and
+    // run from the element's x-init instead.
+    async _annotateInit() {
+      let res;
+      try {
+        res = await fetch(`/api/jobs/active-for-clip/${clipId}`);
+      } catch {
+        return; // offline / transient — nothing to resume
+      }
+      if (!res.ok) return;
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        return;
+      }
+      if (!data || !data.job_id) return;
+      this._resumeRun(data.job_id, data.item_status, data.started_at);
+    },
+
+    _resumeRun(jobId, itemStatus, startedAt) {
+      if (this.running) return;
+      this.running = true;
+      this.scope = "draft";
+      this.jobId = jobId;
+      this.runError = null;
+      this.error = null;
+      // Seed the phase from the item status. Suppress toasts for work that
+      // already happened before the reload — the prompt name is unknown on
+      // resume, so an "Annotating with …" toast would be wrong.
+      const phase = CA_PHASE[itemStatus] || "caching";
+      this.phase = phase;
+      this._didUpload = true;
+      this._cachedAnnounced = phase !== "caching";
+      this._announcedAnnotating = true;
+      // Resume the timer from the true run start, not 0:00 — otherwise the
+      // elapsed clock restarts on every reload.
+      let offset = 0;
+      const t0 = startedAt ? Date.parse(startedAt) : NaN;
+      if (!isNaN(t0)) offset = Math.max(0, (Date.now() - t0) / 1000);
+      this.runElapsed = window.fmtTimecode(offset);
+      this._timer = window.elapsedTimer();
+      this._timer.start((label) => { this.runElapsed = label; }, offset);
+      if (phase === "caching") this._startCachePoll();
+      this.attachStream(jobId);
+    },
+
+    // Poll the live cache queue while caching, so the button shows the same
+    // percentage as the queue page + the Cache button (shared helper).
+    // `_cachePolling` guards re-entry across the async await; `_cachePoll`
+    // holds the pending timeout so _stopCachePoll can cancel it.
+    _startCachePoll() {
+      if (this._cachePolling) return;
+      this._cachePolling = true;
+      const tick = async () => {
+        if (!this.running || this.phase !== "caching") return this._stopCachePoll();
+        const p = await window.cacheProgressForClip(clipId);
+        if (p && p.pct != null) this.cachePct = p.pct;
+        if (this.running && this.phase === "caching") {
+          this._cachePoll = setTimeout(tick, 1200);
+        } else {
+          this._stopCachePoll();
+        }
+      };
+      tick();
+    },
+
+    _stopCachePoll() {
+      this._cachePolling = false;
+      if (this._cachePoll) { clearTimeout(this._cachePoll); this._cachePoll = null; }
+      this.cachePct = null;
+    },
 
     _kindLabel() {
       return this.clipKind === "image" ? "Image" : "Video";
@@ -53,6 +136,7 @@ function clipAnnotate(clipId, clipKind) {
       this._cachedAnnounced = false;
       this._announcedAnnotating = false;
       this.phase = null;
+      this.cachePct = null;
       this.runElapsed = "0:00";
       this._timer = window.elapsedTimer();
       this._timer.start((label) => { this.runElapsed = label; });
@@ -68,7 +152,12 @@ function clipAnnotate(clipId, clipKind) {
     // goes straight to "Annotating" with no caching toast — correct.
     _applyStatus(status) {
       const phase = CA_PHASE[status];
-      if (phase) this.phase = phase;
+      if (phase) {
+        this.phase = phase;
+        // Drive the in-button percentage off the live queue only while caching.
+        if (phase === "caching") this._startCachePoll();
+        else this._stopCachePoll();
+      }
       if (status === "uploading") this._onUploading();
       if (status === "prompting") {
         // Entering the prompting phase means the proxy upload already
@@ -83,13 +172,14 @@ function clipAnnotate(clipId, clipKind) {
     },
 
     // The job only emits resolving/uploading on a cache miss (annotator
-    // uploads the proxy to the AI store). The uploading event is our signal
-    // that this run is also caching the clip — mirror the Cache button's
-    // feedback. Idempotent: replayed/duplicate frames fire it only once.
+    // caches the clip into the AI store). This marks that the run is caching,
+    // so _onCachingDone later flips the badge to cached. Caching PROGRESS is
+    // shown only in the annotate button — the cache badge does NOT spin (one
+    // indicator, not two), so no upload-spinner event is emitted to it.
+    // Idempotent: replayed/duplicate frames fire it only once.
     _onUploading() {
       if (this._didUpload) return;
       this._didUpload = true;
-      this._emitCache("clip-cache-uploading");
       Alpine.store("toast").push(
         `Caching ${this._kindLabel().toLowerCase()}…`, { level: "info" });
     },
@@ -115,6 +205,7 @@ function clipAnnotate(clipId, clipKind) {
 
     _finishRun(ok, errMsg) {
       if (this._timer) { this._timer.stop(); this._timer = null; }
+      this._stopCachePoll();
       this.running = false;
       this.phase = null;
       this.runStatus = null;

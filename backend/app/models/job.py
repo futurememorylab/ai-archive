@@ -16,6 +16,7 @@ ItemStatus = Literal[
     "applied",
     "rejected",
     "error",
+    "cancelled",  # item of a job interrupted by a restart (orphan recovery)
 ]
 
 
