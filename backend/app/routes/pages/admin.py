@@ -5,23 +5,31 @@ and `require_role("admin")` narrows every handler to the `manage` capability
 (ADR 0085). The Access & Permissions section lives in `admin_access.py`.
 """
 
+import time as _time
 from typing import get_args
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, Body, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from backend.app.auth.guards import require_role
 from backend.app.deps import get_core_ctx
 from backend.app.models.media import MediaResolution
+from backend.app.routes.jobs import start_job_in_background
 from backend.app.routes.pages.admin_access import _members_ctx as _access_members_ctx
 from backend.app.routes.pages.templates import templates
 from backend.app.services.calibration import confidence_for_samples
 from backend.app.services.enum_service import EnumError
 from backend.app.services.errors import humanise
+from backend.app.services.run_estimator import estimate_for_clip_ids
 
 router = APIRouter(tags=["pages"])
 
 GEMINI_MODEL_KEY = "gemini_generation_model"
+
+# Calibration sweep dimensions: 3 resolutions × 2 repeats = 6 jobs per launch
+# (each job runs the 3 chosen clips → 18 telemetry-only runs).
+CALIBRATION_RESOLUTIONS = ("low", "medium", "high")
+CALIBRATION_REPEATS = 2
 
 
 async def _enum_view(ctx, key: str) -> dict:
@@ -217,6 +225,72 @@ async def admin_prompts_table(request: Request):
     require_role(request, "admin")
     ctx = get_core_ctx(request)
     return await _prompts_response(request, ctx)
+
+
+@router.post("/admin/prompts/{version_id}/calibrate", response_class=HTMLResponse)
+async def admin_calibrate(
+    request: Request, version_id: int, clip_ids: list[int] = Form(...)
+):
+    """Launch a calibration sweep: 3 resolutions × 2 repeats = 6 jobs, each
+    running the 3 chosen clips telemetry-only (record_only). Needs the live
+    Gemini API; 503 when offline."""
+    require_role(request, "admin")
+    core = get_core_ctx(request)
+    live = request.app.state.live_ctx
+    if live is None:
+        raise HTTPException(503, "Gemini offline — calibration needs the live API")
+    if len(clip_ids) != 3:
+        raise HTTPException(422, "calibration needs exactly 3 clips")
+    try:
+        await core.prompts_repo.get_version(core.db, version_id)
+    except LookupError:
+        raise HTTPException(404, "prompt version not found") from None
+    run_group = f"calibration:{version_id}:{int(_time.time())}"
+    for res in CALIBRATION_RESOLUTIONS:
+        for _ in range(CALIBRATION_REPEATS):
+            job_id = await core.jobs_repo.create_job(
+                core.db,
+                prompt_version_id=version_id,
+                clip_ids=clip_ids,
+                kind="studio",
+                run_group=run_group,
+            )
+            start_job_in_background(
+                core, live, job_id, force_resolution=res, record_only=True
+            )
+    return await _prompts_response(request, core)
+
+
+@router.post("/admin/prompts/{version_id}/calibrate/estimate")
+async def admin_calibrate_estimate(
+    request: Request, version_id: int, body: dict = Body(...)
+):
+    """Advisory projected cost for a calibration sweep. CoreCtx only —
+    fully offline-capable; failures must never block the launch."""
+    require_role(request, "admin")
+    ctx = get_core_ctx(request)
+    clip_ids = [int(c) for c in body.get("clip_ids", [])]
+    if not clip_ids:
+        return {"projected_cost_usd": None, "runs": 0}
+    try:
+        est = await estimate_for_clip_ids(
+            ctx.db,
+            clip_cache_repo=ctx.clip_cache_repo,
+            run_telemetry_repo=ctx.run_telemetry_repo,
+            prompts_repo=ctx.prompts_repo,
+            model_config_repo=ctx.model_config_repo,
+            provider_id=ctx.settings.archive_provider,
+            clip_ids=clip_ids,
+            prompt_version_id=version_id,
+        )
+    except LookupError:
+        raise HTTPException(404, "prompt version not found") from None
+    sweeps = len(CALIBRATION_RESOLUTIONS) * CALIBRATION_REPEATS
+    p50 = est["cost_usd_p50"]
+    return {
+        "projected_cost_usd": (p50 * sweeps) if p50 is not None else None,
+        "runs": sweeps * len(clip_ids),
+    }
 
 
 @router.get("/admin/enums/{key}", response_class=HTMLResponse)

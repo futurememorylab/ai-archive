@@ -1,6 +1,6 @@
 {# backend/app/templates/pages/_admin_prompts_table.html #}
 {% import "components/_ui.html" as ui %}
-<div class="admin-prompts">
+<div class="admin-prompts" x-data="adminPromptsTab()">
   <p class="meta">Active prompts and their versions, with per-resolution
     calibration results (run count, total cost, confidence). Use Calibrate
     to run a calibration sweep for a version.</p>
@@ -38,7 +38,9 @@
         </td>
         <td class="admin-actions">
           <button type="button" class="btn primary sm"
-                  data-version-id="{{ r.version_id }}">Calibrate</button>
+                  data-version-id="{{ r.version_id }}"
+                  data-test="calibrate-open"
+                  @click="openCalibrate({{ r.version_id }}, '{{ r.prompt_name }} · v{{ r.version_num }}')">Calibrate</button>
         </td>
       </tr>
       {% endfor %}
@@ -47,4 +49,27 @@
   {% else %}
   <p class="muted">No active prompts found.</p>
   {% endif %}
+
+  {# ───────── CALIBRATE MODAL (one shared, takes the chosen version) ───────── #}
+  {% call ui.modal('calOpen', card_cls='nb-card') %}
+    <div class="modal-hdr">
+      <h2 class="modal-title">Calibrate <span class="mono" x-text="calLabel"></span></h2>
+      <span class="grow"></span>
+      <span class="meta mono" x-text="selCount() + ' / 3 selected'"></span>
+    </div>
+    <div class="modal-body nb-body">
+      {% include "pages/_clip_picker_main.html" %}
+      <div class="nb-side">
+        {% include "pages/_clip_picker_basket.html" %}
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" @click="calOpen = false">Cancel</button>
+      <div class="muted mono" x-effect="refreshEstimate()" x-text="estimateLabel()"></div>
+      <button type="button" class="btn primary"
+              data-test="calibrate-confirm"
+              :disabled="selCount() !== 3"
+              @click="launchCalibrate()">Launch sweep</button>
+    </div>
+  {% endcall %}
 </div>
