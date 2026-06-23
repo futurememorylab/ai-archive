@@ -427,6 +427,32 @@ before committing.
 Use TDD for all bug fixes and features: write a failing test,
 implement, then confirm green before committing.
 
+### Run the relevant slice, not the whole suite
+
+Most of the wall-clock cost is the integration suite (~70s serial); the
+unit suite is ~6s. During a red→green→refactor loop, **run only the test
+file or directory you're touching** — that's seconds, not minutes:
+
+```bash
+.venv/bin/python -m pytest tests/unit/test_foo.py -q        # one file
+.venv/bin/python -m pytest tests/integration -q             # one area
+.venv/bin/python -m pytest --lf -q                          # only last-failed
+```
+
+Run the **full suite once before committing**, and parallelise it across
+cores with `pytest-xdist` — `-n auto` takes the integration suite from
+~70s to ~20s on an 8-core box:
+
+```bash
+.venv/bin/python -m pytest -n auto -q
+```
+
+Don't bake `-n auto` into in-loop runs — for a single file the worker
+startup costs more than it saves, and it garbles `-x` / pdb output. Use
+it for the full sweep only. The slow Playwright walkthroughs
+(`tests/walkthrough/`) are **not** part of a normal test run — they go
+through the `/e2e` skill, only when you've changed UI.
+
 ## End-to-end walkthrough tests
 
 `tests/walkthrough/` drives the **real app** through Playwright in its
