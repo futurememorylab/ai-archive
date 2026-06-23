@@ -120,6 +120,7 @@ async def list_active_jobs(request: Request):
                 "id": job.id,
                 "kind": job.kind,
                 "status": job.status,
+                "run_group": job.run_group,
                 "done": done,
                 "total": total,
                 "errors": errors,

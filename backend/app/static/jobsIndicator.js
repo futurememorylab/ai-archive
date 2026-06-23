@@ -39,7 +39,7 @@ function jobsIndicator() {
         for (const j of list) {
           next[j.id] = {
             done: j.done, total: j.total, errors: j.errors, status: j.status,
-            phases: j.phases || null,
+            phases: j.phases || null, run_group: j.run_group || null,
           };
         }
         this.jobs = next;
@@ -90,6 +90,12 @@ function jobsIndicator() {
     },
 
     dismiss() { this.failed = false; this.jobs = {}; },
+
+    calibratingCount() {
+      return Object.values(this.jobs).filter(
+        (j) => (j.run_group || "").startsWith("calibration:")
+      ).length;
+    },
   };
 }
 window.jobsIndicator = jobsIndicator;

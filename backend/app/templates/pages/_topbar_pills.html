@@ -1,16 +1,25 @@
 {# Default right-side pillset for the topbar: batch progress (transient),
-   "N to review", sync chip, connection chip, and the user menu. #}
+   calibration indicator, "N to review", sync chip, connection chip, and the
+   user menu. #}
 <span class="pillset">
-  <span class="job-indicator" x-data="jobsIndicator()" x-show="visible()" x-cloak
-        :class="{ 'job-indicator--error': hasErrors() }">
-    <button type="button" class="job-indicator-main" @click="open()"
-            :title="hasErrors() ? 'Batch finished with errors — click to view' : 'Click to view batch'">
-      <span class="ca-spinner" x-show="!hasErrors() && total() > done()" aria-hidden="true"></span>
-      <span x-show="!hasErrors()" x-text="phaseLabel()"></span>
-      <span x-show="hasErrors()">Annotation failed</span>
-    </button>
-    <button type="button" class="job-indicator-x" @click="hasErrors() ? dismiss() : cancel()"
-            :title="hasErrors() ? 'Dismiss' : 'Cancel batch'">✕</button>
+  {# jobsIndicator() scope wraps both the batch-progress indicator and the
+     calibration pill so they share one polling instance. #}
+  <span x-data="jobsIndicator()">
+    <span class="job-indicator" x-show="visible()" x-cloak
+          :class="{ 'job-indicator--error': hasErrors() }">
+      <button type="button" class="job-indicator-main" @click="open()"
+              :title="hasErrors() ? 'Batch finished with errors — click to view' : 'Click to view batch'">
+        <span class="ca-spinner" x-show="!hasErrors() && total() > done()" aria-hidden="true"></span>
+        <span x-show="!hasErrors()" x-text="phaseLabel()"></span>
+        <span x-show="hasErrors()">Annotation failed</span>
+      </button>
+      <button type="button" class="job-indicator-x" @click="hasErrors() ? dismiss() : cancel()"
+              :title="hasErrors() ? 'Dismiss' : 'Cancel batch'">✕</button>
+    </span>
+    <span class="pill accent" x-show="calibratingCount() > 0" x-cloak
+          title="Calibration jobs are running">
+      <span class="led"></span>Calibrating… <span x-text="calibratingCount()"></span>
+    </span>
   </span>
   {# Stable container so the "N to review" count refreshes in place (poll +
      after draft-changing actions) instead of going stale until a full reload.
