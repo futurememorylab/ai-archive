@@ -5,6 +5,7 @@ import pytest
 
 from backend.app.models.telemetry import RunTelemetryRecord
 from backend.app.repositories.run_telemetry import RunTelemetryRepo
+from tests._helpers.query_count import assert_query_count
 
 
 def _rec(**over) -> RunTelemetryRecord:
@@ -163,6 +164,45 @@ async def test_est_cost_sums_by_job(db):
                       cost_usd=0.10, est_cost_usd_p50=0.05)
     sums = await repo.est_cost_sums_by_job(db, [7])
     assert sums[7] == pytest.approx(0.20)  # 0.15 + 0.05
+
+
+@pytest.mark.asyncio
+async def test_totals_by_prompt_version(db):
+    repo = RunTelemetryRepo()
+    # Version 5: two ok runs (video + image) + one error (excluded).
+    await _insert_run(db, prompt_version_id=5, status="ok", media_kind="video",
+                      media_duration_secs=30.0, cost_usd=0.20, est_cost_usd_p50=0.15)
+    await _insert_run(db, prompt_version_id=5, status="ok", media_kind="image",
+                      media_duration_secs=0.0, cost_usd=0.05, est_cost_usd_p50=0.04)
+    await _insert_run(db, prompt_version_id=5, status="error", media_kind="video",
+                      media_duration_secs=99.0, cost_usd=9.0, est_cost_usd_p50=9.0)
+    # Version 6: one ok run.
+    await _insert_run(db, prompt_version_id=6, status="ok", media_kind="video",
+                      media_duration_secs=12.0, cost_usd=1.00, est_cost_usd_p50=0.90)
+    totals = await repo.totals_by_prompt_version(db, prompt_version_ids=[5, 6, 99])
+    assert totals[5] == {
+        "runs": 2,
+        "media_seconds": pytest.approx(30.0),
+        "est_cost_usd": pytest.approx(0.19),
+        "actual_cost_usd": pytest.approx(0.25),
+    }
+    assert totals[6] == {
+        "runs": 1,
+        "media_seconds": pytest.approx(12.0),
+        "est_cost_usd": pytest.approx(0.90),
+        "actual_cost_usd": pytest.approx(1.00),
+    }
+    # Id with no rows is absent (caller treats as zero).
+    assert 99 not in totals
+
+
+@pytest.mark.asyncio
+async def test_totals_by_prompt_version_no_n_plus_1(db):
+    repo = RunTelemetryRepo()
+    async with assert_query_count(db, max_n=1):
+        await repo.totals_by_prompt_version(db, prompt_version_ids=list(range(10)))
+    async with assert_query_count(db, max_n=1):
+        await repo.totals_by_prompt_version(db, prompt_version_ids=list(range(100)))
 
 
 @pytest.mark.asyncio

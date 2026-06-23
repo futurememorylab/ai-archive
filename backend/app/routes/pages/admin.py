@@ -188,8 +188,27 @@ async def admin_remove_model(request: Request, model: str):
     return await _models_response(request, ctx)
 
 
+def _humanize_secs(secs: float) -> str:
+    """Footage duration as "1h 23m" / "4m 12s" / "12s"; 0 (e.g. image runs,
+    where media_duration_secs is ~0) → em dash so the run count carries the
+    meaning. Single formatter for the Prompts-tab Annotated column."""
+    total = int(round(secs or 0))
+    if total <= 0:
+        return "—"
+    h, rem = divmod(total, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}h {m}m"
+    if m:
+        return f"{m}m {s}s"
+    return f"{s}s"
+
+
 async def _prompts_view(ctx) -> dict:
-    rows = []
+    # Two passes: first collect every version (and its per-resolution
+    # calibration stats), THEN fetch usage totals for ALL version_ids in ONE
+    # batched query (ADR 0046 — no per-version N+1).
+    prelim = []
     for p in await ctx.prompts_repo.list_active(ctx.db):
         _p, versions = await ctx.prompts_repo.get_with_versions(ctx.db, p.id)
         for v in versions:
@@ -208,18 +227,39 @@ async def _prompts_view(ctx) -> dict:
             }
             _mc = await ctx.model_config_repo.get(ctx.db, v.model)
             pricing_missing = _mc is None or bool(_mc.removed)
-            rows.append(
-                {
-                    "prompt_name": p.name,
-                    "version_id": v.id,
-                    "version_num": v.version_num,
-                    "state": v.state,
-                    "model": v.model,
-                    "media_kind": p.media_kind,
-                    "per_res": per_res,
-                    "pricing_missing": pricing_missing,
-                }
-            )
+            prelim.append((p, v, per_res, pricing_missing))
+
+    totals = await ctx.run_telemetry_repo.totals_by_prompt_version(
+        ctx.db, prompt_version_ids=[v.id for _p, v, _r, _m in prelim]
+    )
+
+    rows = []
+    for p, v, per_res, pricing_missing in prelim:
+        t = totals.get(v.id)
+        runs = t["runs"] if t else 0
+        seconds = t["media_seconds"] if t else 0.0
+        est_cost = t["est_cost_usd"] if t else 0.0
+        actual_cost = t["actual_cost_usd"] if t else 0.0
+        annotated_label = (
+            f"{runs} run{'s' if runs != 1 else ''} · {_humanize_secs(seconds)}"
+        )
+        rows.append(
+            {
+                "prompt_name": p.name,
+                "version_id": v.id,
+                "version_num": v.version_num,
+                "state": v.state,
+                "model": v.model,
+                "media_kind": p.media_kind,
+                "per_res": per_res,
+                "pricing_missing": pricing_missing,
+                "annotated_runs": runs,
+                "annotated_seconds": seconds,
+                "annotated_label": annotated_label,
+                "est_cost_usd": est_cost,
+                "actual_cost_usd": actual_cost,
+            }
+        )
     return {"rows": rows}
 
 

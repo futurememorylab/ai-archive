@@ -13,6 +13,9 @@
         <th>Prompt · version</th>
         <th>State</th>
         <th>Model</th>
+        <th>Annotated</th>
+        <th>Est. cost</th>
+        <th>Actual cost</th>
         <th>Calibration</th>
         <th></th>
       </tr>
@@ -23,6 +26,27 @@
         <td class="mono-cell">{{ r.prompt_name }} · v{{ r.version_num }}</td>
         <td>{{ r.state }}</td>
         <td class="mono-cell">{{ r.model }}</td>
+        <td>
+          {% if r.annotated_runs %}
+            {{ r.annotated_label }}
+          {% else %}
+            <span class="muted">no runs</span>
+          {% endif %}
+        </td>
+        <td class="mono-cell">
+          {% if r.pricing_missing %}
+            <span class="muted">no rate card</span>
+          {% else %}
+            {{ r.est_cost_usd | usd if r.est_cost_usd else '—' }}
+          {% endif %}
+        </td>
+        <td class="mono-cell">
+          {% if r.pricing_missing %}
+            <span class="muted">no rate card</span>
+          {% else %}
+            {{ r.actual_cost_usd | usd if r.actual_cost_usd else '—' }}
+          {% endif %}
+        </td>
         <td>
           {% if r.pricing_missing %}
             <span class="pill warn">no rate card</span>

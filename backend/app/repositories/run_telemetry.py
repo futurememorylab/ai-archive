@@ -127,6 +127,41 @@ class RunTelemetryRepo:
             }
         return out
 
+    async def totals_by_prompt_version(
+        self, conn: aiosqlite.Connection, *, prompt_version_ids: list[int]
+    ) -> dict[int, dict]:
+        """{prompt_version_id: {"runs": n, "media_seconds": s,
+        "est_cost_usd": e, "actual_cost_usd": a}} over ok runs — powers the
+        Prompts-tab usage columns (total footage annotated, guessed vs. actual
+        spend across ALL run kinds: annotation, studio, calibration).
+
+        Only status='ok' rows count (matches stats_by_resolution). SUMs use
+        COALESCE→0; runs is COUNT(*). Batched via chunked_in_clause (ADR 0046);
+        GROUP-BY aggregates are merged with += across chunks so a key split over
+        two chunks stays correct. Ids with no rows are absent — callers treat a
+        missing id as zero."""
+        out: dict[int, dict] = {}
+        for fragment, params in chunked_in_clause((v,) for v in prompt_version_ids):
+            cur = await conn.execute(
+                "SELECT prompt_version_id, COUNT(*), "
+                "COALESCE(SUM(media_duration_secs), 0), "
+                "COALESCE(SUM(est_cost_usd_p50), 0), "
+                "COALESCE(SUM(cost_usd), 0) "
+                f"FROM run_telemetry WHERE prompt_version_id IN ({fragment}) "
+                "AND status = 'ok' GROUP BY prompt_version_id",
+                tuple(params),
+            )
+            for vid, runs, secs, est, actual in await cur.fetchall():
+                agg = out.setdefault(
+                    int(vid),
+                    {"runs": 0, "media_seconds": 0.0, "est_cost_usd": 0.0, "actual_cost_usd": 0.0},
+                )
+                agg["runs"] += int(runs)
+                agg["media_seconds"] += float(secs)
+                agg["est_cost_usd"] += float(est)
+                agg["actual_cost_usd"] += float(actual)
+        return out
+
     async def recent_input_ratios(
         self,
         conn: aiosqlite.Connection,
