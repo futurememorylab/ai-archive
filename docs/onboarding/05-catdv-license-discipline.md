@@ -20,7 +20,7 @@ source of truth.
 ```mermaid
 flowchart TD
     A["I'm about to run<br/>./run.sh or python -m backend.app"] --> B{Anything listening on 8765?}
-    B -- yes --> C{Anything connected to 192.168.1.41:8080?}
+    B -- yes --> C{Anything connected to catdv-host.example:8080?}
     C -- yes --> R1["**Reuse it, or kill -TERM it first.**<br/>Don't spawn a second one."]
     C -- no --> R1
     B -- no --> D{Stale uvicorn / backend.app proc?}
@@ -33,7 +33,7 @@ The exact commands:
 ```bash
 /usr/sbin/lsof -nP -iTCP:8765 -sTCP:LISTEN
 /bin/ps -ef | /usr/bin/grep -E '(uvicorn|backend\.app)' | /usr/bin/grep -v grep
-/usr/sbin/lsof -nP -iTCP@192.168.1.41:8080
+/usr/sbin/lsof -nP -iTCP@catdv-host.example:8080
 ```
 
 ### Rule 2 — Always shut down gracefully
@@ -64,7 +64,7 @@ If you `POST /session` directly from a script or `curl`, **you've taken
 a seat**. You must finish with:
 
 ```bash
-curl -b /tmp/jar -X DELETE http://192.168.1.41:8080/catdv/api/9/session
+curl -b /tmp/jar -X DELETE http://catdv-host.example:8080/catdv/api/9/session
 ```
 
 Otherwise the seat stays held for the JSESSIONID's idle-timeout window.

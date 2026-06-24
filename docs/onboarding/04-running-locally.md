@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - **Python 3.12+** on `PATH` as `python3`.
-- **VPN to the CatDV server** (`192.168.1.41`). Without it, the app
+- **VPN to the CatDV server** (`catdv-host.example`). Without it, the app
   either fails to start or auto-degrades to offline mode (see below).
 - A **GCP service-account key** with permission to write to the project
   GCS bucket and call Vertex AI (path stored in
@@ -21,7 +21,7 @@ one-time GCP bootstrap in `docs/DEPLOY.md`).
 ```bash
 # 1. Authenticate gcloud (browser flow) and pick the project
 gcloud auth login
-gcloud config set project <project-id>     # e.g. pragafilm-catdv-annotator
+gcloud config set project <project-id>     # e.g. your-gcp-project
 
 # 2. Mint a key for the shared SA
 mkdir -p ~/.gcp
@@ -228,7 +228,7 @@ you'll touch most:
 |---|---|
 | `BIND_PORT=8765` | Server port. |
 | `DATA_DIR=./data` | Where `app.db` and `cache/proxies/` live. |
-| `CATDV_BASE_URL` | `http://192.168.1.41:8080` in dev; `http://localhost:8080` in prod. |
+| `CATDV_BASE_URL` | `http://catdv-host.example:8080` in dev; `http://localhost:8080` in prod. |
 | `CATDV_USERNAME` / `CATDV_PASSWORD` | App identity. In prod, password comes from Secret Manager — do not set in `.env`. |
 | `CATDV_CATALOG_ID=881507` | The one catalog the app reads/writes. |
 | `PROXY_SOURCE` | `rest` (default) or `filesystem` (on CatDV host). |

@@ -2,12 +2,12 @@
 
 ## In one paragraph
 
-The **CatDV Annotator** is a local-first web app that sits next to the
-Pragafilm CatDV archive and adds two things CatDV itself doesn't have:
+The **CatDV Annotator** is a local-first web app that sits next to a
+CatDV archive and adds two things CatDV itself doesn't have:
 a Google **Gemini-backed AI annotation pipeline** for video clips, and a
 durable **long-term annotation store** in SQLite that a future search
 app can layer on top of. It reads and edits a single CatDV catalog
-(881507, *"AI katalog"*), drives Gemini batch jobs against clip
+(*"AI katalog"*), drives Gemini batch jobs against clip
 proxies, gates every result behind a human review step, then writes
 the approved markers / fields / notes back to CatDV via its REST API.
 
@@ -15,8 +15,8 @@ the approved markers / fields / notes back to CatDV via its REST API.
 
 | Audience | Role |
 |---|---|
-| **`klientAI`** — the operator | One person (in the CatDV `ai` group) drives all annotation runs. Runs on a Mac in dev today; eventually on the CatDV server itself. |
-| **Pragafilm archive** | ~10 000 clips of 1920s–30s home-movie footage. Too large for human-only annotation, too messy for CatDV's built-in search. |
+| **The AI operator account** | One person (in the CatDV `ai` group) drives all annotation runs. Runs on a Mac in dev today; eventually on the CatDV server itself. |
+| **The archive** | ~10 000 clips of 1920s–30s home-movie footage. Too large for human-only annotation, too messy for CatDV's built-in search. |
 | **A future curation/search app** | Not built. The SQLite schema reserves tables (`embeddings`, `tags`) so a second project can layer semantic retrieval on top without touching CatDV. |
 
 ## What it does (end-to-end)

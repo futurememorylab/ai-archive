@@ -97,7 +97,7 @@ output. The richest JS in the app is the vanilla-JS video player widget
 
 ## External services
 
-- **CatDV REST API** at `http://192.168.1.41:8080/catdv/api/9/...` (VPN
+- **CatDV REST API** at `http://catdv-host.example:8080/catdv/api/9/...` (VPN
   in dev, loopback in prod).
 - **Google Cloud Storage** — bucket holds the H.264 web proxies handed
   to Vertex.

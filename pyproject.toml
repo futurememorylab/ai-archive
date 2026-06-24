@@ -1,8 +1,13 @@
 [project]
 name = "catdv-annotator"
 version = "0.0.1"
-description = "AI annotation engine for the Pragafilm CatDV archive"
+description = "AI annotation engine for CatDV archives"
 requires-python = ">=3.12"
+license = { text = "MIT" }
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+]
 dependencies = [
   "fastapi>=0.115",
   "uvicorn[standard]>=0.32",
