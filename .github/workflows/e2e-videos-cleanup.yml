@@ -1,0 +1,53 @@
+name: E2E Videos Cleanup
+
+# Companion to e2e-videos.yml. When a PR closes (merged or not), remove that
+# PR's pr-<N>/ gallery from the gh-pages branch so the published site doesn't
+# accumulate stale galleries. Deliberately a SEPARATE workflow with no `paths`
+# filter: it runs on every PR close and is a cheap no-op when there's nothing
+# to remove, which is more robust than coupling cleanup to the path filter that
+# gates recording (a PR could touch UI, get a gallery, then have its diff
+# change). Idempotent: safe when the gh-pages branch or the folder is absent.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write # delete the pr-<N>/ folder from gh-pages
+
+# Serialize per PR so a close storm can't race two pushes to gh-pages.
+concurrency:
+  group: e2e-videos-cleanup-${{ github.event.pull_request.number }}
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove this PR's gallery from gh-pages
+        env:
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          remote="https://x-access-token:${TOKEN}@github.com/${REPO}.git"
+
+          if ! git ls-remote --exit-code --heads "$remote" gh-pages >/dev/null 2>&1; then
+            echo "gh-pages branch does not exist yet — nothing to clean."
+            exit 0
+          fi
+
+          git clone --quiet --branch gh-pages --single-branch "$remote" gh-pages-wt
+          cd gh-pages-wt
+
+          if [ ! -d "pr-$PR" ]; then
+            echo "No pr-$PR/ folder on gh-pages — nothing to remove."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -rq "pr-$PR"
+          git commit -qm "chore(e2e-videos): remove gallery for closed PR #${PR}"
+          git push --quiet origin gh-pages
+          echo "Removed pr-$PR/ from gh-pages."
