@@ -242,14 +242,18 @@ def _humanize_secs(secs: float) -> str:
 
 
 async def _prompts_view(ctx) -> dict:
-    # Collect every (prompt, version) first — NO per-version DB reads in the
-    # loop. Then resolve calibration stats, usage totals, and model rate-cards
-    # with a fixed number of batched/prefetched reads (ADR 0046 — the page's
-    # query count must not scale with the number of versions).
+    # Collect every (prompt, version) first — NO per-prompt or per-version DB
+    # reads in the loop. Then resolve calibration stats, usage totals, and
+    # model rate-cards with a fixed number of batched/prefetched reads
+    # (ADR 0046 — the page's query count must not scale with the number of
+    # prompts OR versions).
+    prompts = await ctx.prompts_repo.list_active(ctx.db)
+    versions_by_pid = await ctx.prompts_repo.versions_by_prompt_ids(
+        ctx.db, [p.id for p in prompts]
+    )
     prelim: list = []
-    for p in await ctx.prompts_repo.list_active(ctx.db):
-        _p, versions = await ctx.prompts_repo.get_with_versions(ctx.db, p.id)
-        for v in versions:
+    for p in prompts:
+        for v in versions_by_pid[p.id]:
             prelim.append((p, v))
 
     version_ids = [v.id for _p, v in prelim]

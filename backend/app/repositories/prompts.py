@@ -14,6 +14,7 @@ from typing import Any
 import aiosqlite
 
 from backend.app.models.prompt import Prompt, PromptVersion
+from backend.app.repositories._batch import chunked_in_clause
 
 
 def _now_iso() -> str:
@@ -144,6 +145,32 @@ class PromptsRepo:
             f"SELECT {_PROMPT_COLS} FROM prompts WHERE archived = 0 ORDER BY name"
         )
         return [_row_to_prompt(r) for r in await cur.fetchall()]
+
+    async def versions_by_prompt_ids(
+        self,
+        conn: aiosqlite.Connection,
+        prompt_ids: list[int],
+    ) -> dict[int, list[PromptVersion]]:
+        """Return all versions for the given prompts in ONE chunked query.
+
+        Returns a dict keyed by prompt_id; each value is a list of
+        PromptVersion ordered by version_num DESC (same as get_with_versions).
+        Prompt IDs with no versions map to an empty list.
+        """
+        result: dict[int, list[PromptVersion]] = {pid: [] for pid in prompt_ids}
+        if not prompt_ids:
+            return result
+        for frag, params in chunked_in_clause([(pid,) for pid in prompt_ids]):
+            cur = await conn.execute(
+                f"SELECT {_VERSION_COLS} FROM prompt_versions "
+                f"WHERE prompt_id IN ({frag}) "
+                "ORDER BY prompt_id, version_num DESC",
+                params,
+            )
+            for row in await cur.fetchall():
+                v = _row_to_version(row)
+                result[v.prompt_id].append(v)
+        return result
 
     async def list_archived(self, conn: aiosqlite.Connection) -> list[Prompt]:
         cur = await conn.execute(
