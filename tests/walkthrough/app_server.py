@@ -148,41 +148,18 @@ class WalkthroughApp:
         # real proxy_resolver), so wire one over our injected fakes and start it
         # on the server's own loop (it owns the aiosqlite connection). Without
         # this the batch / cancel scenarios would enqueue a job that never runs.
-        from backend.app.services.annotator import run_job
+        from backend.app.services.annotator import build_run_one_job
         from backend.app.services.job_runner import JobRunner
-
-        async def _run_one_job(job_id: int) -> None:
-            try:
-                job = await core.jobs_repo.get_job(core.db, job_id)
-                await run_job(
-                    db=core.db,
-                    job_id=job_id,
-                    archive=live.archive,
-                    proxy_resolver=live.proxy_resolver,
-                    ai_store=live.ai_store,
-                    gemini=live.gemini,
-                    event_bus=core.event_bus,
-                    annotations_repo=core.annotations_repo,
-                    review_items_repo=core.review_items_repo,
-                    jobs_repo=core.jobs_repo,
-                    prompts_repo=core.prompts_repo,
-                    studio_runs_repo=core.studio_runs_repo,
-                    uploaded_clips_repo=core.uploaded_clips_repo,
-                    run_telemetry_repo=core.run_telemetry_repo,
-                    telemetry_ctx=core.telemetry_ctx,
-                    model_config_repo=core.model_config_repo,
-                    prefetch_queue_repo=core.prefetch_queue_repo,
-                    force_resolution=job.force_resolution,
-                    record_only=job.record_only,
-                )
-            except asyncio.CancelledError:
-                with contextlib.suppress(Exception):
-                    await core.jobs_repo.cancel_job(core.db, job_id)
-                raise
 
         self._runner = JobRunner(
             jobs_repo=core.jobs_repo,
-            run_job_fn=_run_one_job,
+            run_job_fn=build_run_one_job(
+                core,
+                archive=live.archive,
+                proxy_resolver=live.proxy_resolver,
+                ai_store=live.ai_store,
+                gemini=live.gemini,
+            ),
             db_provider=lambda: core.db,
             tick_interval_s=0.05,
         )

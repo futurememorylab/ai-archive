@@ -8,6 +8,7 @@ and the CatDV-write step is skipped entirely.
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import mimetypes
@@ -234,7 +235,12 @@ async def run_job(
             log.info("job %s cancelled mid-run; stopping", job_id, extra={"job_id": job_id})
             break
 
-        if item.status not in ("pending", "error"):
+        # 'pending' is the single "run me" signal: fresh jobs start all-pending,
+        # retry resets the targeted failures to 'pending', and orphan resume
+        # resets stuck transient items to 'pending'. An item left 'error' is
+        # terminal and is NOT re-run — that is what scopes a partial retry to the
+        # clips the user actually reset (fix #1, ADR 0125).
+        if item.status != "pending":
             continue
 
         try:
@@ -305,6 +311,65 @@ async def run_job(
     await jobs_repo.update_status(db, job_id, final_status)
     if kind != "studio":
         await publish_job_progress(event_bus, jobs_repo, db, job_id, status=final_status)
+
+
+def build_run_one_job(core, *, archive, proxy_resolver, ai_store, gemini):
+    """Build the per-job worker callable the lifespan JobRunner runs (ADR 0125).
+
+    Wraps run_job with the worker's lifecycle reconciliation so a job is never
+    left lingering 'running':
+      - normal completion: run_job finalises the job;
+      - CancelledError (cancel route or shutdown drain): reconcile_interrupted_job
+        mops up a user-cancelled job, or leaves a shutdown-drained job 'running'
+        for the next boot's requeue to resume (fix #2);
+      - any other exception (a job-level failure such as a deleted prompt
+        version): fail_job flips the job terminal so it is not re-claimed and
+        re-crashed on every restart (fix #3).
+
+    `core` supplies the DB + repos; the four live services are passed explicitly.
+    Shared by the live context and the walkthrough harness so the wide run_job
+    call site is wired in exactly one place (no parallel-evolved second copy)."""
+
+    async def _run_one_job(job_id: int) -> None:
+        try:
+            # Per-job run parameters (forced resolution, record-only) live on the
+            # job row so a calibration sweep runs identically to the old
+            # route-spawn path. Normal jobs default to None/False.
+            job = await core.jobs_repo.get_job(core.db, job_id)
+            await run_job(
+                db=core.db,
+                job_id=job_id,
+                archive=archive,
+                proxy_resolver=proxy_resolver,
+                ai_store=ai_store,
+                gemini=gemini,
+                event_bus=core.event_bus,
+                annotations_repo=core.annotations_repo,
+                review_items_repo=core.review_items_repo,
+                jobs_repo=core.jobs_repo,
+                prompts_repo=core.prompts_repo,
+                studio_runs_repo=core.studio_runs_repo,
+                uploaded_clips_repo=core.uploaded_clips_repo,
+                run_telemetry_repo=core.run_telemetry_repo,
+                telemetry_ctx=core.telemetry_ctx,
+                model_config_repo=core.model_config_repo,
+                prefetch_queue_repo=core.prefetch_queue_repo,
+                force_resolution=job.force_resolution,
+                record_only=job.record_only,
+            )
+        except asyncio.CancelledError:
+            with contextlib.suppress(Exception):
+                await core.jobs_repo.reconcile_interrupted_job(core.db, job_id)
+            raise
+        except Exception:
+            # Job-level failure (run_job did not finalise) — make the job
+            # terminal so it is not re-claimed and re-crashed on every restart.
+            # tick_once logs the exception via humanise; re-raise to let it.
+            with contextlib.suppress(Exception):
+                await core.jobs_repo.fail_job(core.db, job_id)
+            raise
+
+    return _run_one_job
 
 
 @dataclass

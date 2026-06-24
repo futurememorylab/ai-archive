@@ -99,10 +99,11 @@ class JobsRepo:
         orphan from a crash/restart/dev-reload. Flip it back to 'pending' so
         the worker re-claims it, and reset its stuck transient items
         (resolving/uploading/prompting) to 'pending' too — run_job only
-        processes pending/error items, so a transient item would otherwise be
+        processes 'pending' items, so a transient item would otherwise be
         skipped on resume and hang forever. Terminal items (done/annotated/
         review_ready/applied/rejected/error/cancelled) are left as-is, so
-        resume re-runs only unfinished work. Returns the count of jobs
+        resume re-runs only unfinished work — in particular an 'error' item is
+        terminal and is not re-run on resume. Returns the count of jobs
         requeued."""
         placeholders = ",".join("?" * len(TRANSIENT_STATUSES))
         await conn.execute(
@@ -342,6 +343,49 @@ class JobsRepo:
             "UPDATE jobs SET status = 'cancelled', finished_at = ? WHERE id = ?",
             (_now_iso(), job_id),
         )
+        await conn.commit()
+
+    async def reconcile_interrupted_job(
+        self, conn: aiosqlite.Connection, job_id: int
+    ) -> None:
+        """Reconcile a job whose worker task was interrupted by CancelledError.
+
+        Two interrupts look identical to the worker; the job's DB status tells
+        them apart (the cancel route flips the job to 'cancelled' BEFORE
+        interrupting the task):
+        - status == 'cancelled' → user cancel: mop up any item that raced into a
+          transient state after the route's first sweep (idempotent cancel_job).
+        - status == 'running' → shutdown drain (stop()): leave the job untouched
+          so the next boot's requeue_orphaned_running resumes it. Cancelling here
+          would make the job terminal and defeat resume on every graceful
+          restart/deploy (fix #2, ADR 0125)."""
+        job = await self.get_job(conn, job_id)
+        if job.status == "cancelled":
+            await self.cancel_job(conn, job_id)
+
+    async def fail_job(
+        self, conn: aiosqlite.Connection, job_id: int, *, error: str = "job failed"
+    ) -> None:
+        """Terminal-fail a job that errored at the job level rather than per-item
+        — e.g. its prompt version was deleted, so run_job raised before it could
+        finalise. Flips the job to 'failed' and any still-in-flight item (pending
+        + transient) to 'error', in one commit. Guarded on status='running' so a
+        racing cancel/complete is never clobbered. Without this the job lingers
+        'running' forever (a phantom the clip page keeps 'resuming') and is
+        re-claimed and re-crashed on every restart (fix #3, ADR 0125)."""
+        cur = await conn.execute(
+            "UPDATE jobs SET status = 'failed', finished_at = ? "
+            " WHERE id = ? AND status = 'running'",
+            (_now_iso(), job_id),
+        )
+        if cur.rowcount:
+            await conn.execute(
+                "UPDATE job_items SET status = 'error', "
+                "  error_message = COALESCE(error_message, ?) "
+                " WHERE job_id = ? "
+                "   AND status IN ('pending', 'resolving', 'uploading', 'prompting')",
+                (error, job_id),
+            )
         await conn.commit()
 
     # --- Batches hub aggregation (read-only, offline-safe) -------------

@@ -177,12 +177,14 @@ async def retry_failed(request: Request, body: RetryFailed):
         # next /batches/table refresh lands in that gap and shows a stale
         # "Failed" until something else triggers a re-render. 'pending' makes
         # in_flight > 0 immediately → the batch reads as running. The worker
-        # re-processes 'pending'/'error' items alike, so what runs is unchanged.
+        # processes ONLY 'pending' items, so resetting just these targeted
+        # failures is exactly what scopes the retry — untargeted 'error' items in
+        # the same job are left alone and are NOT re-run (fix #1).
         for it in failed:
             await core.jobs_repo.update_item_status(core.db, it.id, "pending")
         # Flip the job back to pending so the lifespan JobRunner re-claims it.
-        # The worker only processes pending/error items, so only the reset clips
-        # actually re-run. Routes never execute jobs themselves (ADR 0125).
+        # Only the items reset to 'pending' above actually re-run. Routes never
+        # execute jobs themselves (ADR 0125).
         await core.jobs_repo.update_status(core.db, jid, "pending")
         started.append(jid)
     return {"started": started}

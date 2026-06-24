@@ -79,11 +79,13 @@ class _Gemini:
 
 
 @pytest.mark.asyncio
-async def test_run_job_processes_only_pending_or_error_items(db, tmp_path):
-    """Retry scoping is now done by status, not an only_clip_ids parameter:
-    run_job re-processes only items in 'pending'/'error'. A clip already in a
-    terminal state (here, item 101 pre-marked 'review_ready') is skipped, so
-    resetting just the targeted items to 'pending' is what scopes a retry."""
+async def test_run_job_processes_only_pending_items(db, tmp_path):
+    """Retry scoping is done by status: run_job re-processes ONLY items in
+    'pending'. A terminal item (101 'review_ready') is skipped, and — critically
+    for scoped retry — an 'error' item that was NOT reset (103) is left alone
+    too. So resetting just the targeted failures to 'pending' is what scopes a
+    retry; untargeted failures in the same job do not silently re-run. See
+    finding fix #1 (ADR 0125)."""
     prompts = PromptsRepo()
     _, vid = await prompts.create_with_initial_version(
         db,
@@ -95,17 +97,19 @@ async def test_run_job_processes_only_pending_or_error_items(db, tmp_path):
         model="m",
     )
     jobs = JobsRepo()
-    job_id = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[101, 102])
+    job_id = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[101, 102, 103])
 
     files = {}
-    for cid in (101, 102):
+    for cid in (101, 102, 103):
         p: Path = tmp_path / f"{cid}.mov"
         p.write_bytes(b"X" * 10)
         files[cid] = p
 
-    # 101 is already done; only 102 stays pending and should re-run.
+    # 101 already done (terminal); 103 failed previously and was NOT re-targeted
+    # (still 'error'); only 102 stays pending and should re-run.
     items_before = {it.catdv_clip_id: it.id for it in await jobs.list_items(db, job_id)}
     await jobs.update_item_status(db, items_before[101], "review_ready")
+    await jobs.update_item_status(db, items_before[103], "error", error="boom")
 
     await run_job(
         db=db,
@@ -129,3 +133,4 @@ async def test_run_job_processes_only_pending_or_error_items(db, tmp_path):
     items = {it.catdv_clip_id: it.status for it in await jobs.list_items(db, job_id)}
     assert items[101] == "review_ready"  # terminal -> skipped (not re-run)
     assert items[102] == "review_ready"  # pending -> processed
+    assert items[103] == "error"  # untargeted error -> NOT re-run (scoping)

@@ -88,3 +88,80 @@ async def test_requeue_orphaned_running_ignores_terminal_jobs(db):
     await repo.update_status(db, jid, "completed")
     assert await repo.requeue_orphaned_running(db) == 0
     assert (await repo.get_job(db, jid)).status == "completed"
+
+
+# --- worker interrupt reconciliation (fix #2) ---------------------------
+
+
+@pytest.mark.asyncio
+async def test_reconcile_interrupted_job_mops_up_when_already_cancelled(db):
+    """User-cancel path: the cancel route flips the job to 'cancelled' BEFORE
+    interrupting the worker, so on CancelledError the worker mops up any item
+    that raced into a transient state."""
+    repo = JobsRepo()
+    jid = await repo.create_job(db, prompt_version_id=1, clip_ids=[10, 11])
+    await repo.update_status(db, jid, "running")
+    items = await repo.list_items(db, jid)
+    await repo.update_item_status(db, items[0].id, "prompting")  # raced transient
+    await repo.cancel_job(db, jid)  # the route's DB flip → status 'cancelled'
+
+    await repo.reconcile_interrupted_job(db, jid)
+
+    assert (await repo.get_job(db, jid)).status == "cancelled"
+    after = {i.catdv_clip_id: i.status for i in await repo.list_items(db, jid)}
+    assert after[10] == "cancelled"  # transient mopped up
+    assert after[11] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_reconcile_interrupted_job_leaves_running_for_resume(db):
+    """Shutdown-drain path: stop() interrupts the worker but the route did NOT
+    flip the job, so it is still 'running'. Reconcile must leave it untouched so
+    the next boot's requeue_orphaned_running resumes it (ADR 0125)."""
+    repo = JobsRepo()
+    jid = await repo.create_job(db, prompt_version_id=1, clip_ids=[10])
+    await repo.update_status(db, jid, "running")
+    items = await repo.list_items(db, jid)
+    await repo.update_item_status(db, items[0].id, "prompting")
+
+    await repo.reconcile_interrupted_job(db, jid)
+
+    assert (await repo.get_job(db, jid)).status == "running"  # left for resume
+    assert (await repo.list_items(db, jid))[0].status == "prompting"
+
+
+# --- job-level failure (fix #3) -----------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_fail_job_makes_a_running_job_terminal(db):
+    """A job that errored at the job level (e.g. its prompt version was deleted)
+    must be flipped terminal so it is not re-claimed and re-crashed on every
+    restart. Its still-in-flight items become 'error' too."""
+    repo = JobsRepo()
+    jid = await repo.create_job(db, prompt_version_id=1, clip_ids=[10, 11])
+    await repo.update_status(db, jid, "running")
+    items = await repo.list_items(db, jid)
+    await repo.update_item_status(db, items[1].id, "prompting")
+
+    await repo.fail_job(db, jid)
+
+    assert (await repo.get_job(db, jid)).status == "failed"
+    after = {i.catdv_clip_id: i.status for i in await repo.list_items(db, jid)}
+    assert after[10] == "error"  # pending → error
+    assert after[11] == "error"  # transient → error
+
+
+@pytest.mark.asyncio
+async def test_fail_job_leaves_terminal_jobs_alone(db):
+    """fail_job is guarded on status='running' so a racing cancel/complete is
+    never clobbered."""
+    repo = JobsRepo()
+    jid = await repo.create_job(db, prompt_version_id=1, clip_ids=[10])
+    await repo.update_status(db, jid, "cancelled")
+    items = await repo.list_items(db, jid)
+
+    await repo.fail_job(db, jid)
+
+    assert (await repo.get_job(db, jid)).status == "cancelled"  # untouched
+    assert (await repo.list_items(db, jid))[0].status == items[0].status

@@ -24,7 +24,6 @@ Build returns a ``CoreCtx`` always and a ``LiveCtx | None`` (None when
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -886,48 +885,19 @@ async def _build_sync_subsystem(
     # stack run_job needs is present (same gate the old route auto-start used:
     # a real proxy_resolver). Routes only insert pending jobs; this claims and
     # runs them. See ADR 0125.
-    from backend.app.services.annotator import run_job
+    from backend.app.services.annotator import build_run_one_job
 
     job_runner: JobRunner | None = None
     if arch.proxy_resolver is not None:
-
-        async def _run_one_job(job_id: int) -> None:
-            try:
-                # Per-job run parameters (forced resolution, record-only) live
-                # on the job row so a calibration sweep runs identically to the
-                # old route-spawn path. Normal jobs default to None/False.
-                job = await core.jobs_repo.get_job(core.db, job_id)
-                await run_job(
-                    db=core.db,
-                    job_id=job_id,
-                    archive=arch.archive,
-                    proxy_resolver=arch.proxy_resolver,
-                    ai_store=arch.ai_store,
-                    gemini=arch.gemini,
-                    event_bus=core.event_bus,
-                    annotations_repo=core.annotations_repo,
-                    review_items_repo=core.review_items_repo,
-                    jobs_repo=core.jobs_repo,
-                    prompts_repo=core.prompts_repo,
-                    studio_runs_repo=core.studio_runs_repo,
-                    uploaded_clips_repo=core.uploaded_clips_repo,
-                    run_telemetry_repo=core.run_telemetry_repo,
-                    telemetry_ctx=core.telemetry_ctx,
-                    model_config_repo=core.model_config_repo,
-                    prefetch_queue_repo=core.prefetch_queue_repo,
-                    force_resolution=job.force_resolution,
-                    record_only=job.record_only,
-                )
-            except asyncio.CancelledError:
-                # Cancelled by JobRunner.cancel()/stop(): reconcile item state
-                # (nothing left 'prompting') before propagating. Idempotent.
-                with contextlib.suppress(Exception):
-                    await core.jobs_repo.cancel_job(core.db, job_id)
-                raise
-
         job_runner = JobRunner(
             jobs_repo=core.jobs_repo,
-            run_job_fn=_run_one_job,
+            run_job_fn=build_run_one_job(
+                core,
+                archive=arch.archive,
+                proxy_resolver=arch.proxy_resolver,
+                ai_store=arch.ai_store,
+                gemini=arch.gemini,
+            ),
             db_provider=lambda: core.db,
             tick_interval_s=float(settings.job_tick_interval_s),
         )
