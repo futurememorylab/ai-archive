@@ -50,7 +50,6 @@ async def _run_in_bg(
     ctx,
     job_id: int,
     *,
-    only_clip_ids: set[int] | None = None,
     force_resolution: str | None = None,
     record_only: bool = False,
 ) -> None:
@@ -73,7 +72,6 @@ async def _run_in_bg(
             telemetry_ctx=ctx.telemetry_ctx,
             model_config_repo=ctx.model_config_repo,
             prefetch_queue_repo=ctx.prefetch_queue_repo,
-            only_clip_ids=only_clip_ids,
             force_resolution=force_resolution,
             record_only=record_only,
         )
@@ -93,7 +91,6 @@ def start_job_in_background(
     live,
     job_id: int,
     *,
-    only_clip_ids: set[int] | None = None,
     force_resolution: str | None = None,
     record_only: bool = False,
 ) -> None:
@@ -103,7 +100,6 @@ def start_job_in_background(
         _run_in_bg(
             live,
             job_id,
-            only_clip_ids=only_clip_ids,
             force_resolution=force_resolution,
             record_only=record_only,
         )

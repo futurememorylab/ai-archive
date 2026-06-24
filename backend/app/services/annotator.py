@@ -214,7 +214,6 @@ async def run_job(
     telemetry_ctx: TelemetryCtx,
     model_config_repo: ModelConfigRepo,
     prefetch_queue_repo: PrefetchQueueRepo | None = None,
-    only_clip_ids: set[int] | None = None,
     force_resolution: str | None = None,
     record_only: bool = False,
 ) -> None:
@@ -236,9 +235,6 @@ async def run_job(
             break
 
         if item.status not in ("pending", "error"):
-            continue
-
-        if only_clip_ids is not None and item.catdv_clip_id not in only_clip_ids:
             continue
 
         try:

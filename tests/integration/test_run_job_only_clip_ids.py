@@ -79,7 +79,11 @@ class _Gemini:
 
 
 @pytest.mark.asyncio
-async def test_run_job_only_clip_ids_processes_just_that_clip(db, tmp_path):
+async def test_run_job_processes_only_pending_or_error_items(db, tmp_path):
+    """Retry scoping is now done by status, not an only_clip_ids parameter:
+    run_job re-processes only items in 'pending'/'error'. A clip already in a
+    terminal state (here, item 101 pre-marked 'review_ready') is skipped, so
+    resetting just the targeted items to 'pending' is what scopes a retry."""
     prompts = PromptsRepo()
     _, vid = await prompts.create_with_initial_version(
         db,
@@ -99,6 +103,10 @@ async def test_run_job_only_clip_ids_processes_just_that_clip(db, tmp_path):
         p.write_bytes(b"X" * 10)
         files[cid] = p
 
+    # 101 is already done; only 102 stays pending and should re-run.
+    items_before = {it.catdv_clip_id: it.id for it in await jobs.list_items(db, job_id)}
+    await jobs.update_item_status(db, items_before[101], "review_ready")
+
     await run_job(
         db=db,
         job_id=job_id,
@@ -116,9 +124,8 @@ async def test_run_job_only_clip_ids_processes_just_that_clip(db, tmp_path):
         run_telemetry_repo=RunTelemetryRepo(),
         telemetry_ctx=TelemetryCtx(install_id="inst-test"),
         model_config_repo=ModelConfigRepo(),
-        only_clip_ids={102},
     )
 
     items = {it.catdv_clip_id: it.status for it in await jobs.list_items(db, job_id)}
-    assert items[101] == "pending"  # skipped by the filter
-    assert items[102] == "review_ready"  # processed
+    assert items[101] == "review_ready"  # terminal -> skipped (not re-run)
+    assert items[102] == "review_ready"  # pending -> processed

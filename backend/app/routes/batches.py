@@ -155,8 +155,8 @@ class RetryFailed(BaseModel):
 @router.post("/batches/retry-failed")
 async def retry_failed(request: Request, body: RetryFailed):
     """Re-run failed clips. Reuses annotator.run_job (which only re-processes
-    'error'/'pending' items); only_clip_ids narrows to a single clip when
-    given. Requires live services + a proxy resolver."""
+    'error'/'pending' items); resetting the targeted failures to 'pending' is
+    what scopes the retry. Requires live services + a proxy resolver."""
     live = get_live_ctx(request)  # 503 when offline
     if live.proxy_resolver is None:
         raise HTTPException(503, "Proxy resolver offline — cannot run annotations")
@@ -181,6 +181,6 @@ async def retry_failed(request: Request, body: RetryFailed):
         # 'pending'/'error' items alike, so what actually runs is unchanged.
         for it in failed:
             await core.jobs_repo.update_item_status(core.db, it.id, "pending")
-        start_job_in_background(core, live, jid, only_clip_ids=only)
+        start_job_in_background(core, live, jid)
         started.append(jid)
     return {"started": started}
