@@ -84,7 +84,10 @@ def test_active_jobs_lists_running_with_progress(monkeypatch, tmp_path):
     assert body[0]["run_group"] is None  # no run_group was set
 
 
-def test_create_job_reports_started_flag(monkeypatch, tmp_path):
+def test_create_job_reports_queued(monkeypatch, tmp_path):
+    """POST /api/jobs is a pure DB writer now (ADR 0125): it inserts a pending
+    job and returns {"id", "queued": true}. The lifespan JobRunner runs it; the
+    route never spawns execution, so there is no per-request 'started' flag."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         ctx = client.app.state.core_ctx
@@ -98,12 +101,12 @@ def test_create_job_reports_started_flag(monkeypatch, tmp_path):
             return vid
 
         vid = client.portal.call(seed_version)
-        r = client.post("/api/jobs", json={"prompt_version_id": vid, "clip_ids": [1], "auto_start": True})
+        r = client.post("/api/jobs", json={"prompt_version_id": vid, "clip_ids": [1]})
 
     assert r.status_code == 201
     body = r.json()
     assert "id" in body
-    assert isinstance(body["started"], bool)
+    assert body["queued"] is True
 
 
 def test_active_jobs_exposes_run_group_for_calibration_jobs(monkeypatch, tmp_path):

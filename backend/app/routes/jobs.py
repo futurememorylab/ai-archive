@@ -1,17 +1,14 @@
 """Jobs routes — HTTP endpoints under /api/jobs for creating and
 inspecting annotation jobs. Delegates execution to the annotator service."""
 
-import asyncio
-import contextlib
-
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from backend.app.auth.guards import require_permission
 from backend.app.deps import get_core_ctx
 from backend.app.routes.events import _event_generator
-from backend.app.services.annotator import JOBS_TOPIC, run_job
+from backend.app.services.annotator import JOBS_TOPIC
 from backend.app.services.run_estimator import estimate_for_clip_ids
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -20,14 +17,13 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 class JobCreate(BaseModel):
     prompt_version_id: int
     clip_ids: list[int]
-    auto_start: bool = True
     # Shared token tying together the per-kind jobs of one bulk action so the
     # Batch filter can present them as a single run.
     run_group: str | None = None
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def create_job(request: Request, body: JobCreate, background: BackgroundTasks):
+async def create_job(request: Request, body: JobCreate):
     require_permission(request, "run")
     ctx = get_core_ctx(request)
     job_id = await ctx.jobs_repo.create_job(
@@ -36,75 +32,10 @@ async def create_job(request: Request, body: JobCreate, background: BackgroundTa
         clip_ids=body.clip_ids,
         run_group=body.run_group,
     )
-    # Auto-start requires every live service the annotator needs. When the
-    # app is offline (no LiveCtx) or the resolver is fs-only (None), the job
-    # is created but left for a later run.
-    live = request.app.state.live_ctx
-    started = bool(body.auto_start and live is not None and live.proxy_resolver is not None)
-    if started:
-        start_job_in_background(ctx, live, job_id)
-    return {"id": job_id, "started": started}
-
-
-async def _run_in_bg(
-    ctx,
-    job_id: int,
-    *,
-    force_resolution: str | None = None,
-    record_only: bool = False,
-) -> None:
-    try:
-        await run_job(
-            db=ctx.db,
-            job_id=job_id,
-            archive=ctx.archive,
-            proxy_resolver=ctx.proxy_resolver,
-            ai_store=ctx.ai_store,
-            gemini=ctx.gemini,
-            event_bus=ctx.event_bus,
-            annotations_repo=ctx.annotations_repo,
-            review_items_repo=ctx.review_items_repo,
-            jobs_repo=ctx.jobs_repo,
-            prompts_repo=ctx.prompts_repo,
-            studio_runs_repo=ctx.studio_runs_repo,
-            uploaded_clips_repo=ctx.uploaded_clips_repo,
-            run_telemetry_repo=ctx.run_telemetry_repo,
-            telemetry_ctx=ctx.telemetry_ctx,
-            model_config_repo=ctx.model_config_repo,
-            prefetch_queue_repo=ctx.prefetch_queue_repo,
-            force_resolution=force_resolution,
-            record_only=record_only,
-        )
-    except asyncio.CancelledError:
-        # Cancelled mid-flight (cancel route or shutdown drain): an item may
-        # have advanced into a transient state after the cancel sweep, so
-        # reconcile before propagating, leaving nothing 'prompting' forever.
-        with contextlib.suppress(Exception):
-            await ctx.jobs_repo.cancel_job(ctx.db, job_id)
-        raise
-    finally:
-        ctx._running_jobs.pop(job_id, None)
-
-
-def start_job_in_background(
-    core,
-    live,
-    job_id: int,
-    *,
-    force_resolution: str | None = None,
-    record_only: bool = False,
-) -> None:
-    """Spawn run_job for `job_id` as a tracked background task. Shared by
-    POST /api/jobs (auto-start) and the Batches retry-failed route."""
-    task = asyncio.create_task(
-        _run_in_bg(
-            live,
-            job_id,
-            force_resolution=force_resolution,
-            record_only=record_only,
-        )
-    )
-    core._running_jobs[job_id] = task
+    # The lifespan-owned JobRunner claims pending jobs when the live stack is
+    # up; offline, the job stays pending and resumes on the next live boot.
+    # Routes never execute jobs themselves (ADR 0125).
+    return {"id": job_id, "queued": True}
 
 
 @router.get("")
@@ -200,12 +131,12 @@ async def get_job(request: Request, job_id: int):
 @router.post("/{job_id}/cancel")
 async def cancel_job(request: Request, job_id: int):
     ctx = get_core_ctx(request)
-    # Reconcile DB state first (job + in-flight items → cancelled), then
-    # interrupt the in-flight task so cancel is prompt instead of waiting out
-    # the current clip's long Gemini call. The task's CancelledError handler
-    # re-runs cancel_job to mop up any item that raced into a transient state.
+    # DB flip first (works offline): job + in-flight items → cancelled, so the
+    # claimer never picks it up. Then, if a live worker is running this exact
+    # job, interrupt it so cancel is prompt instead of waiting out the Gemini
+    # call. Its CancelledError handler re-runs cancel_job (idempotent).
     await ctx.jobs_repo.cancel_job(ctx.db, job_id)
-    task = ctx._running_jobs.get(job_id)
-    if isinstance(task, asyncio.Task):
-        task.cancel()
+    live = request.app.state.live_ctx
+    if live is not None and live.job_runner is not None:
+        live.job_runner.cancel(job_id)
     return {"id": job_id, "status": "cancelled"}

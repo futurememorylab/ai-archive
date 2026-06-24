@@ -8,7 +8,6 @@ from pydantic import BaseModel
 
 from backend.app.archive.errors import ProviderError
 from backend.app.deps import get_core_ctx, get_live_ctx
-from backend.app.routes.jobs import start_job_in_background
 from backend.app.routes.pages.clips import query_clip_page
 from backend.app.routes.pages.templates import templates
 from backend.app.services.clip_list_filters import normalize_anno, normalize_cache
@@ -181,6 +180,9 @@ async def retry_failed(request: Request, body: RetryFailed):
         # 'pending'/'error' items alike, so what actually runs is unchanged.
         for it in failed:
             await core.jobs_repo.update_item_status(core.db, it.id, "pending")
-        start_job_in_background(core, live, jid)
+        # Flip the job back to pending so the lifespan JobRunner re-claims it.
+        # run_job only processes pending/error items, so only the reset clips
+        # actually re-run. Routes never execute jobs themselves (ADR 0125).
+        await core.jobs_repo.update_status(core.db, jid, "pending")
         started.append(jid)
     return {"started": started}

@@ -49,7 +49,7 @@ def test_create_job_lists_and_cancels(monkeypatch, tmp_path):
 
         r = client.post(
             "/api/jobs",
-            json={"prompt_version_id": vid, "clip_ids": [1, 2, 3], "auto_start": False},
+            json={"prompt_version_id": vid, "clip_ids": [1, 2, 3]},
         )
         assert r.status_code == 201
         job_id = r.json()["id"]

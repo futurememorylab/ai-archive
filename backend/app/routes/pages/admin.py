@@ -15,7 +15,6 @@ from fastapi.responses import HTMLResponse
 from backend.app.auth.guards import require_role
 from backend.app.deps import get_core_ctx
 from backend.app.models.media import MediaResolution
-from backend.app.routes.jobs import start_job_in_background
 from backend.app.routes.pages.admin_access import _members_ctx as _access_members_ctx
 from backend.app.routes.pages.templates import templates
 from backend.app.services.calibration import confidence_for_samples
@@ -399,15 +398,17 @@ async def admin_calibrate(
         if not eligible:
             continue
         for _ in range(CALIBRATION_REPEATS):
-            job_id = await core.jobs_repo.create_job(
+            # Persist the sweep parameters on the job so the lifespan JobRunner
+            # runs it telemetry-only at the forced resolution, identical to the
+            # old route-spawn path. Routes never execute jobs (ADR 0125).
+            await core.jobs_repo.create_job(
                 core.db,
                 prompt_version_id=version_id,
                 clip_ids=eligible,
                 kind="studio",
                 run_group=run_group,
-            )
-            start_job_in_background(
-                core, live, job_id, force_resolution=res, record_only=True
+                force_resolution=res,
+                record_only=True,
             )
             jobs_created += 1
     resp = await _prompts_response(request, core)
