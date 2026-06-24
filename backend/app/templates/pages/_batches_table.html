@@ -60,7 +60,7 @@
         <div class="bt-actions-inner">
         {% if b.running %}
         <button type="button" class="btn sm danger" @click="cancelBatch({{ b.job_ids|tojson }})">
-          ⨯ Cancel
+          Cancel
         </button>
         {% endif %}
         {% if not b.running and b.failed %}
