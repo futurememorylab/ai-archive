@@ -2,6 +2,7 @@
 
 - **Date:** 2026-05-22
 - **Status:** Accepted
+- **Lifespan:** Feature
 
 ## Context
 

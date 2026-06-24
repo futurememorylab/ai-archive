@@ -2,6 +2,12 @@
 
 **Date:** 2026-06-18
 **Status:** Accepted
+**Lifespan:** Feature
+
+> **Synthesis note (2026-06-24):** Requirement R1 here is revised by **0107**
+> (split published/draft bands). This is a screen-scoped feature decision, not
+> an architecture invariant — a candidate to fold into a `docs/specs/` entry on
+> the next synthesis pass.
 
 ## Context
 

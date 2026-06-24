@@ -1,10 +1,94 @@
 # Architecture Decisions
 
-As of 2026-05-23, individual decisions are now recorded as MADR-style
-files under [`docs/adr/`](./adr/). One decision per file.
+Individual decisions are recorded as MADR-style files under
+[`docs/adr/`](./adr/), one decision per file. This file is the index.
 
-To add a new decision, create `docs/adr/NNNN-slug.md` with the next
-available number. See any existing ADR for the template.
+**The ADR log is the audit trail, not the guidelines.** The distilled,
+always-true rules live in
+[`docs/architecture-invariants.md`](./architecture-invariants.md) — read
+that to understand the system; read an ADR only for the *why* behind a
+specific rule. ADRs are immutable history; the invariants page is the
+living canon.
+
+## How decisions are tracked
+
+Documentation is tiered by **lifespan**, and each kind of write goes to
+its natural home — so the ADR log stays sparse and the invariants page
+stays short:
+
+| Lifespan | Lives in | Example |
+|---|---|---|
+| Always true | `architecture-invariants.md` | "three cache layers, graceful miss" |
+| A pivotal/irreversible choice | an **ADR** | "split AppContext into CoreCtx + LiveCtx" |
+| True until the screen is redesigned | `docs/specs/` | "batches hub layout" |
+| A debugging lesson | the PR + a `*-lessons.md` | "the MTU black-hole root cause" |
+
+### When to write an ADR (the admission bar)
+
+Write an ADR **only** if the decision does at least one of:
+
+1. **Establishes or changes an invariant** (then also update
+   `architecture-invariants.md`).
+2. Is **irreversible or expensive to reverse** (schema/migration, a public
+   contract, a cloud-topology choice).
+3. Is **cross-cutting** — future PRs in unrelated areas must conform to it.
+
+If the decision only shapes one screen or fixes one bug, it is **not** an
+ADR — it's a spec or a PR note. "Would a future contributor ask *why*?" is
+necessary but not sufficient; the bar above is the test.
+
+### ADR template additions
+
+Every ADR header carries a **`Lifespan:`** classifier so the synthesis
+pass (below) is mechanical:
+
+- `Invariant` — established/changed a rule on the invariants page (cite it).
+- `Feature` — a design call scoped to one capability (candidate to fold
+  into a spec).
+- `Lesson` — a root-cause/postmortem kept for the record.
+- `Superseded` — replaced; points forward to the entry that replaced it.
+
+Keep the existing MADR-lite sections (`Context` / `Alternatives` /
+`Decision` / `Consequences`).
+
+### Synthesis pass (the regular architecture review)
+
+Every **~20 new ADRs, or monthly**, run a synthesis pass and log it under
+*Synthesis log* below. The checklist:
+
+1. **Promote** — did any new ADR establish a durable invariant? Add/edit
+   the line in `architecture-invariants.md` and footnote the ADR.
+2. **Collapse** — did a refinement chain (`refines`/`supersedes`)
+   converge? The invariants page points to the live head; mark the
+   intermediate ADRs' `Lifespan: Superseded` and banner them forward.
+3. **Prune** — fix the index annotations so the live entry of each chain
+   is obvious at a glance.
+
+The artifact you review is the ~25-line invariants page, not 100+ ADRs —
+that's what makes the review actually happen.
+
+## Synthesis log
+
+| Date | Through ADR | Notes |
+|---|---|---|
+| 2026-06-24 | 0114 | Initial synthesis. Extracted `architecture-invariants.md` (26 invariants) from the first 114 ADRs. Tagged every ADR with a `Lifespan` (62 Invariant / 42 Feature / 6 Lesson / 2 Superseded). Bannered the write-back (0091–0098), versions (0099–0101) and timeline-band (0106–0107) chains forward to their invariant; marked 0043 `Superseded` by 0112 and 0074 `Lesson` (root cause corrected by 0076). No ADR content was rewritten — history preserved. Spec-fold backlog recorded below. |
+
+### Spec-fold backlog (from the 2026-06-24 pass)
+
+The 42 `Lifespan: Feature` ADRs are screen/flow designs — durable until that
+surface is redesigned, not architecture invariants. They are **not** rewritten
+or deleted (the audit trail stays intact); a future pass may consolidate each
+cluster into one living `docs/specs/` document and leave the ADRs as the
+historical record. Candidate clusters, largest first:
+
+- **Prompt Studio** — 0033, 0034, 0037, 0038, 0039, 0040, 0049, 0050, 0051, 0055, 0061
+- **Draft review** — 0035, 0036, 0054, 0057
+- **Clip annotate / clip-list UI** — 0012, 0013, 0017, 0030, 0031
+- **Write-back status surfaces** (also Invariant-8 chain members) — 0092, 0094, 0095, 0096
+- **Timeline & playback bands** — 0106, 0107, 0108
+- **Batches hub** — 0052, 0053
+- **Image (still) clips** — 0028, 0029
+- **Standalone** (no cluster) — 0003, 0005, 0008, 0009, 0011, 0045, 0072, 0073, 0078, 0102, 0114
 
 ## Index
 

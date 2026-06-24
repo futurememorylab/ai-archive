@@ -2,6 +2,7 @@
 
 **Date:** 2026-06-14
 **Status:** Accepted (implemented on `feat/iap-access-control`)
+**Lifespan:** Invariant
 **Spec:** `docs/specs/2026-06-14-iap-roles-admin-console-design.md`
 **Builds on:** ADR 0084 (IAP as the gate + an app-side roles layer). This ADR records the
 authorization decisions left **open** in 0084 and the Claude-Design handoff

@@ -2,6 +2,7 @@
 
 **Date:** 2026-06-04
 **Status:** Accepted
+**Lifespan:** Feature
 
 Spec: `docs/specs/2026-06-04-draft-review-edit-accept-ux-design.md`.
 Builds on ADR 0054 (the Alpine-data-driven Draft panel).

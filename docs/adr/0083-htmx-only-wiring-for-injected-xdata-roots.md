@@ -2,6 +2,7 @@
 
 **Date:** 2026-06-15
 **Status:** Accepted (refines [0048](./0048-alpine-store-not-x-data-stack-for-shared-state.md))
+**Lifespan:** Invariant
 
 ## Context
 
