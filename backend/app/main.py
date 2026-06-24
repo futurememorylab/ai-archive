@@ -4,6 +4,7 @@ at shutdown to release the CatDV session seat)."""
 
 import logging
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
 
@@ -112,10 +113,14 @@ async def _load_topbar_counts(request: Request) -> None:
     core = getattr(request.app.state, "core_ctx", None)
     if core is None:
         return
+    from backend.app.routes.pages.templates import topbar_usage
+
     try:
+        usage = await core.usage_service.current_month(now=datetime.now(UTC))
         request.state.topbar_counts = {
             "sync_counts": await core.pending_ops_repo.count_actionable(core.db),
             "review_count": await core.review_items_repo.count_clips_for_review(core.db),
+            "usage": topbar_usage(usage),
         }
     except Exception:  # noqa: BLE001 — a count refresh must never break a page
         logging.getLogger(__name__).debug("topbar count load failed", exc_info=True)

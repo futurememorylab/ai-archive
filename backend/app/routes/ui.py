@@ -6,11 +6,13 @@ id on the page and HTMX swaps it via outerHTML.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from backend.app.deps import get_core_ctx
-from backend.app.routes.pages.templates import templates
+from backend.app.routes.pages.templates import templates, topbar_usage
 
 router = APIRouter(prefix="/ui", tags=["ui"])
 
@@ -96,6 +98,24 @@ async def review_pill(request: Request):
     review_count = await ctx.review_items_repo.count_clips_for_review(ctx.db)
     resp = templates.TemplateResponse(
         request, "pages/_review_pill_inner.html", {"review_count": review_count}
+    )
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@router.get("/usage-pill", response_class=HTMLResponse)
+async def usage_pill(request: Request):
+    """Always-present topbar spend pill inner partial. Polled (load + every 60s)
+    by #usage-pill so the current-month spend + ok/warn/over colour stays live
+    without a full reload. CoreCtx / DB-only / offline-safe; mirrors the
+    review-pill pattern. Never crashes the topbar — a DB hiccup renders nothing."""
+    ctx = get_core_ctx(request)
+    try:
+        usage = topbar_usage(await ctx.usage_service.current_month(now=datetime.now(UTC)))
+    except Exception:  # noqa: BLE001 — the pill must never break the topbar
+        usage = None
+    resp = templates.TemplateResponse(
+        request, "pages/_usage_pill_inner.html", {"usage": usage}
     )
     resp.headers["Cache-Control"] = "no-store"
     return resp

@@ -27,9 +27,15 @@ async def test_dependency_loads_counts_onto_request_state(tmp_path, monkeypatch)
     try:
         req = _req(core=ctx)
         await _load_topbar_counts(req)
-        assert req.state.topbar_counts == {
-            "sync_counts": {"queued": 0, "problems": 0},
-            "review_count": 0,
+        assert req.state.topbar_counts["sync_counts"] == {"queued": 0, "problems": 0}
+        assert req.state.topbar_counts["review_count"] == 0
+        # The always-present spend pill rides on topbar_counts too: spend_usd is
+        # 0.0 (no telemetry seeded) and there's no budget set → status 'none'.
+        assert req.state.topbar_counts["usage"] == {
+            "spend_usd": 0.0,
+            "budget_usd": None,
+            "fraction": None,
+            "status": "none",
         }
 
         await ctx.pending_ops_repo.insert_many(
@@ -68,9 +74,19 @@ async def test_dependency_skips_htmx_fragments(tmp_path, monkeypatch):
 def test_context_processor_reads_request_state():
     """The processor returns the request-scoped counts with zero I/O of its own."""
     req = _req()
-    req.state.topbar_counts = {"sync_counts": {"queued": 3, "problems": 1}, "review_count": 2}
+    usage = {"spend_usd": 1.5, "budget_usd": None, "fraction": None, "status": "none"}
+    req.state.topbar_counts = {
+        "sync_counts": {"queued": 3, "problems": 1},
+        "review_count": 2,
+        "usage": usage,
+    }
     out = _topbar_sync_context(req)
-    assert out == {"sync_counts": {"queued": 3, "problems": 1}, "offline": False, "review_count": 2}
+    assert out == {
+        "sync_counts": {"queued": 3, "problems": 1},
+        "offline": False,
+        "review_count": 2,
+        "usage": usage,
+    }
 
 
 def test_context_processor_returns_empty_when_state_unpopulated():

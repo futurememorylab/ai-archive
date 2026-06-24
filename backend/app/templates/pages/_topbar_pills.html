@@ -23,6 +23,11 @@
               title="Cancel calibration sweep">✕</button>
     </span>
   </span>
+  {# Always-present current-month spend pill. Stable container so the spend +
+     ok/warn/over colour refresh in place (poll every 60s) instead of going
+     stale until a full reload. Mirrors the #review-pill / #sync-chip pattern. #}
+  <span id="usage-pill" hx-get="/ui/usage-pill" hx-trigger="load, every 60s"
+        hx-target="#usage-pill" hx-swap="innerHTML">{% include "pages/_usage_pill_inner.html" %}</span>
   {# Stable container so the "N to review" count refreshes in place (poll +
      after draft-changing actions) instead of going stale until a full reload.
      Mirrors the #sync-chip pattern. #}

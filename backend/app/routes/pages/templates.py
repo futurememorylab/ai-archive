@@ -76,6 +76,21 @@ def _fixed_enums_json() -> str:
 templates.env.globals["app_enums_json"] = _fixed_enums_json()
 
 
+def topbar_usage(usage: dict) -> dict[str, object]:
+    """Project a ``UsageService.current_month()`` result down to the few fields
+    the always-present topbar spend pill needs. Shared by the full-page render
+    path (``_load_topbar_counts`` → context processor) and the live
+    ``GET /ui/usage-pill`` poll, so both produce the same ``usage`` var that
+    ``_usage_pill_inner.html`` reads — keeping the pill identical on first paint
+    and on refresh."""
+    return {
+        "spend_usd": usage["spend_usd"],
+        "budget_usd": usage["budget_usd"],
+        "fraction": usage["fraction"],
+        "status": usage["status"],
+    }
+
+
 def _topbar_sync_context(request) -> dict[str, object]:
     """Render the topbar sync chip's counts INLINE on full-page loads, so the
     chip shows the real "↑ N" / "✓ Synced" on first paint instead of flickering
@@ -101,6 +116,7 @@ def _topbar_sync_context(request) -> dict[str, object]:
         "sync_counts": counts["sync_counts"],
         "offline": offline,
         "review_count": counts["review_count"],
+        "usage": counts.get("usage"),
     }
 
 

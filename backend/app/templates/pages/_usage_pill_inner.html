@@ -1,0 +1,20 @@
+{# Inner of the always-present topbar spend pill. Swapped into #usage-pill by
+   the self-refresh poll (load + every 60s), so the current-month spend and its
+   ok/warn/over colour never go stale without a full reload. The stable
+   #usage-pill container in _topbar_pills.html remains as the swap target.
+
+   `usage` comes from the full-page context (templates.py, via topbar_counts) on
+   first paint and from GET /ui/usage-pill thereafter — both project
+   UsageService.current_month() through topbar_usage(), so the var shape is
+   identical. None (a DB hiccup, or counts not yet loaded) → render nothing,
+   never crash the topbar.
+
+   Spend is ALWAYS shown (even with no budget). Status → class: ok/none → plain
+   .pill, warn → .pill.warn, over → .pill.bad (reusing existing .pill.* CSS). #}
+{% if usage is defined and usage %}
+{% set _cls = {"over": "pill bad", "warn": "pill warn"}.get(usage.status, "pill") %}
+<span class="{{ _cls }}"
+   title="{% if usage.budget_usd %}{{ usage.spend_usd | usd }} of {{ usage.budget_usd | usd }} this month ({{ (usage.fraction * 100) | round | int }}%){% else %}{{ usage.spend_usd | usd }} this month{% endif %}">
+  <span class="led"></span>{{ usage.spend_usd | usd }}
+</span>
+{% endif %}
