@@ -1,0 +1,93 @@
+name: E2E Videos
+
+# Records the annotated Playwright walkthroughs (tests/walkthrough) and
+# publishes the gallery to GitHub Pages so a reviewer has one URL per PR to
+# watch the videos. The walkthroughs run fully offline in their own in-process
+# app on :8766 against FakeArchive + a seeded DB — NO CatDV seat, no secrets,
+# no VPN. The published videos contain only fake seed data + UI chrome.
+#
+# One Pages site, many PRs: each PR publishes to a pr-<N>/ subdirectory of the
+# gh-pages branch (keep_files: true so PRs don't clobber each other), and the
+# bot comments the stable URL on the PR.
+#
+# ONE-TIME SETUP (repo admin): Settings → Pages → Build and deployment →
+# Source: "Deploy from a branch" → Branch: gh-pages / (root). The gh-pages
+# branch is created automatically by the first run of this workflow.
+
+on:
+  pull_request:
+    paths:
+      - "backend/app/templates/**"
+      - "backend/app/static/**"
+      - "backend/app/routes/**"
+      - "tests/walkthrough/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write # push the gallery to the gh-pages branch
+  pull-requests: write # comment the gallery URL on the PR
+
+# Serialize same-PR runs so a newer recording supersedes an in-flight one.
+concurrency:
+  group: e2e-videos-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: System deps
+        # ffmpeg seeds the proxy video + thumbnail poster; xvfb gives the
+        # recorder a display (record mode launches headed to defeat
+        # Playwright's 800px screencast cap — see tests/walkthrough/README.md).
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg xvfb
+
+      - name: Install app + Chromium
+        run: |
+          pip install -e ".[dev]"
+          python -m playwright install --with-deps chromium
+
+      - name: Record walkthroughs
+        # Writes tests/walkthrough/artifacts/{<slug>.webm, index.html}. Each
+        # scenario records independently, so the gallery is fully written even
+        # when some scenarios fail; run.py still exits non-zero on any failure
+        # so this step (and the job) goes red — but the publish/comment steps
+        # below use `if: always()` so the videos are published either way. You
+        # want to watch failing flows too.
+        env:
+          CI: "true"
+        run: xvfb-run -a python -m tests.walkthrough.run --record
+
+      - name: Publish gallery to GitHub Pages
+        if: always() # publish even if some scenarios failed
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: tests/walkthrough/artifacts
+          destination_dir: pr-${{ github.event.pull_request.number || github.run_id }}
+          keep_files: true # preserve other PRs' subdirectories
+
+      - name: Comment the gallery URL on the PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pr = context.issue.number;
+            const url = `https://${owner}.github.io/${repo}/pr-${pr}/`;
+            const marker = "<!-- e2e-videos -->";
+            const body = `${marker}\n🎬 **Walkthrough videos for this PR:** ${url}\n\n_Updated each time UI-touching files change. Allow a minute or two after this run for Pages to refresh._`;
+
+            const comments = await github.rest.issues.listComments({ owner, repo, issue_number: pr });
+            const existing = comments.data.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr, body });
+            }
