@@ -427,6 +427,32 @@ before committing.
 Use TDD for all bug fixes and features: write a failing test,
 implement, then confirm green before committing.
 
+### Run the relevant slice, not the whole suite
+
+Most of the wall-clock cost is the integration suite (~70s serial); the
+unit suite is ~6s. During a red→green→refactor loop, **run only the test
+file or directory you're touching** — that's seconds, not minutes:
+
+```bash
+.venv/bin/python -m pytest tests/unit/test_foo.py -q        # one file
+.venv/bin/python -m pytest tests/integration -q             # one area
+.venv/bin/python -m pytest --lf -q                          # only last-failed
+```
+
+Run the **full suite once before committing**, and parallelise it across
+cores with `pytest-xdist` — `-n auto` takes the integration suite from
+~70s to ~20s on an 8-core box:
+
+```bash
+.venv/bin/python -m pytest -n auto -q
+```
+
+Don't bake `-n auto` into in-loop runs — for a single file the worker
+startup costs more than it saves, and it garbles `-x` / pdb output. Use
+it for the full sweep only. The slow Playwright walkthroughs
+(`tests/walkthrough/`) are **not** part of a normal test run — they go
+through the `/e2e` skill, only when you've changed UI.
+
 ## End-to-end walkthrough tests
 
 `tests/walkthrough/` drives the **real app** through Playwright in its
@@ -454,19 +480,37 @@ is the executable form of that acceptance flow.
 
 ## Recording decisions at end of session
 
-When a session involves any non-trivial design call — a schema replacement,
-an API shape choice, a deliberate deviation from the spec, a "we considered
-X and Y, picked Z" moment — append a new ADR file to
-`docs/adr/NNNN-slug.md` (one number higher than the last) before the
-session ends. Use the MADR-lite format: a `# NNNN. <Title>` heading,
-`**Date:**` / `**Status:**` metadata, then `## Context` / `## Alternatives` /
-`## Decision` / `## Consequences` sections. See any existing ADR (e.g.
-`docs/adr/0001-python-only-stack-no-node-frontend.md`) for the template.
-Update the index table in `docs/decisions.md` with the new entry. Group
-several related calls under one ADR when they share context (see the
-PR 3 / PR 5 / PR 6 / PR 7 ADRs for the pattern).
+The distilled, always-true architecture rules live in
+**`docs/architecture-invariants.md`** — that page is the canon. The
+guideline sections above (cache layers, error discipline, enums, removed
+patterns, performance) are the agent-facing expansion of those invariants;
+when one of them changes, update the invariants page too. The ADR log
+(`docs/adr/`, indexed in `docs/decisions.md`) is the immutable audit
+trail behind the invariants, not a changelog of every PR.
 
-The bar is "would a future contributor reading the diff ask *why*?" If
-yes, document it. If the call was forced by an obvious constraint and the
-diff itself makes the reasoning self-evident, skip it. Pure mechanical
-work (renames, dependency bumps, test additions) does not need an entry.
+**The bar for a new ADR (raised — see `docs/decisions.md` → *How
+decisions are tracked*):** write one only if the decision (a) establishes
+or changes an invariant, (b) is irreversible / expensive to reverse, or
+(c) is cross-cutting (future PRs must conform). If the call only shapes one
+screen, it's a **spec** (`docs/specs/`); if it's only a debugging root
+cause, it's a **PR note / lessons file**. "Would a contributor ask *why*?"
+is necessary but no longer sufficient — most PRs do **not** get an ADR.
+
+When you do write one, append `docs/adr/NNNN-slug.md` (next number) in
+MADR-lite format: `# NNNN. <Title>`, then `**Date:**` / `**Status:**` /
+`**Lifespan:**` (`Invariant` | `Feature` | `Lesson` | `Superseded`), then
+`## Context` / `## Alternatives` / `## Decision` / `## Consequences`. If
+`Lifespan: Invariant`, also add/edit the line in
+`architecture-invariants.md`. Keep the title to one line — a multi-sentence
+title is a sign the entry should be a spec, or the chain needs a synthesis
+pass. Update the index table in `docs/decisions.md`. Group related calls
+under one ADR when they share context (see the PR 3 / 5 / 6 / 7 ADRs).
+
+**Synthesis pass (regular architecture review):** every ~20 ADRs or
+monthly, reconcile the log against the invariants page — promote new
+invariants, collapse converged refinement chains, prune the index — and
+log it in `docs/decisions.md` → *Synthesis log*. The review artifact is
+the ~25-line invariants page, not the 100+ ADRs.
+
+Pure mechanical work (renames, dependency bumps, test additions) never
+needs an entry.

@@ -1,10 +1,94 @@
 # Architecture Decisions
 
-As of 2026-05-23, individual decisions are now recorded as MADR-style
-files under [`docs/adr/`](./adr/). One decision per file.
+Individual decisions are recorded as MADR-style files under
+[`docs/adr/`](./adr/), one decision per file. This file is the index.
 
-To add a new decision, create `docs/adr/NNNN-slug.md` with the next
-available number. See any existing ADR for the template.
+**The ADR log is the audit trail, not the guidelines.** The distilled,
+always-true rules live in
+[`docs/architecture-invariants.md`](./architecture-invariants.md) — read
+that to understand the system; read an ADR only for the *why* behind a
+specific rule. ADRs are immutable history; the invariants page is the
+living canon.
+
+## How decisions are tracked
+
+Documentation is tiered by **lifespan**, and each kind of write goes to
+its natural home — so the ADR log stays sparse and the invariants page
+stays short:
+
+| Lifespan | Lives in | Example |
+|---|---|---|
+| Always true | `architecture-invariants.md` | "three cache layers, graceful miss" |
+| A pivotal/irreversible choice | an **ADR** | "split AppContext into CoreCtx + LiveCtx" |
+| True until the screen is redesigned | `docs/specs/` | "batches hub layout" |
+| A debugging lesson | the PR + a `*-lessons.md` | "the MTU black-hole root cause" |
+
+### When to write an ADR (the admission bar)
+
+Write an ADR **only** if the decision does at least one of:
+
+1. **Establishes or changes an invariant** (then also update
+   `architecture-invariants.md`).
+2. Is **irreversible or expensive to reverse** (schema/migration, a public
+   contract, a cloud-topology choice).
+3. Is **cross-cutting** — future PRs in unrelated areas must conform to it.
+
+If the decision only shapes one screen or fixes one bug, it is **not** an
+ADR — it's a spec or a PR note. "Would a future contributor ask *why*?" is
+necessary but not sufficient; the bar above is the test.
+
+### ADR template additions
+
+Every ADR header carries a **`Lifespan:`** classifier so the synthesis
+pass (below) is mechanical:
+
+- `Invariant` — established/changed a rule on the invariants page (cite it).
+- `Feature` — a design call scoped to one capability (candidate to fold
+  into a spec).
+- `Lesson` — a root-cause/postmortem kept for the record.
+- `Superseded` — replaced; points forward to the entry that replaced it.
+
+Keep the existing MADR-lite sections (`Context` / `Alternatives` /
+`Decision` / `Consequences`).
+
+### Synthesis pass (the regular architecture review)
+
+Every **~20 new ADRs, or monthly**, run a synthesis pass and log it under
+*Synthesis log* below. The checklist:
+
+1. **Promote** — did any new ADR establish a durable invariant? Add/edit
+   the line in `architecture-invariants.md` and footnote the ADR.
+2. **Collapse** — did a refinement chain (`refines`/`supersedes`)
+   converge? The invariants page points to the live head; mark the
+   intermediate ADRs' `Lifespan: Superseded` and banner them forward.
+3. **Prune** — fix the index annotations so the live entry of each chain
+   is obvious at a glance.
+
+The artifact you review is the ~25-line invariants page, not 100+ ADRs —
+that's what makes the review actually happen.
+
+## Synthesis log
+
+| Date | Through ADR | Notes |
+|---|---|---|
+| 2026-06-24 | 0114 | Initial synthesis. Extracted `architecture-invariants.md` (26 invariants) from the first 114 ADRs. Tagged every ADR with a `Lifespan` (62 Invariant / 42 Feature / 6 Lesson / 2 Superseded). Bannered the write-back (0091–0098), versions (0099–0101) and timeline-band (0106–0107) chains forward to their invariant; marked 0043 `Superseded` by 0112 and 0074 `Lesson` (root cause corrected by 0076). No ADR content was rewritten — history preserved. Spec-fold backlog recorded below. |
+
+### Spec-fold backlog (from the 2026-06-24 pass)
+
+The 42 `Lifespan: Feature` ADRs are screen/flow designs — durable until that
+surface is redesigned, not architecture invariants. They are **not** rewritten
+or deleted (the audit trail stays intact); a future pass may consolidate each
+cluster into one living `docs/specs/` document and leave the ADRs as the
+historical record. Candidate clusters, largest first:
+
+- **Prompt Studio** — 0033, 0034, 0037, 0038, 0039, 0040, 0049, 0050, 0051, 0055, 0061
+- **Draft review** — 0035, 0036, 0054, 0057
+- **Clip annotate / clip-list UI** — 0012, 0013, 0017, 0030, 0031
+- **Write-back status surfaces** (also Invariant-8 chain members) — 0092, 0094, 0095, 0096
+- **Timeline & playback bands** — 0106, 0107, 0108
+- **Batches hub** — 0052, 0053
+- **Image (still) clips** — 0028, 0029
+- **Standalone** (no cluster) — 0003, 0005, 0008, 0009, 0011, 0045, 0072, 0073, 0078, 0102, 0114
 
 ## Index
 
@@ -130,3 +214,5 @@ available number. See any existing ADR for the template.
 | 0120 | 2026-06-23 | [Auto-filter the calibration clip picker to the prompt's `media_kind` (image/video/any): since a clip's kind is path-derived (`is_image_path`) with no stored column, it can't be pushed into the provider's server-side pagination, so `query_clip_page` gains an opt-in `kind` param that, when set, fetches the full result set, filters in Python, then slices — keeping page AND total correct. Threaded `/batches/picker?kind=` → `clipPickerCore().kind` (null default, so Batches/Studio pickers send identical requests) → `openCalibrate(versionId, label, mediaKind)`. Plus: `stats_by_resolution` also sums `est_cost_usd_p50` so the results panel shows guessed→actual per resolution; and a one-line rough/fair/good confidence legend](./adr/0120-calibration-picker-media-kind-filter-and-guessed-vs-actual.md) — *reuses the shared picker (no fork); extends 0119* |
 | 0121 | 2026-06-23 | [Seed rate cards for the full Gemini catalog (the 5 missing 3.x/3.5 models) at **Global standard** rates (not europe-west3 +10% — Global matches the existing 2.5 cards, is currently accurate pre-2026-07-01, and the 3.x family isn't pinned to europe-west3 single-region yet), verified against the official Vertex pricing page; add `test_rate_card_coverage.py` so any future catalog model lacking a `SEED_RATE_CARDS` entry fails CI; repoint "unpriced model" tests at synthetic ids. Adjacent: Prompts tab usage columns (annotated footage + est vs actual cost) via one batched `totals_by_prompt_version`](./adr/0121-seed-full-gemini-catalog-rate-cards-global.md) — *closes the "why only 3 cards" gap; extends 0119* |
 | 0122 | 2026-06-24 | [Usage & budget (#30): a single monthly **soft** cap in `app_meta['budget_monthly_usd']` (no new table; clear = delete key) that colours the indicator + warns on launch surfaces but NEVER blocks a run (hard cap rejected — surprise-blocked work is worse than overspend); `UsageService` on CoreCtx (DB-only/offline-safe, injected clock) with `current_month` status none/ok/warn/over; spend = SUM(cost_usd) over occurred_at incl. calibration; partial-pricing "(N of M priced)" so a NULL-cost subtotal isn't read as complete; the spend overview (spend vs budget + by-day + budget editor) is merged INTO the "Gemini models" admin tab with per-model spend as table columns (no standalone "Usage" tab/route) + always-present topbar spend pill via `topbar_counts` + `/ui/usage-pill` poll (unchanged)](./adr/0122-usage-and-budget-soft-cap.md) — *delivers #30 on the 0114–0119 cost foundation* |
+| 0114 | 2026-06-23 | [Annotate caching writes a `prefetch_queue` *visibility row* (born `downloading`, never claimed by the worker) so it shows on the queue page with live %, identical to a Cache-button row; the annotator keeps its own inline download rather than routing through the single-at-a-time worker. Button % + reload-resume share `cacheProgressForClip()` / `GET /api/jobs/active-for-clip`. Resume hook is `_annotateInit()` via `x-init` — NOT `init()`, which Object.assign would clobber against player's](./adr/0114-annotate-cache-visibility-row.md) |
+| 0115 | 2026-06-24 | [Annotation/studio batch runner gets real queue management (Tier 1 of the issue #100 review): cancel actually interrupts the in-flight task via `task.cancel()` (was DB-status only → the long Gemini call ran to completion), backed by a new idempotent `JobsRepo.cancel_job` that flips job + in-flight items to cancelled in one commit; both `_run_in_bg` wrappers reconcile on `CancelledError`; and `LiveCtx.aclose()` now `drain_running_jobs()` (cancel + bounded await) BEFORE closing the DB so fire-and-forget jobs — which uvicorn's connection draining does not cover — aren't abandoned mid-run](./adr/0115-job-cancel-and-shutdown-drain.md) — *Tier 2 unification tracked in #100* |

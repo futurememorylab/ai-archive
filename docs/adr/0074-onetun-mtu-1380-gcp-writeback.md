@@ -9,6 +9,12 @@ exceeds the Cloud Run → gateway path MTU), and lowering `ONETUN_MTU` to 1000
 fixes it. The "90 KB inbound read disproves MTU" argument was a flawed test
 (receive path ≠ send path). Read ADR 0076 for the corrected root cause; the
 text below is retained for history.
+**Lifespan:** Lesson
+
+> **Synthesis note (2026-06-24):** The peer-key-collision root cause here was
+> corrected by **0076** (outbound path-MTU black-hole). Kept as the debugging
+> trail. The durable rules live in **Invariant 6 / 20** of
+> [`docs/architecture-invariants.md`](../architecture-invariants.md).
 
 ## Context
 

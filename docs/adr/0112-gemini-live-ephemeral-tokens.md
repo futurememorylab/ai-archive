@@ -2,6 +2,7 @@
 
 **Date:** 2026-06-22
 **Status:** Accepted — supersedes [0043](./0043-gemini-live-api-key-exposure-accepted-risk.md)
+**Lifespan:** Invariant
 
 ## Context
 

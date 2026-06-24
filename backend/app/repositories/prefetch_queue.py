@@ -28,6 +28,7 @@ def _row_to_dict(row) -> dict[str, Any]:
         "finished_at",
         "error",
         "bytes_downloaded",
+        "bytes_total",
     )
     return dict(zip(keys, row, strict=False))
 
@@ -44,6 +45,7 @@ def _row_to_dict_with_name(row) -> dict[str, Any]:
         "finished_at",
         "error",
         "bytes_downloaded",
+        "bytes_total",
         "clip_name",
     )
     return dict(zip(keys, row, strict=False))
@@ -52,21 +54,17 @@ def _row_to_dict_with_name(row) -> dict[str, Any]:
 _LIST_COLUMNS_WITH_NAME = """
     q.id, q.provider_id, q.provider_clip_id, q.status,
     q.requested_by, q.requested_at, q.started_at, q.finished_at,
-    q.error, q.bytes_downloaded,
+    q.error, q.bytes_downloaded, q.bytes_total,
     cc.name AS clip_name
 """
 
 
 class PrefetchQueueRepo:
-    async def enqueue(
-        self,
-        conn: aiosqlite.Connection,
-        *,
-        key: ClipKey,
-        who: str,
-    ) -> int:
-        """Enqueue a prefetch. If an active row already exists for the
-        clip, return its id (idempotent)."""
+    async def _active_row_id(
+        self, conn: aiosqlite.Connection, key: ClipKey
+    ) -> int | None:
+        """Id of the clip's existing active (queued/downloading) row, if any.
+        Shared dedup lookup for the idempotent enqueue / start_inline paths."""
         cur = await conn.execute(
             """
             SELECT id FROM prefetch_queue
@@ -77,8 +75,20 @@ class PrefetchQueueRepo:
             (key[0], key[1]),
         )
         existing = await cur.fetchone()
+        return int(existing[0]) if existing is not None else None
+
+    async def enqueue(
+        self,
+        conn: aiosqlite.Connection,
+        *,
+        key: ClipKey,
+        who: str,
+    ) -> int:
+        """Enqueue a prefetch. If an active row already exists for the
+        clip, return its id (idempotent)."""
+        existing = await self._active_row_id(conn, key)
         if existing is not None:
-            return int(existing[0])
+            return existing
         cur = await conn.execute(
             """
             INSERT INTO prefetch_queue
@@ -87,6 +97,37 @@ class PrefetchQueueRepo:
             VALUES (?, ?, 'queued', ?, ?, 0)
             """,
             (key[0], key[1], who, _now_iso()),
+        )
+        await conn.commit()
+        assert cur.lastrowid is not None
+        return int(cur.lastrowid)
+
+    async def start_inline(
+        self,
+        conn: aiosqlite.Connection,
+        *,
+        key: ClipKey,
+        who: str,
+    ) -> int:
+        """Create a row for a download the caller performs itself, inline —
+        NOT via the prefetch worker (the annotator caches as the first step of
+        a job). The row is born `downloading` so the single-worker `claim_next`
+        (which only takes `queued`) never double-fetches the same clip.
+
+        Idempotent like `enqueue`: if an active row already exists for the clip
+        (e.g. the user also clicked Cache), its id is returned and reused."""
+        existing = await self._active_row_id(conn, key)
+        if existing is not None:
+            return existing
+        now = _now_iso()
+        cur = await conn.execute(
+            """
+            INSERT INTO prefetch_queue
+              (provider_id, provider_clip_id, status,
+               requested_by, requested_at, started_at, bytes_downloaded)
+            VALUES (?, ?, 'downloading', ?, ?, ?, 0)
+            """,
+            (key[0], key[1], who, now, now),
         )
         await conn.commit()
         assert cur.lastrowid is not None
@@ -131,6 +172,23 @@ class PrefetchQueueRepo:
         # Re-read so callers see the updated status/started_at.
         return await self.get(conn, rid)
 
+    async def update_progress(
+        self,
+        conn: aiosqlite.Connection,
+        rid: int,
+        bytes_downloaded: int,
+        bytes_total: int,
+    ) -> None:
+        """Record mid-download progress on a `downloading` row. Throttling
+        is the caller's job (MediaPrefetcher); this is a plain UPDATE."""
+        await conn.execute(
+            "UPDATE prefetch_queue "
+            "   SET bytes_downloaded=?, bytes_total=? "
+            " WHERE id=?",
+            (int(bytes_downloaded), int(bytes_total), rid),
+        )
+        await conn.commit()
+
     async def requeue_orphans(self, conn: aiosqlite.Connection) -> int:
         """Reset orphaned `downloading` rows back to `queued`.
 
@@ -143,7 +201,8 @@ class PrefetchQueueRepo:
         """
         cur = await conn.execute(
             "UPDATE prefetch_queue "
-            "   SET status='queued', started_at=NULL "
+            "   SET status='queued', started_at=NULL, "
+            "       bytes_downloaded=0, bytes_total=0 "
             " WHERE status='downloading'"
         )
         await conn.commit()
@@ -154,7 +213,7 @@ class PrefetchQueueRepo:
             """
             SELECT id, provider_id, provider_clip_id, status,
                    requested_by, requested_at, started_at, finished_at,
-                   error, bytes_downloaded
+                   error, bytes_downloaded, bytes_total
               FROM prefetch_queue WHERE id = ?
             """,
             (rid,),

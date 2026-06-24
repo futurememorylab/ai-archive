@@ -26,6 +26,7 @@ from backend.app.models.telemetry import RunTelemetryRecord, TelemetryCtx
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.model_config import ModelConfigRepo
+from backend.app.repositories.prefetch_queue import PrefetchQueueRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.run_telemetry import RunTelemetryRepo
@@ -33,6 +34,7 @@ from backend.app.repositories.studio_runs import StudioRunsRepo
 from backend.app.services import run_estimator
 from backend.app.services.errors import humanise as _humanise_error
 from backend.app.services.events import EventBus
+from backend.app.services.media_prefetcher import ProgressTracker
 from backend.app.services.pricing import compute_cost
 from backend.app.services.proxy_resolver import ProxyNotFound
 from backend.app.services.target_map import expand
@@ -211,6 +213,7 @@ async def run_job(
     run_telemetry_repo: RunTelemetryRepo,
     telemetry_ctx: TelemetryCtx,
     model_config_repo: ModelConfigRepo,
+    prefetch_queue_repo: PrefetchQueueRepo | None = None,
     only_clip_ids: set[int] | None = None,
     force_resolution: str | None = None,
     record_only: bool = False,
@@ -260,6 +263,7 @@ async def run_job(
                 topic=topic,
                 force_resolution=force_resolution,
                 record_only=record_only,
+                prefetch_queue_repo=prefetch_queue_repo,
             )
         except Exception as exc:  # noqa: BLE001
             log.exception(
@@ -371,6 +375,7 @@ async def _process_item(
     topic,
     force_resolution: str | None = None,
     record_only: bool = False,
+    prefetch_queue_repo: PrefetchQueueRepo | None = None,
 ) -> None:
     # Compute the AI-store key cheaply (no archive call). Full per-clip
     # metadata is resolved lazily below, AFTER the proxy/AI-store cache-miss
@@ -392,16 +397,32 @@ async def _process_item(
     upload = await ai_store.status(clip_key)
 
     if upload is None:
-        # Cache miss in AI store → need the local file to upload it.
+        # Cache miss in AI store → need the local file to upload it. Mirror the
+        # Cache button: record a prefetch_queue row (born `downloading`, never
+        # claimed by the worker) so this caching is visible on the queue page
+        # and reports live progress. The annotator still downloads inline — the
+        # row is purely for visibility/progress (spec 2026-06-23).
+        rid: int | None = None
+        tracker: ProgressTracker | None = None
+        if prefetch_queue_repo is not None:
+            rid = await prefetch_queue_repo.start_inline(
+                db, key=clip_key, who="annotate"
+            )
+            tracker = ProgressTracker(prefetch_queue_repo, conn=db, rid=rid)
+
         await jobs_repo.update_item_status(db, item.id, "resolving")
         await event_bus.publish(topic, {"item_id": item.id, "status": "resolving"})
         try:
-            local_path: Path = await proxy_resolver.path_for_clip_id(item.catdv_clip_id)
+            local_path: Path = await proxy_resolver.path_for_clip_id(
+                item.catdv_clip_id, tracker
+            )
         except ProxyNotFound:
             msg = (
                 f"clip {item.catdv_clip_id} is not locally cached and not in "
                 f"AI store — cache the clip on /clips first, or reconnect to CatDV"
             )
+            if rid is not None and prefetch_queue_repo is not None:
+                await prefetch_queue_repo.mark_error(db, rid, msg)
             await jobs_repo.update_item_status(db, item.id, "error", error=msg)
             await event_bus.publish(topic, {"item_id": item.id, "status": "error", "error": msg})
             if kind == "studio":
@@ -415,7 +436,16 @@ async def _process_item(
         await jobs_repo.update_item_status(db, item.id, "uploading")
         await event_bus.publish(topic, {"item_id": item.id, "status": "uploading"})
         mime = mimetypes.guess_type(str(local_path))[0] or "video/quicktime"
-        upload = await ai_store.ensure_uploaded(clip_key, local_path, mime)
+        try:
+            upload = await ai_store.ensure_uploaded(clip_key, local_path, mime)
+        except Exception as exc:  # noqa: BLE001 — re-raised after marking the row
+            if rid is not None and prefetch_queue_repo is not None:
+                await prefetch_queue_repo.mark_error(db, rid, _humanise_error(exc))
+            raise
+        if rid is not None and tracker is not None and prefetch_queue_repo is not None:
+            await prefetch_queue_repo.mark_done(
+                db, rid, bytes_downloaded=tracker.last_downloaded
+            )
 
     file_ref = await ai_store.reference_for_gemini(upload)
 

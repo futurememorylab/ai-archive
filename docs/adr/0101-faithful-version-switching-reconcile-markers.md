@@ -2,6 +2,7 @@
 
 **Date:** 2026-06-17
 **Status:** Accepted — refines [0100](./0100-publishing-audit-drop-provenance-and-reactivate-switching.md)
+**Lifespan:** Invariant
 
 ## Context
 

@@ -1,7 +1,10 @@
 # ARCHITECTURE — layer map
 
 One picture, one table, one pointer block. If you need a noun defined,
-read `docs/CONTEXT.md` first.
+read `docs/CONTEXT.md` first. For the system's always-true **rules** (the
+short list that governs every change), read
+[`docs/architecture-invariants.md`](./architecture-invariants.md) — this
+file is just the *shape*; that file is the *constraints*.
 
 ## Layers
 
@@ -71,9 +74,11 @@ routes. Run `.venv/bin/lint-imports` to check locally.
 
 ## Where else to look
 
+- `docs/architecture-invariants.md` — the always-true rules (the canon).
 - `docs/CONTEXT.md` — domain glossary; one sentence per noun.
-- `docs/adr/` — architecture decisions, one MADR-lite file per decision
-  (`NNNN-slug.md`). `docs/decisions.md` is now just the index.
+- `docs/adr/` — the decision audit trail, one MADR-lite file per decision
+  (`NNNN-slug.md`). `docs/decisions.md` is the index + the methodology for
+  how decisions are tracked and synthesised.
 - `docs/specs/` — feature designs (one per dated spec).
 - `docs/plans/` — implementation plans, one per PR / feature slice.
 - `docs/DEPLOY.md` — production deployment guide.

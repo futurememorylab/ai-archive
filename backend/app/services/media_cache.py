@@ -18,7 +18,7 @@ import asyncio
 import logging
 import mimetypes
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 from backend.app.archive.model import ClipKey
 from backend.app.services.media_locator import (
@@ -30,6 +30,9 @@ from backend.app.services.media_locator import (
 )
 from backend.app.uploaded_ids import is_uploaded
 
+if TYPE_CHECKING:
+    from backend.app.services.catdv_client import ProgressCb
+
 log = logging.getLogger(__name__)
 
 _DEFAULT_MIME = "video/quicktime"
@@ -40,7 +43,9 @@ def _clip_key(clip_id: int) -> ClipKey:
 
 
 class MediaCacheBackend(Protocol):
-    async def ensure_cached(self, clip_id: int) -> None: ...
+    async def ensure_cached(
+        self, clip_id: int, progress_cb: "ProgressCb | None" = None
+    ) -> None: ...
 
     async def locate(self, clip_id: int) -> LocalFile | RemoteUrl | None: ...
 
@@ -57,8 +62,10 @@ class LocalProxyBackend:
             prefer="local",
         )
 
-    async def ensure_cached(self, clip_id: int) -> None:
-        await self._resolver.path_for_clip_id(clip_id)
+    async def ensure_cached(
+        self, clip_id: int, progress_cb: "ProgressCb | None" = None
+    ) -> None:
+        await self._resolver.path_for_clip_id(clip_id, progress_cb)
 
     async def locate(self, clip_id: int) -> LocalFile | RemoteUrl | None:
         try:
@@ -81,12 +88,14 @@ class AiStoreBackend:
         self._proxy_cache_repo = proxy_cache_repo
         self._db_provider = db_provider
 
-    async def ensure_cached(self, clip_id: int) -> None:
+    async def ensure_cached(
+        self, clip_id: int, progress_cb: "ProgressCb | None" = None
+    ) -> None:
         key = _clip_key(clip_id)
         if await self._ai_store.status(key) is not None:
             return  # already in GCS -- no tunnel hit (status-first fast-path)
 
-        path: Path = await self._resolver.path_for_clip_id(clip_id)
+        path: Path = await self._resolver.path_for_clip_id(clip_id, progress_cb)
         try:
             mime = mimetypes.guess_type(str(path))[0] or _DEFAULT_MIME
             await self._ai_store.ensure_uploaded(key, path, mime)

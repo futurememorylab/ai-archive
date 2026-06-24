@@ -22,7 +22,7 @@ class _Resolver:
     def __init__(self, files):
         self.files = files
 
-    async def path_for_clip_id(self, clip_id):
+    async def path_for_clip_id(self, clip_id, progress_cb=None):
         return self.files[clip_id]
 
     def is_managed(self, path):

@@ -25,7 +25,7 @@ class _Resolver:
     def __init__(self, path):
         self._path, self.calls = path, []
 
-    async def path_for_clip_id(self, clip_id):
+    async def path_for_clip_id(self, clip_id, progress_cb=None):
         self.calls.append(clip_id)
         return self._path
 

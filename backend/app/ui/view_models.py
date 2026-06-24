@@ -197,6 +197,11 @@ def batch_view(row: dict) -> dict:
     # is never masked as green; mirrors the topbar sync chip's problem count so
     # the two can't disagree (see ADR 0096). Optional for back-compat.
     problems = int(row.get("problem_clips", 0) or 0)
+    # Items cancelled by orphan recovery (job interrupted by a restart). Counted
+    # separately from in_flight/completed so a stopped job reads "Cancelled",
+    # not a phantom "Running" (the leftover pending item) nor a false green
+    # "Applied". Optional for back-compat.
+    cancelled = int(row.get("cancelled", 0) or 0)
     running = int(row["running_jobs"]) > 0 or int(row["in_flight"]) > 0
     reviewed = max(0, completed - awaiting)
 
@@ -211,6 +216,9 @@ def batch_view(row: dict) -> dict:
     elif syncing > 0:
         # Review done, but write-backs haven't landed on CatDV yet.
         status_state, status_label = "accent", f"Syncing {syncing}"
+    elif cancelled > 0 and completed == 0 and failed == 0:
+        # Interrupted job with no usable output — stopped, not "Applied".
+        status_state, status_label = "", "Cancelled"
     else:
         status_state, status_label = "ok", "Applied"
 

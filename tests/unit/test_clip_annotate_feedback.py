@@ -29,12 +29,14 @@ def test_clip_annotate_runs_a_timer_and_toasts():
     assert "Alpine.store(\"toast\")" in js or "Alpine.store('toast')" in js
 
 
-def test_clip_annotate_signals_cache_layer_on_upload():
-    # When annotating an uncached clip the job uploads the proxy; clipAnnotate
-    # must tell the cache badge so it shows "uploading" then flips to cached.
+def test_clip_annotate_flips_cache_badge_to_cached_when_done():
+    # When annotating an uncached clip the job caches it; clipAnnotate must tell
+    # the cache badge to refresh to its cached state when caching finishes.
+    # Caching PROGRESS is shown only in the annotate button (one indicator, not
+    # two), so there is NO clip-cache-uploading spinner event anymore.
     js = (STATIC / "clipAnnotate.js").read_text()
-    assert "clip-cache-uploading" in js
     assert "clip-cache-refresh" in js
+    assert "clip-cache-uploading" not in js
 
 
 def test_annotate_dropdown_shows_running_timer():
@@ -70,7 +72,10 @@ def test_cache_badge_settles_at_caching_handoff_not_run_end():
     assert "clip-cache-refresh" in method
 
 
-def test_cache_actions_listens_for_annotate_events():
+def test_cache_actions_listens_for_annotate_cached_event_only():
+    # The badge refreshes to "cached" when annotate caching finishes, but does
+    # NOT spin during caching (the annotate button owns that progress) — so it
+    # only listens for clip-cache-refresh, not clip-cache-uploading.
     html = (TPL / "_cache_actions.html").read_text()
-    assert "clip-cache-uploading.window" in html
     assert "clip-cache-refresh.window" in html
+    assert "clip-cache-uploading" not in html

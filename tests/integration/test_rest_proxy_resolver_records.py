@@ -12,7 +12,7 @@ class _FakeCatdv:
     def __init__(self):
         self.calls = []
 
-    async def download_proxy(self, clip_id: int, dest: Path) -> None:
+    async def download_proxy(self, clip_id: int, dest: Path, *, progress_cb=None) -> None:
         self.calls.append((clip_id, dest))
         dest.write_bytes(b"PROXY-OK!")  # noqa: ASYNC240
 

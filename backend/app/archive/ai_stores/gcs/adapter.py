@@ -4,6 +4,7 @@ returns a gs:// reference for Gemini. Depends on GcsService and AIStoreFilesRepo
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 from collections.abc import Callable
@@ -49,14 +50,22 @@ class GcsInputStore:
     async def ensure_uploaded(self, clip_key: ClipKey, local_path: Path, mime: str) -> UploadedRef:
         clip_id = int(clip_key[1])
         db = self._db_provider()
-        sha = _sha256(local_path)
+        # Hashing a multi-GB file reads the whole thing — offload so it doesn't
+        # block the event loop (which would freeze the server for every other
+        # request while an annotate caches a large clip).
+        sha = await asyncio.to_thread(_sha256, local_path)
 
         existing = await self._repo.get(db, store_id=self.id, clip_id=clip_id)
         if existing is not None and existing["sha256"] == sha:
             await self._repo.touch(db, store_id=self.id, clip_id=clip_id)
             return self._row_to_ref(existing)
 
-        gcs_uri = self._gcs.upload_if_absent(clip_id=clip_id, local_path=local_path, mime=mime)
+        # The GCS upload is synchronous and can take minutes for a large clip;
+        # run it in a worker thread so the event loop stays responsive (a page
+        # reload during the upload must not hang the server).
+        gcs_uri = await asyncio.to_thread(
+            self._gcs.upload_if_absent, clip_id=clip_id, local_path=local_path, mime=mime
+        )
         size = local_path.stat().st_size
 
         await self._repo.upsert(

@@ -93,6 +93,25 @@ from backend.app.settings import Settings
 MIGRATIONS = Path(__file__).resolve().parents[1] / "migrations"
 
 
+async def drain_running_jobs(
+    running: dict[int, object], *, timeout: float = 5.0
+) -> None:
+    """Cancel and await any in-flight annotation/studio job tasks tracked in
+    CoreCtx._running_jobs, so shutdown never closes the DB under a running
+    run_job(). Mirrors MediaPrefetcher.stop(): cancel, then a bounded await.
+    Each task's CancelledError handler reconciles its job's item state, which
+    is why this must run BEFORE core.aclose() closes the connection."""
+    tasks = [
+        t
+        for t in list(running.values())
+        if isinstance(t, asyncio.Task) and not t.done()
+    ]
+    for t in tasks:
+        t.cancel()
+    if tasks:
+        await asyncio.wait(tasks, timeout=timeout)
+
+
 @dataclass
 class CoreCtx:
     """Always-present state. No Optional service fields."""
@@ -461,6 +480,10 @@ class LiveCtx:
             await self.catdv.__aexit__(None, None, None)
         if self.vpn_supervisor is not None:
             await self.vpn_supervisor.aclose()
+        # Drain fire-and-forget annotation/studio job tasks before the DB
+        # closes under them — they are NOT request-scoped, so uvicorn's
+        # connection draining does not cover them. See ADR 0115.
+        await drain_running_jobs(self.core._running_jobs)
         await self.core.aclose()
 
 

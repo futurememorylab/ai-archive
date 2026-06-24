@@ -14,6 +14,7 @@ from backend.app.repositories.proxy_cache import ProxyCacheRepo
 from backend.app.uploaded_ids import is_uploaded
 
 if TYPE_CHECKING:
+    from backend.app.services.catdv_client import ProgressCb
     from backend.app.services.media_store_map import MediaStoreMap
 
 
@@ -21,7 +22,9 @@ if TYPE_CHECKING:
 class ProxyResolver(Protocol):
     is_host_local: bool
 
-    async def path_for_clip_id(self, clip_id: int) -> Path: ...
+    async def path_for_clip_id(
+        self, clip_id: int, progress_cb: "ProgressCb | None" = None
+    ) -> Path: ...
     def is_managed(self, path: Path) -> bool: ...
 
 
@@ -50,7 +53,9 @@ class RestProxyResolver:
         self._db_provider = db_provider
         self._archive = archive
 
-    async def path_for_clip_id(self, clip_id: int) -> Path:
+    async def path_for_clip_id(
+        self, clip_id: int, progress_cb: "ProgressCb | None" = None
+    ) -> Path:
         # Cache hit by recorded row — avoids a get_clip round-trip and works
         # for both image ({id}.jpg) and video ({id}.mov) files. Also repairs
         # legacy rows with NULL provider_* columns.
@@ -74,7 +79,7 @@ class RestProxyResolver:
                         )
                     return cached
 
-        dest, download = await self._dest_and_downloader(clip_id)
+        dest, download = await self._dest_and_downloader(clip_id, progress_cb)
         if not dest.exists() or dest.stat().st_size == 0:  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
             await download()
 
@@ -92,7 +97,7 @@ class RestProxyResolver:
         return dest
 
     async def _dest_and_downloader(
-        self, clip_id: int
+        self, clip_id: int, progress_cb: "ProgressCb | None" = None
     ) -> tuple[Path, Callable[[], Awaitable[None]]]:
         """Return (dest_path, async download callable) for this clip.
 
@@ -111,14 +116,14 @@ class RestProxyResolver:
                 mid = int(media_id)
 
                 async def _dl_image() -> None:
-                    await self._catdv.download_original(mid, dest)
+                    await self._catdv.download_original(mid, dest, progress_cb=progress_cb)
 
                 return dest, _dl_image
 
         dest = self._cache_dir / f"{clip_id}.mov"
 
         async def _dl_video() -> None:
-            await self._catdv.download_proxy(clip_id, dest)
+            await self._catdv.download_proxy(clip_id, dest, progress_cb=progress_cb)
 
         return dest, _dl_video
 
@@ -151,7 +156,10 @@ class FilesystemProxyResolver:
         self._archive = archive
         self._map = media_store_map
 
-    async def path_for_clip_id(self, clip_id: int) -> Path:
+    async def path_for_clip_id(
+        self, clip_id: int, progress_cb: "ProgressCb | None" = None
+    ) -> Path:
+        # progress_cb intentionally unused: these resolvers never download.
         clip = await self._archive.get_clip(str(clip_id))
         media = (clip.provider_data or {}).get("media") or {}
         hires = media.get("filePath")
@@ -191,7 +199,10 @@ class LocalCacheOnlyResolver:
         self._db_provider = db_provider
         self._cache_dir = cache_dir
 
-    async def path_for_clip_id(self, clip_id: int) -> Path:
+    async def path_for_clip_id(
+        self, clip_id: int, progress_cb: "ProgressCb | None" = None
+    ) -> Path:
+        # progress_cb intentionally unused: these resolvers never download.
         row = await self._repo.get(self._db_provider(), clip_id)
         if row is None:
             raise ProxyNotFound(f"clip {clip_id} not cached locally")
@@ -232,9 +243,12 @@ class UploadAwareResolver:
     def inner(self) -> ProxyResolver:
         return self._inner
 
-    async def path_for_clip_id(self, clip_id: int) -> Path:
+    async def path_for_clip_id(
+        self, clip_id: int, progress_cb: "ProgressCb | None" = None
+    ) -> Path:
         if not is_uploaded(clip_id):
-            return await self._inner.path_for_clip_id(clip_id)
+            return await self._inner.path_for_clip_id(clip_id, progress_cb)
+        # uploaded clips are served from local cache; no download, cb unused
         row = await self._repo.get(self._db_provider(), clip_id)
         if row is None:
             raise ProxyNotFound(f"uploaded clip {clip_id} not in local cache")

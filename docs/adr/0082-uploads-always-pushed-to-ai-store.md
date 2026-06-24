@@ -2,6 +2,7 @@
 
 **Date:** 2026-06-15
 **Status:** Accepted (supersedes the upload-gating part of [0069](./0069-cloud-media-cache-ai-store.md))
+**Lifespan:** Invariant
 
 ## Context
 

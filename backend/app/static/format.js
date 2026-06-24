@@ -35,9 +35,13 @@
     let startMs = 0;
     let id = null;
     return {
-      start(onTick) {
-        startMs = performance.now();
-        onTick(fmtTimecode(0));
+      // offsetSeconds backdates the start so the timer resumes from time
+      // already elapsed (e.g. a job that began before a page reload). Defaults
+      // to 0 — a fresh run starts at 0:00.
+      start(onTick, offsetSeconds = 0) {
+        const offMs = Math.max(0, Number(offsetSeconds) || 0) * 1000;
+        startMs = performance.now() - offMs;
+        onTick(fmtTimecode(offMs / 1000));
         id = setInterval(() => {
           onTick(fmtTimecode((performance.now() - startMs) / 1000));
         }, 1000);
@@ -47,7 +51,39 @@
       },
     };
   }
+  // Shared cache-progress probe: reads the live prefetch queue and returns
+  // { status, pct } for a clip's active row, or null when the clip has no
+  // active row. `pct` is an integer 0–100 only while `downloading` with a
+  // known total, else null. Both the per-clip cache control (cacheActions)
+  // and the annotate button (clipAnnotate) read progress through this single
+  // helper so they always show the same percentage math.
+  async function cacheProgressForClip(clipId) {
+    let res;
+    try {
+      res = await fetch("/api/cache/prefetch/queue");
+    } catch {
+      return null; // offline / transient
+    }
+    if (!res.ok) return null;
+    let q;
+    try {
+      q = await res.json();
+    } catch {
+      return null;
+    }
+    const row = (q.active || []).find(
+      (r) => String(r.provider_clip_id) === String(clipId),
+    );
+    if (!row) return null;
+    const pct =
+      row.status === "downloading" && row.bytes_total > 0
+        ? Math.floor((100 * row.bytes_downloaded) / row.bytes_total)
+        : null;
+    return { status: row.status, pct };
+  }
+
   window.fmtTimecode = fmtTimecode;
+  window.cacheProgressForClip = cacheProgressForClip;
   window.elapsedTimer = elapsedTimer;
   window.fmtBytes = fmtBytes;
   window.fmtUsd = fmtUsd;

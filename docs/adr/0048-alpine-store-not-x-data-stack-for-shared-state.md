@@ -2,6 +2,7 @@
 
 **Date:** 2026-05-31
 **Status:** Accepted
+**Lifespan:** Invariant
 
 ## Context
 

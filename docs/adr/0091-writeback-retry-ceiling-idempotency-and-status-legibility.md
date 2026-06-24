@@ -2,6 +2,13 @@
 
 **Date:** 2026-06-17
 **Status:** Accepted
+**Lifespan:** Invariant
+
+> **Synthesis note (2026-06-24):** Head of the write-back refinement chain
+> 0091 → 0092 → 0093 → 0094 → 0095 → 0096 → 0097 → 0098. The converged,
+> current-state rule is **Invariant 8** in
+> [`docs/architecture-invariants.md`](../architecture-invariants.md). Read
+> this chain only for the detailed history; the invariant is the live canon.
 
 ## Context
 
