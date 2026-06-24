@@ -7,6 +7,8 @@ provider cannot supply. These are injected via install_live_ctx.
 
 from __future__ import annotations
 
+import json
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -47,19 +49,34 @@ SEARCH_MATCH_NAMES = (
 )
 SEARCH_NONMATCH_NAME = "Brno textile factory"
 NO_RESULTS_TERM = "zzqxnomatch"
+
+# Clips that NO search/review assertion touches — safe to drive a real annotate
+# job against (bulk-annotate-start, cancel-running-batch) without perturbing the
+# other scenarios. The single source of truth shared with those scenarios.
+ANNOTATE_SAFE_NAMES = (
+    "Wartime newsreel, reel 12",    # clip 105
+    "Studio interview (unedited)",  # clip 106
+)
+
 # (clip_id, name) for every extra clip. 101 is the canonical clip (build_clip)
 # and is added separately; none of these names contain SEARCH_TERM by accident.
 _EXTRA_CLIPS = (
     (102, SEARCH_MATCH_NAMES[0]),
     (103, SEARCH_MATCH_NAMES[1]),
     (104, SEARCH_NONMATCH_NAME),
-    (105, "Wartime newsreel, reel 12"),
-    (106, "Studio interview (unedited)"),
+    (105, ANNOTATE_SAFE_NAMES[0]),
+    (106, ANNOTATE_SAFE_NAMES[1]),
     (REVIEW_FIXTURE_CLIP_ID, REVIEW_FIXTURE_CLIP_NAME),
 )
 # A catalog clip that is never annotated — used by the "not annotated" filter
 # scenario as the clip that should remain visible.
 NOT_ANNOTATED_CLIP_NAME = SEARCH_NONMATCH_NAME
+
+# A prompt with a PRODUCTION version is seeded (seed.seed_production_prompt) so
+# the bulk-annotate modal and the New-batch picker have a selectable prompt —
+# both only list prompts whose current_production_version_id is non-null. Its
+# media_kind matches the seeded video clips so it shows up for them.
+PRODUCTION_PROMPT_NAME = "decade-tagger (production)"
 
 
 def build_clip(video_path: Path, duration_secs: float = 8.0, fps: float = 25.0) -> CanonicalClip:
@@ -181,3 +198,86 @@ class StubThumbnailService:
 
     async def get_or_fetch(self, clip_id: int):
         return self._thumb
+
+
+class FakeAIStore:
+    """Offline AI-input store: reports every clip as already uploaded.
+
+    `status()` returning non-None makes the annotator take its fast path
+    (skip the local-proxy resolve + upload entirely — see
+    services/annotator.py::_process_item), so a job can run with no network
+    and no CatDV seat. Mirrors the GCS store's DB-only, offline-safe
+    `status()` contract (CLAUDE.md, cache layers)."""
+
+    id = "fake-ai-store"
+
+    async def status(self, clip_key):
+        return {"key": tuple(clip_key)}
+
+    async def ensure_uploaded(self, clip_key, local_path, mime):
+        return {"key": tuple(clip_key)}
+
+    async def reference_for_gemini(self, upload):
+        return {"uri": "fake://" + "/".join(upload["key"])}
+
+
+# Default release timeout: if a scenario forgets to release() a held annotate,
+# the executor thread unblocks after this many seconds rather than wedging the
+# app. Generous so a slow CI box never trips it during a legitimate hold.
+_HOLD_TIMEOUT_SECS = 30.0
+
+
+class FakeGemini:
+    """Offline Gemini double for the job-start / cancel walkthroughs.
+
+    `annotate` is invoked by the annotator via ``asyncio.to_thread`` (Vertex's
+    client is synchronous), so it runs on the app's executor thread. By default
+    the gate is *released*: annotate returns immediately with a deterministic
+    payload, so any scenario that just needs a job to run gets instant
+    completion.
+
+    A scenario can call ``hold()`` (from the Playwright / main thread — the
+    walkthrough app runs in-process) to make every subsequent annotate block on
+    a thread-safe gate until ``release()`` is called. That keeps a batch in
+    ``running`` / ``prompting`` long enough to observe progress and click
+    Cancel, then lets the run finish cleanly. Fully offline: no network, no
+    CatDV seat (ADR 0111)."""
+
+    id = "fake-gemini"
+
+    def __init__(self) -> None:
+        self._gate = threading.Event()
+        self._gate.set()  # released by default → instant
+        self._entered = threading.Event()
+
+    def hold(self) -> None:
+        """Make the next annotate() block until release() is called."""
+        self._entered.clear()
+        self._gate.clear()
+
+    def release(self) -> None:
+        """Unblock a held annotate() so the run ends (or cancels) cleanly."""
+        self._gate.set()
+
+    def wait_until_prompting(self, timeout: float = 10.0) -> bool:
+        """Block until a held annotate() has actually started — i.e. the batch
+        has reached ``prompting`` — so a caller asserts 'running' without a
+        race. Returns False on timeout."""
+        return self._entered.wait(timeout)
+
+    def annotate(self, *, file_ref, prompt, schema, model):
+        self._entered.set()
+        # No-op when the gate is already set (default); blocks while held.
+        self._gate.wait(timeout=_HOLD_TIMEOUT_SECS)
+        return {"text": json.dumps({"decade": PUBLISHED_DECADE}), "raw": {}}
+
+
+# Process-wide singleton: app_server injects THIS instance into the LiveCtx, and
+# scenarios import it via gemini_fake() to hold/release the fake while Playwright
+# drives the browser. One walkthrough app instance per run, so one shared fake.
+_GEMINI = FakeGemini()
+
+
+def gemini_fake() -> FakeGemini:
+    """The FakeGemini the walkthrough app injects — shared with scenarios."""
+    return _GEMINI
