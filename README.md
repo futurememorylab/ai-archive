@@ -1,6 +1,6 @@
 # CatDV Annotator — Backend
 
-Local-first web app for the Pragafilm CatDV archive: AI annotation jobs against
+Local-first web app for a CatDV archive: AI annotation jobs against
 Gemini (Vertex AI) with results written back to CatDV.
 
 **Backend only at this point.** UI is Plan B.
@@ -243,3 +243,13 @@ Sessions land in the `live_sessions` SQLite table and surface as a
 The History panel is read-only — transcripts and Czech summaries are
 never auto-pushed into draft annotations. Audio bytes are not stored
 at all (only the transcripts that Gemini emits).
+
+## License
+
+Released under the [MIT License](LICENSE) © 2026 Future Memory Lab.
+
+This repository also bundles a few third-party assets (Alpine.js, htmx, and
+the Inter and JetBrains Mono fonts) under their own licenses — see
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). "CatDV" is a trademark of
+its respective owner; it is referenced here only for interoperability and this
+project is not affiliated with or endorsed by them.
