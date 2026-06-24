@@ -4,6 +4,7 @@ All under /api/studio. See docs/specs/2026-05-26-prompt-studio-design.md.
 """
 
 import asyncio
+import contextlib
 import logging
 
 import aiosqlite
@@ -340,6 +341,12 @@ async def _run_in_bg(ctx, job_id: int) -> None:
             telemetry_ctx=ctx.telemetry_ctx,
             prefetch_queue_repo=ctx.prefetch_queue_repo,
         )
+    except asyncio.CancelledError:
+        # Cancelled mid-flight (cancel route or shutdown drain): reconcile the
+        # job's item state before propagating so nothing is left 'prompting'.
+        with contextlib.suppress(Exception):
+            await ctx.jobs_repo.cancel_job(ctx.db, job_id)
+        raise
     finally:
         ctx._running_jobs.pop(job_id, None)
 

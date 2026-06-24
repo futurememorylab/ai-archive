@@ -58,6 +58,11 @@
       </td>
       <td class="bt-actions" onclick="event.stopPropagation()">
         <div class="bt-actions-inner">
+        {% if b.running %}
+        <button type="button" class="btn sm danger" @click="cancelBatch({{ b.job_ids|tojson }})">
+          Cancel
+        </button>
+        {% endif %}
         {% if not b.running and b.failed %}
         <button type="button" class="btn sm" @click="retryFailed({{ b.job_ids|tojson }})">
           ↻ Retry failed ({{ b.failed }})

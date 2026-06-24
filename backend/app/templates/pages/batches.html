@@ -161,6 +161,17 @@
           this._schedule();
         } catch (e) { Alpine.store("toast").push("Retry failed: " + e.message, { level: "error" }); }
       },
+      async cancelBatch(jobIds) {
+        // A batch is one job per media kind sharing a run_group, so cancel each.
+        try {
+          for (const id of jobIds) {
+            const r = await fetch("/api/jobs/" + id + "/cancel", { method: "POST" });
+            if (!r.ok) throw new Error("HTTP " + r.status);
+          }
+          Alpine.store("toast").push("Cancelling batch…", { level: "success" });
+          window.dispatchEvent(new CustomEvent("jobs-changed"));
+        } catch (e) { Alpine.store("toast").push("Cancel failed: " + e.message, { level: "error" }); }
+      },
 
       // ── new-batch picker ────────────────────────────────────────
       newOpen: false,

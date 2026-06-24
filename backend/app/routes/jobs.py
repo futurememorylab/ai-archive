@@ -2,6 +2,7 @@
 inspecting annotation jobs. Delegates execution to the annotator service."""
 
 import asyncio
+import contextlib
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -66,6 +67,13 @@ async def _run_in_bg(ctx, job_id: int, *, only_clip_ids: set[int] | None = None)
             prefetch_queue_repo=ctx.prefetch_queue_repo,
             only_clip_ids=only_clip_ids,
         )
+    except asyncio.CancelledError:
+        # Cancelled mid-flight (cancel route or shutdown drain): an item may
+        # have advanced into a transient state after the cancel sweep, so
+        # reconcile before propagating, leaving nothing 'prompting' forever.
+        with contextlib.suppress(Exception):
+            await ctx.jobs_repo.cancel_job(ctx.db, job_id)
+        raise
     finally:
         ctx._running_jobs.pop(job_id, None)
 
@@ -170,5 +178,12 @@ async def get_job(request: Request, job_id: int):
 @router.post("/{job_id}/cancel")
 async def cancel_job(request: Request, job_id: int):
     ctx = get_core_ctx(request)
-    await ctx.jobs_repo.update_status(ctx.db, job_id, "cancelled")
+    # Reconcile DB state first (job + in-flight items → cancelled), then
+    # interrupt the in-flight task so cancel is prompt instead of waiting out
+    # the current clip's long Gemini call. The task's CancelledError handler
+    # re-runs cancel_job to mop up any item that raced into a transient state.
+    await ctx.jobs_repo.cancel_job(ctx.db, job_id)
+    task = ctx._running_jobs.get(job_id)
+    if isinstance(task, asyncio.Task):
+        task.cancel()
     return {"id": job_id, "status": "cancelled"}
