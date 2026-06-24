@@ -153,9 +153,9 @@ class RetryFailed(BaseModel):
 
 @router.post("/batches/retry-failed")
 async def retry_failed(request: Request, body: RetryFailed):
-    """Re-run failed clips. Reuses annotator.run_job (which only re-processes
-    'error'/'pending' items); resetting the targeted failures to 'pending' is
-    what scopes the retry. Requires live services + a proxy resolver."""
+    """Re-run failed clips. The worker only re-processes 'error'/'pending'
+    items, so resetting the targeted failures to 'pending' is what scopes the
+    retry. Requires live services + a proxy resolver."""
     live = get_live_ctx(request)  # 503 when offline
     if live.proxy_resolver is None:
         raise HTTPException(503, "Proxy resolver offline — cannot run annotations")
@@ -172,16 +172,16 @@ async def retry_failed(request: Request, body: RetryFailed):
         if not failed:
             continue
         # Flip the targeted failures back to 'pending' synchronously, BEFORE the
-        # async job starts. The background run can take seconds to begin flipping
-        # statuses (proxy resolution over the VPN), so without this the next
-        # /batches/table refresh lands in that gap and shows a stale "Failed"
-        # until something else triggers a re-render. 'pending' makes in_flight > 0
-        # immediately → the batch reads as running. run_job re-processes
-        # 'pending'/'error' items alike, so what actually runs is unchanged.
+        # worker picks the job up. The background run can take seconds to begin
+        # flipping statuses (proxy resolution over the VPN), so without this the
+        # next /batches/table refresh lands in that gap and shows a stale
+        # "Failed" until something else triggers a re-render. 'pending' makes
+        # in_flight > 0 immediately → the batch reads as running. The worker
+        # re-processes 'pending'/'error' items alike, so what runs is unchanged.
         for it in failed:
             await core.jobs_repo.update_item_status(core.db, it.id, "pending")
         # Flip the job back to pending so the lifespan JobRunner re-claims it.
-        # run_job only processes pending/error items, so only the reset clips
+        # The worker only processes pending/error items, so only the reset clips
         # actually re-run. Routes never execute jobs themselves (ADR 0125).
         await core.jobs_repo.update_status(core.db, jid, "pending")
         started.append(jid)
