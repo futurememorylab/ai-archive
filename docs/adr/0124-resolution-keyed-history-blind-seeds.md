@@ -1,4 +1,4 @@
-# 0115. Resolution-aware estimates: key the learned history, keep seeds resolution-blind
+# 0124. Resolution-aware estimates: key the learned history, keep seeds resolution-blind
 
 **Date:** 2026-06-23
 **Status:** Accepted

@@ -111,7 +111,7 @@ model_config(
   the code dict. `compute_cost()` keeps its signature; only the rate source
   moves. Pricing stays **DB-only and offline-safe** (a DB lookup, no
   network), consistent with `EnumService` on `CoreCtx`.
-- **Admin "Gemini models" tab** (revised — see ADR 0114): rather than a
+- **Admin "Gemini models" tab** (revised — see ADR 0123): rather than a
   *second* tab alongside the existing editable-enum tab for
   `gemini_generation_model`, the model catalog (the enum) and its per-model
   rate cards are merged into **one** tab. Its spine is the catalog (every
@@ -152,7 +152,7 @@ model_config(
   `(model, kind)`. The fallback chain became:
   prompt-hash + model + kind + resolution → model + kind + resolution →
   **seed constants (resolution-blind, see below)**.
-- **Scope decision (ADR 0115):** the cold-start *seed constants* stay
+- **Scope decision (ADR 0124):** the cold-start *seed constants* stay
   resolution-blind — only the *learned history* is resolution-keyed. Once
   ≥3 runs exist at a resolution, that resolution's real token rates take
   over; before then the (already-`rough`) seed estimate is resolution-blind.
@@ -260,7 +260,7 @@ The spec ships as four independently shippable, ordered slices:
    admin dropdown).
 3. **PR3 — Accurate estimates everywhere** *(shipped)*. Resolution-key the
    `run_estimator` learned-history chain (seeds stay resolution-blind, ADR
-   0115); estimate-vs-actual delta on the batches list; show the resolution
+   0124); estimate-vs-actual delta on the batches list; show the resolution
    in force on the pre-run estimate labels (studio + batch modal); the N+1
    query-count guard updated (constant +1 model_config read, N=10==N=100).
 4. **PR4 — Calibration + real cost.** Split into two slices:
@@ -295,7 +295,7 @@ The spec ships as four independently shippable, ordered slices:
 
 ## Manual acceptance flows
 
-1. **One merged "Gemini models" tab — catalog + pricing (ADR 0114).**
+1. **One merged "Gemini models" tab — catalog + pricing (ADR 0123).**
    Setup: app running, signed in as admin, open `/admin` → "Gemini models"
    tab. There is exactly ONE Gemini-model tab (no separate "Gemini
    generation models" enum tab).

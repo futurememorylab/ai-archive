@@ -7,7 +7,7 @@
 
 Issue #30 ("Usage & budget") asks for four things: collect token cost/spend,
 create a budget, an admin page for a spend overview, and an always-present
-usage indicator. The cost-prediction epic (ADRs 0114–0119) already delivered
+usage indicator. The cost-prediction epic (ADRs 0116, 0119–0124) already delivered
 the first — every Gemini call writes a `run_telemetry` row with `cost_usd` and
 `occurred_at`. This ADR covers the remaining three: a budget, the overview, and
 the indicator. The open question was how strict the budget should be and where

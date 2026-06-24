@@ -1,4 +1,4 @@
-# 0114. Merge the Gemini model catalog and pricing into one Admin tab
+# 0123. Merge the Gemini model catalog and pricing into one Admin tab
 
 **Date:** 2026-06-23
 **Status:** Accepted
