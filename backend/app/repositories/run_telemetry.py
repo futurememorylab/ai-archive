@@ -217,6 +217,71 @@ class RunTelemetryRepo:
                 agg["actual_cost_usd"] += float(actual)
         return out
 
+    # --- Spend aggregates over a time window (Usage & Budget, #30) -------
+    # All filtered by occurred_at >= start [AND occurred_at < end]. Spend is
+    # status-agnostic and run-kind-agnostic: every run that burned tokens is
+    # real spend (annotation + studio + calibration). NULL cost_usd (un-priced
+    # models) is summed as 0 via COALESCE and counted in total_count, NOT
+    # priced_count, so a caller can flag a partial subtotal. Single GROUP BY
+    # queries (no N+1) — a month scan is small; add an occurred_at index only
+    # if a perf test shows it's slow.
+
+    @staticmethod
+    def _period_where(end_iso: str | None) -> tuple[str, list]:
+        if end_iso is None:
+            return "occurred_at >= ?", []
+        return "occurred_at >= ? AND occurred_at < ?", [end_iso]
+
+    async def spend_in_period(
+        self, conn: aiosqlite.Connection, *, start_iso: str, end_iso: str | None = None
+    ) -> dict:
+        """{"cost_usd": float, "priced_count": int, "total_count": int} over the
+        window. cost_usd is COALESCE(SUM,0); priced_count = COUNT(cost_usd)
+        (non-NULL); total_count = COUNT(*) — un-priced runs count in total only."""
+        where, extra = self._period_where(end_iso)
+        cur = await conn.execute(
+            f"SELECT COALESCE(SUM(cost_usd), 0), COUNT(cost_usd), COUNT(*) "
+            f"FROM run_telemetry WHERE {where}",
+            (start_iso, *extra),
+        )
+        row = await cur.fetchone()
+        return {
+            "cost_usd": float(row[0]),
+            "priced_count": int(row[1]),
+            "total_count": int(row[2]),
+        }
+
+    async def spend_by_model_in_period(
+        self, conn: aiosqlite.Connection, *, start_iso: str, end_iso: str | None = None
+    ) -> list[dict]:
+        """[{"model": str, "cost_usd": float, "count": int}] grouped by model,
+        ORDER BY cost_usd DESC — the by-model breakdown for the Usage tab."""
+        where, extra = self._period_where(end_iso)
+        cur = await conn.execute(
+            f"SELECT model, COALESCE(SUM(cost_usd), 0), COUNT(*) "
+            f"FROM run_telemetry WHERE {where} "
+            f"GROUP BY model ORDER BY COALESCE(SUM(cost_usd), 0) DESC",
+            (start_iso, *extra),
+        )
+        return [
+            {"model": m, "cost_usd": float(cost), "count": int(count)}
+            for m, cost, count in await cur.fetchall()
+        ]
+
+    async def spend_by_day_in_period(
+        self, conn: aiosqlite.Connection, *, start_iso: str, end_iso: str | None = None
+    ) -> list[dict]:
+        """[{"day": "YYYY-MM-DD", "cost_usd": float}] grouped by calendar day
+        (substr of the ISO occurred_at), ORDER BY day — the daily spend series."""
+        where, extra = self._period_where(end_iso)
+        cur = await conn.execute(
+            f"SELECT substr(occurred_at, 1, 10) AS day, COALESCE(SUM(cost_usd), 0) "
+            f"FROM run_telemetry WHERE {where} "
+            f"GROUP BY day ORDER BY day",
+            (start_iso, *extra),
+        )
+        return [{"day": day, "cost_usd": float(cost)} for day, cost in await cur.fetchall()]
+
     async def recent_input_ratios(
         self,
         conn: aiosqlite.Connection,

@@ -305,3 +305,71 @@ async def test_cost_counts_by_job_partial(db):
     await _insert_run(db, job_id=3, model="m", media_kind="video", status="ok", cost_usd=None)
     counts = await repo.cost_counts_by_job(db, [3])
     assert counts[3] == (1, 2)  # 1 priced of 2 total
+
+
+# --- Spend aggregates over a window (Usage & Budget, #30) --------------------
+
+
+async def _seed_two_months(db):
+    """Seed run_telemetry across May + June 2026 with priced + un-priced rows."""
+    # June 2026 (the "current" month under test).
+    await _insert_run(db, occurred_at="2026-06-01T09:00:00+00:00",
+                      model="gemini-flash", cost_usd=1.00)
+    await _insert_run(db, occurred_at="2026-06-01T15:00:00+00:00",
+                      model="gemini-pro", cost_usd=2.50)
+    await _insert_run(db, occurred_at="2026-06-10T12:00:00+00:00",
+                      model="gemini-flash", cost_usd=0.50)
+    # Un-priced June run (NULL cost) — counts in total, not priced, adds 0 spend.
+    await _insert_run(db, occurred_at="2026-06-15T12:00:00+00:00",
+                      model="gemini-flash", cost_usd=None)
+    # May 2026 — outside the June window.
+    await _insert_run(db, occurred_at="2026-05-20T12:00:00+00:00",
+                      model="gemini-flash", cost_usd=99.0)
+
+
+@pytest.mark.asyncio
+async def test_spend_in_period_totals_and_counts(db):
+    repo = RunTelemetryRepo()
+    await _seed_two_months(db)
+    res = await repo.spend_in_period(
+        db, start_iso="2026-06-01T00:00:00+00:00", end_iso="2026-07-01T00:00:00+00:00"
+    )
+    assert res["cost_usd"] == pytest.approx(4.00)  # 1.00 + 2.50 + 0.50, NULL→0
+    assert res["priced_count"] == 3  # NULL excluded from priced
+    assert res["total_count"] == 4  # NULL counted in total
+
+
+@pytest.mark.asyncio
+async def test_spend_in_period_open_ended_includes_later_rows(db):
+    repo = RunTelemetryRepo()
+    await _seed_two_months(db)
+    # No end_iso: everything from June onward (May excluded by start).
+    res = await repo.spend_in_period(db, start_iso="2026-06-01T00:00:00+00:00")
+    assert res["cost_usd"] == pytest.approx(4.00)
+    assert res["total_count"] == 4
+
+
+@pytest.mark.asyncio
+async def test_spend_by_model_in_period(db):
+    repo = RunTelemetryRepo()
+    await _seed_two_months(db)
+    rows = await repo.spend_by_model_in_period(
+        db, start_iso="2026-06-01T00:00:00+00:00", end_iso="2026-07-01T00:00:00+00:00"
+    )
+    # ORDER BY cost DESC: pro (2.50) then flash (1.50 over 3 rows incl. NULL).
+    assert rows[0] == {"model": "gemini-pro", "cost_usd": pytest.approx(2.50), "count": 1}
+    assert rows[1] == {"model": "gemini-flash", "cost_usd": pytest.approx(1.50), "count": 3}
+
+
+@pytest.mark.asyncio
+async def test_spend_by_day_in_period(db):
+    repo = RunTelemetryRepo()
+    await _seed_two_months(db)
+    rows = await repo.spend_by_day_in_period(
+        db, start_iso="2026-06-01T00:00:00+00:00", end_iso="2026-07-01T00:00:00+00:00"
+    )
+    assert rows == [
+        {"day": "2026-06-01", "cost_usd": pytest.approx(3.50)},  # 1.00 + 2.50
+        {"day": "2026-06-10", "cost_usd": pytest.approx(0.50)},
+        {"day": "2026-06-15", "cost_usd": pytest.approx(0.0)},  # NULL-cost row
+    ]
