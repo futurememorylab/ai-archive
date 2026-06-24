@@ -55,6 +55,31 @@ class JobsRepo:
         await conn.commit()
         return job_id
 
+    async def claim_next_job(self, conn: aiosqlite.Connection) -> int | None:
+        """Atomically take the oldest `pending` job and mark it `running`.
+
+        CAS, same shape as PrefetchQueueRepo.claim_next: SELECT the oldest
+        pending id, then UPDATE guarded on status='pending'. If rowcount != 1
+        another claim won the race (cannot happen with the single JobRunner,
+        but kept for correctness), so return None. Returns the claimed job id
+        or None when the queue is empty."""
+        cur = await conn.execute(
+            "SELECT id FROM jobs WHERE status = 'pending' ORDER BY created_at ASC, id ASC LIMIT 1"
+        )
+        row = await cur.fetchone()
+        if row is None:
+            return None
+        jid = int(row[0])
+        upd = await conn.execute(
+            "UPDATE jobs SET status = 'running', started_at = COALESCE(started_at, ?) "
+            " WHERE id = ? AND status = 'pending'",
+            (_now_iso(), jid),
+        )
+        await conn.commit()
+        if upd.rowcount != 1:
+            return None
+        return jid
+
     async def get_job(self, conn: aiosqlite.Connection, job_id: int) -> Job:
         cur = await conn.execute(
             "SELECT id, prompt_version_id, status, total_clips, notes, kind, run_group "
