@@ -14,6 +14,7 @@ from typing import Any
 import aiosqlite
 
 from backend.app.models.prompt import Prompt, PromptVersion
+from backend.app.repositories._batch import chunked_in_clause
 
 
 def _now_iso() -> str:
@@ -64,15 +65,16 @@ def _row_to_version(row) -> PromptVersion:
         target_map=json.loads(row[5]),
         output_schema=json.loads(row[6]),
         model=row[7],
-        created_at=row[8],
-        updated_at=row[9],
+        media_resolution=row[8],
+        created_at=row[9],
+        updated_at=row[10],
     )
 
 
 _PROMPT_COLS = "id, name, description, archived, created_at, updated_at, media_kind"
 _VERSION_COLS = (
     "id, prompt_id, version_num, state, body, target_map, "
-    "output_schema, model, created_at, updated_at"
+    "output_schema, model, media_resolution, created_at, updated_at"
 )
 
 
@@ -89,6 +91,7 @@ class PromptsRepo:
         target_map: Any,
         output_schema: Any,
         model: str,
+        media_resolution: str | None = None,
         initial_state: str = "draft",
         media_kind: str = "any",
     ) -> tuple[int, int]:
@@ -103,8 +106,8 @@ class PromptsRepo:
         assert prompt_id is not None
         cur = await conn.execute(
             "INSERT INTO prompt_versions(prompt_id, version_num, state, body, target_map, "
-            "output_schema, model, created_at, updated_at) "
-            "VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?)",
+            "output_schema, model, media_resolution, created_at, updated_at) "
+            "VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 prompt_id,
                 initial_state,
@@ -112,6 +115,7 @@ class PromptsRepo:
                 _target_map_to_json(target_map),
                 json.dumps(output_schema),
                 model,
+                media_resolution,
                 now,
                 now,
             ),
@@ -141,6 +145,32 @@ class PromptsRepo:
             f"SELECT {_PROMPT_COLS} FROM prompts WHERE archived = 0 ORDER BY name"
         )
         return [_row_to_prompt(r) for r in await cur.fetchall()]
+
+    async def versions_by_prompt_ids(
+        self,
+        conn: aiosqlite.Connection,
+        prompt_ids: list[int],
+    ) -> dict[int, list[PromptVersion]]:
+        """Return all versions for the given prompts in ONE chunked query.
+
+        Returns a dict keyed by prompt_id; each value is a list of
+        PromptVersion ordered by version_num DESC (same as get_with_versions).
+        Prompt IDs with no versions map to an empty list.
+        """
+        result: dict[int, list[PromptVersion]] = {pid: [] for pid in prompt_ids}
+        if not prompt_ids:
+            return result
+        for frag, params in chunked_in_clause([(pid,) for pid in prompt_ids]):
+            cur = await conn.execute(
+                f"SELECT {_VERSION_COLS} FROM prompt_versions "
+                f"WHERE prompt_id IN ({frag}) "
+                "ORDER BY prompt_id, version_num DESC",
+                params,
+            )
+            for row in await cur.fetchall():
+                v = _row_to_version(row)
+                result[v.prompt_id].append(v)
+        return result
 
     async def list_archived(self, conn: aiosqlite.Connection) -> list[Prompt]:
         cur = await conn.execute(
@@ -275,8 +305,8 @@ class PromptsRepo:
         now = _now_iso()
         cur = await conn.execute(
             "INSERT INTO prompt_versions(prompt_id, version_num, state, body, "
-            "target_map, output_schema, model, created_at, updated_at) "
-            "VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?)",
+            "target_map, output_schema, model, media_resolution, created_at, updated_at) "
+            "VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)",
             (
                 prompt_id,
                 next_num,
@@ -284,6 +314,7 @@ class PromptsRepo:
                 _target_map_to_json(src.target_map),
                 json.dumps(src.output_schema),
                 src.model,
+                src.media_resolution,
                 now,
                 now,
             ),
@@ -302,18 +333,20 @@ class PromptsRepo:
         target_map: Any,
         output_schema: Any,
         model: str,
+        media_resolution: str | None = None,
     ) -> None:
         v = await self.get_version(conn, version_id)
         if v.state != "draft":
             raise VersionImmutableError(version_id, v.state)
         await conn.execute(
             "UPDATE prompt_versions SET body = ?, target_map = ?, output_schema = ?, "
-            "model = ?, updated_at = ? WHERE id = ?",
+            "model = ?, media_resolution = ?, updated_at = ? WHERE id = ?",
             (
                 body,
                 _target_map_to_json(target_map),
                 json.dumps(output_schema),
                 model,
+                media_resolution,
                 _now_iso(),
                 version_id,
             ),
@@ -385,6 +418,7 @@ class PromptsRepo:
             target_map=src_version.target_map,
             output_schema=src_version.output_schema,
             model=src_version.model,
+            media_resolution=src_version.media_resolution,
             initial_state="draft",
             media_kind=src_prompt.media_kind,
         )

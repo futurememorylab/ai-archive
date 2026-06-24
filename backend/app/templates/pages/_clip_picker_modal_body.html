@@ -1,0 +1,15 @@
+{# Shared clip-picker modal body: the side-by-side results list + selection
+   basket. Spread window.clipPickerCore() (static/clipPicker.js) into the
+   enclosing Alpine component; rows load into .nb-list via fetchPage().
+
+   This is the canonical picker body — include it instead of hand-writing the
+   `.nb-body > main + .nb-side` wrapper (parallel copies drift: a stray
+   `.modal-body` class once made one picker stack vertically). Used by the
+   Studio archive picker and the Admin calibrate dialog. batches.html composes
+   the columns itself because its side panel also carries prompt-per-kind. #}
+<div class="nb-body">
+  {% include "pages/_clip_picker_main.html" %}
+  <div class="nb-side">
+    {% include "pages/_clip_picker_basket.html" %}
+  </div>
+</div>

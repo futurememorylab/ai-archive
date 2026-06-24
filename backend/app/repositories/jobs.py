@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 import aiosqlite
 
 from backend.app.models.job import ItemStatus, Job, JobItem, JobStatus
+from backend.app.repositories._batch import chunked_in_clause
 
 
 def _now_iso() -> str:
@@ -13,6 +14,17 @@ def _now_iso() -> str:
 
 
 TRANSIENT_STATUSES = ("resolving", "uploading", "prompting")
+
+# Explicit partition of ItemStatus into the topbar phase buckets. Every status
+# belongs to exactly one bucket (guarded by test_phase_statuses_partition_item_status),
+# so a new status can't silently fall into 'done' the way a catch-all would.
+_PHASE_STATUSES: dict[str, tuple[str, ...]] = {
+    "queued": ("pending",),
+    "caching": ("resolving", "uploading"),
+    "annotating": ("prompting",),
+    "error": ("error",),
+    "done": ("annotated", "review_ready", "applied", "rejected", "cancelled"),
+}
 
 
 class JobsRepo:
@@ -118,6 +130,24 @@ class JobsRepo:
             for r in await cur.fetchall()
         ]
 
+    async def clip_status_by_jobs(
+        self, conn: aiosqlite.Connection, job_ids: list[int]
+    ) -> dict[int, str]:
+        """Merged `{catdv_clip_id: status}` across the given jobs' items in one
+        chunked query — instead of a `list_items()` per job. Backs the batch
+        run-status pills (clips list + the polled fragment), which are otherwise
+        an N+1 over the batch's jobs on every poll. See ADR 0046."""
+        out: dict[int, str] = {}
+        for fragment, params in chunked_in_clause((j,) for j in job_ids):
+            cur = await conn.execute(
+                f"SELECT catdv_clip_id, status FROM job_items "
+                f"WHERE job_id IN ({fragment}) ORDER BY job_id, id",
+                params,
+            )
+            for clip_id, status in await cur.fetchall():
+                out[int(clip_id)] = status
+        return out
+
     async def update_item_status(
         self,
         conn: aiosqlite.Connection,
@@ -143,8 +173,13 @@ class JobsRepo:
 
     async def list_running(self, conn: aiosqlite.Connection) -> list[Job]:
         cur = await conn.execute(
+            # Plain studio (draft) runs stay hidden from the topbar indicator,
+            # but calibration sweeps — which reuse kind='studio' (ADR 0116) —
+            # are a deliberate admin action and must surface, so include any
+            # job tagged with a calibration run_group.
             "SELECT id, prompt_version_id, status, total_clips, notes, kind, run_group "
-            "FROM jobs WHERE status = 'running' AND COALESCE(kind, '') != 'studio' "
+            "FROM jobs WHERE status = 'running' "
+            "AND (COALESCE(kind, '') != 'studio' OR run_group LIKE 'calibration:%') "
             "ORDER BY id DESC",
         )
         return [
@@ -208,13 +243,9 @@ class JobsRepo:
             (job_id,),
         )
         rows = {s: int(n) for s, n in await cur.fetchall()}
-        in_flight = ("pending", "resolving", "uploading", "prompting", "error")
         return {
-            "caching": rows.get("resolving", 0) + rows.get("uploading", 0),
-            "annotating": rows.get("prompting", 0),
-            "queued": rows.get("pending", 0),
-            "error": rows.get("error", 0),
-            "done": sum(n for s, n in rows.items() if s not in in_flight),
+            phase: sum(rows.get(s, 0) for s in statuses)
+            for phase, statuses in _PHASE_STATUSES.items()
         }
 
     async def reset_transient(self, conn: aiosqlite.Connection) -> int:

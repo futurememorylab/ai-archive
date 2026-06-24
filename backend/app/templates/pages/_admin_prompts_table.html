@@ -1,0 +1,107 @@
+{# backend/app/templates/pages/_admin_prompts_table.html #}
+{% import "components/_ui.html" as ui %}
+<div class="admin-prompts" x-data="adminPromptsTab()">
+  {% call ui.page_header('Prompts',
+       meta='Prompt versions with per-resolution calibration results (run count, guessed vs. actual cost, confidence). Use Calibrate to run a sweep for a version.') %}{% endcall %}
+  <p class="field-help">Confidence: rough (&lt;3 runs) · fair (3–9) · good (10+) —
+    how many calibration runs back each estimate.</p>
+  {% if rows %}
+  <table class="admin-table">
+    <thead>
+      <tr>
+        <th>Prompt · version</th>
+        <th>State</th>
+        <th>Model</th>
+        <th>Annotated</th>
+        <th>Est. cost</th>
+        <th>Actual cost</th>
+        <th>Calibration</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td class="mono-cell">{{ r.prompt_name }} · v{{ r.version_num }}</td>
+        <td>{{ r.state }}</td>
+        <td class="mono-cell">{{ r.model }}</td>
+        <td>
+          {% if r.annotated_runs %}
+            {{ r.annotated_label }}
+          {% else %}
+            <span class="muted">no runs</span>
+          {% endif %}
+        </td>
+        <td class="mono-cell">
+          {% if r.pricing_missing %}
+            <span class="muted">no rate card</span>
+          {% else %}
+            {{ r.est_cost_usd | usd if r.est_cost_usd else '—' }}
+          {% endif %}
+        </td>
+        <td class="mono-cell">
+          {% if r.pricing_missing %}
+            <span class="muted">no rate card</span>
+          {% else %}
+            {{ r.actual_cost_usd | usd if r.actual_cost_usd else '—' }}
+            {% if r.priced_runs < r.annotated_runs %}
+              <span class="muted" title="Only {{ r.priced_runs }} of {{ r.annotated_runs }} runs have a recorded cost; the rest are not yet priced, so this total is partial.">({{ r.priced_runs }} of {{ r.annotated_runs }} priced)</span>
+            {% endif %}
+          {% endif %}
+        </td>
+        <td>
+          {% if r.pricing_missing %}
+            <span class="pill warn">no rate card</span>
+            <a href="/admin/models"
+               hx-get="/admin/models"
+               hx-target="#admin-enum-region"
+               hx-swap="innerHTML"
+               class="muted">set pricing</a>
+          {% elif r.per_res %}
+            {% for res in ['low', 'medium', 'high'] if res in r.per_res %}
+              {% set s = r.per_res[res] %}
+              <div>
+                <span class="pill">{{ res }}</span>
+                {{ s.count }} run{{ 's' if s.count != 1 else '' }}
+                · est {{ s.est_cost_usd | usd if s.est_cost_usd else '—' }} → actual {{ s.cost_usd | usd if s.cost_usd else '—' }}{% if s.priced_count < s.count %}<span class="muted" title="Only {{ s.priced_count }} of {{ s.count }} runs have a recorded cost; this actual is partial.">*</span>{% endif %}
+                · {{ s.confidence }}
+              </div>
+            {% endfor %}
+          {% else %}
+            <span class="muted">not calibrated</span>
+          {% endif %}
+        </td>
+        <td class="admin-actions">
+          <button type="button" class="btn primary sm"
+                  data-version-id="{{ r.version_id }}"
+                  data-cal-label="{{ r.prompt_name }} · v{{ r.version_num }}"
+                  data-cal-kind="{{ r.media_kind }}"
+                  data-test="calibrate-open"
+                  @click="openCalibrate($el)">Calibrate</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No active prompts found.</p>
+  {% endif %}
+
+  {# ───────── CALIBRATE MODAL (one shared, takes the chosen version) ───────── #}
+  {% call ui.modal('calOpen', card_cls='nb-card') %}
+    <div class="modal-hdr">
+      <h2 class="modal-title">Calibrate <span class="mono" x-text="calLabel"></span></h2>
+      <span class="grow"></span>
+      <span class="meta mono" x-text="selCount() + ' selected'"></span>
+    </div>
+    {% include "pages/_clip_picker_modal_body.html" %}
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" @click="calOpen = false">Cancel</button>
+      <div class="muted mono" x-effect="refreshEstimate()" x-text="estimateLabel()"></div>
+      <button type="button" class="btn primary"
+              data-test="calibrate-confirm"
+              :disabled="!selCount()"
+              @click="launchCalibrate()">Launch sweep</button>
+    </div>
+  {% endcall %}
+</div>

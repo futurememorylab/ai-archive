@@ -20,7 +20,7 @@ def _now_iso() -> str:
 
 _COLS = (
     "id, clip_id, prompt_version, state, started_at, ended_at, end_reason, "
-    "transcript_json, summary_cs, frame_count, search_calls, created_at"
+    "transcript_json, summary_cs, frame_count, created_at"
 )
 
 
@@ -36,8 +36,7 @@ def _row(r) -> LiveSession:
         transcript_json=r[7],
         summary_cs=r[8],
         frame_count=r[9],
-        search_calls=r[10],
-        created_at=r[11],
+        created_at=r[10],
     )
 
 
@@ -72,12 +71,11 @@ class LiveSessionsRepo:
         end_reason: str,
         transcript_json: str,
         frame_count: int = 0,
-        search_calls: int = 0,
     ) -> None:
         await conn.execute(
             "UPDATE live_sessions SET state='ended', ended_at=?, end_reason=?, "
-            "transcript_json=?, frame_count=?, search_calls=? WHERE id=?",
-            (_now_iso(), end_reason, transcript_json, frame_count, search_calls, id),
+            "transcript_json=?, frame_count=? WHERE id=?",
+            (_now_iso(), end_reason, transcript_json, frame_count, id),
         )
         await conn.commit()
 

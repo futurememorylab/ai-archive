@@ -111,6 +111,9 @@ a { color: inherit; text-decoration: none; }
   font-size: 10.5px; letter-spacing: 0.04em; color: var(--text-2); text-transform: uppercase;
   white-space: nowrap; flex-shrink: 0; }
 .pill .led { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
+.pill-x { background: none; border: 0; color: inherit; cursor: pointer; padding: 0 0 0 3px;
+  font-size: 11px; line-height: 1; opacity: 0.65; }
+.pill-x:hover { opacity: 1; }
 .pill.ok { color: var(--good); border-color: color-mix(in oklab, var(--good) 35%, transparent); }
 .pill.ok .led { background: var(--good); box-shadow: 0 0 6px var(--good); }
 .pill.accent { color: var(--accent); border-color: color-mix(in oklab, var(--accent) 35%, transparent); }
@@ -120,6 +123,9 @@ a { color: inherit; text-decoration: none; }
 .pill.changed { color: var(--changed);
   border-color: color-mix(in oklab, var(--changed) 35%, transparent); }
 .pill.changed .led { background: var(--changed); box-shadow: 0 0 6px var(--changed); }
+.pill.warn { color: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 35%, transparent); }
+.pill.warn .led { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
 .to-review-chip { text-decoration: none; cursor: pointer; gap: 4px; }
 .to-review-chip:hover { filter: brightness(1.15); }
 /* User menu: a rounded pill trigger consistent with .conn-pill, not a plain btn. */
@@ -907,7 +913,21 @@ a { color: inherit; text-decoration: none; }
 /* Own class, NOT .row-actions — that shared class is opacity:0 until row-hover
    (cache/vlist convention) and would render the kebab + its menu invisible. */
 .admin-table .admin-actions { text-align: right; white-space: nowrap; }
+.admin-table input[type="number"].txt { width: 8ch; text-align: right; }
 .admin-add-row { display: flex; align-items: flex-end; gap: 8px; margin-top: 6px; }
+
+/* Usage tab: monthly spend-vs-budget progress bar. Guard-safe names (no
+   *-btn / *-menu / modal-* / *-card). The fill width is capped at 100% by the
+   route (round(fraction*100), clamped) and coloured by status. */
+.usage-bar {
+  height: 8px; border-radius: 4px; background: var(--surface-2);
+  border: 1px solid var(--line); overflow: hidden;
+  margin: 6px 0 10px; max-width: 480px;
+}
+.usage-bar-fill { height: 100%; background: var(--accent); transition: width 0.2s ease; }
+.usage-bar-fill.warn { background: var(--accent); }
+.usage-bar-fill.over { background: var(--bad); }
+.usage-bar-fill.ok { background: var(--good); }
 
 .crumb .sep { color: var(--text-4); padding: 0 4px; }
 .crumb .strong { color: var(--text); font-weight: 500; }
@@ -1006,6 +1026,10 @@ a { color: inherit; text-decoration: none; }
 }
 .txt:focus { outline: none; border-color: var(--accent); }
 .txt:read-only, .txt[readonly] { color: var(--text-2); background: var(--panel-2); }
+/* Hide native number-input spinner arrows app-wide for .txt fields. */
+.txt[type="number"]::-webkit-inner-spin-button,
+.txt[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.txt[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 
 /* Reusable form-field component (label + textarea + help text). */
 .field { display: flex; flex-direction: column; gap: 4px; }
@@ -2687,6 +2711,11 @@ body.studio-resizing {
 .admin-stats .stat .l { display: block; color: var(--text-3); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
 
 .admin-filters { display: flex; gap: 12px; align-items: end; margin: 12px 0; }
+
+/* Sub-section label inside an admin tab (e.g. Usage "By model" / "By day").
+   Token-backed so it doesn't inherit browser-default <h3> rendering. */
+.admin-section-hdr { margin: 18px 0 6px; color: var(--text-2); font-size: 11px;
+  font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
 
 .admin-members { margin-top: 8px; }
 

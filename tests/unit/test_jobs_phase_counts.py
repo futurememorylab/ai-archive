@@ -2,12 +2,14 @@
 (caching / annotating / queued / done / error). See ADR 0093."""
 
 from pathlib import Path
+from typing import get_args
 
 import pytest
 
 from backend.app.db import open_db
 from backend.app.migrations_runner import apply_migrations
-from backend.app.repositories.jobs import JobsRepo
+from backend.app.models.job import ItemStatus
+from backend.app.repositories.jobs import _PHASE_STATUSES, JobsRepo
 
 
 @pytest.fixture
@@ -44,3 +46,27 @@ async def test_phase_counts_groups_items_by_phase(db):
 
     pc = await repo.phase_counts(db, jid)
     assert pc == {"caching": 2, "annotating": 1, "queued": 1, "done": 1, "error": 1}
+
+
+@pytest.mark.asyncio
+async def test_phase_counts_does_not_count_unknown_status_as_done(db):
+    """A status outside the known phase buckets must NOT be silently counted as
+    'done' — the old catch-all (`done = everything not in_flight`) did, so a new
+    or intermediate status would wrongly report the work finished. Finding #6."""
+    repo = JobsRepo()
+    jid = await repo.create_job(db, prompt_version_id=10, clip_ids=[1, 2])
+    items = await repo.list_items(db, jid)
+    await repo.update_item_status(db, items[0].id, "applied")  # genuinely done
+    await db.execute(
+        "UPDATE job_items SET status = 'future_unknown' WHERE id = ?", (items[1].id,)
+    )
+    await db.commit()
+    pc = await repo.phase_counts(db, jid)
+    assert pc["done"] == 1  # only the 'applied' item, not the unknown one
+
+
+def test_phase_statuses_partition_item_status():
+    """Every ItemStatus value maps to exactly one phase bucket, so adding a
+    status forces a bucket choice instead of silently falling into 'done'."""
+    assigned = [s for statuses in _PHASE_STATUSES.values() for s in statuses]
+    assert sorted(assigned) == sorted(get_args(ItemStatus))  # complete, no overlap

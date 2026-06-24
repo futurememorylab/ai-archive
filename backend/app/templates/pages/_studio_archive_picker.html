@@ -15,12 +15,7 @@
       <span class="grow"></span>
       <button class="btn ghost" @click="close()">×</button>
     </div>
-    <div class="nb-body">
-      {% include "pages/_clip_picker_main.html" %}
-      <div class="nb-side">
-        {% include "pages/_clip_picker_basket.html" %}
-      </div>
-    </div>
+    {% include "pages/_clip_picker_modal_body.html" %}
     <div class="modal-actions">
       <span class="muted" x-text="selCount() + ' selected'"></span>
       <span class="grow"></span>

@@ -66,6 +66,43 @@ class RunTelemetryRepo:
                 out[int(jid)] = out.get(int(jid), 0.0) + float(total)
         return out
 
+    async def cost_counts_by_job(
+        self, conn: aiosqlite.Connection, job_ids: list[int]
+    ) -> dict[int, tuple[int, int]]:
+        """{job_id: (priced_rows, total_rows)} — COUNT(cost_usd) vs COUNT(*).
+        When priced < total for a batch's jobs, the summed cost (cost_sums_by_job)
+        is a partial subtotal (SQL SUM skips NULLs) and the UI flags it instead
+        of presenting it as complete. Missing jobs are absent."""
+        out: dict[int, tuple[int, int]] = {}
+        for fragment, params in chunked_in_clause((j,) for j in job_ids):
+            cur = await conn.execute(
+                f"SELECT job_id, COUNT(cost_usd), COUNT(*) "
+                f"FROM run_telemetry WHERE job_id IN ({fragment}) "
+                f"GROUP BY job_id",
+                tuple(params),
+            )
+            for jid, priced, total in await cur.fetchall():
+                p0, t0 = out.get(int(jid), (0, 0))
+                out[int(jid)] = (p0 + int(priced), t0 + int(total))
+        return out
+
+    async def est_cost_sums_by_job(
+        self, conn: aiosqlite.Connection, job_ids: list[int]
+    ) -> dict[int, float]:
+        """{job_id: total est_cost_usd_p50}. Powers the batches-list
+        estimate-vs-actual delta (the pre-run p50 estimate captured per run)."""
+        out: dict[int, float] = {}
+        for fragment, params in chunked_in_clause((j,) for j in job_ids):
+            cur = await conn.execute(
+                f"SELECT job_id, COALESCE(SUM(est_cost_usd_p50), 0) "
+                f"FROM run_telemetry WHERE job_id IN ({fragment}) "
+                f"GROUP BY job_id",
+                tuple(params),
+            )
+            for jid, total in await cur.fetchall():
+                out[int(jid)] = out.get(int(jid), 0.0) + float(total)
+        return out
+
     async def cost_totals_by_clip(
         self, conn: aiosqlite.Connection, job_ids: list[int]
     ) -> dict[int, float]:
@@ -86,12 +123,172 @@ class RunTelemetryRepo:
                 out[int(cid)] = out.get(int(cid), 0.0) + float(total)
         return out
 
+    async def stats_by_resolution(
+        self, conn: aiosqlite.Connection, *, prompt_version_id: int
+    ) -> dict[str | None, dict]:
+        """{media_resolution_setting: {"count": n, "priced_count": p,
+        "cost_usd": actual, "est_cost_usd": guessed}} for ok runs of a prompt
+        version — powers the calibration results panel. cost_usd is the actual
+        billed spend; est_cost_usd is the SUM of the pre-run p50 estimates
+        captured per run (est_cost_usd_p50), so the panel can show
+        guessed-vs-actual. priced_count = COUNT(cost_usd) (non-NULL rows): when
+        priced_count < count, cost_usd is a partial subtotal (SQL SUM skips
+        NULLs) — the UI flags it rather than presenting it as a complete total.
+        Batched form: stats_by_resolution_many."""
+        many = await self.stats_by_resolution_many(
+            conn, prompt_version_ids=[prompt_version_id]
+        )
+        return many.get(prompt_version_id, {})
+
+    async def stats_by_resolution_many(
+        self, conn: aiosqlite.Connection, *, prompt_version_ids: list[int]
+    ) -> dict[int, dict[str | None, dict]]:
+        """{prompt_version_id: {media_resolution_setting: {...}}} for ok runs —
+        the batched form of stats_by_resolution (ADR 0046, mirrors
+        totals_by_prompt_version). Ids with no rows are absent. COUNT(cost_usd)
+        is the priced (non-NULL) subset; GROUP-BY aggregates merge with += so a
+        key split across chunks stays correct."""
+        out: dict[int, dict[str | None, dict]] = {}
+        for fragment, params in chunked_in_clause(
+            (v,) for v in prompt_version_ids
+        ):
+            cur = await conn.execute(
+                "SELECT prompt_version_id, media_resolution_setting, COUNT(*), "
+                "COUNT(cost_usd), COALESCE(SUM(cost_usd), 0), "
+                "COALESCE(SUM(est_cost_usd_p50), 0) "
+                f"FROM run_telemetry WHERE prompt_version_id IN ({fragment}) "
+                "AND status = 'ok' "
+                "GROUP BY prompt_version_id, media_resolution_setting",
+                tuple(params),
+            )
+            for vid, res, count, priced, cost, est in await cur.fetchall():
+                per_res = out.setdefault(int(vid), {})
+                agg = per_res.setdefault(
+                    res,
+                    {"count": 0, "priced_count": 0, "cost_usd": 0.0, "est_cost_usd": 0.0},
+                )
+                agg["count"] += int(count)
+                agg["priced_count"] += int(priced)
+                agg["cost_usd"] += float(cost)
+                agg["est_cost_usd"] += float(est)
+        return out
+
+    async def totals_by_prompt_version(
+        self, conn: aiosqlite.Connection, *, prompt_version_ids: list[int]
+    ) -> dict[int, dict]:
+        """{prompt_version_id: {"runs": n, "priced_runs": p, "media_seconds": s,
+        "est_cost_usd": e, "actual_cost_usd": a}} over ok runs — powers the
+        Prompts-tab usage columns (total footage annotated, guessed vs. actual
+        spend across ALL run kinds: annotation, studio, calibration).
+
+        Only status='ok' rows count (matches stats_by_resolution). SUMs use
+        COALESCE→0; runs is COUNT(*); priced_runs is COUNT(cost_usd) (non-NULL),
+        so a caller can detect when actual_cost_usd is a partial subtotal
+        (SQL SUM skips NULLs) rather than a complete total. Batched via
+        chunked_in_clause (ADR 0046); GROUP-BY aggregates are merged with +=
+        across chunks so a key split over two chunks stays correct. Ids with no
+        rows are absent — callers treat a missing id as zero."""
+        out: dict[int, dict] = {}
+        for fragment, params in chunked_in_clause((v,) for v in prompt_version_ids):
+            cur = await conn.execute(
+                "SELECT prompt_version_id, COUNT(*), COUNT(cost_usd), "
+                "COALESCE(SUM(media_duration_secs), 0), "
+                "COALESCE(SUM(est_cost_usd_p50), 0), "
+                "COALESCE(SUM(cost_usd), 0) "
+                f"FROM run_telemetry WHERE prompt_version_id IN ({fragment}) "
+                "AND status = 'ok' GROUP BY prompt_version_id",
+                tuple(params),
+            )
+            for vid, runs, priced, secs, est, actual in await cur.fetchall():
+                agg = out.setdefault(
+                    int(vid),
+                    {
+                        "runs": 0,
+                        "priced_runs": 0,
+                        "media_seconds": 0.0,
+                        "est_cost_usd": 0.0,
+                        "actual_cost_usd": 0.0,
+                    },
+                )
+                agg["runs"] += int(runs)
+                agg["priced_runs"] += int(priced)
+                agg["media_seconds"] += float(secs)
+                agg["est_cost_usd"] += float(est)
+                agg["actual_cost_usd"] += float(actual)
+        return out
+
+    # --- Spend aggregates over a time window (Usage & Budget, #30) -------
+    # All filtered by occurred_at >= start [AND occurred_at < end]. Spend is
+    # status-agnostic and run-kind-agnostic: every run that burned tokens is
+    # real spend (annotation + studio + calibration). NULL cost_usd (un-priced
+    # models) is summed as 0 via COALESCE and counted in total_count, NOT
+    # priced_count, so a caller can flag a partial subtotal. Single GROUP BY
+    # queries (no N+1) — a month scan is small; add an occurred_at index only
+    # if a perf test shows it's slow.
+
+    @staticmethod
+    def _period_where(end_iso: str | None) -> tuple[str, list]:
+        if end_iso is None:
+            return "occurred_at >= ?", []
+        return "occurred_at >= ? AND occurred_at < ?", [end_iso]
+
+    async def spend_in_period(
+        self, conn: aiosqlite.Connection, *, start_iso: str, end_iso: str | None = None
+    ) -> dict:
+        """{"cost_usd": float, "priced_count": int, "total_count": int} over the
+        window. cost_usd is COALESCE(SUM,0); priced_count = COUNT(cost_usd)
+        (non-NULL); total_count = COUNT(*) — un-priced runs count in total only."""
+        where, extra = self._period_where(end_iso)
+        cur = await conn.execute(
+            f"SELECT COALESCE(SUM(cost_usd), 0), COUNT(cost_usd), COUNT(*) "
+            f"FROM run_telemetry WHERE {where}",
+            (start_iso, *extra),
+        )
+        row = await cur.fetchone()
+        return {
+            "cost_usd": float(row[0]),
+            "priced_count": int(row[1]),
+            "total_count": int(row[2]),
+        }
+
+    async def spend_by_model_in_period(
+        self, conn: aiosqlite.Connection, *, start_iso: str, end_iso: str | None = None
+    ) -> list[dict]:
+        """[{"model": str, "cost_usd": float, "count": int}] grouped by model,
+        ORDER BY cost_usd DESC — the by-model breakdown for the Usage tab."""
+        where, extra = self._period_where(end_iso)
+        cur = await conn.execute(
+            f"SELECT model, COALESCE(SUM(cost_usd), 0), COUNT(*) "
+            f"FROM run_telemetry WHERE {where} "
+            f"GROUP BY model ORDER BY COALESCE(SUM(cost_usd), 0) DESC",
+            (start_iso, *extra),
+        )
+        return [
+            {"model": m, "cost_usd": float(cost), "count": int(count)}
+            for m, cost, count in await cur.fetchall()
+        ]
+
+    async def spend_by_day_in_period(
+        self, conn: aiosqlite.Connection, *, start_iso: str, end_iso: str | None = None
+    ) -> list[dict]:
+        """[{"day": "YYYY-MM-DD", "cost_usd": float}] grouped by calendar day
+        (substr of the ISO occurred_at), ORDER BY day — the daily spend series."""
+        where, extra = self._period_where(end_iso)
+        cur = await conn.execute(
+            f"SELECT substr(occurred_at, 1, 10) AS day, COALESCE(SUM(cost_usd), 0) "
+            f"FROM run_telemetry WHERE {where} "
+            f"GROUP BY day ORDER BY day",
+            (start_iso, *extra),
+        )
+        return [{"day": day, "cost_usd": float(cost)} for day, cost in await cur.fetchall()]
+
     async def recent_input_ratios(
         self,
         conn: aiosqlite.Connection,
         *,
         model: str,
         media_kind: str,
+        media_resolution: str | None = None,
         limit: int = 50,
     ) -> list[float]:
         """tokens_in_<media>/second for recent ok runs — calibrates the
@@ -103,15 +300,20 @@ class RunTelemetryRepo:
             "audio": "COALESCE(tokens_in_audio, 0)",
             "image": "COALESCE(tokens_in_image, 0)",
         }.get(media_kind, "COALESCE(tokens_in_video, 0)")
+        res_clause = " AND media_resolution_setting = ?" if media_resolution is not None else ""
+        params: list = [model, media_kind]
+        if media_resolution is not None:
+            params.append(media_resolution)
+        params.append(limit)
         # id is insertion order == recency today; occurred_at may differ
         # if Phase-2 ever back-fills older events.
         cur = await conn.execute(
             f"SELECT CAST(({col_expr}) AS REAL) / media_duration_secs "
             "FROM run_telemetry "
             "WHERE model = ? AND media_kind = ? AND status = 'ok' "
-            f"AND COALESCE(media_duration_secs, 0) > 0 AND ({col_expr}) > 0 "
+            f"AND COALESCE(media_duration_secs, 0) > 0 AND ({col_expr}) > 0{res_clause} "
             "ORDER BY id DESC LIMIT ?",
-            (model, media_kind, limit),
+            tuple(params),
         )
         return [r[0] for r in await cur.fetchall()]
 
@@ -122,6 +324,7 @@ class RunTelemetryRepo:
         model: str,
         media_kind: str,
         prompt_hash: str | None = None,
+        media_resolution: str | None = None,
         limit: int = 50,
     ) -> list[float]:
         """Billable output per media-second (per-item for images) for
@@ -145,6 +348,9 @@ class RunTelemetryRepo:
         if prompt_hash is not None:
             where.append("prompt_hash = ?")
             params.append(prompt_hash)
+        if media_resolution is not None:
+            where.append("media_resolution_setting = ?")
+            params.append(media_resolution)
         params.append(limit)
         cur = await conn.execute(
             f"SELECT {value} FROM run_telemetry WHERE {' AND '.join(where)} "

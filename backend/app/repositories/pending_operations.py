@@ -16,6 +16,8 @@ from typing import Any
 
 import aiosqlite
 
+from backend.app.repositories._batch import chunked_in_clause
+
 
 def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
@@ -302,6 +304,7 @@ class PendingOperationsRepo:
         conn: aiosqlite.Connection,
         *,
         provider_id: str,
+        clip_ids: list[str] | None = None,
     ) -> dict[str, dict[str, int]]:
         """Per-clip queued / conflict / failed write counts.
 
@@ -310,26 +313,40 @@ class PendingOperationsRepo:
         write FAILED surfaces here too. This is the single source of truth for a
         clip's publish headline (see services/publish_status.py), consistent
         with the topbar chip and the batches problem state.
+
+        Pass `clip_ids` (a page / a single clip) to bound the scan to those
+        provider_clip_ids via chunked_in_clause; omit it to scan the whole
+        provider backlog. The clips-list and clip-badge callers pass their
+        clips so a large stuck queue doesn't make every render do backlog-sized
+        work. See ADR 0046.
         """
-        cur = await conn.execute(
-            """
-            SELECT provider_clip_id, status, COUNT(*)
-              FROM pending_operations
-             WHERE provider_id = ?
-               AND status IN ('pending', 'in_flight', 'conflict', 'failed')
-             GROUP BY provider_clip_id, status
-            """,
-            (provider_id,),
-        )
         out: dict[str, dict[str, int]] = {}
-        for clip_id, status, n in await cur.fetchall():
-            bucket = out.setdefault(clip_id, {"pending": 0, "conflict": 0, "failed": 0})
-            if status == "conflict":
-                bucket["conflict"] += n
-            elif status == "failed":
-                bucket["failed"] += n
-            else:  # pending + in_flight both count as "queued"
-                bucket["pending"] += n
+
+        def _accumulate(rows: Iterable[tuple[str, str, int]]) -> None:
+            for clip_id, status, n in rows:
+                bucket = out.setdefault(clip_id, {"pending": 0, "conflict": 0, "failed": 0})
+                if status == "conflict":
+                    bucket["conflict"] += n
+                elif status == "failed":
+                    bucket["failed"] += n
+                else:  # pending + in_flight both count as "queued"
+                    bucket["pending"] += n
+
+        base = (
+            "SELECT provider_clip_id, status, COUNT(*) FROM pending_operations "
+            "WHERE provider_id = ? "
+            "AND status IN ('pending', 'in_flight', 'conflict', 'failed')"
+        )
+        if clip_ids is None:
+            cur = await conn.execute(base + " GROUP BY provider_clip_id, status", (provider_id,))
+            _accumulate(await cur.fetchall())
+            return out
+        for fragment, params in chunked_in_clause((c,) for c in clip_ids):
+            cur = await conn.execute(
+                f"{base} AND provider_clip_id IN ({fragment}) GROUP BY provider_clip_id, status",
+                (provider_id, *params),
+            )
+            _accumulate(await cur.fetchall())
         return out
 
     async def reset_all_for_retry(self, conn: aiosqlite.Connection) -> int:

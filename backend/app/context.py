@@ -48,7 +48,7 @@ from backend.app.models.telemetry import TelemetryCtx
 from backend.app.repositories import app_meta as app_meta_repo
 from backend.app.repositories.ai_store_files import AIStoreFilesRepo
 from backend.app.repositories.annotations import AnnotationsRepo
-from backend.app.repositories.app_meta import get_or_create_install_id
+from backend.app.repositories.app_meta import AppMetaRepo, get_or_create_install_id
 from backend.app.repositories.cache_actions_log import CacheActionsLogRepo
 from backend.app.repositories.clip_cache import ClipCacheRepo
 from backend.app.repositories.clip_list_cache import ClipListCacheRepo
@@ -56,6 +56,7 @@ from backend.app.repositories.clip_versions import ClipVersionsRepo
 from backend.app.repositories.enum_values import EnumValuesRepo
 from backend.app.repositories.field_def_cache import FieldDefCacheRepo
 from backend.app.repositories.jobs import JobsRepo
+from backend.app.repositories.model_config import ModelConfigRepo
 from backend.app.repositories.pending_operations import PendingOperationsRepo
 from backend.app.repositories.poster_cache import PosterCacheRepo
 from backend.app.repositories.prefetch_queue import PrefetchQueueRepo
@@ -78,10 +79,12 @@ from backend.app.services.idle_disconnector import IdleDisconnector
 from backend.app.services.lru_eviction import LruEviction
 from backend.app.services.media_cache import MediaCacheBackend, build_media_cache_backend
 from backend.app.services.media_prefetcher import MediaPrefetcher
+from backend.app.services.pricing_service import PricingService
 from backend.app.services.proxy_cache_reconciler import ProxyCacheReconciler
 from backend.app.services.publish_service import PublishService
 from backend.app.services.restore_service import RestoreService
 from backend.app.services.sync_engine import SyncEngine
+from backend.app.services.usage_service import UsageService
 from backend.app.services.vpn_supervisor import VpnSupervisor
 from backend.app.services.workspace_manager import WorkspaceManager
 from backend.app.services.write_queue import WriteQueue
@@ -138,7 +141,9 @@ class CoreCtx:
     run_telemetry_repo: RunTelemetryRepo = field(default_factory=RunTelemetryRepo)
     user_roles_repo: UserRolesRepo = field(default_factory=UserRolesRepo)
     enum_values_repo: EnumValuesRepo = field(default_factory=EnumValuesRepo)
+    model_config_repo: ModelConfigRepo = field(default_factory=ModelConfigRepo)
     clip_versions_repo: ClipVersionsRepo = field(default_factory=ClipVersionsRepo)
+    app_meta_repo: AppMetaRepo = field(default_factory=AppMetaRepo)
     telemetry_ctx: TelemetryCtx = field(init=False)
     event_bus: EventBus = field(default_factory=EventBus)
 
@@ -154,6 +159,8 @@ class CoreCtx:
     cache_inspector: CacheInspector = field(init=False)
     cache_actions: CacheActions = field(init=False)
     enum_service: EnumService = field(init=False)
+    pricing_service: PricingService = field(init=False)
+    usage_service: UsageService = field(init=False)
 
     @classmethod
     async def build(cls, settings: Settings) -> CoreCtx:
@@ -220,6 +227,17 @@ class CoreCtx:
             repo=ctx.enum_values_repo,
         )
         await ctx.enum_service.reconcile_seeds()
+        ctx.pricing_service = PricingService(
+            db_provider=lambda: ctx.db,
+            repo=ctx.model_config_repo,
+        )
+        await ctx.pricing_service.reconcile_seeds()
+        await ctx.pricing_service.reload()
+        ctx.usage_service = UsageService(
+            db_provider=lambda: ctx.db,
+            run_telemetry_repo=ctx.run_telemetry_repo,
+            app_meta_repo=ctx.app_meta_repo,
+        )
         from backend.app.services.clip_versions_backfill import backfill_clip_versions
 
         await backfill_clip_versions(ctx.db, ctx.clip_versions_repo)
@@ -406,8 +424,24 @@ class LiveCtx:
         return self.core.enum_values_repo
 
     @property
+    def model_config_repo(self) -> ModelConfigRepo:
+        return self.core.model_config_repo
+
+    @property
     def enum_service(self) -> EnumService:
         return self.core.enum_service
+
+    @property
+    def pricing_service(self) -> PricingService:
+        return self.core.pricing_service
+
+    @property
+    def app_meta_repo(self) -> AppMetaRepo:
+        return self.core.app_meta_repo
+
+    @property
+    def usage_service(self) -> UsageService:
+        return self.core.usage_service
 
     @property
     def clip_versions_repo(self) -> ClipVersionsRepo:

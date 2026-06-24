@@ -46,7 +46,14 @@ async def create_job(request: Request, body: JobCreate, background: BackgroundTa
     return {"id": job_id, "started": started}
 
 
-async def _run_in_bg(ctx, job_id: int, *, only_clip_ids: set[int] | None = None) -> None:
+async def _run_in_bg(
+    ctx,
+    job_id: int,
+    *,
+    only_clip_ids: set[int] | None = None,
+    force_resolution: str | None = None,
+    record_only: bool = False,
+) -> None:
     try:
         await run_job(
             db=ctx.db,
@@ -64,8 +71,11 @@ async def _run_in_bg(ctx, job_id: int, *, only_clip_ids: set[int] | None = None)
             uploaded_clips_repo=ctx.uploaded_clips_repo,
             run_telemetry_repo=ctx.run_telemetry_repo,
             telemetry_ctx=ctx.telemetry_ctx,
+            model_config_repo=ctx.model_config_repo,
             prefetch_queue_repo=ctx.prefetch_queue_repo,
             only_clip_ids=only_clip_ids,
+            force_resolution=force_resolution,
+            record_only=record_only,
         )
     except asyncio.CancelledError:
         # Cancelled mid-flight (cancel route or shutdown drain): an item may
@@ -79,11 +89,25 @@ async def _run_in_bg(ctx, job_id: int, *, only_clip_ids: set[int] | None = None)
 
 
 def start_job_in_background(
-    core, live, job_id: int, *, only_clip_ids: set[int] | None = None
+    core,
+    live,
+    job_id: int,
+    *,
+    only_clip_ids: set[int] | None = None,
+    force_resolution: str | None = None,
+    record_only: bool = False,
 ) -> None:
     """Spawn run_job for `job_id` as a tracked background task. Shared by
     POST /api/jobs (auto-start) and the Batches retry-failed route."""
-    task = asyncio.create_task(_run_in_bg(live, job_id, only_clip_ids=only_clip_ids))
+    task = asyncio.create_task(
+        _run_in_bg(
+            live,
+            job_id,
+            only_clip_ids=only_clip_ids,
+            force_resolution=force_resolution,
+            record_only=record_only,
+        )
+    )
     core._running_jobs[job_id] = task
 
 
@@ -105,6 +129,7 @@ async def list_active_jobs(request: Request):
                 "id": job.id,
                 "kind": job.kind,
                 "status": job.status,
+                "run_group": job.run_group,
                 "done": done,
                 "total": total,
                 "errors": errors,
@@ -156,6 +181,7 @@ async def estimate_job(request: Request, body: EstimateRequest):
             clip_cache_repo=ctx.clip_cache_repo,
             run_telemetry_repo=ctx.run_telemetry_repo,
             prompts_repo=ctx.prompts_repo,
+            model_config_repo=ctx.model_config_repo,
             provider_id=ctx.settings.archive_provider,
             clip_ids=body.clip_ids,
             prompt_version_id=body.prompt_version_id,

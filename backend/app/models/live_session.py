@@ -20,5 +20,4 @@ class LiveSession(BaseModel):
     transcript_json: str | None = None
     summary_cs: str | None = None
     frame_count: int = 0
-    search_calls: int = 0
     created_at: str | None = None

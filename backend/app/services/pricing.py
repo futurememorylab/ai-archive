@@ -17,6 +17,11 @@ We use the ≤200K (standard) rate here — the vast majority of annotation
 runs stay well within that threshold. If a run exceeds 200K tokens the
 cost estimate will be lower than the actual bill; tokens are stored so
 the cost can be recomputed with the correct tier when needed.
+
+All rates below are Global standard (us-central1 / global routing).
+europe-west3 'non-global' adds +10% for GA Gemini-3 models from
+2026-07-01; bump the affected cards in the admin UI if pinning a
+regional endpoint.
 """
 
 import logging
@@ -36,11 +41,13 @@ class RateCard:
     input_cached_per_1m: float
     output_per_1m: float
     source_url: str  # provenance: where this rate was read (spec §5 audit trail)
+    pricing_version: str = PRICING_VERSION
 
 
-# Rates verified 2026-06-07 from:
-# https://cloud.google.com/vertex-ai/generative-ai/pricing
-RATE_CARDS: dict[str, RateCard] = {
+# Seed values — the offline fallback and the source the PricingService
+# reconciles into the model_config table at boot. The live lookup uses
+# _ACTIVE_CARDS (populated from the DB); see set_rate_cards/rate_cards.
+SEED_RATE_CARDS: dict[str, RateCard] = {
     "gemini-2.5-flash-lite": RateCard(
         input_text_video_image_per_1m=0.10,
         input_audio_per_1m=0.30,
@@ -63,7 +70,62 @@ RATE_CARDS: dict[str, RateCard] = {
         output_per_1m=10.00,
         source_url="https://cloud.google.com/vertex-ai/generative-ai/pricing",
     ),
+    # ── Gemini 3.x / 3.5 series ─────────────────────────────────────────────
+    "gemini-3-flash-preview": RateCard(
+        input_text_video_image_per_1m=0.50,
+        input_audio_per_1m=1.00,
+        input_cached_per_1m=0.05,
+        output_per_1m=3.00,
+        source_url="https://cloud.google.com/vertex-ai/generative-ai/pricing",
+    ),
+    "gemini-3.1-pro-preview": RateCard(
+        # Tiered: ≤200K tokens=$2.00 input/$12.00 output, >200K=2x; using ≤200K rate.
+        input_text_video_image_per_1m=2.00,
+        input_audio_per_1m=2.00,
+        input_cached_per_1m=0.20,
+        output_per_1m=12.00,
+        source_url="https://cloud.google.com/vertex-ai/generative-ai/pricing",
+    ),
+    "gemini-3.1-flash-lite": RateCard(
+        input_text_video_image_per_1m=0.25,
+        input_audio_per_1m=0.50,
+        input_cached_per_1m=0.025,
+        output_per_1m=1.50,
+        source_url="https://cloud.google.com/vertex-ai/generative-ai/pricing",
+    ),
+    "gemini-3.1-flash-lite-preview": RateCard(
+        # Deprecated preview ID (same rates as GA gemini-3.1-flash-lite);
+        # retained because still in the model catalog.
+        input_text_video_image_per_1m=0.25,
+        input_audio_per_1m=0.50,
+        input_cached_per_1m=0.025,
+        output_per_1m=1.50,
+        source_url="https://cloud.google.com/vertex-ai/generative-ai/pricing",
+    ),
+    "gemini-3.5-flash": RateCard(
+        input_text_video_image_per_1m=1.50,
+        input_audio_per_1m=1.50,
+        input_cached_per_1m=0.15,
+        output_per_1m=9.00,
+        source_url="https://cloud.google.com/vertex-ai/generative-ai/pricing",
+    ),
 }
+
+# Process-wide active cache. Defaults to the seed so imports work before the
+# DB is wired (and in pure-unit tests); PricingService.reload() swaps in the
+# DB rows at boot and after every admin edit.
+_ACTIVE_CARDS: dict[str, RateCard] = dict(SEED_RATE_CARDS)
+
+
+def rate_cards() -> dict[str, RateCard]:
+    """The active per-model rate cards (DB-backed once the app has booted)."""
+    return _ACTIVE_CARDS
+
+
+def set_rate_cards(cards: dict[str, RateCard]) -> None:
+    """Replace the active cache (called by PricingService after load/edit)."""
+    _ACTIVE_CARDS.clear()
+    _ACTIVE_CARDS.update(cards)
 
 
 def compute_cost(
@@ -72,7 +134,7 @@ def compute_cost(
     """Cost in USD for one call, or (None, version) when the model is
     not in the card. Never raises — a missing rate must not fail a run."""
     if card is None:
-        card = RATE_CARDS.get(model)
+        card = _ACTIVE_CARDS.get(model)
     if card is None:
         log.warning("pricing: no rate card for model %r; cost_usd=NULL", model)
         return None, PRICING_VERSION
@@ -95,4 +157,4 @@ def compute_cost(
         + cached * card.input_cached_per_1m
         + usage.billable_out * card.output_per_1m
     ) / 1_000_000
-    return cost, PRICING_VERSION
+    return cost, card.pricing_version

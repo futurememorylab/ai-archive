@@ -14,6 +14,7 @@ from backend.app.migrations_runner import apply_migrations
 from backend.app.models.telemetry import TelemetryCtx
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.jobs import JobsRepo
+from backend.app.repositories.model_config import ModelConfigRepo
 from backend.app.repositories.prefetch_queue import PrefetchQueueRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
@@ -74,6 +75,7 @@ async def _run(db, *, job_id, proxy, ai_store, jobs, prompts, runs, queue_repo, 
         jobs_repo=jobs, prompts_repo=prompts, studio_runs_repo=runs,
         uploaded_clips_repo=UploadedClipsRepo(), run_telemetry_repo=RunTelemetryRepo(),
         telemetry_ctx=TelemetryCtx(install_id="t"),
+        model_config_repo=ModelConfigRepo(),
         prefetch_queue_repo=queue_repo,
     )
 

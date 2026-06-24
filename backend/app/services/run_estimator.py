@@ -14,7 +14,8 @@ clip (ADR 0046).
 from dataclasses import dataclass
 
 from backend.app.media_kind import classify_media_kind
-from backend.app.services.pricing import RATE_CARDS, compute_cost
+from backend.app.services.pricing import compute_cost, rate_cards
+from backend.app.services.resolution import resolution_valid_for_kind
 from backend.app.services.telemetry_capture import TokenUsage
 from backend.app.services.telemetry_capture import prompt_hash as _prompt_hash
 
@@ -91,6 +92,7 @@ async def estimate_clips(
     schema: dict,
     model: str,
     prompt_hash_override: str | None = None,
+    media_resolution: str | None = None,
 ) -> RunEstimate:
     if not clips:
         return RunEstimate(
@@ -113,16 +115,35 @@ async def estimate_clips(
     input_ratio: dict[str, float] = {}
     stats: dict[str, _KindStats] = {}
     for kind in kinds:
+        # Mirror the run's per-clip downgrade (services/resolution.py is the
+        # single source of truth): HIGH is image-only, so a video/audio clip
+        # under a HIGH-resolution prompt actually RUNS at medium. Read the
+        # matching-resolution history so the estimate doesn't drift from the
+        # charge. media_resolution=None (estimator caller didn't supply one)
+        # passes through and matches the repo's "any resolution" lookup.
+        kind_resolution = media_resolution
+        if media_resolution is not None and not resolution_valid_for_kind(
+            media_resolution, kind
+        ):
+            kind_resolution = "medium"
         if kind != "image":
-            ratios = await repo.recent_input_ratios(conn, model=model, media_kind=kind)
+            ratios = await repo.recent_input_ratios(
+                conn, model=model, media_kind=kind, media_resolution=kind_resolution
+            )
             if len(ratios) >= _MIN_SAMPLES:
                 input_ratio[kind] = _pct(ratios, 0.5)
         rates = await repo.recent_output_rates(
-            conn, model=model, media_kind=kind, prompt_hash=p_hash
+            conn,
+            model=model,
+            media_kind=kind,
+            prompt_hash=p_hash,
+            media_resolution=kind_resolution,
         )
         level = 1
         if len(rates) < _MIN_SAMPLES:
-            rates = await repo.recent_output_rates(conn, model=model, media_kind=kind)
+            rates = await repo.recent_output_rates(
+                conn, model=model, media_kind=kind, media_resolution=kind_resolution
+            )
             level = 2
         if len(rates) >= _MIN_SAMPLES:
             stats[kind] = _KindStats(
@@ -165,7 +186,7 @@ async def estimate_clips(
         confidence = "rough"
 
     def _cost(out_tokens: float) -> float | None:
-        if model not in RATE_CARDS:
+        if model not in rate_cards():
             return None
         # Approximate the modality split: media tokens at the video rate
         # bucket (correct for video/image; audio clips are billed higher —
@@ -197,6 +218,59 @@ async def estimate_clips(
     )
 
 
+def _classify_cached_row(row) -> str:
+    """Media kind for one clip_cache row. name is last-ditch: clip titles
+    sometimes carry an extension (fs provider). Misclassification falls
+    through to 'video+audio', the safe non-image default for estimation."""
+    cj = row["canonical_json"] or {}
+    media = cj.get("media") or {}
+    path = media.get("cached_path") or media.get("upstream_handle") or cj.get("name")
+    return classify_media_kind(str(path) if path else None)
+
+
+def _dimensions_from_cached_row(row) -> tuple[int | None, int | None]:
+    """Extract pixel width/height from a clip_cache row's provider_data.media dict.
+
+    CatDV stores image/video dimensions in the raw provider_data under the
+    "media" key (e.g. provider_data["media"]["width"]). The canonical MediaRef
+    sub-dict does NOT carry dimensions, so we reach into provider_data.
+
+    Returns (None, None) for any missing/non-integer value — callers must
+    handle None gracefully (used only for the image-tile estimate, where
+    None → 1-tile fallback in _image_tiles).
+    """
+    cj = row["canonical_json"] or {}
+    provider_media = (cj.get("provider_data") or {}).get("media") or {}
+    return _coerce_dim(provider_media.get("width")), _coerce_dim(
+        provider_media.get("height")
+    )
+
+
+def _coerce_dim(v) -> int | None:
+    """Coerce a provider dimension to a positive int, or None.
+
+    CatDV sometimes serialises width/height as numeric strings ("4000") rather
+    than ints; accept those too so large images aren't silently under-estimated
+    as a single tile. Non-numeric / non-positive / missing values → None.
+    """
+    try:
+        n = int(float(v))
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
+
+
+async def media_kinds_for_clip_ids(conn, *, clip_cache_repo, provider_id, clip_ids):
+    """{clip_id: media_kind} DB-first (offline-safe). Uncached clips default to
+    'video+audio' — the safe non-image default (never offered HIGH)."""
+    cached = await clip_cache_repo.get_many_by_ids(conn, provider_id, clip_ids)
+    out: dict[int, str] = {}
+    for cid in clip_ids:
+        row = cached.get(cid)
+        out[cid] = "video+audio" if row is None else _classify_cached_row(row)
+    return out
+
+
 _UNKNOWN_CLIP_DURATION_SECS = 60.0  # conservative default for uncached clips
 
 
@@ -206,6 +280,7 @@ async def estimate_for_clip_ids(
     clip_cache_repo,
     run_telemetry_repo,
     prompts_repo,
+    model_config_repo,
     provider_id: str,
     clip_ids: list[int],
     prompt_version_id: int,
@@ -215,6 +290,13 @@ async def estimate_for_clip_ids(
     conservative default duration rather than failing the whole estimate.
     Returns n_unknown: count of clip_ids not present in the local cache."""
     version = await prompts_repo.get_version(conn, prompt_version_id)
+
+    from backend.app.services.resolution import resolve_media_resolution
+
+    _mc = await model_config_repo.get(conn, version.model)
+    _model_default = _mc.default_media_resolution if _mc and not _mc.removed else None
+    media_resolution = resolve_media_resolution(version.media_resolution, _model_default)
+
     cached = await clip_cache_repo.get_many_by_ids(conn, provider_id, clip_ids)
     clips: list[ClipEstimateInput] = []
     n_unknown = 0
@@ -230,17 +312,14 @@ async def estimate_for_clip_ids(
                 )
             )
             continue
-        cj = row["canonical_json"] or {}
-        media = cj.get("media") or {}
-        # name is last-ditch: clip titles sometimes carry an extension
-        # (fs provider). Misclassification falls through to "video+audio",
-        # the safe default for estimation.
-        path = media.get("cached_path") or media.get("upstream_handle") or cj.get("name")
+        w, h = _dimensions_from_cached_row(row)
         clips.append(
             ClipEstimateInput(
                 clip_id=cid,
-                media_kind=classify_media_kind(str(path) if path else None),
+                media_kind=_classify_cached_row(row),
                 duration_secs=row["duration_secs"],
+                width=w,
+                height=h,
             )
         )
     est = await estimate_clips(
@@ -250,6 +329,7 @@ async def estimate_for_clip_ids(
         prompt_body=version.body,
         schema=version.output_schema,
         model=version.model,
+        media_resolution=media_resolution,
     )
     return {
         "tokens_in": est.tokens_in,
@@ -257,8 +337,10 @@ async def estimate_for_clip_ids(
         "tokens_out_p90": est.tokens_out_p90,
         "cost_usd_p50": est.cost_usd_p50,
         "cost_usd_p90": est.cost_usd_p90,
+        "pricing_missing": est.cost_usd_p50 is None,
         "confidence": est.confidence,
         "n_samples": est.n_samples,
         "n_clips": est.n_clips,
         "n_unknown": n_unknown,
+        "media_resolution": media_resolution,
     }

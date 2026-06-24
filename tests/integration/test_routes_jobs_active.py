@@ -80,6 +80,8 @@ def test_active_jobs_lists_running_with_progress(monkeypatch, tmp_path):
     assert body[0]["errors"] == 0
     assert body[0]["kind"] == "video"
     assert body[0]["status"] == "running"
+    assert "run_group" in body[0]
+    assert body[0]["run_group"] is None  # no run_group was set
 
 
 def test_create_job_reports_started_flag(monkeypatch, tmp_path):
@@ -102,6 +104,54 @@ def test_create_job_reports_started_flag(monkeypatch, tmp_path):
     body = r.json()
     assert "id" in body
     assert isinstance(body["started"], bool)
+
+
+def test_active_jobs_exposes_run_group_for_calibration_jobs(monkeypatch, tmp_path):
+    """run_group is included in /api/jobs/active so the topbar pill can
+    identify calibration jobs (run_group starting 'calibration:')."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.core_ctx
+
+        async def seed():
+            from backend.app.repositories.prompts import PromptsRepo
+
+            _, vid = await PromptsRepo().create_with_initial_version(
+                ctx.db, name="cal", description=None, body="p",
+                target_map={"x": {"kind": "markers"}}, output_schema={}, model="m",
+            )
+            # Real calibration jobs are kind="studio" (ADR 0116). Plain studio
+            # runs are hidden from the topbar, but calibration ones must show —
+            # so seed BOTH and assert only the calibration one is listed.
+            cal = await ctx.jobs_repo.create_job(
+                ctx.db,
+                prompt_version_id=vid,
+                clip_ids=[10],
+                kind="studio",
+                run_group="calibration:5:42",
+            )
+            draft = await ctx.jobs_repo.create_job(
+                ctx.db,
+                prompt_version_id=vid,
+                clip_ids=[11],
+                kind="studio",
+                run_group=None,
+            )
+            await ctx.jobs_repo.update_status(ctx.db, cal, "running")
+            await ctx.jobs_repo.update_status(ctx.db, draft, "running")
+            return cal, draft
+
+        cal, draft = client.portal.call(seed)
+
+        r = client.get("/api/jobs/active")
+
+    assert r.status_code == 200
+    body = r.json()
+    ids = {row["id"] for row in body}
+    assert cal in ids  # calibration studio job IS surfaced
+    assert draft not in ids  # plain studio draft run stays hidden
+    cal_row = next(row for row in body if row["id"] == cal)
+    assert cal_row["run_group"] == "calibration:5:42"
 
 
 def test_jobs_events_route_resolves_before_job_id(monkeypatch, tmp_path):

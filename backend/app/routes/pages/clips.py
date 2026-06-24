@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse
 
 from backend.app.archive.errors import ProviderError, is_provider_not_found
 from backend.app.archive.model import CanonicalClip, ClipQuery
+from backend.app.media_kind import is_image_path
 from backend.app.deps import get_core_ctx, get_live_ctx
 from backend.app.repositories.jobs import TRANSIENT_STATUSES
 from backend.app.repositories.live_sessions import LiveSessionsRepo
@@ -123,6 +124,33 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["pages"])
 
 
+# Upper bound for the full-catalog fetch used by the kind filter. The kind of a
+# clip is derived from its file-path extension at render time (there is no stored
+# kind column), so it cannot be pushed into the provider's server-side pagination.
+# When a kind filter is active we fetch the whole result set, filter in Python,
+# then slice — so the page AND total reflect the filtered set. The picker catalog
+# is small (calibration over the AI catalog); this bound keeps it safe.
+_KIND_FILTER_FETCH_LIMIT = 5000
+
+
+def _clip_kind(clip: CanonicalClip) -> str:
+    """Derive a clip's coarse kind ("image" | "video") the same way the
+    render path does — from the media file-path extension (is_image_path).
+    Everything that isn't a still image (video / video+audio / audio) is
+    bucketed as "video" so the picker's image/video toggle stays binary."""
+    media = clip.provider_data.get("media") or {}
+    return "image" if is_image_path(media.get("filePath")) else "video"
+
+
+def _filter_clips_by_kind(
+    clips: list[CanonicalClip], kind: str | None
+) -> list[CanonicalClip]:
+    """Keep only clips of the requested kind. ``None``/``"any"`` is a no-op."""
+    if not kind or kind == "any":
+        return clips
+    return [c for c in clips if _clip_kind(c) == kind]
+
+
 async def query_clip_page(
     ctx,
     *,
@@ -134,29 +162,69 @@ async def query_clip_page(
     anno_f,
     batch_ids: list[int],
     host_local_proxies: bool,
+    kind: str | None = None,
 ) -> tuple[list[dict], int, str | None]:
     """Shared clip-page query for the clips list and the batch picker.
 
     Returns (clip_summary rows, total, cache_fetched_at). Encapsulates the
     host-local cache collapse, the filtered-vs-plain page fetch, the bulk
     cache-status lookup, and per-clip clip_summary. Raises ProviderError on
-    archive failure (callers map to 502)."""
+    archive failure (callers map to 502).
+
+    ``kind`` ("image" | "video" | None/"any") restricts the result to clips of
+    that media kind, derived from each clip's file path. It is None for every
+    existing caller (Batches / Studio pickers) so their behaviour is unchanged;
+    the calibration picker sets it from the prompt's media_kind. When set, the
+    filter is applied to the full candidate set BEFORE the page slice so both
+    the returned page and the total reflect the filtered set."""
     # In host-local mode `cache=local` matches every clip — collapse to "any".
     effective_cache_f = "any" if (host_local_proxies and cache_f == "local") else cache_f
     cache_fetched_at: str | None = None
+    kind_active = bool(kind) and kind != "any"
 
     if filters_active(effective_cache_f, anno_f, batch_ids):
+        # The filtered path already fetches the full candidate set then slices;
+        # ask it for everything and slice here so the kind filter composes
+        # cleanly with the existing filters and keeps the total correct.
         clips, total = await _filtered_page(
             ctx,
             catalog_id=catalog_id,
             q=q,
-            offset=offset,
-            limit=limit,
+            offset=0 if kind_active else offset,
+            limit=_KIND_FILTER_FETCH_LIMIT if kind_active else limit,
             cache_filter=effective_cache_f,
             anno_filter=anno_f,
             host_local_proxies=host_local_proxies,
             batch=batch_ids,
         )
+        if kind_active:
+            clips = _filter_clips_by_kind(clips, kind)
+            total = len(clips)
+            clips = clips[offset : offset + limit]
+    elif kind_active:
+        # No other filter active, but a kind filter is: fetch the whole result
+        # set (kind is path-derived, so it can't be server-paginated), filter,
+        # then slice locally — total reflects the filtered count.
+        page = await ctx.archive.list_clips(
+            catalog_id, ClipQuery(text=q, offset=0, limit=_KIND_FILTER_FETCH_LIMIT)
+        )
+        raw_items = list(page.items)
+        if len(raw_items) >= _KIND_FILTER_FETCH_LIMIT:
+            # The kind filter is path-derived, so it can't be server-paginated:
+            # we fetch the whole result set and filter in Python. A catalog
+            # larger than the cap is silently truncated and `total` would be
+            # wrong — log it so the bound is observable rather than invisible.
+            logger.warning(
+                "kind-filter fetch for catalog %s hit the %d-clip cap (q=%r, "
+                "kind=%r); results may be truncated and the total under-counted",
+                catalog_id,
+                _KIND_FILTER_FETCH_LIMIT,
+                q,
+                kind,
+            )
+        clips = _filter_clips_by_kind(raw_items, kind)
+        total = len(clips)
+        clips = clips[offset : offset + limit]
     else:
         page = await ctx.archive.list_clips(
             catalog_id, ClipQuery(text=q, offset=offset, limit=limit)
@@ -266,10 +334,7 @@ async def clips_list(
     # When viewing a batch, surface each clip's per-item run status (queued /
     # processing / done / failed) from the job's items, merged across all the
     # per-kind jobs of the bulk action.
-    batch_status_map: dict[int, str] = {}
-    for jid in batch_ids:
-        for it in await ctx.jobs_repo.list_items(ctx.db, jid):
-            batch_status_map[it.catdv_clip_id] = it.status
+    batch_status_map = await ctx.jobs_repo.clip_status_by_jobs(ctx.db, batch_ids)
     # While any item is still in-flight, the per-clip pills change underneath a
     # static page — flag it so the tbody self-polls and refreshes the pills
     # without a manual reload. Stops automatically once the batch settles.
@@ -292,7 +357,9 @@ async def clips_list(
     # consulted only for the live version number. See services/publish_status.py.
     clip_ids = [row["id"] for row in ctx_dict["clips"]]
     live_nums = await ctx.clip_versions_repo.live_version_num_by_clip(ctx.db, clip_ids)
-    pending_by_clip = await ctx.pending_ops_repo.count_pending_by_clip(ctx.db, provider_id="catdv")
+    pending_by_clip = await ctx.pending_ops_repo.count_pending_by_clip(
+        ctx.db, provider_id="catdv", clip_ids=[str(c) for c in clip_ids]
+    )
 
     for row in ctx_dict["clips"]:
         row["batch_status"] = _batch_status_view(batch_status_map.get(row["id"]))
@@ -738,10 +805,7 @@ async def batch_statuses_fragment(request: Request, batch: str = ""):
     the batch is running, and tells the poller to stop once it settles."""
     ctx = get_core_ctx(request)
     job_ids = [int(b) for b in batch.split(",") if b.strip().isdigit()]
-    status_map: dict[int, str] = {}
-    for jid in job_ids:
-        for it in await ctx.jobs_repo.list_items(ctx.db, jid):
-            status_map[it.catdv_clip_id] = it.status
+    status_map = await ctx.jobs_repo.clip_status_by_jobs(ctx.db, job_ids)
     cells = {cid: _batch_status_view(s) for cid, s in status_map.items()}
     running = any(s in _RUNNING_ITEM_STATUSES for s in status_map.values())
     return templates.TemplateResponse(

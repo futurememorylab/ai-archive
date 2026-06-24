@@ -12,6 +12,30 @@ import aiosqlite
 _INSTALL_ID_KEY = "install_id"
 
 
+class AppMetaRepo:
+    """Generic key/value accessor over the app_meta table.
+
+    Repos are leaves (no service imports). Generic on purpose — callers own
+    the key namespace (e.g. UsageService owns ``budget_monthly_usd``)."""
+
+    async def get(self, conn: aiosqlite.Connection, key: str) -> str | None:
+        cur = await conn.execute("SELECT value FROM app_meta WHERE key = ?", (key,))
+        row = await cur.fetchone()
+        return row[0] if row is not None else None
+
+    async def set(self, conn: aiosqlite.Connection, key: str, value: str) -> None:
+        await conn.execute(
+            "INSERT INTO app_meta(key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
+        await conn.commit()
+
+    async def delete(self, conn: aiosqlite.Connection, key: str) -> None:
+        await conn.execute("DELETE FROM app_meta WHERE key = ?", (key,))
+        await conn.commit()
+
+
 async def get_or_create_install_id(conn: aiosqlite.Connection) -> str:
     cur = await conn.execute("SELECT value FROM app_meta WHERE key = ?", (_INSTALL_ID_KEY,))
     row = await cur.fetchone()

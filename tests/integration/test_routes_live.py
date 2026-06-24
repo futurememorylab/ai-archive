@@ -180,7 +180,6 @@ async def test_transcript_persist_happy_path(client_and_db):
             {"role": "model", "text": "dobrý den", "ts": 2, "kind": "speech"},
         ],
         "frame_count": 3,
-        "search_calls": 1,
     }
     r = await ac.post("/api/live/sessions/abc/transcript", json=payload)
     assert r.status_code == 200, r.text

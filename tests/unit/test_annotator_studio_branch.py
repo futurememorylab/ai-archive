@@ -19,6 +19,7 @@ from backend.app.migrations_runner import apply_migrations
 from backend.app.models.telemetry import TelemetryCtx
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.jobs import JobsRepo
+from backend.app.repositories.model_config import ModelConfigRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.run_telemetry import RunTelemetryRepo
@@ -136,6 +137,7 @@ async def test_studio_kind_persists_run_skips_catdv_write(db):
         uploaded_clips_repo=UploadedClipsRepo(),
         run_telemetry_repo=RunTelemetryRepo(),
         telemetry_ctx=TelemetryCtx(install_id="inst-test"),
+        model_config_repo=ModelConfigRepo(),
     )
 
     # Assertion: CatDV-side annotations write was NOT called
@@ -214,6 +216,7 @@ async def test_ai_cache_hit_skips_proxy_resolver(db):
         uploaded_clips_repo=UploadedClipsRepo(),
         run_telemetry_repo=RunTelemetryRepo(),
         telemetry_ctx=TelemetryCtx(install_id="inst-test"),
+        model_config_repo=ModelConfigRepo(),
     )
 
     # Fast path: resolver + uploader were skipped entirely.
@@ -275,6 +278,7 @@ async def test_run_fails_clearly_when_neither_cached(db):
         uploaded_clips_repo=UploadedClipsRepo(),
         run_telemetry_repo=RunTelemetryRepo(),
         telemetry_ctx=TelemetryCtx(install_id="inst-test"),
+        model_config_repo=ModelConfigRepo(),
     )
 
     # Studio run reports the error with a message naming both caches.

@@ -260,16 +260,14 @@ def test_reconcile_drops_foreign_marker_colliding_on_a_dropped_frame():
     assert sorted(m["name"] for m in payload["markers"]) == ["ours_keep"]
 
 
-def test_build_put_payload_demojibakes_marker_text_before_send():
-    # A foreign marker preserved on a switch, whose category CatDV mangled over
-    # prior writes (UTF-8 read as latin-1, 4x). We must PUT the CLEAN value so
-    # CatDV cannot compound it further or overflow its length-limited column.
-    bad = "Interiér"
-    for _ in range(4):
-        bad = bad.encode("utf-8").decode("latin-1")
-    assert len(bad) > len("Interiér")  # it really is bloated
-    existing = [{"name": "Žena", "in": {"frm": 100, "fmt": 25.0, "secs": 4.0}, "category": bad}]
+def test_build_put_payload_sends_foreign_marker_text_as_is():
+    # A foreign marker preserved on a switch is now sent exactly as it is on the
+    # live clip — no write-side repair. charset=utf-8 stops compounding at the
+    # source (catdv_client), and the read path repairs legacy mojibake for display.
+    existing = [
+        {"name": "Žena", "in": {"frm": 100, "fmt": 25.0, "secs": 4.0}, "category": "Exteriér"}
+    ]
     op = ReconcileMarkers(desired=(), drop_secs=())
     payload = build_put_payload(current=_clip(markers=existing), ops=[op])
-    assert payload["markers"][0]["category"] == "Interiér"
+    assert payload["markers"][0]["category"] == "Exteriér"
     assert payload["markers"][0]["name"] == "Žena"

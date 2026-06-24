@@ -5,6 +5,7 @@ function jobsIndicator() {
   return {
     jobs: {}, // id -> { done, total, errors, status }
     failed: false,
+    _resolving: false, // coalesces refreshes triggered to classify a new job
 
     async init() {
       await this.refresh();
@@ -13,7 +14,41 @@ function jobsIndicator() {
       es.onmessage = (evt) => {
         let p;
         try { p = JSON.parse(evt.data); } catch { return; }
-        if (["completed", "cancelled"].includes(p.status) && !p.errors) {
+        // A brand-new job's FIRST event may lack run_group (only /api/jobs/active
+        // carries it). Resolve its group via a refresh before classifying, so a
+        // calibration job isn't briefly mistaken for a failed batch (or vice
+        // versa). Coalesce so a 6-job sweep triggers at most one in-flight fetch.
+        if (!(p.job_id in this.jobs) && !p.run_group) {
+          if (!this._resolving) {
+            this._resolving = true;
+            this.refresh().finally(() => { this._resolving = false; });
+          }
+          return;
+        }
+        // run_group may be absent on later job-level events; the spread below
+        // preserves the prior value (seeded by /api/jobs/active). Decide
+        // calibration from the merged record, not the event.
+        const priorGroup = this.jobs[p.job_id]?.run_group || "";
+        const group = (p.run_group || priorGroup);
+        const isCal = group.startsWith("calibration:");
+        // Terminal = a real end state only. A partial error COUNT (p.errors) on a
+        // still-'running' job must NOT drop it — else a sweep where one clip
+        // errors makes the Calibrating… pill vanish mid-run.
+        const terminal = ["completed", "cancelled", "failed"].includes(p.status);
+        if (isCal) {
+          // Calibration jobs surface via their own pill (calibratingCount),
+          // not the batch banner. They're terminal on completion AND on
+          // failure — drop them so a Gemini error can't stick the pill or
+          // raise the batch "failed" flag (that flag is for real batches).
+          if (terminal) {
+            delete this.jobs[p.job_id];
+          } else {
+            this.jobs[p.job_id] = {
+              ...this.jobs[p.job_id],
+              done: p.done, total: p.total, errors: p.errors, status: p.status,
+            };
+          }
+        } else if (["completed", "cancelled"].includes(p.status) && !p.errors) {
           delete this.jobs[p.job_id];
         } else {
           // Preserve the last-known phases — job-level events don't carry them.
@@ -26,8 +61,12 @@ function jobsIndicator() {
       };
       // Phase transitions (caching→annotating) emit per-item events, not the
       // job-level events this SSE carries, so refresh the phase breakdown on a
-      // short cadence WHILE a batch is active. Idle = no fetch.
-      setInterval(() => { if (this.visible()) this.refresh(); }, 2000);
+      // short cadence WHILE a batch is active. Calibration sweeps are excluded
+      // from visible()/activeIds(), so ALSO refresh while one is in flight —
+      // otherwise a dropped SSE would leave its pill stale. Idle = no fetch.
+      setInterval(() => {
+        if (this.visible() || this.calibratingCount() > 0) this.refresh();
+      }, 2000);
     },
 
     async refresh() {
@@ -39,14 +78,18 @@ function jobsIndicator() {
         for (const j of list) {
           next[j.id] = {
             done: j.done, total: j.total, errors: j.errors, status: j.status,
-            phases: j.phases || null,
+            phases: j.phases || null, run_group: j.run_group || null,
           };
         }
         this.jobs = next;
       } catch { /* offline — leave current state */ }
     },
 
-    activeIds() { return Object.keys(this.jobs).map(Number); },
+    _isCalibration(id) { return (this.jobs[id]?.run_group || "").startsWith("calibration:"); },
+    // The batch indicator counts real batches only; calibration sweeps surface
+    // via their own pill (calibratingCount), so exclude them here to avoid
+    // double-display and mislabelling a sweep as an "Annotating" batch.
+    activeIds() { return Object.keys(this.jobs).map(Number).filter((id) => !this._isCalibration(id)); },
     visible() { return this.activeIds().length > 0 || this.failed; },
     done() { return this.activeIds().reduce((n, id) => n + (this.jobs[id].done || 0), 0); },
     total() { return this.activeIds().reduce((n, id) => n + (this.jobs[id].total || 0), 0); },
@@ -90,6 +133,26 @@ function jobsIndicator() {
     },
 
     dismiss() { this.failed = false; this.jobs = {}; },
+
+    calibratingCount() {
+      return this._calibrationIds().length;
+    },
+
+    _calibrationIds() {
+      return Object.keys(this.jobs)
+        .map(Number)
+        .filter((id) => this._isCalibration(id));
+    },
+
+    // Cancel an in-flight calibration sweep from the topbar pill. Calibration
+    // jobs are excluded from activeIds(), so cancel() (the batch X) never
+    // touches them — this is their dedicated stop affordance.
+    async cancelCalibration() {
+      for (const id of this._calibrationIds()) {
+        await fetch(`/api/jobs/${id}/cancel`, { method: "POST" });
+      }
+      await this.refresh();
+    },
   };
 }
 window.jobsIndicator = jobsIndicator;

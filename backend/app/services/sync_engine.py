@@ -209,11 +209,11 @@ class SyncEngine:
                 continue
             except (AuthError, FatalProviderError) as exc:
                 await self._pending.mark_failed(db, op_ids, error=str(exc))
-                await self._mark_version_failed(db, rows, reason=str(exc))
+                await self._advance_versions(db, rows, state="failed", reason=str(exc))
                 continue
             except ProviderError as exc:
                 await self._pending.mark_failed(db, op_ids, error=str(exc))
-                await self._mark_version_failed(db, rows, reason=str(exc))
+                await self._advance_versions(db, rows, state="failed", reason=str(exc))
                 continue
             except Exception as exc:  # noqa: BLE001 — unknown adapter bug
                 # Default to retryable: unknown exception is most often
@@ -269,35 +269,51 @@ class SyncEngine:
                 error=f"{error}; max_attempts={self._max_attempts} reached",
                 bump_attempts=True,
             )
-            version_id = self._version_id_from_rows(rows)
-            if self._clip_versions is not None and version_id is not None:
-                await self._clip_versions.mark_failed(
-                    db, version_id, reason=f"max_attempts={self._max_attempts} reached"
-                )
+            await self._advance_versions(
+                db,
+                rows,
+                state="failed",
+                reason=f"max_attempts={self._max_attempts} reached",
+            )
         else:
             await self._pending.mark_retryable(db, op_ids, error=error)
 
-    @staticmethod
-    def _version_id_from_rows(rows: list[dict[str, Any]]) -> int | None:
-        """Freshest clip_version among this clip's drained rows (max non-null).
-        When several publishes for one clip merge into one PUT, the newest
-        version is the one whose state should advance."""
-        ids = [r.get("origin_clip_version_id") for r in rows if r.get("origin_clip_version_id")]
-        return max(ids) if ids else None
-
-    async def _mark_version_failed(
-        self, db: aiosqlite.Connection, rows: list[dict[str, Any]], *, reason: str
+    async def _advance_versions(
+        self,
+        db: aiosqlite.Connection,
+        rows: list[dict[str, Any]],
+        *,
+        state: str,
+        reason: str = "",
     ) -> None:
-        """Flip the clip_version 'failed' when a write RAISES a fatal/provider
-        error (not only when apply_changes RETURNS a fatal result). Without
-        this the version stays 'publishing' forever and the clips-list badge /
-        clip headline read 'Publishing…' for a write that actually failed. See
-        the publishing audit, anomaly A9."""
+        """The one place a drain advances its clip_version(s). Every result and
+        error branch routes here, so none can silently forget the transition and
+        strand a version on 'publishing' (publishing audit, anomaly A9).
+
+        'live' flips only the freshest version — ClipVersionsRepo.mark_live
+        already supersedes the older merged-publish siblings (anomaly A4).
+        'conflict'/'failed' have no such fan-out, so every merged version (one
+        drain can carry several — ADR 0091) must be advanced, or the older ones
+        strand on 'publishing' forever."""
         if self._clip_versions is None:
             return
-        version_id = self._version_id_from_rows(rows)
-        if version_id is not None:
-            await self._clip_versions.mark_failed(db, version_id, reason=reason)
+        ids = list(
+            dict.fromkeys(
+                r["origin_clip_version_id"] for r in rows if r.get("origin_clip_version_id")
+            )
+        )
+        if not ids:
+            return
+        if state == "live":
+            await self._clip_versions.mark_live(db, max(ids))
+            return
+        mark = (
+            self._clip_versions.mark_conflict
+            if state == "conflict"
+            else self._clip_versions.mark_failed
+        )
+        for vid in ids:
+            await mark(db, vid, reason=reason)
 
     async def _handle_result(
         self,
@@ -309,8 +325,6 @@ class SyncEngine:
         rows: list[dict[str, Any]],
         result: Any,
     ) -> None:
-        version_id = self._version_id_from_rows(rows)
-
         if result.status == "ok":
             await self._pending.mark_applied(db, op_ids)
             # The write actually landed on CatDV now — stamp the originating
@@ -342,8 +356,7 @@ class SyncEngine:
                 provider_id=provider_id,
                 provider_clip_id=clip_id,
             )
-            if self._clip_versions is not None and version_id is not None:
-                await self._clip_versions.mark_live(db, version_id)
+            await self._advance_versions(db, rows, state="live")
         elif result.status == "conflict":
             detail = None
             cd = result.conflict_detail
@@ -355,8 +368,7 @@ class SyncEngine:
                     "fields": cd.fields,
                 }
             await self._pending.mark_conflict(db, op_ids, conflict_detail=detail)
-            if self._clip_versions is not None and version_id is not None:
-                await self._clip_versions.mark_conflict(db, version_id, reason="etag conflict")
+            await self._advance_versions(db, rows, state="conflict", reason="etag conflict")
         elif result.status == "retryable":
             await self._retry_or_fail(
                 db,
@@ -370,5 +382,4 @@ class SyncEngine:
                 op_ids,
                 error=json.dumps(result.upstream_response or {}),
             )
-            if self._clip_versions is not None and version_id is not None:
-                await self._clip_versions.mark_failed(db, version_id, reason="fatal")
+            await self._advance_versions(db, rows, state="failed", reason="fatal")

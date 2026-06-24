@@ -25,6 +25,7 @@ from backend.app.models.annotation import Annotation
 from backend.app.models.telemetry import RunTelemetryRecord, TelemetryCtx
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.jobs import JobsRepo
+from backend.app.repositories.model_config import ModelConfigRepo
 from backend.app.repositories.prefetch_queue import PrefetchQueueRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
@@ -130,6 +131,7 @@ async def _record_telemetry(
     est=None,
     ai_store_kind: str | None = None,
     review_item_count: int | None = None,
+    media_resolution_setting: str | None = None,
 ) -> None:
     """Write one run_telemetry row. Telemetry/bookkeeping must NEVER fail
     a run, so every path here is wrapped in try/except + log."""
@@ -186,6 +188,7 @@ async def _record_telemetry(
             est_confidence=getattr(est, "confidence", None),
             output_chars=rendered_len,
             review_item_count=review_item_count,
+            media_resolution_setting=media_resolution_setting,
         )
         await repo.insert(db, rec)
     except Exception:  # noqa: BLE001 — telemetry must never fail the run
@@ -209,8 +212,11 @@ async def run_job(
     uploaded_clips_repo,
     run_telemetry_repo: RunTelemetryRepo,
     telemetry_ctx: TelemetryCtx,
+    model_config_repo: ModelConfigRepo,
     prefetch_queue_repo: PrefetchQueueRepo | None = None,
     only_clip_ids: set[int] | None = None,
+    force_resolution: str | None = None,
+    record_only: bool = False,
 ) -> None:
     """Run a job to completion (or cancellation). Serial per job."""
     job = await jobs_repo.get_job(db, job_id)
@@ -252,8 +258,11 @@ async def run_job(
                 uploaded_clips_repo=uploaded_clips_repo,
                 run_telemetry_repo=run_telemetry_repo,
                 telemetry_ctx=telemetry_ctx,
+                model_config_repo=model_config_repo,
                 event_bus=event_bus,
                 topic=topic,
+                force_resolution=force_resolution,
+                record_only=record_only,
                 prefetch_queue_repo=prefetch_queue_repo,
             )
         except Exception as exc:  # noqa: BLE001
@@ -275,6 +284,7 @@ async def run_job(
                 version=version,
                 status="error",
                 error_class=type(exc).__name__,
+                media_resolution_setting=getattr(exc, "media_resolution_setting", None),
             )
             # Studio runs need a terminal status of their own — the frontend
             # polls /api/studio/runs/{id} and waits for status != pending|running.
@@ -360,8 +370,11 @@ async def _process_item(
     uploaded_clips_repo,
     run_telemetry_repo: RunTelemetryRepo,
     telemetry_ctx: TelemetryCtx,
+    model_config_repo: ModelConfigRepo,
     event_bus,
     topic,
+    force_resolution: str | None = None,
+    record_only: bool = False,
     prefetch_queue_repo: PrefetchQueueRepo | None = None,
 ) -> None:
     # Compute the AI-store key cheaply (no archive call). Full per-clip
@@ -450,6 +463,38 @@ async def _process_item(
     duration_secs = meta.duration_secs
     media_kind = meta.media_kind
 
+    # Effective media resolution: per-version override > model default >
+    # 'medium'. Invalid stored values are ignored (never reach the SDK map).
+    # Resolved BEFORE the estimate so the estimate reads same-resolution
+    # history and the resolution feedback loop is not a partial no-op.
+    from backend.app.services.resolution import (
+        resolution_valid_for_kind,
+        resolve_media_resolution,
+    )
+
+    if force_resolution is not None:
+        # Route the override through the validator too: a valid value passes
+        # through unchanged, an invalid one (e.g. a stale/garbage calibration
+        # value) falls back to the default 'medium' instead of KeyErroring at
+        # the SDK map (gemini.py::_SDK_MEDIA_RESOLUTION).
+        media_resolution = resolve_media_resolution(force_resolution, None)
+    else:
+        _mc = await model_config_repo.get(db, version.model)
+        _model_default = _mc.default_media_resolution if _mc and not _mc.removed else None
+        media_resolution = resolve_media_resolution(version.media_resolution, _model_default)
+    if not resolution_valid_for_kind(media_resolution, media_kind):
+        # Vertex rejects HIGH for non-image media; medium is the safe ceiling.
+        # Covers both branches above — even a stray calibration force_resolution
+        # of 'high' on a non-image clip is sanitized here.
+        log.info(
+            "downgrading media_resolution %s->medium for %s clip %s "
+            "(HIGH is image-only)",
+            media_resolution,
+            media_kind,
+            item.catdv_clip_id,
+        )
+        media_resolution = "medium"
+
     # Pre-call estimate (spec §6; stamped onto the telemetry row so
     # est-vs-actual is one query). Blind to the outcome by construction.
     est: run_estimator.RunEstimate | None = None
@@ -467,6 +512,7 @@ async def _process_item(
             prompt_body=version.body,
             schema=version.output_schema,
             model=version.model,
+            media_resolution=media_resolution,
         )
     except Exception:  # noqa: BLE001 — estimation must never block a run
         log.exception("pre-run estimate failed for clip %s", item.catdv_clip_id)
@@ -487,13 +533,21 @@ async def _process_item(
     # The Vertex AI client is synchronous and each call takes seconds; run it
     # off the event loop so concurrent jobs and ordinary page requests stay
     # responsive while Gemini works.
-    result = await asyncio.to_thread(
-        gemini.annotate,
-        file_ref=file_ref,
-        prompt=rendered_body,
-        schema=version.output_schema,
-        model=version.model,
-    )
+    try:
+        result = await asyncio.to_thread(
+            gemini.annotate,
+            file_ref=file_ref,
+            prompt=rendered_body,
+            schema=version.output_schema,
+            model=version.model,
+            media_resolution=media_resolution,
+        )
+    except Exception as exc:
+        # Attribute the effective (post-downgrade) resolution onto the
+        # exception so run_job's except block can stamp it on the error
+        # telemetry row — otherwise calibration error rows are resolution-blind.
+        exc.media_resolution_setting = media_resolution  # type: ignore[attr-defined]
+        raise
     elapsed_s = time.monotonic() - t0
 
     structured: dict[str, Any] | None
@@ -503,7 +557,58 @@ async def _process_item(
         structured = None
 
     ai_store_kind = getattr(ai_store, "id", None)
-    if kind == "studio":
+    if record_only:
+        # Calibration path: record the telemetry row + mark the item done, but
+        # write NO studio-runs / review-items / annotations. Used to measure
+        # cost/quality at a forced resolution without mutating review state.
+        #
+        # A non-JSON / truncated Gemini response parses to structured=None.
+        # Mirror _finalize_studio's structured-is-None branch: record an
+        # 'error' row (error_class "NonJsonOutput") and mark the item failed.
+        # Recording it as 'ok' would pollute calibration's per-resolution stats
+        # and the estimator's learned output-rates (both count only status='ok'
+        # rows) with a garbage sample.
+        if structured is None:
+            await jobs_repo.update_item_status(db, item.id, "error", error="non-JSON output")
+            await event_bus.publish(
+                topic, {"item_id": item.id, "status": "error", "error": "non-JSON output"}
+            )
+            await _record_telemetry(
+                db,
+                run_telemetry_repo,
+                telemetry_ctx,
+                kind="studio",
+                item=item,
+                version=version,
+                status="error",
+                error_class="NonJsonOutput",
+                result=result,
+                duration_s=elapsed_s,
+                capture=capture,
+                est=est,
+                ai_store_kind=ai_store_kind,
+                media_resolution_setting=media_resolution,
+            )
+            return
+        await jobs_repo.update_item_status(db, item.id, "review_ready")
+        await event_bus.publish(topic, {"item_id": item.id, "status": "review_ready"})
+        await _record_telemetry(
+            db,
+            run_telemetry_repo,
+            telemetry_ctx,
+            kind="studio",
+            item=item,
+            version=version,
+            status="ok",
+            result=result,
+            duration_s=elapsed_s,
+            capture=capture,
+            est=est,
+            ai_store_kind=ai_store_kind,
+            media_resolution_setting=media_resolution,
+        )
+        return
+    elif kind == "studio":
         await _finalize_studio(
             db,
             item,
@@ -522,6 +627,7 @@ async def _process_item(
             capture=capture,
             est=est,
             ai_store_kind=ai_store_kind,
+            media_resolution_setting=media_resolution,
         )
     else:
         await _finalize_annotation(
@@ -544,6 +650,7 @@ async def _process_item(
             est=est,
             ai_store_kind=ai_store_kind,
             elapsed_s=elapsed_s,
+            media_resolution_setting=media_resolution,
         )
 
 
@@ -566,6 +673,7 @@ async def _finalize_studio(
     capture: CaptureMeta,
     est=None,
     ai_store_kind: str | None = None,
+    media_resolution_setting: str | None = None,
 ) -> None:
     """Studio path: persist to studio_run + review_items (linked by
     studio_run_id), skip annotations. The studio UI renders from
@@ -603,6 +711,7 @@ async def _finalize_studio(
             capture=capture,
             est=est,
             ai_store_kind=ai_store_kind,
+            media_resolution_setting=media_resolution_setting,
         )
         return
 
@@ -632,7 +741,7 @@ async def _finalize_studio(
         duration_s=elapsed_s,
         tokens_in=usage.tokens_in,
         tokens_out=usage.billable_out,
-        cost_usd=cost_usd or 0.0,
+        cost_usd=cost_usd,
     )
 
     await jobs_repo.update_item_status(db, item.id, "review_ready")
@@ -653,6 +762,7 @@ async def _finalize_studio(
         est=est,
         ai_store_kind=ai_store_kind,
         review_item_count=len(review),
+        media_resolution_setting=media_resolution_setting,
     )
 
 
@@ -677,6 +787,7 @@ async def _finalize_annotation(
     est=None,
     ai_store_kind: str | None = None,
     elapsed_s: float | None = None,
+    media_resolution_setting: str | None = None,
 ) -> None:
     """Original annotation path: write to annotations + review_items."""
     annotation_id = await annotations_repo.insert(
@@ -734,4 +845,5 @@ async def _finalize_annotation(
         est=est,
         ai_store_kind=ai_store_kind,
         review_item_count=review_count,
+        media_resolution_setting=media_resolution_setting,
     )

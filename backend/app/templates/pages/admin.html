@@ -11,7 +11,19 @@
     {# Access is the default tab and a full-page link, so its Alpine popovers/modal
        init cleanly on load (HTMX-injecting them double-binds — the "black box"). #}
     <a class="ctab{% if active == 'access' %} active{% endif %}" href="/admin">Access &amp; Permissions</a>
-    {% for d in definitions %}
+    <a class="ctab{% if active == 'models' %} active{% endif %}"
+       href="/admin/models"
+       hx-get="/admin/models"
+       hx-target="#admin-enum-region"
+       hx-swap="innerHTML"
+       hx-push-url="false">Gemini models</a>
+    <a class="ctab{% if active == 'prompts' %} active{% endif %}"
+       href="/admin/prompts"
+       hx-get="/admin/prompts"
+       hx-target="#admin-enum-region"
+       hx-swap="innerHTML"
+       hx-push-url="false">Prompts</a>
+    {% for d in definitions if d.key != 'gemini_generation_model' %}
       <a class="ctab{% if d.key == active_key %} active{% endif %}"
          href="/admin/enums/{{ d.key }}"
          hx-get="/admin/enums/{{ d.key }}"
@@ -43,5 +55,121 @@
       t.classList.add("active");
     });
   })();
+
+  {# Prompts-tab calibrate dialog. Reuses the shared clip picker
+     (window.clipPickerCore — loaded globally in layout.html). The Prompts
+     tab fragment is HTMX-injected, so its <script> would not run; the
+     component is defined here on the always-loaded admin page and the
+     fragment references it via x-data="adminPromptsTab()". #}
+  // Module-scope (non-reactive) key so the estimate x-effect does not track
+  // its own write as a dependency (same pattern as batches.html).
+  let _calEstimateKey = "";
+
+  function adminPromptsTab() {
+    return {
+      ...window.clipPickerCore(),
+      calOpen: false,
+      calVersionId: null,
+      calLabel: "",
+      estimate: null,        // { projected_cost_usd, runs } | null
+
+      openCalibrate(el) {
+        // Label/kind/version come from data-* attributes on the button (Jinja
+        // autoescapes attribute values, so a prompt named O'Brien is safe) —
+        // NOT interpolated into this JS expression (that re-decoded the escaped
+        // quote and broke the handler / allowed expression injection).
+        const versionId = Number(el.dataset.versionId);
+        const label = el.dataset.calLabel || "";
+        const mediaKind = el.dataset.calKind || "";
+        this.sel = {};
+        this.q = ""; this.cacheF = "any"; this.annoF = "any";
+        this.selOnly = false; this.offset = 0;
+        // Auto-filter the picker to the prompt's media kind (image/video).
+        // 'any' (or missing) means no filter. Set BEFORE the first fetchPage()
+        // so the initial page is already filtered.
+        this.kind = (mediaKind && mediaKind !== "any") ? mediaKind : null;
+        this.calVersionId = versionId;
+        this.calLabel = label;
+        this.estimate = null;
+        _calEstimateKey = "";
+        this.calOpen = true;
+        this.$nextTick(() => this.fetchPage());
+      },
+
+      // Advisory projected cost — refreshed whenever the selection changes.
+      // x-effect on the modal body calls this; the module-scope key guard
+      // prevents the write to this.estimate from re-triggering the effect.
+      async refreshEstimate() {
+        if (!this.calOpen || this.calVersionId == null) return;
+        const ids = this.selectedClips().map((c) => c.id);
+        const key = JSON.stringify(ids);
+        if (key === _calEstimateKey) return;
+        _calEstimateKey = key;
+        if (!ids.length) { this.estimate = null; return; }
+        try {
+          const r = await fetch(
+            "/admin/prompts/" + this.calVersionId + "/calibrate/estimate",
+            { method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ clip_ids: ids }) });
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          if (key !== _calEstimateKey) return;  // selection changed mid-flight
+          this.estimate = await r.json();
+        } catch (e) {
+          console.error("calibrate estimate failed", e);  // advisory — no toast
+          if (key !== _calEstimateKey) return;
+          this.estimate = null;
+        }
+      },
+      estimateLabel() {
+        const e = this.estimate;
+        if (!e) return "";
+        if (e.pricing_missing || e.projected_cost_usd == null) {
+          return "No rate card for this model — cost not projected. Set pricing in Gemini models.";
+        }
+        let label = "Projected: ~" + fmtUsd(e.projected_cost_usd) + " over " + e.runs + " runs";
+        // Soft cap: advisory only — the Launch button stays enabled (:disabled
+        // is bound to !selCount(), unchanged).
+        if (e.would_exceed_budget) {
+          label += " · ⚠ would exceed this month's budget";
+        }
+        return label;
+      },
+
+      async launchCalibrate() {
+        if (!this.selCount() || this.calVersionId == null) return;
+        const ids = this.selectedClips().map((c) => c.id);
+        const form = new URLSearchParams();
+        for (const id of ids) form.append("clip_ids", id);
+        try {
+          const r = await fetch(
+            "/admin/prompts/" + this.calVersionId + "/calibrate",
+            { method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: form.toString() });
+          if (!r.ok) {
+            const d = await r.json().catch(() => ({}));
+            throw new Error(d.detail || ("HTTP " + r.status));
+          }
+          const region = document.getElementById("admin-enum-region");
+          if (region) {
+            region.innerHTML = await r.text();
+            // The fragment carries its OWN x-data="adminPromptsTab()" root, so
+            // Alpine's MutationObserver initializes it — calling reinit (=
+            // Alpine.initTree) would double-bind every @click. Only HTMX needs
+            // a manual nudge for injected innerHTML (idempotent). This mirrors
+            // the tab-switch HTMX path, which swaps the same self-rooted
+            // fragment and relies on the observer for Alpine.
+            window.htmxAlpine.wireHtmx(region);
+          }
+          const n = r.headers.get("X-Calibration-Jobs");
+          this.calOpen = false;
+          Alpine.store("toast").push("Calibration sweep launched" + (n ? " — " + n + " jobs." : "."), { level: "success" });
+        } catch (e) {
+          Alpine.store("toast").push("Couldn't launch calibration: " + e.message, { level: "error" });
+        }
+      },
+    };
+  }
+  window.adminPromptsTab = adminPromptsTab;
 </script>
 {% endblock %}

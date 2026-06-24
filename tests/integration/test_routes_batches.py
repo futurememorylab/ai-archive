@@ -179,13 +179,17 @@ def test_retry_failed_flips_failed_items_to_pending_synchronously(monkeypatch, t
         assert statuses[101] == "review_ready"   # untouched
 
 
-def _picker_clip(clip_id=12041, name="Abramcukova_Anna_09"):
+def _picker_clip(clip_id=12041, name="Abramcukova_Anna_09", file_path=None):
+    # Kind is derived from the media.filePath extension at render time; default
+    # to a .mov (→ video) so existing tests stay "video".
+    media_path = file_path if file_path is not None else f"/vol/{name}.mov"
     return CanonicalClip(
         key=("catdv", str(clip_id)), name=name, duration_secs=60.0, fps=25.0,
         markers=(), fields={}, notes={},
         media=MediaRef(mime_type="video/quicktime", size_bytes=None,
                        cached_path=None, upstream_handle=str(clip_id)),
-        provider_data={"ID": clip_id, "name": name}, fetched_at=datetime.now(UTC),
+        provider_data={"ID": clip_id, "name": name, "media": {"filePath": media_path}},
+        fetched_at=datetime.now(UTC),
     )
 
 
@@ -238,3 +242,42 @@ def test_batches_picker_passes_query_and_paging(monkeypatch, tmp_path):
         assert arch.last_query.offset == 12
         assert arch.last_query.limit == 12
         assert 'data-total="29"' in r.text
+
+
+def _kind_clips():
+    return [
+        _picker_clip(1, "Vid_one", file_path="/vol/Vid_one.mov"),
+        _picker_clip(2, "Img_one", file_path="/vol/Img_one.jpg"),
+    ]
+
+
+def test_batches_picker_kind_image_returns_only_images(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        install_live_ctx(client.app, archive=_PickerArchive(_kind_clips()))
+        r = client.get("/batches/picker?kind=image")
+        assert r.status_code == 200
+        assert 'value="catdv/2"' in r.text      # the .jpg
+        assert 'value="catdv/1"' not in r.text   # the .mov filtered out
+        assert 'data-total="1"' in r.text        # total reflects the filtered set
+
+
+def test_batches_picker_kind_video_returns_only_videos(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        install_live_ctx(client.app, archive=_PickerArchive(_kind_clips()))
+        r = client.get("/batches/picker?kind=video")
+        assert r.status_code == 200
+        assert 'value="catdv/1"' in r.text       # the .mov
+        assert 'value="catdv/2"' not in r.text   # the .jpg filtered out
+        assert 'data-total="1"' in r.text
+
+
+def test_batches_picker_no_kind_returns_both(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        install_live_ctx(client.app, archive=_PickerArchive(_kind_clips()))
+        # No kind, and kind=any, both return the full set unchanged.
+        for url in ("/batches/picker", "/batches/picker?kind=any"):
+            r = client.get(url)
+            assert r.status_code == 200
+            assert 'value="catdv/1"' in r.text
+            assert 'value="catdv/2"' in r.text
+            assert 'data-total="2"' in r.text

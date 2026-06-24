@@ -13,6 +13,10 @@
     return {
       // ── picker state ─────────────────────────────────────────────
       q: '', cacheF: 'any', annoF: 'any', selOnly: false,
+      // kind: null = no media-kind filter (Batches / Studio pickers leave it
+      // unset, so they are unaffected). The calibration picker sets it to the
+      // prompt's media_kind ('image' | 'video') so only matching clips show.
+      kind: null,
       sel: {},                 // id -> { id, name, kind, thumb }
       offset: 0, perPage: 15, total: 0,
 
@@ -25,6 +29,7 @@
           q: this.q, cache: this.cacheF, anno: this.annoF,
           offset: this.offset, limit: this.perPage,
         });
+        if (this.kind) params.set('kind', this.kind);
         try {
           const r = await fetch('/batches/picker?' + params.toString());
           if (!r.ok) {

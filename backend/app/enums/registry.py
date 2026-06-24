@@ -63,6 +63,17 @@ ENUM_REGISTRY: dict[str, EnumSpec] = {
             EnumValueSpec("error"),
         ),
     ),
+    "media_resolution": EnumSpec(
+        key="media_resolution",
+        name="Media resolutions",
+        description="How much detail (and token cost) a clip's media gets in a Gemini call.",
+        editable=False,
+        values=(
+            EnumValueSpec("low"),
+            EnumValueSpec("medium"),
+            EnumValueSpec("high"),
+        ),
+    ),
     "clip_publish_state": EnumSpec(
         key="clip_publish_state",
         name="Clip publish state",

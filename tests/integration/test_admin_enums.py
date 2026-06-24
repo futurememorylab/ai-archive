@@ -17,9 +17,13 @@ def test_admin_lists_editable_enum_with_models(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as client:
         r = client.get("/admin")
         assert r.status_code == 200
-        assert "Gemini generation models" in r.text  # enum tab present
-        # /admin now defaults to the Access & Permissions section; enum VALUES
-        # live behind the enum tab (covered by test_admin_table_partial).
+        # The Gemini catalog no longer has its own generic enum tab — it was
+        # merged into the "Gemini models" tab (which carries the catalog +
+        # pricing together). The generic "Gemini generation models" tab is gone.
+        assert "Gemini generation models" not in r.text
+        assert "Gemini models" in r.text  # merged tab present
+        # /admin still defaults to the Access & Permissions section. The gemini
+        # enum VALUES route still works (covered by test_admin_table_partial).
         assert "Access" in r.text and "Permissions" in r.text
 
 
