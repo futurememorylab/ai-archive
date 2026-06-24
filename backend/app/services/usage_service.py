@@ -47,7 +47,7 @@ def month_start_utc(now: datetime) -> datetime:
 def _status_for(fraction: float | None) -> str:
     if fraction is None:
         return "none"
-    if fraction > 1.0:
+    if fraction >= 1.0:  # spend == budget is already over (fully consumed), not "nearing"
         return "over"
     if fraction >= _WARN_FRACTION:
         return "warn"

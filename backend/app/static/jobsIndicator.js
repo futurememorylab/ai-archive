@@ -5,6 +5,7 @@ function jobsIndicator() {
   return {
     jobs: {}, // id -> { done, total, errors, status }
     failed: false,
+    _resolving: false, // coalesces refreshes triggered to classify a new job
 
     async init() {
       await this.refresh();
@@ -13,15 +14,27 @@ function jobsIndicator() {
       es.onmessage = (evt) => {
         let p;
         try { p = JSON.parse(evt.data); } catch { return; }
-        // run_group may be absent on job-level SSE events; the spread below
-        // preserves the prior value (seeded by /api/jobs/active, which DOES
-        // carry it). Decide calibration from the merged record, not the event.
+        // A brand-new job's FIRST event may lack run_group (only /api/jobs/active
+        // carries it). Resolve its group via a refresh before classifying, so a
+        // calibration job isn't briefly mistaken for a failed batch (or vice
+        // versa). Coalesce so a 6-job sweep triggers at most one in-flight fetch.
+        if (!(p.job_id in this.jobs) && !p.run_group) {
+          if (!this._resolving) {
+            this._resolving = true;
+            this.refresh().finally(() => { this._resolving = false; });
+          }
+          return;
+        }
+        // run_group may be absent on later job-level events; the spread below
+        // preserves the prior value (seeded by /api/jobs/active). Decide
+        // calibration from the merged record, not the event.
         const priorGroup = this.jobs[p.job_id]?.run_group || "";
         const group = (p.run_group || priorGroup);
         const isCal = group.startsWith("calibration:");
-        const terminal =
-          ["completed", "cancelled"].includes(p.status) ||
-          p.status === "failed" || p.errors;
+        // Terminal = a real end state only. A partial error COUNT (p.errors) on a
+        // still-'running' job must NOT drop it — else a sweep where one clip
+        // errors makes the Calibrating… pill vanish mid-run.
+        const terminal = ["completed", "cancelled", "failed"].includes(p.status);
         if (isCal) {
           // Calibration jobs surface via their own pill (calibratingCount),
           // not the batch banner. They're terminal on completion AND on

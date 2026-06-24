@@ -67,7 +67,10 @@
           {{ r.model }}
           {% if not r.has_card %}<span class="pill warn" title="No pricing rate card yet — enter rates and Save">no rate card</span>{% endif %}
         </td>
-        <td class="mono-cell">{{ s.cost_usd | usd if s and s.cost_usd else '—' }}</td>
+        {# Cost is known only for carded models; an un-priced model's SUM is a
+           NULL→0 artifact (unknown), not a real $0, so show — there. A carded
+           model's genuine $0.00 renders as $0.00, not — (falsy-zero). #}
+        <td class="mono-cell">{% if s and r.has_card %}{{ s.cost_usd | usd }}{% else %}—{% endif %}</td>
         <td class="mono-cell">{{ s.count if s else 0 }}</td>
         <td>{% if r.is_default %}★{% endif %}</td>
         <td>{{ ui.status_pill('on', 'ok') if r.enabled else ui.status_pill('off', '') }}</td>

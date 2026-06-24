@@ -110,6 +110,11 @@ async def test_status_ok_warn_over_thresholds(db):
     res = await svc.current_month(now=NOW)
     assert res["status"] == "over"
 
+    await svc.set_budget(10.0)  # exactly 100% (spend == budget) → over, not "warn"
+    res = await svc.current_month(now=NOW)
+    assert res["fraction"] == pytest.approx(1.0)
+    assert res["status"] == "over"
+
 
 # ---- budget read / write -------------------------------------------------
 
