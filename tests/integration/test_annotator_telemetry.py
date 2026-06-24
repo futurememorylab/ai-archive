@@ -279,6 +279,40 @@ async def test_force_resolution_overrides_resolver(db, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_force_resolution_invalid_value_falls_back_not_keyerror(db, tmp_path):
+    # L1: a bogus force_resolution (e.g. a stale/garbage calibration value)
+    # must be routed through the validator, falling back to the default
+    # 'medium' — NOT assigned raw, which would KeyError at the gemini SDK
+    # map (_SDK_MEDIA_RESOLUTION[media_resolution]) outside any try/except.
+    mc = ModelConfigRepo()
+    await mc.set_rates(
+        db,
+        "gemini-2.5-flash-lite",
+        input_text_video_image_per_1m=0.1,
+        input_audio_per_1m=0.1,
+        input_cached_per_1m=0.1,
+        output_per_1m=0.1,
+        pricing_version="test",
+        commit=True,
+    )
+
+    job_id, f = await _setup(db, tmp_path, kind=None)
+    gemini = FakeGeminiCapturing()
+    # Must not raise — a valid resolution must reach gemini, not "bogus".
+    await run_job(
+        job_id=job_id,
+        **_run_kwargs(db, {101: f}, gemini),
+        force_resolution="bogus",
+    )
+
+    assert gemini.media_resolution == "medium"  # validated fallback, not "bogus"
+
+    cur = await db.execute("SELECT media_resolution_setting FROM run_telemetry")
+    row = await cur.fetchone()
+    assert row == ("medium",)  # records a valid setting, never the raw bad value
+
+
+@pytest.mark.asyncio
 async def test_record_only_writes_telemetry_but_no_studio_or_review(db, tmp_path):
     # record_only=True on a studio-kind job: after the Gemini call we record
     # telemetry + mark the item done, but write NO studio-run completion and

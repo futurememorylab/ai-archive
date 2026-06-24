@@ -211,12 +211,15 @@ async def test_p90_exceeds_p50_on_skewed_history():
 
 @pytest.mark.asyncio
 async def test_estimate_uses_resolution_keyed_history():
+    # Uses low vs medium (both valid for video, neither downgraded) so this
+    # asserts the resolution-keying alone, independent of the HIGH→medium
+    # per-kind downgrade (covered by the dedicated tests below).
     repo = FakeRepo(output_rates={("video+audio", "*", "low"): [5.0] * 5,
-                                  ("video+audio", "*", "high"): [50.0] * 5})
+                                  ("video+audio", "*", "medium"): [50.0] * 5})
     low = await estimate_clips(None, repo, [VIDEO], prompt_body="", schema={}, model="m", media_resolution="low")
-    high = await estimate_clips(None, repo, [VIDEO], prompt_body="", schema={}, model="m", media_resolution="high")
+    medium = await estimate_clips(None, repo, [VIDEO], prompt_body="", schema={}, model="m", media_resolution="medium")
     assert low.tokens_out_p50 == 300    # 60s * 5/s
-    assert high.tokens_out_p50 == 3000  # 60s * 50/s
+    assert medium.tokens_out_p50 == 3000  # 60s * 50/s
 
 
 @pytest.mark.asyncio
