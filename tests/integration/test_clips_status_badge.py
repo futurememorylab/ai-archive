@@ -328,12 +328,16 @@ def test_clips_status_badge_query_count_bounded(monkeypatch, tmp_path, n_clips):
 
     The badge now uses two batched reads — live_version_num_by_clip and
     count_pending_by_clip — instead of one newest_state_by_clip, both O(1) in
-    clip count. Bound is 13 (actual + headroom) so a per-row DB lookup (10 extra
-    statements for a 10-row page) trips the assertion.
+    clip count. The always-present topbar usage pill adds ONE constant
+    statement (the current-month spend aggregate in the pre-render
+    topbar_counts refresh — backed by idx_run_telemetry_occurred_at, ADR 0122).
+    Bound is 15 (actual 14 + headroom) so a per-row DB lookup (10 extra
+    statements for a 10-row page) still trips the assertion; the O(1)-in-N
+    guard (test_..._identical_across_n) is the real N+1 catch.
     """
     count = _count_render(monkeypatch, tmp_path, n_clips)
-    assert count <= 13, (
-        f"[n={n_clips}] query count {count} > 13; "
+    assert count <= 15, (
+        f"[n={n_clips}] query count {count} > 15; "
         "an N+1 may have been introduced in the status-badge derivation. "
         "See ADR 0046."
     )

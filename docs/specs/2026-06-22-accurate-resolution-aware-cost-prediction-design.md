@@ -219,9 +219,10 @@ clips page, and studio runs. Each surface shows:
 - the estimate **with its confidence** (`rough`/`fair`/`good`),
 - after the run, the **estimate-vs-actual delta**.
 
-The always-present global usage indicator remains scoped to #30; this spec
-lays its data foundation (accurate per-run cost, captured resolution,
-DB-sourced pricing).
+The always-present global usage indicator was scoped to #30; this spec laid
+its data foundation (accurate per-run cost, captured resolution, DB-sourced
+pricing). **#30 has since been delivered on that foundation** — a monthly soft
+cap, an Admin "Usage" tab, and the always-present topbar spend pill (ADR 0122).
 
 ### 6. Guards / tests
 
