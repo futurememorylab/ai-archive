@@ -24,6 +24,7 @@ Build returns a ``CoreCtx`` always and a ``LiveCtx | None`` (None when
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -76,6 +77,7 @@ from backend.app.services.connection_monitor import ConnectionMonitor
 from backend.app.services.enum_service import EnumService
 from backend.app.services.events import EventBus
 from backend.app.services.idle_disconnector import IdleDisconnector
+from backend.app.services.job_runner import JobRunner
 from backend.app.services.lru_eviction import LruEviction
 from backend.app.services.media_cache import MediaCacheBackend, build_media_cache_backend
 from backend.app.services.media_prefetcher import MediaPrefetcher
@@ -91,25 +93,6 @@ from backend.app.services.write_queue import WriteQueue
 from backend.app.settings import Settings
 
 MIGRATIONS = Path(__file__).resolve().parents[1] / "migrations"
-
-
-async def drain_running_jobs(
-    running: dict[int, object], *, timeout: float = 5.0
-) -> None:
-    """Cancel and await any in-flight annotation/studio job tasks tracked in
-    CoreCtx._running_jobs, so shutdown never closes the DB under a running
-    run_job(). Mirrors MediaPrefetcher.stop(): cancel, then a bounded await.
-    Each task's CancelledError handler reconciles its job's item state, which
-    is why this must run BEFORE core.aclose() closes the connection."""
-    tasks = [
-        t
-        for t in list(running.values())
-        if isinstance(t, asyncio.Task) and not t.done()
-    ]
-    for t in tasks:
-        t.cancel()
-    if tasks:
-        await asyncio.wait(tasks, timeout=timeout)
 
 
 @dataclass
@@ -146,8 +129,6 @@ class CoreCtx:
     app_meta_repo: AppMetaRepo = field(default_factory=AppMetaRepo)
     telemetry_ctx: TelemetryCtx = field(init=False)
     event_bus: EventBus = field(default_factory=EventBus)
-
-    _running_jobs: dict[int, object] = field(default_factory=dict)
 
     write_queue: WriteQueue = field(init=False)
     publish_service: PublishService = field(init=False)
@@ -299,6 +280,7 @@ class LiveCtx:
     thumbnail_service: ThumbnailService | None = None
     media_cache_backend: MediaCacheBackend | None = None
     media_prefetcher: MediaPrefetcher | None = None
+    job_runner: JobRunner | None = None
     idle_disconnector: IdleDisconnector | None = None
     vpn_supervisor: VpnSupervisor | None = None
 
@@ -455,10 +437,6 @@ class LiveCtx:
     def restore_service(self) -> RestoreService:
         return self.core.restore_service
 
-    @property
-    def _running_jobs(self) -> dict[int, object]:
-        return self.core._running_jobs
-
     async def aclose(self) -> None:
         # Stop the live services in the documented order, then close the
         # core (DB). Order matches the pre-split teardown exactly.
@@ -468,6 +446,8 @@ class LiveCtx:
         # master-switch order (see ADR 0075).
         if self.media_prefetcher is not None:
             await self.media_prefetcher.stop()
+        if self.job_runner is not None:
+            await self.job_runner.stop()
         if self.lru_eviction is not None:
             await self.lru_eviction.stop()
         if self.sync_engine is not None:
@@ -480,10 +460,6 @@ class LiveCtx:
             await self.catdv.__aexit__(None, None, None)
         if self.vpn_supervisor is not None:
             await self.vpn_supervisor.aclose()
-        # Drain fire-and-forget annotation/studio job tasks before the DB
-        # closes under them — they are NOT request-scoped, so uvicorn's
-        # connection draining does not cover them. See ADR 0115.
-        await drain_running_jobs(self.core._running_jobs)
         await self.core.aclose()
 
 
@@ -906,6 +882,56 @@ async def _build_sync_subsystem(
             tick_interval_s=float(settings.prefetch_tick_interval_s),
         )
 
+    # The lifespan-owned annotation/studio job worker. Built whenever the live
+    # stack run_job needs is present (same gate the old route auto-start used:
+    # a real proxy_resolver). Routes only insert pending jobs; this claims and
+    # runs them. See ADR 0125.
+    from backend.app.services.annotator import run_job
+
+    job_runner: JobRunner | None = None
+    if arch.proxy_resolver is not None:
+
+        async def _run_one_job(job_id: int) -> None:
+            try:
+                # Per-job run parameters (forced resolution, record-only) live
+                # on the job row so a calibration sweep runs identically to the
+                # old route-spawn path. Normal jobs default to None/False.
+                job = await core.jobs_repo.get_job(core.db, job_id)
+                await run_job(
+                    db=core.db,
+                    job_id=job_id,
+                    archive=arch.archive,
+                    proxy_resolver=arch.proxy_resolver,
+                    ai_store=arch.ai_store,
+                    gemini=arch.gemini,
+                    event_bus=core.event_bus,
+                    annotations_repo=core.annotations_repo,
+                    review_items_repo=core.review_items_repo,
+                    jobs_repo=core.jobs_repo,
+                    prompts_repo=core.prompts_repo,
+                    studio_runs_repo=core.studio_runs_repo,
+                    uploaded_clips_repo=core.uploaded_clips_repo,
+                    run_telemetry_repo=core.run_telemetry_repo,
+                    telemetry_ctx=core.telemetry_ctx,
+                    model_config_repo=core.model_config_repo,
+                    prefetch_queue_repo=core.prefetch_queue_repo,
+                    force_resolution=job.force_resolution,
+                    record_only=job.record_only,
+                )
+            except asyncio.CancelledError:
+                # Cancelled by JobRunner.cancel()/stop(): reconcile item state
+                # (nothing left 'prompting') before propagating. Idempotent.
+                with contextlib.suppress(Exception):
+                    await core.jobs_repo.cancel_job(core.db, job_id)
+                raise
+
+        job_runner = JobRunner(
+            jobs_repo=core.jobs_repo,
+            run_job_fn=_run_one_job,
+            db_provider=lambda: core.db,
+            tick_interval_s=float(settings.job_tick_interval_s),
+        )
+
     idle_disconnector = None
     if flags.manual and arch.catdv is not None:
         from backend.app.services.idle_disconnector import IdleDisconnector
@@ -981,6 +1007,7 @@ async def _build_sync_subsystem(
         thumbnail_service=arch.thumbnail_service,
         media_cache_backend=media_cache_backend,
         media_prefetcher=media_prefetcher,
+        job_runner=job_runner,
         idle_disconnector=idle_disconnector,
         vpn_supervisor=vpn_supervisor,
     )

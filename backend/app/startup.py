@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 
 import aiosqlite
 
-from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.live_sessions import LiveSessionsRepo
 
 log = logging.getLogger(__name__)
@@ -16,21 +15,10 @@ async def run_startup_cleanup(conn: aiosqlite.Connection) -> int:
     """Boot-time cleanup of state a previous process left mid-flight. Returns
     the count of stale live_sessions dropped (back-compat with callers).
 
-    Two recoveries run here (single process → nothing is in-flight at boot):
-    - stale-pending live_sessions older than 1h are dropped;
-    - orphaned annotation jobs are recovered — any job still 'running' (and its
-      unfinished items) is cancelled, so a job killed by a crash/restart/
-      dev-reload stops appearing active: the clip page no longer 'resumes' a
-      dead run and the Batches view no longer shows it as "Running".
+    Orphaned annotation jobs are resumed, not cleaned up here: that now happens
+    in JobRunner.start() (requeue_orphaned_running), faithful to the prefetcher.
+    See ADR 0125.
     """
-    jobs = JobsRepo()
-    cancelled = await jobs.cancel_orphaned_running(conn)
-    if cancelled:
-        log.info(
-            "startup recovery: cancelled %d orphaned running job(s) and their "
-            "unfinished items",
-            cancelled,
-        )
     sessions = LiveSessionsRepo()
     return await sessions.cleanup_stale_pending(conn, older_than_hours=1)
 

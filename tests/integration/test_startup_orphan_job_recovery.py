@@ -1,14 +1,12 @@
-"""Startup recovery for orphaned jobs (ADR 0114 follow-up).
+"""Orphaned-job recovery now RESUMES, not cancels (ADR 0125).
 
-A job runs as a fire-and-forget background task. A restart (deploy, crash, or
-the dev --reload firing on a file save) kills that task mid-flight, but the DB
-still says status='running' / item='prompting'. Unlike the prefetch queue
-(requeue_orphans on MediaPrefetcher.start), nothing recovered these — so the
-clip page kept showing "Annotating" forever for a job that was already dead.
-
-run_startup_cleanup must, at boot (single process → nothing in-flight by
-construction): reset transient item statuses to 'pending' and cancel the
-orphaned 'running' jobs so they stop appearing active.
+A job runs inside the single lifespan-owned JobRunner. A restart (deploy,
+crash, or the dev --reload firing on a file save) leaves the DB saying
+status='running' / item='prompting'. Faithful to the prefetch queue
+(requeue_orphans on MediaPrefetcher.start), the worker now RESUMES these on
+JobRunner.start() (requeue_orphaned_running: running -> pending, transient
+items -> pending) instead of cancelling them. run_startup_cleanup no longer
+touches jobs at all.
 """
 from pathlib import Path
 
@@ -37,42 +35,40 @@ async def _seed_running_job(conn, *, clip_id, item_status):
 
 
 @pytest.mark.asyncio
-async def test_cancel_orphaned_running_flips_job_and_items_to_cancelled(tmp_path):
+async def test_requeue_orphaned_running_resumes_job_and_transient_items(tmp_path):
     db = tmp_path / "t.db"
     async with aiosqlite.connect(db) as conn:
         await apply_migrations(conn, MIGRATIONS)
         jobs = JobsRepo()
-        running_id, run_item = await _seed_running_job(conn, clip_id=1, item_status="prompting")
+        running_id, _ = await _seed_running_job(conn, clip_id=1, item_status="prompting")
         # A terminal job must be left alone.
         done_id, _ = await _seed_running_job(conn, clip_id=2, item_status="prompting")
         await jobs.update_status(conn, done_id, "completed")
 
-        n = await jobs.cancel_orphaned_running(conn)
+        n = await jobs.requeue_orphaned_running(conn)
 
         assert n == 1
-        assert (await jobs.get_job(conn, running_id)).status == "cancelled"
-        # The unfinished item is cancelled too — a terminal job must not keep a
-        # pending/in-flight item (that's what made the Batches view show it
-        # "Running" while the clip page showed it stopped).
+        # The orphan is requeued so the worker re-claims and resumes it; its
+        # stuck transient item is reset so run_job re-runs it.
+        assert (await jobs.get_job(conn, running_id)).status == "pending"
         items = await jobs.list_items(conn, running_id)
-        assert items[0].status == "cancelled"
+        assert items[0].status == "pending"
         # Terminal job untouched.
         assert (await jobs.get_job(conn, done_id)).status == "completed"
 
 
 @pytest.mark.asyncio
-async def test_startup_cleanup_clears_orphaned_annotate_job(tmp_path):
+async def test_startup_cleanup_no_longer_touches_jobs(tmp_path):
     db = tmp_path / "t.db"
     async with aiosqlite.connect(db) as conn:
         await apply_migrations(conn, MIGRATIONS)
         jobs = JobsRepo()
-        job_id, item_id = await _seed_running_job(conn, clip_id=888727, item_status="prompting")
+        job_id, _ = await _seed_running_job(conn, clip_id=888727, item_status="prompting")
 
+        # Boot-time cleanup is now only about stale live_sessions — orphaned
+        # jobs are resumed by JobRunner.start(), not here.
         await run_startup_cleanup(conn)
 
-        # The phantom is gone: job + its unfinished item both cancelled.
-        assert (await jobs.get_job(conn, job_id)).status == "cancelled"
+        assert (await jobs.get_job(conn, job_id)).status == "running"
         items = await jobs.list_items(conn, job_id)
-        assert items[0].status == "cancelled"
-        # And the clip page would no longer try to resume it.
-        assert await jobs.find_running_item_for_clip(conn, 888727) is None
+        assert items[0].status == "prompting"

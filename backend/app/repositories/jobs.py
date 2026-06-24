@@ -36,14 +36,25 @@ class JobsRepo:
         clip_ids: list[int],
         kind: str | None = None,
         run_group: str | None = None,
+        force_resolution: str | None = None,
+        record_only: bool = False,
     ) -> int:
         cur = await conn.execute(
             """
             INSERT INTO jobs
-              (prompt_version_id, status, created_at, total_clips, kind, run_group)
-            VALUES (?, 'pending', ?, ?, ?, ?)
+              (prompt_version_id, status, created_at, total_clips, kind, run_group,
+               force_resolution, record_only)
+            VALUES (?, 'pending', ?, ?, ?, ?, ?, ?)
             """,
-            (prompt_version_id, _now_iso(), len(clip_ids), kind, run_group),
+            (
+                prompt_version_id,
+                _now_iso(),
+                len(clip_ids),
+                kind,
+                run_group,
+                force_resolution,
+                1 if record_only else 0,
+            ),
         )
         job_id = cur.lastrowid
         assert job_id is not None
@@ -108,7 +119,8 @@ class JobsRepo:
 
     async def get_job(self, conn: aiosqlite.Connection, job_id: int) -> Job:
         cur = await conn.execute(
-            "SELECT id, prompt_version_id, status, total_clips, notes, kind, run_group "
+            "SELECT id, prompt_version_id, status, total_clips, notes, kind, run_group, "
+            "force_resolution, record_only "
             "FROM jobs WHERE id = ?",
             (job_id,),
         )
@@ -123,6 +135,8 @@ class JobsRepo:
             notes=row[4],
             kind=row[5],
             run_group=row[6],
+            force_resolution=row[7],
+            record_only=bool(row[8]),
         )
 
     async def list_jobs(self, conn: aiosqlite.Connection, *, limit: int = 50) -> list[Job]:
@@ -311,9 +325,9 @@ class JobsRepo:
     async def cancel_job(self, conn: aiosqlite.Connection, job_id: int) -> None:
         """User-initiated cancel of one job. Flips the job AND all its
         still-in-flight items (pending + transient) to 'cancelled' in a single
-        commit so the state is internally consistent — same invariant as
-        cancel_orphaned_running, but scoped to one job. Terminal items (done /
-        review_ready / applied / rejected / error / cancelled) are left as-is.
+        commit so the state is internally consistent — a terminal job must not
+        keep an in-flight item. Terminal items (done / review_ready / applied /
+        rejected / error / cancelled) are left as-is.
 
         Idempotent: the in-flight task's CancelledError handler re-runs this to
         mop up an item that raced into a transient state after the cancel route
@@ -329,32 +343,6 @@ class JobsRepo:
             (_now_iso(), job_id),
         )
         await conn.commit()
-
-    async def cancel_orphaned_running(self, conn: aiosqlite.Connection) -> int:
-        """Cancel jobs left 'running' by a killed worker, AND their unfinished
-        items. A job runs as a fire-and-forget background task; at boot nothing
-        is in-flight (single process, by construction — same reasoning as the
-        prefetcher's orphan recovery), so any still-'running' job is an orphan
-        from a crash / restart / dev --reload. Left alone it shows as active
-        forever and the clip page keeps 'resuming' a job that will never finish.
-
-        Both the job AND its unfinished items flip to 'cancelled' so the state
-        is internally consistent: a terminal job must not keep a 'pending' /
-        in-flight item, or the Batches view (which counts those as in-flight)
-        would still show the batch "Running" while the clip page — keyed on the
-        job status — shows it stopped. Already-finished items (done /
-        review_ready / error) are left as-is. Returns the count of jobs
-        cancelled."""
-        await conn.execute(
-            "UPDATE job_items SET status = 'cancelled' "
-            " WHERE status IN ('pending', 'resolving', 'uploading', 'prompting') "
-            "   AND job_id IN (SELECT id FROM jobs WHERE status = 'running')"
-        )
-        cur = await conn.execute(
-            "UPDATE jobs SET status = 'cancelled' WHERE status = 'running'"
-        )
-        await conn.commit()
-        return cur.rowcount or 0
 
     # --- Batches hub aggregation (read-only, offline-safe) -------------
     # A "batch" = a group of jobs sharing a run_group, OR a singleton job with
