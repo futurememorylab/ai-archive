@@ -60,7 +60,12 @@ def _add_unpriced_model(p) -> None:
     # Add a new catalog model that has no rate card yet, so the 'no rate card'
     # pill is visible in the table.
     p.locator("input[name='model']").fill(UNPRICED_MODEL)
-    p.get_by_role("button", name="Add model").click()
+    # The submit button is labelled "Add" — "Add model" is the field LABEL
+    # (ui.field('Add model', 'model', ...)), not the button text, so
+    # get_by_role("button", name="Add model") matches nothing. The merged tab
+    # has more than one .admin-add-row form, so scope to the one that POSTs to
+    # /admin/models (the add-model form) and click its submit.
+    p.locator("form[hx-post='/admin/models'] button[type='submit']").click()
     expect(p.locator("td.mono-cell").filter(has_text=UNPRICED_MODEL)).to_have_count(1)
 
 
