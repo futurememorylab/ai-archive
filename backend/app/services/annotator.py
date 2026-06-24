@@ -280,6 +280,7 @@ async def run_job(
                 version=version,
                 status="error",
                 error_class=type(exc).__name__,
+                media_resolution_setting=getattr(exc, "media_resolution_setting", None),
             )
             # Studio runs need a terminal status of their own — the frontend
             # polls /api/studio/runs/{id} and waits for status != pending|running.
@@ -498,14 +499,21 @@ async def _process_item(
     # The Vertex AI client is synchronous and each call takes seconds; run it
     # off the event loop so concurrent jobs and ordinary page requests stay
     # responsive while Gemini works.
-    result = await asyncio.to_thread(
-        gemini.annotate,
-        file_ref=file_ref,
-        prompt=rendered_body,
-        schema=version.output_schema,
-        model=version.model,
-        media_resolution=media_resolution,
-    )
+    try:
+        result = await asyncio.to_thread(
+            gemini.annotate,
+            file_ref=file_ref,
+            prompt=rendered_body,
+            schema=version.output_schema,
+            model=version.model,
+            media_resolution=media_resolution,
+        )
+    except Exception as exc:
+        # Attribute the effective (post-downgrade) resolution onto the
+        # exception so run_job's except block can stamp it on the error
+        # telemetry row — otherwise calibration error rows are resolution-blind.
+        exc.media_resolution_setting = media_resolution  # type: ignore[attr-defined]
+        raise
     elapsed_s = time.monotonic() - t0
 
     structured: dict[str, Any] | None
@@ -519,6 +527,35 @@ async def _process_item(
         # Calibration path: record the telemetry row + mark the item done, but
         # write NO studio-runs / review-items / annotations. Used to measure
         # cost/quality at a forced resolution without mutating review state.
+        #
+        # A non-JSON / truncated Gemini response parses to structured=None.
+        # Mirror _finalize_studio's structured-is-None branch: record an
+        # 'error' row (error_class "NonJsonOutput") and mark the item failed.
+        # Recording it as 'ok' would pollute calibration's per-resolution stats
+        # and the estimator's learned output-rates (both count only status='ok'
+        # rows) with a garbage sample.
+        if structured is None:
+            await jobs_repo.update_item_status(db, item.id, "error", error="non-JSON output")
+            await event_bus.publish(
+                topic, {"item_id": item.id, "status": "error", "error": "non-JSON output"}
+            )
+            await _record_telemetry(
+                db,
+                run_telemetry_repo,
+                telemetry_ctx,
+                kind="studio",
+                item=item,
+                version=version,
+                status="error",
+                error_class="NonJsonOutput",
+                result=result,
+                duration_s=elapsed_s,
+                capture=capture,
+                est=est,
+                ai_store_kind=ai_store_kind,
+                media_resolution_setting=media_resolution,
+            )
+            return
         await jobs_repo.update_item_status(db, item.id, "review_ready")
         await event_bus.publish(topic, {"item_id": item.id, "status": "review_ready"})
         await _record_telemetry(
@@ -536,6 +573,7 @@ async def _process_item(
             ai_store_kind=ai_store_kind,
             media_resolution_setting=media_resolution,
         )
+        return
     elif kind == "studio":
         await _finalize_studio(
             db,

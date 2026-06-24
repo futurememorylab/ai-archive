@@ -341,6 +341,62 @@ async def test_studio_non_json_records_error_telemetry(db, tmp_path):
     assert rows[0] == ("studio", "error", "NonJsonOutput", None, 3000)
 
 
+@pytest.mark.asyncio
+async def test_record_only_non_json_output_recorded_as_error(db, tmp_path):
+    # Bug M1: a record_only (calibration) run whose Gemini output does not
+    # parse to JSON (structured is None) must be recorded as status='error'
+    # with the SAME error_class the studio finalize path uses — NOT 'ok'.
+    # Otherwise calibration per-resolution stats / the estimator's learned
+    # output-rates (which only count status='ok' rows) count a garbage run as
+    # a clean sample.
+    job_id, f = await _setup(db, tmp_path, kind="studio")
+    await run_job(
+        job_id=job_id,
+        **_run_kwargs(db, {101: f}, FakeGeminiNonJson()),
+        record_only=True,
+    )
+
+    cur = await db.execute(
+        "SELECT status, error_class FROM run_telemetry WHERE job_id = ?", (job_id,)
+    )
+    rows = await cur.fetchall()
+    assert len(rows) == 1
+    assert rows[0] == ("error", "NonJsonOutput")
+
+    # The per-resolution ok-count must exclude this run.
+    cur = await db.execute(
+        "SELECT COUNT(*) FROM run_telemetry WHERE job_id = ? AND status = 'ok'",
+        (job_id,),
+    )
+    assert (await cur.fetchone())[0] == 0
+
+    # The item is marked failed, not review_ready.
+    items = await JobsRepo().list_items(db, job_id)
+    assert items[0].status == "error"
+
+
+@pytest.mark.asyncio
+async def test_record_only_error_row_carries_resolution(db, tmp_path):
+    # Bug M3: when the Gemini call RAISES mid-call, the error telemetry row
+    # recorded by run_job's except block must still carry the resolved
+    # media_resolution_setting (here forced to 'low'), not NULL — otherwise
+    # calibration error rows are resolution-blind.
+    job_id, f = await _setup(db, tmp_path, kind="studio")
+    await run_job(
+        job_id=job_id,
+        **_run_kwargs(db, {101: f}, FakeGemini(fail=True)),
+        record_only=True,
+        force_resolution="low",
+    )
+
+    cur = await db.execute(
+        "SELECT status, media_resolution_setting FROM run_telemetry WHERE job_id = ?",
+        (job_id,),
+    )
+    row = await cur.fetchone()
+    assert row == ("error", "low")
+
+
 # --- Fix 1/2/3 regression coverage --------------------------------------
 
 
