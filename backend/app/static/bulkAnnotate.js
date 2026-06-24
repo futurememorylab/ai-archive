@@ -106,6 +106,12 @@ function bulkAnnotateMixin() {
         return; // keep the modal open so the user sees the error
       }
       this.annoOpen = false;
+      // Confirm the kickoff — mirrors the Batches-page startBatch() toast so the
+      // search-page bulk flow isn't silent (the topbar indicator is easy to miss).
+      Alpine.store("toast").push(
+        "Annotation started — " + this.annoRunCount() + " clip(s).",
+        { level: "success" },
+      );
       // Nudge the topbar indicator to pick up the new jobs immediately.
       window.dispatchEvent(new CustomEvent("jobs-changed"));
     },
