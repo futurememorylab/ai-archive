@@ -2,6 +2,9 @@
 
 **Date:** 2026-06-17
 **Status:** Accepted
+**Lifespan:** Feature
+
+> **Synthesis note (2026-06-24):** Refinement in the write-back status chain (0091–0098); the converged rule is **Invariant 8** in [`docs/architecture-invariants.md`](../architecture-invariants.md).
 
 ## Context
 

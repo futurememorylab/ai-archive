@@ -1,9 +1,10 @@
 # 0043. Gemini Live API key browser exposure — accepted risk
 
 **Date:** 2026-05-30
-**Status:** Superseded by [0111](./0111-gemini-live-ephemeral-tokens.md) —
-the raw key is no longer shipped to the browser; the 1007 failure below
-was a wrong endpoint+version+param triad, not a Google limitation.
+**Status:** Superseded
+**Lifespan:** Superseded
+
+> **Synthesis note (2026-06-24):** Fully superseded by **0112** (server-minted ephemeral tokens — the raw key never reaches the browser). The "1007 / key not valid" framing here was a wrong endpoint+version triad, not a Google limit. See **Invariant 24** in [`docs/architecture-invariants.md`](../architecture-invariants.md).
 
 ## Context
 

@@ -1,7 +1,14 @@
 # 0099. Clip version history: publish snapshots, local-canonical store, unified publish status
 
 **Date:** 2026-06-17
-**Status:** Accepted
+**Status:** Superseded
+**Lifespan:** Superseded
+
+> **Synthesis note (2026-06-24):** Head of the clip-versions chain
+> 0099 → 0100 → 0101; parts of this entry were superseded by **0100** (dropped
+> the CatDV provenance field, switched versions by re-activation) and refined
+> by **0101**. The current-state rule is **Invariant 19** in
+> [`docs/architecture-invariants.md`](../architecture-invariants.md).
 
 ## Context
 

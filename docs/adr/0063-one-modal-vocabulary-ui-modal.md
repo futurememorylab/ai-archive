@@ -2,6 +2,7 @@
 
 **Date:** 2026-06-09
 **Status:** Accepted
+**Lifespan:** Invariant
 
 Implements "Candidate B" — a non-goal of the menu-consolidation spec
 (`docs/specs/2026-06-09-popover-menu-module-and-design-language-guard-design.md`),

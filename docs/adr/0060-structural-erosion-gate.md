@@ -2,6 +2,7 @@
 
 **Date:** 2026-06-07
 **Status:** Accepted
+**Lifespan:** Invariant
 
 Spec: `docs/specs/2026-06-07-erosion-detection-ci-design.md`.
 

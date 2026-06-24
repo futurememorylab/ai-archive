@@ -2,6 +2,7 @@
 
 **Date:** 2026-06-13
 **Status:** Proposed
+**Lifespan:** Invariant
 **Spec:** `docs/specs/2026-06-13-iap-access-control-design.md`
 
 > **Numbering note:** a parallel design chat may also be adding an ADR. If

@@ -2,6 +2,7 @@
 
 - **Date:** 2026-05-20
 - **Status:** Accepted
+- **Lifespan:** Feature
 
 1. Prefetch is a persistent SQLite queue (`prefetch_queue`), not in-memory. A
    long download must survive process restart. The same table powers the

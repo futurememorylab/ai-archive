@@ -2,6 +2,7 @@
 
 - **Date:** 2026-05-27
 - **Status:** Accepted (supersedes the `/review` page parts of [0035](./0035-draft-review-accept-ui.md))
+- **Lifespan:** Feature
 
 ## Context
 

@@ -2,6 +2,7 @@
 
 **Date:** 2026-06-17
 **Status:** Accepted — supersedes parts of [0099](./0099-clip-version-history-publish-snapshots.md)
+**Lifespan:** Invariant
 
 ## Context
 
