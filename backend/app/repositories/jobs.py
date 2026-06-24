@@ -80,6 +80,32 @@ class JobsRepo:
             return None
         return jid
 
+    async def requeue_orphaned_running(self, conn: aiosqlite.Connection) -> int:
+        """Resume jobs left 'running' by a killed worker. Mirrors the
+        prefetcher's requeue_orphans (running -> re-runnable), the opposite of
+        the old cancel_orphaned_running. A job runs only inside the single
+        JobRunner; at boot nothing is in-flight, so any 'running' job is an
+        orphan from a crash/restart/dev-reload. Flip it back to 'pending' so
+        the worker re-claims it, and reset its stuck transient items
+        (resolving/uploading/prompting) to 'pending' too — run_job only
+        processes pending/error items, so a transient item would otherwise be
+        skipped on resume and hang forever. Terminal items (done/annotated/
+        review_ready/applied/rejected/error/cancelled) are left as-is, so
+        resume re-runs only unfinished work. Returns the count of jobs
+        requeued."""
+        placeholders = ",".join("?" * len(TRANSIENT_STATUSES))
+        await conn.execute(
+            f"UPDATE job_items SET status = 'pending' "
+            f" WHERE status IN ({placeholders}) "
+            f"   AND job_id IN (SELECT id FROM jobs WHERE status = 'running')",
+            TRANSIENT_STATUSES,
+        )
+        cur = await conn.execute(
+            "UPDATE jobs SET status = 'pending', started_at = NULL WHERE status = 'running'"
+        )
+        await conn.commit()
+        return cur.rowcount or 0
+
     async def get_job(self, conn: aiosqlite.Connection, job_id: int) -> Job:
         cur = await conn.execute(
             "SELECT id, prompt_version_id, status, total_clips, notes, kind, run_group "

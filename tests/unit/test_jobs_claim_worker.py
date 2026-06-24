@@ -58,3 +58,33 @@ async def test_claim_next_job_skips_non_pending(db):
     jid = await repo.create_job(db, prompt_version_id=1, clip_ids=[10])
     await repo.update_status(db, jid, "running")  # already running
     assert await repo.claim_next_job(db) is None
+
+
+@pytest.mark.asyncio
+async def test_requeue_orphaned_running_resumes_jobs_and_resets_transient_items(db):
+    repo = JobsRepo()
+    jid = await repo.create_job(db, prompt_version_id=1, clip_ids=[10, 11, 12])
+    await repo.update_status(db, jid, "running")
+    items = await repo.list_items(db, jid)
+    # one done, one mid-prompting (orphaned transient), one still pending
+    await repo.update_item_status(db, items[0].id, "annotated")
+    await repo.update_item_status(db, items[1].id, "prompting")
+    # items[2] stays pending
+
+    n = await repo.requeue_orphaned_running(db)
+    assert n == 1
+
+    assert (await repo.get_job(db, jid)).status == "pending"
+    after = {i.catdv_clip_id: i.status for i in await repo.list_items(db, jid)}
+    assert after[10] == "annotated"  # terminal item untouched
+    assert after[11] == "pending"  # transient reset so run_job re-runs it
+    assert after[12] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_requeue_orphaned_running_ignores_terminal_jobs(db):
+    repo = JobsRepo()
+    jid = await repo.create_job(db, prompt_version_id=1, clip_ids=[10])
+    await repo.update_status(db, jid, "completed")
+    assert await repo.requeue_orphaned_running(db) == 0
+    assert (await repo.get_job(db, jid)).status == "completed"
