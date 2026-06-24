@@ -36,18 +36,29 @@ missing. One-time setup:
   `install_live_ctx`. The UI needs a numeric clip key (`int(clip.key[1])`),
   which the filesystem provider can't supply — hence injection, not env. See
   ADR 0111.
-- **Fully offline, no seat.** No CatDV / GCS / Gemini; credentials are
+- **Fully offline, no seat.** No real CatDV / GCS / Gemini; credentials are
   force-blanked at boot so nothing external is constructed.
 - **Mocked archive + media** (`fakes.py`). `FakeArchive` serves an in-memory
   clip catalog and filters `list_clips` by query text + paginates.
   `LocalFileResolver` serves a real ffmpeg-seeded proxy so the player plays on
   camera; `StubThumbnailService` serves one real JPEG poster so rows show a
   thumbnail (not a broken image).
+- **Offline AI store + releasable Gemini** (`fakes.py`). `FakeAIStore` reports
+  every clip as already uploaded, so the annotator takes its fast path (no
+  proxy resolve / upload) and a job runs with no network. `FakeGemini` returns
+  a deterministic payload; by default it completes instantly, but a scenario
+  can `hold()` it (via the `gemini_fake()` singleton) so a batch stays
+  `running`/`prompting` long enough to observe progress and click Cancel, then
+  `release()` it to let the run end cleanly. The hold gate is a thread-safe
+  `threading.Event` because `annotate` runs on the app's executor thread
+  (`asyncio.to_thread`) while the scenario toggles it from the Playwright
+  thread.
 - **Seeded DB, kept separate from the run** (`seed.py`). `build_seed_db()`
   builds a standalone, migrated + seeded SQLite file on its **own** connection
-  (draft on clip 101, an "awaiting review" fixture clip, and the catalog in
-  `clip_list_cache` so the annotation-status filters resolve). `app_server`
-  copies it to `app.db`; the app connects to the copy for the run.
+  (draft on clip 101, an "awaiting review" fixture clip, a **production**
+  prompt so the bulk-annotate / New-batch pickers have something to pick, and
+  the catalog in `clip_list_cache` so the annotation-status filters resolve).
+  `app_server` copies it to `app.db`; the app connects to the copy for the run.
 - **Annotated recording** (`harness.py`). `Walkthrough.step(label, action)`
   shows a "Step N — label" overlay, runs the action, then dwells so the result
   (e.g. an HTMX table swap) paints and is captured under that step's overlay.
@@ -76,9 +87,10 @@ def run(wt):
 ```
 
 - One `wt.step` per user-visible action; phrase the label as documentation.
-- Shared actions/assertions live in `scenarios/_search_support.py` (the `_`
-  prefix keeps the loader from treating it as a scenario). Use Playwright
-  `expect(...)` so a step that can't reach its target fails the scenario.
+- Shared actions/assertions live in `scenarios/_search_support.py` (search) and
+  `scenarios/_job_support.py` (the bulk-annotate / cancel flow); the `_` prefix
+  keeps the loader from treating them as scenarios. Use Playwright `expect(...)`
+  so a step that can't reach its target fails the scenario.
 - If a click can't find its target, add an inert `data-test="…"` hook to the
   template (see the existing `player-play` / `apply-draft` hooks) — don't
   couple to styling classes.

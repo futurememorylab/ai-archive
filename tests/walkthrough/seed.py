@@ -21,6 +21,7 @@ from tests.walkthrough.fakes import (
     CLIP_ID,
     CLIP_NAME,
     DECADE_IDENT,
+    PRODUCTION_PROMPT_NAME,
     REVIEW_FIXTURE_CLIP_ID,
     REVIEW_FIXTURE_CLIP_NAME,
 )
@@ -196,6 +197,32 @@ async def seed_for_review_fixture(db: aiosqlite.Connection) -> int:
     return aid
 
 
+async def seed_production_prompt(db: aiosqlite.Connection) -> int:
+    """Seed one prompt with a PRODUCTION version matching the video clips.
+
+    The bulk-annotate modal (`_loadPrompts`) and the New-batch picker only list
+    prompts whose `current_production_version_id` is non-null, so without a
+    promoted version neither surface has anything to pick and no job can be
+    kicked off from the UI. `media_kind='video'` matches the seeded clips so it
+    shows up for them. Returns the production version id.
+    """
+    prompts = PromptsRepo()
+    prompt_id, vid = await prompts.create_with_initial_version(
+        db,
+        name=PRODUCTION_PROMPT_NAME,
+        description="Production prompt for the bulk-annotate / cancel walkthroughs.",
+        body="Identify the decade depicted in this clip.",
+        target_map={"decade": {"kind": "field", "identifier": DECADE_IDENT}},
+        output_schema={},
+        model="gemini-2.5-pro",
+        media_kind="video",
+    )
+    # create_with_initial_version makes a draft; promote it so it becomes the
+    # prompt's current production version.
+    await prompts.promote_version(db, prompt_id, vid)
+    return vid
+
+
 async def seed_clip_list_cache(
     db: aiosqlite.Connection, clips: tuple[CanonicalClip, ...], catalog_id: str
 ) -> None:
@@ -230,9 +257,11 @@ async def build_seed_db(
     This runs on its OWN connection, isolated from the connection the app opens
     for the test run: the caller connects a *copy* of this file for the run, so
     seeding and the live run never share a database. Seeds the review draft
-    (clip 101) and the awaiting-review fixture (clip 110); when `clips` +
-    `catalog_id` are given, also seeds the clip-list cache so the annotation
-    filters resolve against the full clip universe. The writes are committed and
+    (clip 101), the awaiting-review fixture (clip 110), and a production prompt
+    (so the bulk-annotate / New-batch pickers have a selectable prompt); when
+    `clips` + `catalog_id` are given, also seeds the clip-list cache so the
+    annotation filters resolve against the full clip universe. The writes are
+    committed and
     the WAL is checkpointed into the main file before the connection closes, so
     the file is safe to copy. Returns the seeded annotation id (clip 101).
     """
@@ -240,6 +269,7 @@ async def build_seed_db(
         await apply_migrations(conn, _MIGRATIONS_DIR)
         aid = await seed_draft(conn)
         await seed_for_review_fixture(conn)
+        await seed_production_prompt(conn)
         if clips is not None and catalog_id is not None:
             await seed_clip_list_cache(conn, clips, catalog_id)
         await conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")

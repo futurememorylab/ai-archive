@@ -9,10 +9,11 @@ import pytest
 
 from backend.app.db import open_db
 from backend.app.repositories.annotations import AnnotationsRepo
+from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.services.draft_view import build_draft_view
 from tests.walkthrough import seed
-from tests.walkthrough.fakes import CLIP_ID, DECADE_IDENT
+from tests.walkthrough.fakes import CLIP_ID, DECADE_IDENT, PRODUCTION_PROMPT_NAME
 
 
 def test_make_proxy_video_creates_playable_file(tmp_path: Path):
@@ -31,6 +32,21 @@ async def test_seed_draft_produces_a_draft_view(db):
     assert view["has_draft"] is True
     decades = [f for f in view["fields"] if f["identifier"] == DECADE_IDENT]
     assert decades and decades[0]["value"] == "20.léta"
+
+
+async def test_seed_production_prompt_is_pickable(db):
+    """The seeded prompt must expose a non-null production version with a
+    video media kind, or the bulk-annotate modal / New-batch picker (which
+    only list prompts with current_production_version_id != null) have nothing
+    to pick."""
+    await seed.seed_production_prompt(db)
+    prompts = PromptsRepo()
+    prompt = await prompts.get_by_name(db, PRODUCTION_PROMPT_NAME)
+    assert prompt is not None
+    assert prompt.media_kind == "video"
+    prod = await prompts.get_production_version(db, prompt.id)
+    assert prod is not None
+    assert prod.state == "production"
 
 
 async def test_build_seed_db_is_readable_from_a_separate_connection(tmp_path: Path):

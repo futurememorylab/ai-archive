@@ -21,10 +21,12 @@ import uvicorn
 from tests.walkthrough import seed
 from tests.walkthrough.fakes import (
     CATALOG_ID,
+    FakeAIStore,
     FakeArchive,
     LocalFileResolver,
     StubThumbnailService,
     build_clips,
+    gemini_fake,
 )
 
 _OFFLINE_ENV = {
@@ -109,11 +111,17 @@ class WalkthroughApp:
         from tests._helpers.live_ctx import install_live_ctx
 
         resolver = LocalFileResolver(video)
+        # Inject the offline AI store + the releasable Gemini fake so the
+        # job-start / cancel scenarios can drive a real run with no network and
+        # no CatDV seat. FakeAIStore reports every clip as already uploaded, so
+        # the annotator's fast path skips the local-proxy resolve + upload.
         live = install_live_ctx(
             self._app,
             archive=FakeArchive(clips),
             proxy_resolver=resolver,
             thumbnail_service=StubThumbnailService(self._thumb),
+            ai_store=FakeAIStore(),
+            gemini=gemini_fake(),
         )
         # build_context only wires media_cache_backend when init_external is
         # True (real proxy_resolver present); offline boot leaves it None, so
