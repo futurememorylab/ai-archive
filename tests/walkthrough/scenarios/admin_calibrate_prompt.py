@@ -41,7 +41,11 @@ def _open_admin(p) -> None:
 
 
 def _open_prompts_tab(p) -> None:
-    p.get_by_role("link", name="Prompts", exact=True).click()
+    # Scope to the admin-console TAB. The global nav rail also carries a
+    # "Prompts" link (href="/prompts", title="Prompts"), so an unscoped
+    # get_by_role("link", name="Prompts") is ambiguous (strict-mode
+    # violation). The tab is the .ctab pointing at /admin/prompts.
+    p.locator("a.ctab[href='/admin/prompts']").click()
     # The tab HTMX-swaps the prompts table (with calibration results) in.
     expect(p.locator(".admin-prompts")).to_be_visible()
 

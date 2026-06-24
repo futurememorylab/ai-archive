@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import tempfile
 import webbrowser
@@ -85,7 +86,9 @@ def main(argv: list[str] | None = None) -> int:
         gallery = ARTIFACTS / "index.html"
         gallery.write_text(render_gallery(results), encoding="utf-8")
         print(f"\nGallery: {gallery}")
-        webbrowser.open(gallery.as_uri())
+        # Don't try to pop a browser in CI (no display / spawns xdg-open).
+        if not os.environ.get("CI"):
+            webbrowser.open(gallery.as_uri())
 
     return 0 if all(r["ok"] for r in results) else 1
 
