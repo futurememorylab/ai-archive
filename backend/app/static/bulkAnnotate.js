@@ -85,18 +85,15 @@ function bulkAnnotateMixin() {
             body: JSON.stringify({
               prompt_version_id: Number(g.promptVersionId),
               clip_ids: g.clipIds,
-              auto_start: true,
               run_group: runGroup,
             }),
           });
           if (!r.ok) {
             failures.push(`${g.kind}: HTTP ${r.status}`);
-          } else {
-            const data = await r.json();
-            if (data.started === false) {
-              failures.push(`${g.kind}: not started (services offline)`);
-            }
           }
+          // The job is enqueued; the lifespan JobRunner runs it when the live
+          // stack is up (and resumes it automatically if offline now). No
+          // per-job "not started" state any more (ADR 0125).
         } catch (e) {
           failures.push(`${g.kind}: ${e}`);
         }

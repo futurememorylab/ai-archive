@@ -9,6 +9,7 @@ loop (so the aiosqlite connection is used from the loop that owns it).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import importlib
 import os
 import shutil
@@ -53,6 +54,7 @@ class WalkthroughApp:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._app = None
         self._thumb: Path | None = None
+        self._runner = None
 
     def start(self) -> None:
         for k, v in _OFFLINE_ENV.items():
@@ -141,6 +143,53 @@ class WalkthroughApp:
             db_provider=lambda: core.db,
         )
 
+        # Routes are pure DB writers now (ADR 0125): a job only runs if the
+        # lifespan-owned JobRunner claims it. The offline boot built none (no
+        # real proxy_resolver), so wire one over our injected fakes and start it
+        # on the server's own loop (it owns the aiosqlite connection). Without
+        # this the batch / cancel scenarios would enqueue a job that never runs.
+        from backend.app.services.annotator import run_job
+        from backend.app.services.job_runner import JobRunner
+
+        async def _run_one_job(job_id: int) -> None:
+            try:
+                job = await core.jobs_repo.get_job(core.db, job_id)
+                await run_job(
+                    db=core.db,
+                    job_id=job_id,
+                    archive=live.archive,
+                    proxy_resolver=live.proxy_resolver,
+                    ai_store=live.ai_store,
+                    gemini=live.gemini,
+                    event_bus=core.event_bus,
+                    annotations_repo=core.annotations_repo,
+                    review_items_repo=core.review_items_repo,
+                    jobs_repo=core.jobs_repo,
+                    prompts_repo=core.prompts_repo,
+                    studio_runs_repo=core.studio_runs_repo,
+                    uploaded_clips_repo=core.uploaded_clips_repo,
+                    run_telemetry_repo=core.run_telemetry_repo,
+                    telemetry_ctx=core.telemetry_ctx,
+                    model_config_repo=core.model_config_repo,
+                    prefetch_queue_repo=core.prefetch_queue_repo,
+                    force_resolution=job.force_resolution,
+                    record_only=job.record_only,
+                )
+            except asyncio.CancelledError:
+                with contextlib.suppress(Exception):
+                    await core.jobs_repo.cancel_job(core.db, job_id)
+                raise
+
+        self._runner = JobRunner(
+            jobs_repo=core.jobs_repo,
+            run_job_fn=_run_one_job,
+            db_provider=lambda: core.db,
+            tick_interval_s=0.05,
+        )
+        live.job_runner = self._runner
+        assert self._loop is not None
+        asyncio.run_coroutine_threadsafe(self._runner.start(), self._loop).result(timeout=5)
+
     def _wait_until_started(self, timeout: float = 30.0) -> None:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -151,6 +200,11 @@ class WalkthroughApp:
         raise RuntimeError("walkthrough app failed to start within timeout")
 
     def stop(self) -> None:
+        if self._runner is not None and self._loop is not None:
+            with contextlib.suppress(Exception):
+                asyncio.run_coroutine_threadsafe(
+                    self._runner.stop(), self._loop
+                ).result(timeout=5)
         if self._server is not None:
             self._server.should_exit = True
         if self._thread is not None:

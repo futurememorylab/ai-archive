@@ -304,7 +304,6 @@ function clipAnnotate(clipId, clipKind) {
           body: JSON.stringify({
             prompt_version_id: prompt.current_production_version_id,
             clip_ids: [clipId],
-            auto_start: true,
           }),
         });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
