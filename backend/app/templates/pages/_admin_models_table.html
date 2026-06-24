@@ -1,9 +1,8 @@
 {# backend/app/templates/pages/_admin_models_table.html #}
 {% import "components/_ui.html" as ui %}
 <div class="admin-models">
-  <p class="meta">Gemini models offered in prompts, with per-model pricing
-    (USD per 1M tokens) and default media resolution. Editing rates bumps the
-    pricing version; historical run costs are not changed.</p>
+  {% call ui.page_header('Gemini models',
+       meta='Per-model pricing (USD per 1M tokens) and default media resolution. Editing rates bumps the pricing version; historical run costs are not changed.') %}{% endcall %}
   <table class="admin-table">
     <thead>
       <tr>

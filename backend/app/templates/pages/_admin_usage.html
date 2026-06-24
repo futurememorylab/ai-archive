@@ -1,13 +1,8 @@
 {# backend/app/templates/pages/_admin_usage.html #}
 {% import "components/_ui.html" as ui %}
 <div class="admin-usage">
-  <p class="meta">Current-month spend (UTC) across all runs — annotation,
-    studio, and calibration. The monthly budget is a soft cap: it colours the
-    indicator and warns on launch, but never blocks a run.</p>
-
-  {# ── Header: spend vs budget + status pill ── #}
-  <p class="strong" style="font-size: 15px;">
-    This month: {{ spend_usd | usd }}{% if budget_usd %} / {{ budget_usd | usd }}{% endif %}
+  {% call ui.page_header('Usage',
+       meta='Current-month spend (UTC) across all runs — annotation, studio, and calibration. The monthly budget is a soft cap: it warns on launch but never blocks a run.') %}
     {% if status == 'over' %}
       <span class="pill bad"><span class="led"></span>over budget</span>
     {% elif status == 'warn' %}
@@ -17,7 +12,19 @@
     {% else %}
       <span class="muted">no budget set</span>
     {% endif %}
-  </p>
+  {% endcall %}
+
+  {# ── Spend / budget as stat tiles (matches the Access tab) ── #}
+  <div class="admin-stats">
+    <div class="stat">
+      <div class="n">{{ spend_usd | usd }}</div>
+      <div class="l">This month</div>
+    </div>
+    <div class="stat">
+      <div class="n">{{ budget_usd | usd if budget_usd else '—' }}</div>
+      <div class="l">Monthly budget</div>
+    </div>
+  </div>
 
   {% if budget_usd %}
     <div class="usage-bar">
@@ -43,7 +50,7 @@
   </form>
 
   {# ── By-model breakdown ── #}
-  <h3 class="strong">By model</h3>
+  <p class="admin-section-hdr">By model</p>
   {% if by_model %}
   <table class="admin-table">
     <thead>
@@ -64,7 +71,7 @@
   {% endif %}
 
   {# ── By-day breakdown ── #}
-  <h3 class="strong">By day</h3>
+  <p class="admin-section-hdr">By day</p>
   {% if by_day %}
   <table class="admin-table">
     <thead>

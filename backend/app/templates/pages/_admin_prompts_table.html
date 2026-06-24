@@ -1,10 +1,9 @@
 {# backend/app/templates/pages/_admin_prompts_table.html #}
 {% import "components/_ui.html" as ui %}
 <div class="admin-prompts" x-data="adminPromptsTab()">
-  <p class="meta">Active prompts and their versions, with per-resolution
-    calibration results (run count, guessed vs. actual cost, confidence). Use
-    Calibrate to run a calibration sweep for a version.</p>
-  <p class="meta">Confidence: rough (&lt;3 runs) · fair (3–9) · good (10+) —
+  {% call ui.page_header('Prompts',
+       meta='Prompt versions with per-resolution calibration results (run count, guessed vs. actual cost, confidence). Use Calibrate to run a sweep for a version.') %}{% endcall %}
+  <p class="field-help">Confidence: rough (&lt;3 runs) · fair (3–9) · good (10+) —
     how many calibration runs back each estimate.</p>
   {% if rows %}
   <table class="admin-table">

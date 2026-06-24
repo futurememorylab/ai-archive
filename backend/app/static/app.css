@@ -2703,6 +2703,11 @@ body.studio-resizing {
 
 .admin-filters { display: flex; gap: 12px; align-items: end; margin: 12px 0; }
 
+/* Sub-section label inside an admin tab (e.g. Usage "By model" / "By day").
+   Token-backed so it doesn't inherit browser-default <h3> rendering. */
+.admin-section-hdr { margin: 18px 0 6px; color: var(--text-2); font-size: 11px;
+  font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+
 .admin-members { margin-top: 8px; }
 
 .admin-table { width: 100%; border-collapse: collapse; }

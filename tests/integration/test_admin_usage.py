@@ -116,7 +116,7 @@ def test_usage_tab_renders_spend_no_budget(monkeypatch, tmp_path):
 
         r = client.get("/admin/usage")
         assert r.status_code == 200
-        assert "This month:" in r.text
+        assert "This month" in r.text  # the spend stat-tile label
         assert "$10.00" in r.text  # 4 + 6
         assert "no budget set" in r.text
         # by-model breakdown present
