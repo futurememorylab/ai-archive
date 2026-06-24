@@ -13,7 +13,29 @@ function jobsIndicator() {
       es.onmessage = (evt) => {
         let p;
         try { p = JSON.parse(evt.data); } catch { return; }
-        if (["completed", "cancelled"].includes(p.status) && !p.errors) {
+        // run_group may be absent on job-level SSE events; the spread below
+        // preserves the prior value (seeded by /api/jobs/active, which DOES
+        // carry it). Decide calibration from the merged record, not the event.
+        const priorGroup = this.jobs[p.job_id]?.run_group || "";
+        const group = (p.run_group || priorGroup);
+        const isCal = group.startsWith("calibration:");
+        const terminal =
+          ["completed", "cancelled"].includes(p.status) ||
+          p.status === "failed" || p.errors;
+        if (isCal) {
+          // Calibration jobs surface via their own pill (calibratingCount),
+          // not the batch banner. They're terminal on completion AND on
+          // failure — drop them so a Gemini error can't stick the pill or
+          // raise the batch "failed" flag (that flag is for real batches).
+          if (terminal) {
+            delete this.jobs[p.job_id];
+          } else {
+            this.jobs[p.job_id] = {
+              ...this.jobs[p.job_id],
+              done: p.done, total: p.total, errors: p.errors, status: p.status,
+            };
+          }
+        } else if (["completed", "cancelled"].includes(p.status) && !p.errors) {
           delete this.jobs[p.job_id];
         } else {
           // Preserve the last-known phases — job-level events don't carry them.
@@ -26,8 +48,12 @@ function jobsIndicator() {
       };
       // Phase transitions (caching→annotating) emit per-item events, not the
       // job-level events this SSE carries, so refresh the phase breakdown on a
-      // short cadence WHILE a batch is active. Idle = no fetch.
-      setInterval(() => { if (this.visible()) this.refresh(); }, 2000);
+      // short cadence WHILE a batch is active. Calibration sweeps are excluded
+      // from visible()/activeIds(), so ALSO refresh while one is in flight —
+      // otherwise a dropped SSE would leave its pill stale. Idle = no fetch.
+      setInterval(() => {
+        if (this.visible() || this.calibratingCount() > 0) this.refresh();
+      }, 2000);
     },
 
     async refresh() {

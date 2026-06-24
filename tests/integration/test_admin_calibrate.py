@@ -238,6 +238,33 @@ def test_calibrate_mixed_high_only_images(monkeypatch, tmp_path):
                 assert clip_ids == [11, 22]
 
 
+def test_calibrate_rejects_too_many_clips(monkeypatch, tmp_path):
+    """M5: a sweep over more than CALIBRATION_MAX_CLIPS clips is rejected with
+    422 (a safety bound — one click could otherwise fan out to 6×N runs)."""
+    from backend.app.routes.pages.admin import CALIBRATION_MAX_CLIPS
+
+    with _client(monkeypatch, tmp_path) as client:
+        vid = asyncio.run(_seed_prompt(tmp_path / "app.db"))
+        client.app.state.live_ctx = _LiveStub()
+        too_many = [str(i) for i in range(CALIBRATION_MAX_CLIPS + 1)]
+        r = client.post(
+            f"/admin/prompts/{vid}/calibrate",
+            data={"clip_ids": too_many},
+        )
+        assert r.status_code == 422
+
+
+def test_calibrate_estimate_non_integer_clip_id_422(monkeypatch, tmp_path):
+    """M4: a non-intable clip id must yield 422 (validation), not 500."""
+    with _client(monkeypatch, tmp_path) as client:
+        vid = asyncio.run(_seed_prompt(tmp_path / "app.db"))
+        r = client.post(
+            f"/admin/prompts/{vid}/calibrate/estimate",
+            json={"clip_ids": ["abc"]},
+        )
+        assert r.status_code == 422
+
+
 def test_calibrate_estimate_returns_projected_cost(monkeypatch, tmp_path):
     """Image clips: runs include high → 3 res × 2 × N."""
     with _client(monkeypatch, tmp_path) as client:

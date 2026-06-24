@@ -182,18 +182,35 @@ async def test_totals_by_prompt_version(db):
     totals = await repo.totals_by_prompt_version(db, prompt_version_ids=[5, 6, 99])
     assert totals[5] == {
         "runs": 2,
+        "priced_runs": 2,
         "media_seconds": pytest.approx(30.0),
         "est_cost_usd": pytest.approx(0.19),
         "actual_cost_usd": pytest.approx(0.25),
     }
     assert totals[6] == {
         "runs": 1,
+        "priced_runs": 1,
         "media_seconds": pytest.approx(12.0),
         "est_cost_usd": pytest.approx(0.90),
         "actual_cost_usd": pytest.approx(1.00),
     }
     # Id with no rows is absent (caller treats as zero).
     assert 99 not in totals
+
+
+@pytest.mark.asyncio
+async def test_totals_by_prompt_version_partial_pricing(db):
+    """M2: priced_runs counts only non-NULL cost rows, so a caller can tell when
+    actual_cost_usd is a partial subtotal."""
+    repo = RunTelemetryRepo()
+    await _insert_run(db, prompt_version_id=7, status="ok", media_kind="video",
+                      media_duration_secs=10.0, cost_usd=0.30, est_cost_usd_p50=0.20)
+    await _insert_run(db, prompt_version_id=7, status="ok", media_kind="video",
+                      media_duration_secs=10.0, cost_usd=None, est_cost_usd_p50=0.20)
+    totals = await repo.totals_by_prompt_version(db, prompt_version_ids=[7])
+    assert totals[7]["runs"] == 2
+    assert totals[7]["priced_runs"] == 1
+    assert totals[7]["actual_cost_usd"] == pytest.approx(0.30)  # SUM skips NULL
 
 
 @pytest.mark.asyncio
@@ -216,10 +233,12 @@ async def test_stats_by_resolution(db):
                       media_resolution_setting="high", cost_usd=1.00, est_cost_usd_p50=0.90)
     stats = await repo.stats_by_resolution(db, prompt_version_id=5)
     assert stats["low"] == {
-        "count": 2, "cost_usd": pytest.approx(0.30), "est_cost_usd": pytest.approx(0.33),
+        "count": 2, "priced_count": 2,
+        "cost_usd": pytest.approx(0.30), "est_cost_usd": pytest.approx(0.33),
     }
     assert stats["high"] == {
-        "count": 1, "cost_usd": pytest.approx(1.00), "est_cost_usd": pytest.approx(0.90),
+        "count": 1, "priced_count": 1,
+        "cost_usd": pytest.approx(1.00), "est_cost_usd": pytest.approx(0.90),
     }
 
 
@@ -234,5 +253,55 @@ async def test_stats_by_resolution_excludes_errors_and_other_versions(db):
                       media_resolution_setting="low", cost_usd=9.0, est_cost_usd_p50=9.0)
     stats = await repo.stats_by_resolution(db, prompt_version_id=5)
     assert stats == {
-        "low": {"count": 1, "cost_usd": pytest.approx(0.10), "est_cost_usd": pytest.approx(0.07)}
+        "low": {
+            "count": 1, "priced_count": 1,
+            "cost_usd": pytest.approx(0.10), "est_cost_usd": pytest.approx(0.07),
+        }
     }
+
+
+@pytest.mark.asyncio
+async def test_stats_by_resolution_partial_pricing(db):
+    """M2: a mix of priced + un-priced (NULL cost) ok rows reports a
+    priced_count < count, so the UI can flag the partial subtotal instead of
+    presenting it as a complete actual."""
+    repo = RunTelemetryRepo()
+    await _insert_run(db, prompt_version_id=8, media_kind="video", status="ok",
+                      media_resolution_setting="low", cost_usd=0.40, est_cost_usd_p50=0.30)
+    await _insert_run(db, prompt_version_id=8, media_kind="video", status="ok",
+                      media_resolution_setting="low", cost_usd=None, est_cost_usd_p50=0.30)
+    stats = await repo.stats_by_resolution(db, prompt_version_id=8)
+    assert stats["low"]["count"] == 2
+    assert stats["low"]["priced_count"] == 1  # only one row had a cost
+    assert stats["low"]["cost_usd"] == pytest.approx(0.40)  # SUM skips the NULL
+
+
+@pytest.mark.asyncio
+async def test_stats_by_resolution_many_batched(db):
+    """The batched form returns {vid: {res: {...}}} for several versions and
+    runs a bounded number of statements (no N+1 across version count)."""
+    repo = RunTelemetryRepo()
+    await _insert_run(db, prompt_version_id=1, media_kind="video", status="ok",
+                      media_resolution_setting="low", cost_usd=0.10, est_cost_usd_p50=0.08)
+    await _insert_run(db, prompt_version_id=2, media_kind="video", status="ok",
+                      media_resolution_setting="high", cost_usd=0.50, est_cost_usd_p50=0.40)
+    many = await repo.stats_by_resolution_many(db, prompt_version_ids=[1, 2, 99])
+    assert many[1]["low"]["count"] == 1
+    assert many[2]["high"]["cost_usd"] == pytest.approx(0.50)
+    assert 99 not in many
+    # Query count does not scale with the number of version ids.
+    async with assert_query_count(db, max_n=1):
+        await repo.stats_by_resolution_many(db, prompt_version_ids=list(range(10)))
+    async with assert_query_count(db, max_n=1):
+        await repo.stats_by_resolution_many(db, prompt_version_ids=list(range(100)))
+
+
+@pytest.mark.asyncio
+async def test_cost_counts_by_job_partial(db):
+    """M2 (batches side): cost_counts_by_job reports (priced, total) per job so
+    a batch with un-priced runs can be flagged."""
+    repo = RunTelemetryRepo()
+    await _insert_run(db, job_id=3, model="m", media_kind="video", status="ok", cost_usd=0.20)
+    await _insert_run(db, job_id=3, model="m", media_kind="video", status="ok", cost_usd=None)
+    counts = await repo.cost_counts_by_job(db, [3])
+    assert counts[3] == (1, 2)  # 1 priced of 2 total

@@ -208,7 +208,21 @@ async def query_clip_page(
         page = await ctx.archive.list_clips(
             catalog_id, ClipQuery(text=q, offset=0, limit=_KIND_FILTER_FETCH_LIMIT)
         )
-        clips = _filter_clips_by_kind(list(page.items), kind)
+        raw_items = list(page.items)
+        if len(raw_items) >= _KIND_FILTER_FETCH_LIMIT:
+            # The kind filter is path-derived, so it can't be server-paginated:
+            # we fetch the whole result set and filter in Python. A catalog
+            # larger than the cap is silently truncated and `total` would be
+            # wrong — log it so the bound is observable rather than invisible.
+            logger.warning(
+                "kind-filter fetch for catalog %s hit the %d-clip cap (q=%r, "
+                "kind=%r); results may be truncated and the total under-counted",
+                catalog_id,
+                _KIND_FILTER_FETCH_LIMIT,
+                q,
+                kind,
+            )
+        clips = _filter_clips_by_kind(raw_items, kind)
         total = len(clips)
         clips = clips[offset : offset + limit]
     else:

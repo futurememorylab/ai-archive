@@ -45,6 +45,9 @@
             <span class="muted">no rate card</span>
           {% else %}
             {{ r.actual_cost_usd | usd if r.actual_cost_usd else '—' }}
+            {% if r.priced_runs < r.annotated_runs %}
+              <span class="muted" title="Only {{ r.priced_runs }} of {{ r.annotated_runs }} runs have a recorded cost; the rest are not yet priced, so this total is partial.">({{ r.priced_runs }} of {{ r.annotated_runs }} priced)</span>
+            {% endif %}
           {% endif %}
         </td>
         <td>
@@ -61,7 +64,7 @@
               <div>
                 <span class="pill">{{ res }}</span>
                 {{ s.count }} run{{ 's' if s.count != 1 else '' }}
-                · est {{ s.est_cost_usd | usd }} → actual {{ s.cost_usd | usd }}
+                · est {{ s.est_cost_usd | usd }} → actual {{ s.cost_usd | usd }}{% if s.priced_count < s.count %}<span class="muted" title="Only {{ s.priced_count }} of {{ s.count }} runs have a recorded cost; this actual is partial.">*</span>{% endif %}
                 · {{ s.confidence }}
               </div>
             {% endfor %}
@@ -72,8 +75,10 @@
         <td class="admin-actions">
           <button type="button" class="btn primary sm"
                   data-version-id="{{ r.version_id }}"
+                  data-cal-label="{{ r.prompt_name }} · v{{ r.version_num }}"
+                  data-cal-kind="{{ r.media_kind }}"
                   data-test="calibrate-open"
-                  @click="openCalibrate({{ r.version_id }}, '{{ r.prompt_name }} · v{{ r.version_num }}', '{{ r.media_kind }}')">Calibrate</button>
+                  @click="openCalibrate($el)">Calibrate</button>
         </td>
       </tr>
       {% endfor %}

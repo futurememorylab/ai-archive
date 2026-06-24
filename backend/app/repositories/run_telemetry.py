@@ -66,6 +66,26 @@ class RunTelemetryRepo:
                 out[int(jid)] = out.get(int(jid), 0.0) + float(total)
         return out
 
+    async def cost_counts_by_job(
+        self, conn: aiosqlite.Connection, job_ids: list[int]
+    ) -> dict[int, tuple[int, int]]:
+        """{job_id: (priced_rows, total_rows)} — COUNT(cost_usd) vs COUNT(*).
+        When priced < total for a batch's jobs, the summed cost (cost_sums_by_job)
+        is a partial subtotal (SQL SUM skips NULLs) and the UI flags it instead
+        of presenting it as complete. Missing jobs are absent."""
+        out: dict[int, tuple[int, int]] = {}
+        for fragment, params in chunked_in_clause((j,) for j in job_ids):
+            cur = await conn.execute(
+                f"SELECT job_id, COUNT(cost_usd), COUNT(*) "
+                f"FROM run_telemetry WHERE job_id IN ({fragment}) "
+                f"GROUP BY job_id",
+                tuple(params),
+            )
+            for jid, priced, total in await cur.fetchall():
+                p0, t0 = out.get(int(jid), (0, 0))
+                out[int(jid)] = (p0 + int(priced), t0 + int(total))
+        return out
+
     async def est_cost_sums_by_job(
         self, conn: aiosqlite.Connection, job_ids: list[int]
     ) -> dict[int, float]:
@@ -106,44 +126,72 @@ class RunTelemetryRepo:
     async def stats_by_resolution(
         self, conn: aiosqlite.Connection, *, prompt_version_id: int
     ) -> dict[str | None, dict]:
-        """{media_resolution_setting: {"count": n, "cost_usd": actual,
-        "est_cost_usd": guessed}} for ok runs of a prompt version — powers
-        the calibration results panel. cost_usd is the actual billed spend;
-        est_cost_usd is the SUM of the pre-run p50 estimates captured per run
-        (est_cost_usd_p50), so the panel can show guessed-vs-actual."""
-        cur = await conn.execute(
-            "SELECT media_resolution_setting, COUNT(*), "
-            "COALESCE(SUM(cost_usd), 0), COALESCE(SUM(est_cost_usd_p50), 0) "
-            "FROM run_telemetry WHERE prompt_version_id = ? AND status = 'ok' "
-            "GROUP BY media_resolution_setting",
-            (prompt_version_id,),
+        """{media_resolution_setting: {"count": n, "priced_count": p,
+        "cost_usd": actual, "est_cost_usd": guessed}} for ok runs of a prompt
+        version — powers the calibration results panel. cost_usd is the actual
+        billed spend; est_cost_usd is the SUM of the pre-run p50 estimates
+        captured per run (est_cost_usd_p50), so the panel can show
+        guessed-vs-actual. priced_count = COUNT(cost_usd) (non-NULL rows): when
+        priced_count < count, cost_usd is a partial subtotal (SQL SUM skips
+        NULLs) — the UI flags it rather than presenting it as a complete total.
+        Batched form: stats_by_resolution_many."""
+        many = await self.stats_by_resolution_many(
+            conn, prompt_version_ids=[prompt_version_id]
         )
-        out: dict[str | None, dict] = {}
-        for res, count, cost, est in await cur.fetchall():
-            out[res] = {
-                "count": int(count),
-                "cost_usd": float(cost),
-                "est_cost_usd": float(est),
-            }
+        return many.get(prompt_version_id, {})
+
+    async def stats_by_resolution_many(
+        self, conn: aiosqlite.Connection, *, prompt_version_ids: list[int]
+    ) -> dict[int, dict[str | None, dict]]:
+        """{prompt_version_id: {media_resolution_setting: {...}}} for ok runs —
+        the batched form of stats_by_resolution (ADR 0046, mirrors
+        totals_by_prompt_version). Ids with no rows are absent. COUNT(cost_usd)
+        is the priced (non-NULL) subset; GROUP-BY aggregates merge with += so a
+        key split across chunks stays correct."""
+        out: dict[int, dict[str | None, dict]] = {}
+        for fragment, params in chunked_in_clause(
+            (v,) for v in prompt_version_ids
+        ):
+            cur = await conn.execute(
+                "SELECT prompt_version_id, media_resolution_setting, COUNT(*), "
+                "COUNT(cost_usd), COALESCE(SUM(cost_usd), 0), "
+                "COALESCE(SUM(est_cost_usd_p50), 0) "
+                f"FROM run_telemetry WHERE prompt_version_id IN ({fragment}) "
+                "AND status = 'ok' "
+                "GROUP BY prompt_version_id, media_resolution_setting",
+                tuple(params),
+            )
+            for vid, res, count, priced, cost, est in await cur.fetchall():
+                per_res = out.setdefault(int(vid), {})
+                agg = per_res.setdefault(
+                    res,
+                    {"count": 0, "priced_count": 0, "cost_usd": 0.0, "est_cost_usd": 0.0},
+                )
+                agg["count"] += int(count)
+                agg["priced_count"] += int(priced)
+                agg["cost_usd"] += float(cost)
+                agg["est_cost_usd"] += float(est)
         return out
 
     async def totals_by_prompt_version(
         self, conn: aiosqlite.Connection, *, prompt_version_ids: list[int]
     ) -> dict[int, dict]:
-        """{prompt_version_id: {"runs": n, "media_seconds": s,
+        """{prompt_version_id: {"runs": n, "priced_runs": p, "media_seconds": s,
         "est_cost_usd": e, "actual_cost_usd": a}} over ok runs — powers the
         Prompts-tab usage columns (total footage annotated, guessed vs. actual
         spend across ALL run kinds: annotation, studio, calibration).
 
         Only status='ok' rows count (matches stats_by_resolution). SUMs use
-        COALESCE→0; runs is COUNT(*). Batched via chunked_in_clause (ADR 0046);
-        GROUP-BY aggregates are merged with += across chunks so a key split over
-        two chunks stays correct. Ids with no rows are absent — callers treat a
-        missing id as zero."""
+        COALESCE→0; runs is COUNT(*); priced_runs is COUNT(cost_usd) (non-NULL),
+        so a caller can detect when actual_cost_usd is a partial subtotal
+        (SQL SUM skips NULLs) rather than a complete total. Batched via
+        chunked_in_clause (ADR 0046); GROUP-BY aggregates are merged with +=
+        across chunks so a key split over two chunks stays correct. Ids with no
+        rows are absent — callers treat a missing id as zero."""
         out: dict[int, dict] = {}
         for fragment, params in chunked_in_clause((v,) for v in prompt_version_ids):
             cur = await conn.execute(
-                "SELECT prompt_version_id, COUNT(*), "
+                "SELECT prompt_version_id, COUNT(*), COUNT(cost_usd), "
                 "COALESCE(SUM(media_duration_secs), 0), "
                 "COALESCE(SUM(est_cost_usd_p50), 0), "
                 "COALESCE(SUM(cost_usd), 0) "
@@ -151,12 +199,19 @@ class RunTelemetryRepo:
                 "AND status = 'ok' GROUP BY prompt_version_id",
                 tuple(params),
             )
-            for vid, runs, secs, est, actual in await cur.fetchall():
+            for vid, runs, priced, secs, est, actual in await cur.fetchall():
                 agg = out.setdefault(
                     int(vid),
-                    {"runs": 0, "media_seconds": 0.0, "est_cost_usd": 0.0, "actual_cost_usd": 0.0},
+                    {
+                        "runs": 0,
+                        "priced_runs": 0,
+                        "media_seconds": 0.0,
+                        "est_cost_usd": 0.0,
+                        "actual_cost_usd": 0.0,
+                    },
                 )
                 agg["runs"] += int(runs)
+                agg["priced_runs"] += int(priced)
                 agg["media_seconds"] += float(secs)
                 agg["est_cost_usd"] += float(est)
                 agg["actual_cost_usd"] += float(actual)

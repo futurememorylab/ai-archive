@@ -35,6 +35,11 @@ GEMINI_MODEL_KEY = "gemini_generation_model"
 CALIBRATION_RESOLUTIONS = ("low", "medium", "high")
 CALIBRATION_REPEATS = 2
 
+# Safety bound on a single sweep — the picker is for a handful of clips, but a
+# malicious/buggy caller could POST thousands of clip_ids, fanning out to up to
+# 6×N real Gemini runs from one click. Not a UX limit.
+CALIBRATION_MAX_CLIPS = 200
+
 
 async def _enum_view(ctx, key: str) -> dict:
     defs = {d.key: d for d in await ctx.enum_service.definitions(editable_only=True)}
@@ -205,38 +210,50 @@ def _humanize_secs(secs: float) -> str:
 
 
 async def _prompts_view(ctx) -> dict:
-    # Two passes: first collect every version (and its per-resolution
-    # calibration stats), THEN fetch usage totals for ALL version_ids in ONE
-    # batched query (ADR 0046 — no per-version N+1).
-    prelim = []
+    # Collect every (prompt, version) first — NO per-version DB reads in the
+    # loop. Then resolve calibration stats, usage totals, and model rate-cards
+    # with a fixed number of batched/prefetched reads (ADR 0046 — the page's
+    # query count must not scale with the number of versions).
+    prelim: list = []
     for p in await ctx.prompts_repo.list_active(ctx.db):
         _p, versions = await ctx.prompts_repo.get_with_versions(ctx.db, p.id)
         for v in versions:
-            stats = await ctx.run_telemetry_repo.stats_by_resolution(
-                ctx.db, prompt_version_id=v.id
-            )
-            per_res = {
-                res: {
-                    "count": s["count"],
-                    "cost_usd": s["cost_usd"],
-                    "est_cost_usd": s["est_cost_usd"],
-                    "confidence": confidence_for_samples(s["count"]),
-                }
-                for res, s in stats.items()
-                if res is not None
-            }
-            _mc = await ctx.model_config_repo.get(ctx.db, v.model)
-            pricing_missing = _mc is None or bool(_mc.removed)
-            prelim.append((p, v, per_res, pricing_missing))
+            prelim.append((p, v))
 
-    totals = await ctx.run_telemetry_repo.totals_by_prompt_version(
-        ctx.db, prompt_version_ids=[v.id for _p, v, _r, _m in prelim]
+    version_ids = [v.id for _p, v in prelim]
+    models = {v.model for _p, v in prelim}
+
+    # Batched reads — one query each (chunked only past SQLite's param limit).
+    stats_by_vid = await ctx.run_telemetry_repo.stats_by_resolution_many(
+        ctx.db, prompt_version_ids=version_ids
     )
+    totals = await ctx.run_telemetry_repo.totals_by_prompt_version(
+        ctx.db, prompt_version_ids=version_ids
+    )
+    # Prefetch model rate-cards ONCE (one query) → {model: row_or_None}. A model
+    # absent from all_live() (never seeded, or soft-deleted) → no rate card.
+    cards = {r.model: r for r in await ctx.model_config_repo.all_live(ctx.db)}
+    pricing_missing_by_model = {m: cards.get(m) is None for m in models}
 
     rows = []
-    for p, v, per_res, pricing_missing in prelim:
+    for p, v in prelim:
+        stats = stats_by_vid.get(v.id, {})
+        per_res = {
+            res: {
+                "count": s["count"],
+                "priced_count": s["priced_count"],
+                "cost_usd": s["cost_usd"],
+                "est_cost_usd": s["est_cost_usd"],
+                "confidence": confidence_for_samples(s["count"]),
+            }
+            for res, s in stats.items()
+            if res is not None
+        }
+        pricing_missing = pricing_missing_by_model.get(v.model, True)
+
         t = totals.get(v.id)
         runs = t["runs"] if t else 0
+        priced_runs = t["priced_runs"] if t else 0
         seconds = t["media_seconds"] if t else 0.0
         est_cost = t["est_cost_usd"] if t else 0.0
         actual_cost = t["actual_cost_usd"] if t else 0.0
@@ -254,6 +271,9 @@ async def _prompts_view(ctx) -> dict:
                 "per_res": per_res,
                 "pricing_missing": pricing_missing,
                 "annotated_runs": runs,
+                # Non-NULL actual-cost rows; when < annotated_runs the actual
+                # cost is a partial subtotal (M2) and the UI flags it.
+                "priced_runs": priced_runs,
                 "annotated_seconds": seconds,
                 "annotated_label": annotated_label,
                 "est_cost_usd": est_cost,
@@ -292,6 +312,12 @@ async def admin_calibrate(
         raise HTTPException(503, "Gemini offline — calibration needs the live API")
     if not clip_ids:
         raise HTTPException(422, "calibration needs at least one clip")
+    if len(clip_ids) > CALIBRATION_MAX_CLIPS:
+        raise HTTPException(
+            422,
+            f"too many clips for one sweep (max {CALIBRATION_MAX_CLIPS}, "
+            f"got {len(clip_ids)})",
+        )
     try:
         await core.prompts_repo.get_version(core.db, version_id)
     except LookupError:
@@ -337,7 +363,10 @@ async def admin_calibrate_estimate(
     fully offline-capable; failures must never block the launch."""
     require_role(request, "admin")
     ctx = get_core_ctx(request)
-    clip_ids = [int(c) for c in body.get("clip_ids", [])]
+    try:
+        clip_ids = [int(c) for c in body.get("clip_ids", [])]
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(422, "clip_ids must be integers") from exc
     if not clip_ids:
         return {"projected_cost_usd": None, "runs": 0}
     try:

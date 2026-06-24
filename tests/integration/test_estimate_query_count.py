@@ -200,7 +200,7 @@ def test_estimate_route_happy_path_and_404(monkeypatch, tmp_path):
         assert r.status_code == 404
 
 
-async def _seed_image_clip(db, repo: ClipCacheRepo, clip_id: int, width: int, height: int) -> None:
+async def _seed_image_clip(db, repo: ClipCacheRepo, clip_id: int, width, height) -> None:
     """Seed a JPEG image clip with real pixel dimensions in provider_data.media."""
     clip = CanonicalClip(
         key=("catdv", str(clip_id)),
@@ -272,3 +272,50 @@ async def test_image_clip_dimensions_used_in_token_estimate(db):
         f"1536x1536 and 768x768 images, got {diff} "
         f"(large={result_large['tokens_in']}, small={result_small['tokens_in']})"
     )
+
+
+@pytest.mark.asyncio
+async def test_image_dimensions_as_strings_coerced_not_one_tile(db):
+    """L3: CatDV may serialise width/height as numeric strings ("1536"). The
+    estimate must coerce them to ints (4 tiles for 1536x1536), not silently
+    degrade to a single 1-tile estimate. tokens_in must match the int-valued
+    case."""
+    prompts = PromptsRepo()
+    _, vid = await prompts.create_with_initial_version(
+        db,
+        name="img-strdim-test",
+        description=None,
+        body="describe",
+        target_map={"scenes": {"kind": "markers"}},
+        output_schema={"type": "object"},
+        model="gemini-2.5-flash-lite",
+    )
+    cache = ClipCacheRepo()
+    # String dimensions (the bug trigger) vs the int-valued equivalent.
+    await _seed_image_clip(db, cache, clip_id=201, width="1536", height="1536")
+    await _seed_image_clip(db, cache, clip_id=202, width=1536, height=1536)
+
+    result_str = await estimate_for_clip_ids(
+        db,
+        clip_cache_repo=cache,
+        run_telemetry_repo=RunTelemetryRepo(),
+        prompts_repo=prompts,
+        model_config_repo=ModelConfigRepo(),
+        provider_id="catdv",
+        clip_ids=[201],
+        prompt_version_id=vid,
+    )
+    result_int = await estimate_for_clip_ids(
+        db,
+        clip_cache_repo=cache,
+        run_telemetry_repo=RunTelemetryRepo(),
+        prompts_repo=prompts,
+        model_config_repo=ModelConfigRepo(),
+        provider_id="catdv",
+        clip_ids=[202],
+        prompt_version_id=vid,
+    )
+    # String "1536" must yield the same 4-tile estimate as int 1536, not 1 tile.
+    assert result_str["tokens_in"] == result_int["tokens_in"]
+    # And it must genuinely be 4 tiles, not the 1-tile degradation.
+    assert result_str["tokens_in"] >= 4 * IMAGE_TILE_TOKENS

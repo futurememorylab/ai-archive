@@ -73,7 +73,14 @@
       calLabel: "",
       estimate: null,        // { projected_cost_usd, runs } | null
 
-      openCalibrate(versionId, label, mediaKind) {
+      openCalibrate(el) {
+        // Label/kind/version come from data-* attributes on the button (Jinja
+        // autoescapes attribute values, so a prompt named O'Brien is safe) —
+        // NOT interpolated into this JS expression (that re-decoded the escaped
+        // quote and broke the handler / allowed expression injection).
+        const versionId = Number(el.dataset.versionId);
+        const label = el.dataset.calLabel || "";
+        const mediaKind = el.dataset.calKind || "";
         this.sel = {};
         this.q = ""; this.cacheF = "any"; this.annoF = "any";
         this.selOnly = false; this.offset = 0;
@@ -82,7 +89,7 @@
         // so the initial page is already filtered.
         this.kind = (mediaKind && mediaKind !== "any") ? mediaKind : null;
         this.calVersionId = versionId;
-        this.calLabel = label || "";
+        this.calLabel = label;
         this.estimate = null;
         _calEstimateKey = "";
         this.calOpen = true;
@@ -140,7 +147,13 @@
           const region = document.getElementById("admin-enum-region");
           if (region) {
             region.innerHTML = await r.text();
-            window.htmxAlpine.reinit(region);
+            // The fragment carries its OWN x-data="adminPromptsTab()" root, so
+            // Alpine's MutationObserver initializes it — calling reinit (=
+            // Alpine.initTree) would double-bind every @click. Only HTMX needs
+            // a manual nudge for injected innerHTML (idempotent). This mirrors
+            // the tab-switch HTMX path, which swaps the same self-rooted
+            // fragment and relies on the observer for Alpine.
+            window.htmxAlpine.wireHtmx(region);
           }
           const n = r.headers.get("X-Calibration-Jobs");
           this.calOpen = false;

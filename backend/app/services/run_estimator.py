@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 from backend.app.media_kind import classify_media_kind
 from backend.app.services.pricing import compute_cost, rate_cards
+from backend.app.services.resolution import resolution_valid_for_kind
 from backend.app.services.telemetry_capture import TokenUsage
 from backend.app.services.telemetry_capture import prompt_hash as _prompt_hash
 
@@ -114,9 +115,20 @@ async def estimate_clips(
     input_ratio: dict[str, float] = {}
     stats: dict[str, _KindStats] = {}
     for kind in kinds:
+        # Mirror the run's per-clip downgrade (services/resolution.py is the
+        # single source of truth): HIGH is image-only, so a video/audio clip
+        # under a HIGH-resolution prompt actually RUNS at medium. Read the
+        # matching-resolution history so the estimate doesn't drift from the
+        # charge. media_resolution=None (estimator caller didn't supply one)
+        # passes through and matches the repo's "any resolution" lookup.
+        kind_resolution = media_resolution
+        if media_resolution is not None and not resolution_valid_for_kind(
+            media_resolution, kind
+        ):
+            kind_resolution = "medium"
         if kind != "image":
             ratios = await repo.recent_input_ratios(
-                conn, model=model, media_kind=kind, media_resolution=media_resolution
+                conn, model=model, media_kind=kind, media_resolution=kind_resolution
             )
             if len(ratios) >= _MIN_SAMPLES:
                 input_ratio[kind] = _pct(ratios, 0.5)
@@ -125,12 +137,12 @@ async def estimate_clips(
             model=model,
             media_kind=kind,
             prompt_hash=p_hash,
-            media_resolution=media_resolution,
+            media_resolution=kind_resolution,
         )
         level = 1
         if len(rates) < _MIN_SAMPLES:
             rates = await repo.recent_output_rates(
-                conn, model=model, media_kind=kind, media_resolution=media_resolution
+                conn, model=model, media_kind=kind, media_resolution=kind_resolution
             )
             level = 2
         if len(rates) >= _MIN_SAMPLES:
@@ -229,11 +241,23 @@ def _dimensions_from_cached_row(row) -> tuple[int | None, int | None]:
     """
     cj = row["canonical_json"] or {}
     provider_media = (cj.get("provider_data") or {}).get("media") or {}
-    raw_w = provider_media.get("width")
-    raw_h = provider_media.get("height")
-    w = int(raw_w) if isinstance(raw_w, (int, float)) and raw_w else None
-    h = int(raw_h) if isinstance(raw_h, (int, float)) and raw_h else None
-    return w, h
+    return _coerce_dim(provider_media.get("width")), _coerce_dim(
+        provider_media.get("height")
+    )
+
+
+def _coerce_dim(v) -> int | None:
+    """Coerce a provider dimension to a positive int, or None.
+
+    CatDV sometimes serialises width/height as numeric strings ("4000") rather
+    than ints; accept those too so large images aren't silently under-estimated
+    as a single tile. Non-numeric / non-positive / missing values → None.
+    """
+    try:
+        n = int(float(v))
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
 
 
 async def media_kinds_for_clip_ids(conn, *, clip_cache_repo, provider_id, clip_ids):

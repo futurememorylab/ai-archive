@@ -138,11 +138,91 @@ def test_prompts_tab_shows_usage_columns(monkeypatch, tmp_path):
         assert "$0.60" in r.text
 
 
+def test_prompts_tab_flags_partial_pricing(monkeypatch, tmp_path):
+    """M2: when some ok runs have a NULL cost, the Actual-cost column shows an
+    '(N of M priced)' note instead of presenting the partial sum as complete."""
+    with _client(monkeypatch, tmp_path) as client:
+        asyncio.run(_seed_prompt(tmp_path / "app.db"))
+        from backend.app.routes.pages.admin import _prompts_view
+
+        ctx = client.app.state.core_ctx
+        view = asyncio.run(_prompts_view(ctx))
+        vid = next(r["version_id"] for r in view["rows"] if r["prompt_name"] == "MyPrompt")
+
+        async def _seed_mixed(db_path):
+            import aiosqlite
+
+            from backend.app.models.telemetry import RunTelemetryRecord
+            from backend.app.repositories.run_telemetry import RunTelemetryRepo
+
+            async with aiosqlite.connect(db_path) as conn:
+                repo = RunTelemetryRepo()
+                # One priced run, one un-priced (NULL cost) run.
+                await repo.insert(conn, RunTelemetryRecord(
+                    occurred_at="2026-06-07T12:00:00+00:00", install_id="i", kind="studio",
+                    model="gemini-2.5-flash-lite", status="ok", media_kind="video+audio",
+                    media_duration_secs=60.0, prompt_version_id=vid,
+                    cost_usd=0.20, est_cost_usd_p50=0.15,
+                ))
+                await repo.insert(conn, RunTelemetryRecord(
+                    occurred_at="2026-06-07T12:00:00+00:00", install_id="i", kind="studio",
+                    model="gemini-2.5-flash-lite", status="ok", media_kind="video+audio",
+                    media_duration_secs=60.0, prompt_version_id=vid,
+                    cost_usd=None, est_cost_usd_p50=0.15,
+                ))
+
+        asyncio.run(_seed_mixed(tmp_path / "app.db"))
+
+        r = client.get("/admin/prompts")
+        assert r.status_code == 200
+        assert "1 of 2 priced" in r.text
+
+
 def test_prompts_tab_calibrate_button_passes_media_kind(monkeypatch, tmp_path):
-    """The Calibrate button forwards the prompt's media_kind as the 3rd arg to
-    openCalibrate, so the picker is filtered to that kind."""
+    """The Calibrate button forwards the prompt's media_kind via a data-*
+    attribute (NOT interpolated into the @click JS), so the picker can filter
+    to that kind. openCalibrate now reads it from $el.dataset.calKind."""
     with _client(monkeypatch, tmp_path) as client:
         asyncio.run(_seed_prompt(tmp_path / "app.db", media_kind="image"))
         r = client.get("/admin/prompts")
         assert r.status_code == 200
-        assert "'image')\">Calibrate" in r.text
+        # Kind lives in a data attribute, and the handler reads $el.
+        assert 'data-cal-kind="image"' in r.text
+        assert 'openCalibrate($el)' in r.text
+        # The old interpolated form must be gone (it broke on apostrophes).
+        assert "'image')\">Calibrate" not in r.text
+
+
+def test_prompts_tab_apostrophe_name_safe(monkeypatch, tmp_path):
+    """H3: a prompt named O'Brien must render a WORKING Calibrate button — the
+    name belongs in a data-* attribute (autoescaped), never inside the @click
+    JS expression where a decoded apostrophe would break Alpine / inject."""
+    with _client(monkeypatch, tmp_path) as client:
+
+        async def _seed_apostrophe(db_path):
+            import aiosqlite
+
+            from backend.app.repositories.prompts import PromptsRepo
+
+            async with aiosqlite.connect(db_path) as conn:
+                await PromptsRepo().create_with_initial_version(
+                    conn,
+                    name="O'Brien",
+                    description="apostrophe prompt",
+                    body="Identify scenes.",
+                    target_map={"scenes": {"kind": "markers"}},
+                    output_schema={"type": "object"},
+                    model="gemini-2.5-flash-lite",
+                    media_resolution="low",
+                )
+
+        asyncio.run(_seed_apostrophe(tmp_path / "app.db"))
+        r = client.get("/admin/prompts")
+        assert r.status_code == 200
+        # The name appears as a data-attribute value (HTML-escaped apostrophe),
+        # NOT inside the openCalibrate(...) JS call.
+        assert "data-cal-label=" in r.text
+        assert "O&#39;Brien" in r.text or "O'Brien" in r.text
+        # No version's name is interpolated into the click handler anymore.
+        assert "openCalibrate('" not in r.text
+        assert "O'Brien · v1'" not in r.text

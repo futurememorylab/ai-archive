@@ -443,7 +443,11 @@ async def _process_item(
     )
 
     if force_resolution is not None:
-        media_resolution = force_resolution
+        # Route the override through the validator too: a valid value passes
+        # through unchanged, an invalid one (e.g. a stale/garbage calibration
+        # value) falls back to the default 'medium' instead of KeyErroring at
+        # the SDK map (gemini.py::_SDK_MEDIA_RESOLUTION).
+        media_resolution = resolve_media_resolution(force_resolution, None)
     else:
         _mc = await model_config_repo.get(db, version.model)
         _model_default = _mc.default_media_resolution if _mc and not _mc.removed else None

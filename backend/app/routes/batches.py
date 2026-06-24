@@ -40,9 +40,16 @@ async def _load_batches_ctx(ctx, limit: int) -> dict:
     # Actual billable spend per batch: one batched aggregate over every
     # member job_id, summed back per batch_key (no per-batch query).
     cost_by_job = await ctx.run_telemetry_repo.cost_sums_by_job(ctx.db, all_job_ids)
+    # Priced vs total run counts per job — when a batch has un-priced (NULL
+    # cost) runs, its summed cost is a partial subtotal; flag it rather than
+    # present the subtotal as complete (M2).
+    counts_by_job = await ctx.run_telemetry_repo.cost_counts_by_job(ctx.db, all_job_ids)
     for v in views:
         spent = sum(cost_by_job.get(jid, 0.0) for jid in v["job_ids"])
         v["cost_usd"] = spent if spent else None
+        priced = sum(counts_by_job.get(jid, (0, 0))[0] for jid in v["job_ids"])
+        total = sum(counts_by_job.get(jid, (0, 0))[1] for jid in v["job_ids"])
+        v["cost_partial"] = total > 0 and priced < total
 
     est_by_job = await ctx.run_telemetry_repo.est_cost_sums_by_job(ctx.db, all_job_ids)
     for v in views:

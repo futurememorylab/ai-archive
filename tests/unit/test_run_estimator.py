@@ -224,3 +224,53 @@ async def test_resolution_with_no_history_falls_back_to_seeds_rough():
     repo = FakeRepo(output_rates={("video+audio", "*", "high"): [50.0] * 5})
     est = await estimate_clips(None, repo, [VIDEO], prompt_body="", schema={}, model="m", media_resolution="low")
     assert est.confidence == "rough"  # no 'low' history → seeds
+
+
+@pytest.mark.asyncio
+async def test_high_resolution_downgraded_to_medium_for_non_image_clip():
+    """L2: a video clip under a HIGH-resolution prompt RUNS at medium (HIGH is
+    image-only), so the estimate must read MEDIUM-keyed history, not HIGH."""
+    repo = FakeRepo(
+        output_rates={
+            ("video+audio", "*", "high"): [50.0] * 5,  # must NOT be selected
+            ("video+audio", "*", "medium"): [10.0] * 5,  # downgraded → selected
+        }
+    )
+    est = await estimate_clips(
+        None, repo, [VIDEO], prompt_body="", schema={}, model="m", media_resolution="high"
+    )
+    # 60s * medium 10/s = 600 (not 60 * 50 = 3000 had it stayed at high)
+    assert est.tokens_out_p50 == 600
+
+
+@pytest.mark.asyncio
+async def test_high_resolution_kept_for_image_clip():
+    """L2 counterpart: an image clip under HIGH stays HIGH (HIGH is image-only)."""
+    repo = FakeRepo(
+        output_rates={
+            ("image", "*", "high"): [500.0, 600.0, 700.0],  # selected for image
+            ("image", "*", "medium"): [10.0] * 5,  # must NOT be selected
+        }
+    )
+    est = await estimate_clips(
+        None, repo, [IMAGE], prompt_body="", schema={}, model="m", media_resolution="high"
+    )
+    assert est.tokens_out_p50 == 600  # per-item median from HIGH history
+
+
+@pytest.mark.asyncio
+async def test_high_resolution_per_kind_in_mixed_batch():
+    """Mixed batch: the image keeps HIGH history, the video downgrades to MEDIUM
+    — proving the downgrade is per kind, not a single batch-wide decision."""
+    repo = FakeRepo(
+        output_rates={
+            ("image", "*", "high"): [400.0, 400.0, 400.0],
+            ("video+audio", "*", "medium"): [10.0] * 5,
+            ("video+audio", "*", "high"): [50.0] * 5,  # must NOT be selected
+        }
+    )
+    est = await estimate_clips(
+        None, repo, [VIDEO, IMAGE], prompt_body="", schema={}, model="m", media_resolution="high"
+    )
+    # image: 400 (from high history); video: 60s * 10/s = 600 (from medium history)
+    assert est.tokens_out_p50 == 400 + 600
