@@ -226,6 +226,28 @@ class JobsRepo:
         await conn.commit()
         return cur.rowcount or 0
 
+    async def cancel_job(self, conn: aiosqlite.Connection, job_id: int) -> None:
+        """User-initiated cancel of one job. Flips the job AND all its
+        still-in-flight items (pending + transient) to 'cancelled' in a single
+        commit so the state is internally consistent — same invariant as
+        cancel_orphaned_running, but scoped to one job. Terminal items (done /
+        review_ready / applied / rejected / error / cancelled) are left as-is.
+
+        Idempotent: the in-flight task's CancelledError handler re-runs this to
+        mop up an item that raced into a transient state after the cancel route
+        ran its first sweep, so re-application must be a no-op on already-final
+        rows."""
+        await conn.execute(
+            "UPDATE job_items SET status = 'cancelled' "
+            " WHERE job_id = ? AND status IN ('pending', 'resolving', 'uploading', 'prompting')",
+            (job_id,),
+        )
+        await conn.execute(
+            "UPDATE jobs SET status = 'cancelled', finished_at = ? WHERE id = ?",
+            (_now_iso(), job_id),
+        )
+        await conn.commit()
+
     async def cancel_orphaned_running(self, conn: aiosqlite.Connection) -> int:
         """Cancel jobs left 'running' by a killed worker, AND their unfinished
         items. A job runs as a fire-and-forget background task; at boot nothing
