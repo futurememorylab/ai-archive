@@ -100,20 +100,25 @@ async def lifespan(app: FastAPI):
         await (live or core).aclose()
 
 
-async def _refresh_topbar_counts(request: Request) -> None:
-    """Refresh the cached topbar counts before a full-page render, so the
-    synchronous Jinja context processor reads a current value from memory
-    instead of opening its own per-render sqlite connection (finding #10).
-    Skipped for HTMX fragments (they don't draw the topbar); never fatal."""
+async def _load_topbar_counts(request: Request) -> None:
+    """Compute the topbar sync-chip + review-pill counts (async, on the pooled
+    connection) and stash them on request.state before a full-page render, so
+    the synchronous Jinja context processor reads them without opening its own
+    per-render sqlite connection (finding #10). Scoped to the request — there is
+    nothing to cache between renders. Skipped for HTMX fragments (they don't draw
+    the topbar); never fatal."""
     if request.headers.get("hx-request") == "true":
         return
     core = getattr(request.app.state, "core_ctx", None)
     if core is None:
         return
     try:
-        await core.refresh_topbar_counts()
+        request.state.topbar_counts = {
+            "sync_counts": await core.pending_ops_repo.count_actionable(core.db),
+            "review_count": await core.review_items_repo.count_clips_for_review(core.db),
+        }
     except Exception:  # noqa: BLE001 — a count refresh must never break a page
-        logging.getLogger(__name__).debug("topbar count refresh failed", exc_info=True)
+        logging.getLogger(__name__).debug("topbar count load failed", exc_info=True)
 
 
 def register_routers(app: FastAPI) -> None:
@@ -135,7 +140,7 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(cache_ui_router)
     app.include_router(enums_router)
     for r in page_routers:
-        app.include_router(r, dependencies=[Depends(_refresh_topbar_counts)])
+        app.include_router(r, dependencies=[Depends(_load_topbar_counts)])
     app.include_router(live_router)
 
 

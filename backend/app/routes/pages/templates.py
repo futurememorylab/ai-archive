@@ -82,19 +82,19 @@ def _topbar_sync_context(request) -> dict[str, object]:
     through a placeholder while an async load-fetch returns.
 
     Skipped for HTMX fragment renders (HX-Request) — those don't draw the topbar.
-    Reads the counts CoreCtx caches in memory (refreshed off the render path at
-    boot + each SyncEngine tick — see CoreCtx.refresh_topbar_counts), so this
-    runs zero I/O on the event loop instead of a per-render synchronous SQLite
-    connection. None until the first refresh → the chip falls back to its async
-    /ui/sync-chip poll. Never raises (a context processor runs on EVERY render).
+    Reads the counts the `_load_topbar_counts` page-router dependency computed
+    (async, on the pooled connection) and stashed on `request.state` before this
+    render — so the synchronous context processor itself runs zero I/O instead of
+    opening a per-render sqlite connection (finding #10). Absent on requests that
+    skipped the dependency → the chip falls back to its async /ui/sync-chip poll.
+    Never raises (a context processor runs on EVERY render).
     """
     if request.headers.get("HX-Request") == "true":
         return {}
-    state = getattr(getattr(request, "app", None), "state", None)
-    core = getattr(state, "core_ctx", None)
-    counts = getattr(core, "topbar_counts", None)
+    counts = getattr(getattr(request, "state", None), "topbar_counts", None)
     if not counts:
         return {}
+    state = getattr(getattr(request, "app", None), "state", None)
     monitor = getattr(getattr(state, "live_ctx", None), "connection_monitor", None)
     offline = monitor is not None and monitor.current_state().value != "online"
     return {
