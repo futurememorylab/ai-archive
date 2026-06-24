@@ -6,6 +6,7 @@ and `require_role("admin")` narrows every handler to the `manage` capability
 """
 
 import time as _time
+from datetime import UTC, datetime
 from typing import get_args
 
 from fastapi import APIRouter, Body, Form, HTTPException, Request
@@ -296,6 +297,67 @@ async def admin_prompts_table(request: Request):
     return await _prompts_response(request, ctx)
 
 
+async def _usage_view(ctx) -> dict:
+    """Current-month spend vs the monthly soft budget, plus by-model / by-day
+    breakdowns. CoreCtx / DB-only — offline-safe. The clock is read here at the
+    route boundary and injected into the pure UsageService."""
+    now = datetime.now(UTC)
+    summary = await ctx.usage_service.current_month(now=now)
+    by_model = await ctx.usage_service.by_model(now=now)
+    by_day = await ctx.usage_service.by_day(now=now)
+    # Progress-bar width: clamp to 100% (over-budget bars don't overflow the
+    # track; the .pill.bad status carries the "over" signal instead).
+    fraction = summary["fraction"]
+    bar_pct = min(100, round((fraction or 0) * 100)) if fraction is not None else 0
+    return {
+        "spend_usd": summary["spend_usd"],
+        "budget_usd": summary["budget_usd"],
+        "fraction": fraction,
+        "bar_pct": bar_pct,
+        "status": summary["status"],
+        "priced_count": summary["priced_count"],
+        "total_count": summary["total_count"],
+        "by_model": by_model,
+        "by_day": by_day,
+    }
+
+
+async def _usage_response(request: Request, ctx, *, status_code: int = 200):
+    return templates.TemplateResponse(
+        request, "pages/_admin_usage.html", await _usage_view(ctx), status_code=status_code
+    )
+
+
+@router.get("/admin/usage", response_class=HTMLResponse)
+async def admin_usage(request: Request):
+    require_role(request, "admin")
+    ctx = get_core_ctx(request)
+    return await _usage_response(request, ctx)
+
+
+@router.post("/admin/usage/budget", response_class=HTMLResponse)
+async def admin_set_budget(request: Request, budget_usd: str = Form("")):
+    """Set or clear the monthly soft budget. Empty / 0 clears it. A
+    non-numeric or negative value is rejected (422) — the budget is advisory
+    but must still be a valid number. Re-renders the usage partial so the HTMX
+    swap refreshes the tab in place."""
+    require_role(request, "admin")
+    ctx = get_core_ctx(request)
+    raw = (budget_usd or "").strip()
+    if not raw:
+        await ctx.usage_service.set_budget(None)
+        return await _usage_response(request, ctx)
+    try:
+        val = float(raw)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(422, "budget must be a number") from exc
+    if val < 0:
+        raise HTTPException(422, "budget must not be negative")
+    # set_budget treats None / <=0 as "clear".
+    await ctx.usage_service.set_budget(val if val > 0 else None)
+    return await _usage_response(request, ctx)
+
+
 @router.post("/admin/prompts/{version_id}/calibrate", response_class=HTMLResponse)
 async def admin_calibrate(
     request: Request, version_id: int, clip_ids: list[int] = Form(...)
@@ -401,10 +463,24 @@ async def admin_calibrate_estimate(
     # p50 is the total for all clip_ids at the prompt's effective resolution;
     # approximate per-clip cost = p50 / n, scaled by the real run count.
     projected = (p50 / n * total_runs) if (p50 is not None and n) else None
+    # Soft-cap advisory: would this sweep, on top of the month's spend so far,
+    # tip over the monthly budget? Pure CoreCtx read — NEVER blocks or changes
+    # the status code; the launch button stays enabled regardless.
+    summary = await ctx.usage_service.current_month(now=datetime.now(UTC))
+    budget = summary["budget_usd"]
+    month_spend = summary["spend_usd"]
+    would_exceed = bool(
+        budget is not None
+        and projected is not None
+        and (month_spend + projected) > budget
+    )
     return {
         "projected_cost_usd": projected,
         "runs": total_runs,
         "pricing_missing": est["pricing_missing"],
+        "budget_usd": budget,
+        "month_spend_usd": month_spend,
+        "would_exceed_budget": would_exceed,
     }
 
 

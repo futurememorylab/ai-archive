@@ -23,6 +23,12 @@
        hx-target="#admin-enum-region"
        hx-swap="innerHTML"
        hx-push-url="false">Prompts</a>
+    <a class="ctab{% if active == 'usage' %} active{% endif %}"
+       href="/admin/usage"
+       hx-get="/admin/usage"
+       hx-target="#admin-enum-region"
+       hx-swap="innerHTML"
+       hx-push-url="false">Usage</a>
     {% for d in definitions if d.key != 'gemini_generation_model' %}
       <a class="ctab{% if d.key == active_key %} active{% endif %}"
          href="/admin/enums/{{ d.key }}"
@@ -126,7 +132,13 @@
         if (e.pricing_missing || e.projected_cost_usd == null) {
           return "No rate card for this model — cost not projected. Set pricing in Gemini models.";
         }
-        return "Projected: ~" + fmtUsd(e.projected_cost_usd) + " over " + e.runs + " runs";
+        let label = "Projected: ~" + fmtUsd(e.projected_cost_usd) + " over " + e.runs + " runs";
+        // Soft cap: advisory only — the Launch button stays enabled (:disabled
+        // is bound to !selCount(), unchanged).
+        if (e.would_exceed_budget) {
+          label += " · ⚠ would exceed this month's budget";
+        }
+        return label;
       },
 
       async launchCalibrate() {
