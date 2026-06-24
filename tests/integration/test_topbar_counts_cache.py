@@ -1,21 +1,33 @@
-"""Topbar counts are cached in memory (CoreCtx.refresh_topbar_counts) and the
-Jinja context processor reads that cache — no per-render sync sqlite connection.
-Review finding #10."""
+"""Topbar counts are computed by the `_load_topbar_counts` page-router dependency
+(async, on the pooled connection) and stashed on `request.state`; the Jinja
+context processor reads them with zero I/O of its own. Review finding #10."""
+
+from types import SimpleNamespace
 
 import pytest
 
 from backend.app.context import CoreCtx
+from backend.app.main import _load_topbar_counts
 from backend.app.routes.pages.templates import _topbar_sync_context
 from backend.app.settings import load_settings
 
 
+def _req(*, core=None, live=None, headers=None) -> SimpleNamespace:
+    return SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(core_ctx=core, live_ctx=live)),
+        state=SimpleNamespace(),
+        headers=headers or {},
+    )
+
+
 @pytest.mark.asyncio
-async def test_build_populates_topbar_counts_and_refresh_recomputes(tmp_path, monkeypatch):
+async def test_dependency_loads_counts_onto_request_state(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     ctx = await CoreCtx.build(load_settings())
     try:
-        # build() runs an initial refresh, so the cache is populated (empty DB).
-        assert ctx.topbar_counts == {
+        req = _req(core=ctx)
+        await _load_topbar_counts(req)
+        assert req.state.topbar_counts == {
             "sync_counts": {"queued": 0, "problems": 0},
             "review_count": 0,
         }
@@ -35,37 +47,31 @@ async def test_build_populates_topbar_counts_and_refresh_recomputes(tmp_path, mo
                 }
             ],
         )
-        await ctx.refresh_topbar_counts()
-        assert ctx.topbar_counts["sync_counts"]["queued"] == 1
+        await _load_topbar_counts(req)
+        assert req.state.topbar_counts["sync_counts"]["queued"] == 1
     finally:
         await ctx.aclose()
 
 
-def test_context_processor_reads_cache_not_sqlite():
-    """The processor returns the cached counts with zero I/O; on a full-page
-    render it must not open a database connection."""
+@pytest.mark.asyncio
+async def test_dependency_skips_htmx_fragments(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    ctx = await CoreCtx.build(load_settings())
+    try:
+        req = _req(core=ctx, headers={"hx-request": "true"})
+        await _load_topbar_counts(req)
+        assert not hasattr(req.state, "topbar_counts")  # fragments don't draw the topbar
+    finally:
+        await ctx.aclose()
 
-    class _Core:
-        topbar_counts = {"sync_counts": {"queued": 3, "problems": 1}, "review_count": 2}
 
-    class _State:
-        core_ctx = _Core()
-        live_ctx = None
-
-    class _Req:
-        app = type("A", (), {"state": _State()})()
-        headers: dict[str, str] = {}
-
-    out = _topbar_sync_context(_Req())
+def test_context_processor_reads_request_state():
+    """The processor returns the request-scoped counts with zero I/O of its own."""
+    req = _req()
+    req.state.topbar_counts = {"sync_counts": {"queued": 3, "problems": 1}, "review_count": 2}
+    out = _topbar_sync_context(req)
     assert out == {"sync_counts": {"queued": 3, "problems": 1}, "offline": False, "review_count": 2}
 
 
-def test_context_processor_returns_empty_when_cache_unpopulated():
-    class _Core:
-        topbar_counts = None
-
-    class _Req:
-        app = type("A", (), {"state": type("S", (), {"core_ctx": _Core(), "live_ctx": None})()})()
-        headers: dict[str, str] = {}
-
-    assert _topbar_sync_context(_Req()) == {}
+def test_context_processor_returns_empty_when_state_unpopulated():
+    assert _topbar_sync_context(_req()) == {}

@@ -37,9 +37,8 @@ async def test_live_sessions_columns(tmp_path):
         "transcript_json",
         "summary_cs",
         "frame_count",
-        "search_calls",
         "created_at",
-    }
+    }  # search_calls dropped in 0027 (ADR 0109)
 
 
 @pytest.mark.asyncio
