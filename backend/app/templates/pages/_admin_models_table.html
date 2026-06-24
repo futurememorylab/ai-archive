@@ -2,17 +2,64 @@
 {% import "components/_ui.html" as ui %}
 <div class="admin-models">
   {% call ui.page_header('Gemini models',
-       meta='Per-model pricing (USD per 1M tokens) and default media resolution. Editing rates bumps the pricing version; historical run costs are not changed.') %}{% endcall %}
+       meta='Per-model pricing (USD per 1M tokens) and default media resolution, plus current-month spend (UTC) per model. Editing rates bumps the pricing version; historical run costs are not changed. The monthly budget is a soft cap — it warns on launch but never blocks a run.') %}
+    {% if status == 'over' %}
+      <span class="pill bad"><span class="led"></span>over budget</span>
+    {% elif status == 'warn' %}
+      <span class="pill warn"><span class="led"></span>nearing budget</span>
+    {% elif status == 'ok' %}
+      <span class="pill ok"><span class="led"></span>within budget</span>
+    {% else %}
+      <span class="muted">no budget set</span>
+    {% endif %}
+  {% endcall %}
+
+  {# ── Spend / budget as stat tiles (matches the Access tab) ── #}
+  <div class="admin-stats">
+    <div class="stat">
+      <div class="n">{{ spend_usd | usd }}</div>
+      <div class="l">This month</div>
+    </div>
+    <div class="stat">
+      <div class="n">{{ budget_usd | usd if budget_usd else '—' }}</div>
+      <div class="l">Monthly budget</div>
+    </div>
+  </div>
+
+  {% if budget_usd %}
+    <div class="usage-bar">
+      <div class="usage-bar-fill {{ status }}" style="width: {{ bar_pct }}%;"></div>
+    </div>
+  {% endif %}
+
+  {% if priced_count < total_count %}
+    <p class="muted" title="Some runs have no recorded cost yet, so this total is partial.">({{ priced_count }} of {{ total_count }} runs priced)</p>
+  {% endif %}
+
+  {# ── Budget editor ── #}
+  <form class="admin-add-row"
+        hx-post="/admin/usage/budget"
+        hx-target="#admin-enum-region"
+        hx-swap="innerHTML">
+    {{ ui.field('Monthly budget (USD)', 'budget_usd',
+                value=(budget_usd if budget_usd else ''),
+                type='number',
+                help='Empty or 0 clears the budget.',
+                input_attrs='min="0" step="0.01"') }}
+    {{ ui.button('Save budget', type='submit', variant='primary', size='sm') }}
+  </form>
+
   <table class="admin-table">
     <thead>
       <tr>
-        <th>Model</th><th>Default</th><th>Enabled</th>
+        <th>Model</th><th>This month</th><th>Runs</th><th>Default</th><th>Enabled</th>
         <th>Text/Video/Image</th><th>Audio</th><th>Cached</th><th>Output</th>
         <th>Default res</th><th></th>
       </tr>
     </thead>
     <tbody>
       {% for r in rows %}
+      {% set s = spend_by_model.get(r.model) %}
       {# No <form> inside <tr> (invalid HTML). Save is an HTMX button that submits
          the row's named inputs via hx-include="closest tr". #}
       <tr>
@@ -20,6 +67,8 @@
           {{ r.model }}
           {% if not r.has_card %}<span class="pill warn" title="No pricing rate card yet — enter rates and Save">no rate card</span>{% endif %}
         </td>
+        <td class="mono-cell">{{ s.cost_usd | usd if s and s.cost_usd else '—' }}</td>
+        <td class="mono-cell">{{ s.count if s else 0 }}</td>
         <td>{% if r.is_default %}★{% endif %}</td>
         <td>{{ ui.status_pill('on', 'ok') if r.enabled else ui.status_pill('off', '') }}</td>
         <td><input class="txt" type="number" step="0.0001" min="0"
@@ -69,6 +118,27 @@
     </tbody>
   </table>
   <p class="meta">Media resolution controls how much visual detail Gemini reads per clip (higher = more tokens, more cost). <strong>high</strong> applies to still images only — it is rejected for video/audio, which fall back to medium.</p>
+
+  {# ── By-day breakdown ── #}
+  <p class="admin-section-hdr">By day</p>
+  {% if by_day %}
+  <table class="admin-table">
+    <thead>
+      <tr><th>Day</th><th>Cost</th></tr>
+    </thead>
+    <tbody>
+      {% for d in by_day %}
+      <tr>
+        <td class="mono-cell">{{ d.day }}</td>
+        <td class="mono-cell">{{ d.cost_usd | usd if d.cost_usd else '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No runs this month.</p>
+  {% endif %}
+
   <form class="admin-add-row" hx-post="/admin/models"
         hx-target="#admin-enum-region" hx-swap="innerHTML"
         hx-on::after-request="if(event.detail.successful) this.reset()">

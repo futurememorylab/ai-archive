@@ -1,7 +1,13 @@
-"""Admin "Usage" tab: GET renders spend + budget, POST sets / clears the
-budget and re-renders, bad / negative budgets → 422, and the calibrate
-estimate carries a soft-cap warning (never blocking — the Launch button
-stays enabled).
+"""Admin spend overview (merged into the "Gemini models" tab): GET /admin/models
+renders the spend tiles + budget, POST /admin/usage/budget sets / clears the
+budget and re-renders the models partial, bad / negative budgets → 422, and the
+calibrate estimate carries a soft-cap warning (never blocking — the Launch
+button stays enabled).
+
+The standalone "Usage" tab was merged INTO the Gemini-models tab: per-model
+spend is now a table column, and the budget editor + by-day breakdown render at
+the top of /admin/models. The always-present topbar pill (/ui/usage-pill) is
+unchanged — see test_usage_pill.py.
 
 Harness mirrors test_admin_calibrate.py: an on-disk reload-and-seed
 in-process app. The usage surfaces are CoreCtx / DB-only, so they render
@@ -103,7 +109,7 @@ async def _seed_clip(db_path, clip_id: int, handle: str) -> None:
         await conn.commit()
 
 
-# ── GET /admin/usage ─────────────────────────────────────────────────────
+# ── GET /admin/models (the merged spend overview) ────────────────────────
 
 
 def test_usage_tab_renders_spend_no_budget(monkeypatch, tmp_path):
@@ -111,16 +117,21 @@ def test_usage_tab_renders_spend_no_budget(monkeypatch, tmp_path):
     'no budget set' note, no crash."""
     with _client(monkeypatch, tmp_path) as client:
         client.app.state.live_ctx = None
-        asyncio.run(_seed_telemetry(tmp_path / "app.db", cost_usd=4.00))
-        asyncio.run(_seed_telemetry(tmp_path / "app.db", cost_usd=6.00, model="gemini-pro"))
+        # Both rows on a seeded catalog model so per-model spend lands on a row.
+        asyncio.run(
+            _seed_telemetry(tmp_path / "app.db", cost_usd=4.00, model="gemini-2.5-flash-lite")
+        )
+        asyncio.run(
+            _seed_telemetry(tmp_path / "app.db", cost_usd=6.00, model="gemini-2.5-flash-lite")
+        )
 
-        r = client.get("/admin/usage")
+        r = client.get("/admin/models")
         assert r.status_code == 200
         assert "This month" in r.text  # the spend stat-tile label
-        assert "$10.00" in r.text  # 4 + 6
+        assert "$10.00" in r.text  # 4 + 6 (the month-total tile + the model row)
         assert "no budget set" in r.text
-        # by-model breakdown present
-        assert "gemini-pro" in r.text
+        # per-model spend now shows as a table column for the model row
+        assert "gemini-2.5-flash-lite" in r.text
 
 
 def test_usage_tab_partial_pricing_note(monkeypatch, tmp_path):
@@ -131,13 +142,14 @@ def test_usage_tab_partial_pricing_note(monkeypatch, tmp_path):
         asyncio.run(_seed_telemetry(tmp_path / "app.db", cost_usd=4.00))
         asyncio.run(_seed_telemetry(tmp_path / "app.db", cost_usd=None))
 
-        r = client.get("/admin/usage")
+        r = client.get("/admin/models")
         assert r.status_code == 200
         assert "1 of 2 runs priced" in r.text
 
 
 def test_usage_tab_renders_budget_and_status(monkeypatch, tmp_path):
-    """With a budget set below spend, the over-budget pill + budget figure render."""
+    """With a budget set below spend, the over-budget pill + budget figure render
+    in the merged models partial."""
     with _client(monkeypatch, tmp_path) as client:
         client.app.state.live_ctx = None
         asyncio.run(_seed_telemetry(tmp_path / "app.db", cost_usd=10.00))
@@ -147,6 +159,8 @@ def test_usage_tab_renders_budget_and_status(monkeypatch, tmp_path):
         assert "over budget" in r.text
         assert "usage-bar" in r.text
         assert "$5.00" in r.text  # the budget figure
+        # the budget POST now re-renders the merged models partial
+        assert "admin-models" in r.text
 
 
 # ── POST /admin/usage/budget ─────────────────────────────────────────────
@@ -157,14 +171,15 @@ def test_set_and_clear_budget(monkeypatch, tmp_path):
         client.app.state.live_ctx = None
         asyncio.run(_seed_telemetry(tmp_path / "app.db", cost_usd=2.00))
 
-        # Set a budget.
+        # Set a budget. The POST now re-renders the merged models partial.
         r = client.post("/admin/usage/budget", data={"budget_usd": "100"})
         assert r.status_code == 200
         assert "$100.00" in r.text
         assert "within budget" in r.text  # 2 / 100 = ok
+        assert "admin-models" in r.text  # the models partial, not a standalone usage one
 
-        # GET reflects the persisted budget.
-        r2 = client.get("/admin/usage")
+        # GET reflects the persisted budget (now on the merged models tab).
+        r2 = client.get("/admin/models")
         assert "$100.00" in r2.text
 
         # Clear it (empty string).

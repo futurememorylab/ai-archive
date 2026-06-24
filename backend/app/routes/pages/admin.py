@@ -72,8 +72,28 @@ async def admin_page(request: Request):
 
 async def _models_view(ctx) -> dict:
     """Spine = the Gemini model catalog (the editable enum); each model joined to
-    its model_config rate card (may be absent)."""
+    its model_config rate card (may be absent). The view also folds in the
+    current-month spend overview (the merged Usage panel): a budget summary, a
+    per-model spend lookup so the table can show This-month + Runs columns, and
+    the by-day breakdown. These are 3 constant queries (current_month, by_model,
+    by_day) — NOT per-model — so the page's query count does not scale with the
+    catalog size. CoreCtx / DB-only → offline-safe."""
+    now = datetime.now(UTC)
     cards = {r.model: r for r in await ctx.pricing_service.rows()}
+    summary = await ctx.usage_service.current_month(now=now)
+    by_model = await ctx.usage_service.by_model(now=now)
+    by_day = await ctx.usage_service.by_day(now=now)
+    # {model: {"cost_usd": float, "count": int}} so the template can look up each
+    # row's current-month spend by model name.
+    spend_by_model = {
+        m["model"]: {"cost_usd": m["cost_usd"], "count": m["count"]}
+        for m in by_model
+        if m.get("model")
+    }
+    # Progress-bar width: clamp to 100% (over-budget bars don't overflow the
+    # track; the .pill.bad status carries the "over" signal instead).
+    fraction = summary["fraction"]
+    bar_pct = min(100, round((fraction or 0) * 100)) if fraction is not None else 0
     rows = []
     for v in await ctx.enum_service.values(GEMINI_MODEL_KEY):
         c = cards.get(v.value)
@@ -90,7 +110,18 @@ async def _models_view(ctx) -> dict:
                 "default_media_resolution": c.default_media_resolution if c else "—",
             }
         )
-    return {"rows": rows}
+    return {
+        "rows": rows,
+        "spend_by_model": spend_by_model,
+        "spend_usd": summary["spend_usd"],
+        "budget_usd": summary["budget_usd"],
+        "fraction": fraction,
+        "bar_pct": bar_pct,
+        "status": summary["status"],
+        "priced_count": summary["priced_count"],
+        "total_count": summary["total_count"],
+        "by_day": by_day,
+    }
 
 
 async def _models_response(request: Request, ctx):
@@ -297,56 +328,19 @@ async def admin_prompts_table(request: Request):
     return await _prompts_response(request, ctx)
 
 
-async def _usage_view(ctx) -> dict:
-    """Current-month spend vs the monthly soft budget, plus by-model / by-day
-    breakdowns. CoreCtx / DB-only — offline-safe. The clock is read here at the
-    route boundary and injected into the pure UsageService."""
-    now = datetime.now(UTC)
-    summary = await ctx.usage_service.current_month(now=now)
-    by_model = await ctx.usage_service.by_model(now=now)
-    by_day = await ctx.usage_service.by_day(now=now)
-    # Progress-bar width: clamp to 100% (over-budget bars don't overflow the
-    # track; the .pill.bad status carries the "over" signal instead).
-    fraction = summary["fraction"]
-    bar_pct = min(100, round((fraction or 0) * 100)) if fraction is not None else 0
-    return {
-        "spend_usd": summary["spend_usd"],
-        "budget_usd": summary["budget_usd"],
-        "fraction": fraction,
-        "bar_pct": bar_pct,
-        "status": summary["status"],
-        "priced_count": summary["priced_count"],
-        "total_count": summary["total_count"],
-        "by_model": by_model,
-        "by_day": by_day,
-    }
-
-
-async def _usage_response(request: Request, ctx, *, status_code: int = 200):
-    return templates.TemplateResponse(
-        request, "pages/_admin_usage.html", await _usage_view(ctx), status_code=status_code
-    )
-
-
-@router.get("/admin/usage", response_class=HTMLResponse)
-async def admin_usage(request: Request):
-    require_role(request, "admin")
-    ctx = get_core_ctx(request)
-    return await _usage_response(request, ctx)
-
-
 @router.post("/admin/usage/budget", response_class=HTMLResponse)
 async def admin_set_budget(request: Request, budget_usd: str = Form("")):
     """Set or clear the monthly soft budget. Empty / 0 clears it. A
     non-numeric or negative value is rejected (422) — the budget is advisory
-    but must still be a valid number. Re-renders the usage partial so the HTMX
+    but must still be a valid number. Re-renders the merged Gemini-models
+    partial (the spend overview + budget editor now live there) so the HTMX
     swap refreshes the tab in place."""
     require_role(request, "admin")
     ctx = get_core_ctx(request)
     raw = (budget_usd or "").strip()
     if not raw:
         await ctx.usage_service.set_budget(None)
-        return await _usage_response(request, ctx)
+        return await _models_response(request, ctx)
     try:
         val = float(raw)
     except (ValueError, TypeError) as exc:
@@ -355,7 +349,7 @@ async def admin_set_budget(request: Request, budget_usd: str = Form("")):
         raise HTTPException(422, "budget must not be negative")
     # set_budget treats None / <=0 as "clear".
     await ctx.usage_service.set_budget(val if val > 0 else None)
-    return await _usage_response(request, ctx)
+    return await _models_response(request, ctx)
 
 
 @router.post("/admin/prompts/{version_id}/calibrate", response_class=HTMLResponse)

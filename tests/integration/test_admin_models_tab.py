@@ -29,6 +29,40 @@ def _reset_cards():
     pricing.set_rate_cards(pricing.SEED_RATE_CARDS)
 
 
+def _now_month_iso(day: int = 5) -> str:
+    """An occurred_at inside the current calendar month (UTC)."""
+    from datetime import UTC, datetime
+
+    now = datetime.now(UTC)
+    return now.replace(
+        day=day, hour=12, minute=0, second=0, microsecond=0
+    ).isoformat()
+
+
+async def _seed_telemetry(db_path, *, cost_usd, model, occurred_at=None):
+    import aiosqlite
+
+    from backend.app.models.telemetry import RunTelemetryRecord
+    from backend.app.repositories.run_telemetry import RunTelemetryRepo
+
+    rec = RunTelemetryRecord(
+        occurred_at=occurred_at or _now_month_iso(),
+        install_id="inst-1",
+        kind="studio",
+        model=model,
+        status="ok",
+        media_kind="video+audio",
+        media_duration_secs=10.0,
+        prompt_hash="h" * 64,
+        tokens_in=3000,
+        tokens_out=100,
+        cost_usd=cost_usd,
+    )
+    async with aiosqlite.connect(db_path) as conn:
+        await RunTelemetryRepo().insert(conn, rec)
+        await conn.commit()
+
+
 def test_lists_full_catalog_including_unpriced(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as client:
         # Add a synthetic catalog entry that has no rate card — all seed models
@@ -257,3 +291,48 @@ def test_resolution_unknown_model_404(monkeypatch, tmp_path):
             headers={"HX-Request": "true"},
         )
         assert r.status_code == 404
+
+
+# ── Merged spend overview (the former "Usage" tab) ──────────────────────────
+
+
+def test_spend_tiles_and_budget_editor_render(monkeypatch, tmp_path):
+    """The merged tab shows the spend stat tiles + the budget editor form
+    (posting to /admin/usage/budget) at the top of the models partial."""
+    with _client(monkeypatch, tmp_path) as client:
+        client.app.state.live_ctx = None
+        r = client.get("/admin/models")
+        assert r.status_code == 200
+        # spend stat tiles
+        assert "This month" in r.text
+        assert "Monthly budget" in r.text
+        # budget editor form
+        assert 'hx-post="/admin/usage/budget"' in r.text
+        # by-day section header
+        assert "By day" in r.text
+
+
+def test_model_row_shows_this_month_spend_and_runs(monkeypatch, tmp_path):
+    """A model with current-month telemetry shows its spend + run count as
+    table columns on its catalog row (replacing the standalone by-model table)."""
+    with _client(monkeypatch, tmp_path) as client:
+        client.app.state.live_ctx = None
+        # gemini-2.5-flash-lite is a seeded catalog model.
+        asyncio.run(
+            _seed_telemetry(
+                tmp_path / "app.db", cost_usd=3.00, model="gemini-2.5-flash-lite"
+            )
+        )
+        asyncio.run(
+            _seed_telemetry(
+                tmp_path / "app.db", cost_usd=4.00, model="gemini-2.5-flash-lite"
+            )
+        )
+        r = client.get("/admin/models")
+        assert r.status_code == 200
+        # This-month spend column (3 + 4) and a "This month" header
+        assert "$7.00" in r.text
+        assert "This month" in r.text
+        # column headers
+        assert "<th>This month</th>" in r.text
+        assert "<th>Runs</th>" in r.text

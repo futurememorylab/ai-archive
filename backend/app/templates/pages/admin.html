@@ -23,12 +23,6 @@
        hx-target="#admin-enum-region"
        hx-swap="innerHTML"
        hx-push-url="false">Prompts</a>
-    <a class="ctab{% if active == 'usage' %} active{% endif %}"
-       href="/admin/usage"
-       hx-get="/admin/usage"
-       hx-target="#admin-enum-region"
-       hx-swap="innerHTML"
-       hx-push-url="false">Usage</a>
     {% for d in definitions if d.key != 'gemini_generation_model' %}
       <a class="ctab{% if d.key == active_key %} active{% endif %}"
          href="/admin/enums/{{ d.key }}"

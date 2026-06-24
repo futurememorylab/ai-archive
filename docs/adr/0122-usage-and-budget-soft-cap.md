@@ -53,10 +53,20 @@ its small amount of new state lives.
    surface shows "(N of M priced)" when they differ, so a partial sum is never
    read as the complete total — consistent with the rest of the epic.
 
-4. **Admin "Usage" tab** (`/admin/usage`, CoreCtx): month spend vs budget with a
-   status pill + a capped progress bar, by-model and by-day breakdowns, and a
-   budget editor (`POST /admin/usage/budget`, 422 on a non-numeric/negative
-   value, empty/0 clears).
+4. **Admin spend overview** (CoreCtx): month spend vs budget with a status pill +
+   a capped progress bar, per-model and by-day breakdowns, and a budget editor
+   (`POST /admin/usage/budget`, 422 on a non-numeric/negative value, empty/0
+   clears).
+
+   *Amendment (2026-06-24): the spend overview was merged INTO the "Gemini
+   models" admin tab rather than living as a standalone "Usage" tab. The
+   spend tiles, budget editor, status pill, and by-day breakdown render at the
+   top of `/admin/models`; per-model current-month spend is shown as two table
+   columns (This month · Runs) on each model's catalog row instead of a separate
+   "By model" table — keeping pricing and spend for a model in one place. The
+   budget POST (`/admin/usage/budget`) now re-renders the models partial. The
+   standalone `/admin/usage` route + `_admin_usage.html` were removed. The
+   always-present topbar pill (`/ui/usage-pill`, item 5) is unchanged.*
 
 5. **Always-present topbar pill.** Current-month spend is added to the existing
    in-memory `topbar_counts` (the async pre-render refresher from the topbar
