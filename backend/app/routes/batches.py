@@ -8,7 +8,6 @@ from pydantic import BaseModel
 
 from backend.app.archive.errors import ProviderError
 from backend.app.deps import get_core_ctx, get_live_ctx
-from backend.app.routes.jobs import start_job_in_background
 from backend.app.routes.pages.clips import query_clip_page
 from backend.app.routes.pages.templates import templates
 from backend.app.services.clip_list_filters import normalize_anno, normalize_cache
@@ -154,9 +153,9 @@ class RetryFailed(BaseModel):
 
 @router.post("/batches/retry-failed")
 async def retry_failed(request: Request, body: RetryFailed):
-    """Re-run failed clips. Reuses annotator.run_job (which only re-processes
-    'error'/'pending' items); only_clip_ids narrows to a single clip when
-    given. Requires live services + a proxy resolver."""
+    """Re-run failed clips. The worker only re-processes 'error'/'pending'
+    items, so resetting the targeted failures to 'pending' is what scopes the
+    retry. Requires live services + a proxy resolver."""
     live = get_live_ctx(request)  # 503 when offline
     if live.proxy_resolver is None:
         raise HTTPException(503, "Proxy resolver offline — cannot run annotations")
@@ -173,14 +172,19 @@ async def retry_failed(request: Request, body: RetryFailed):
         if not failed:
             continue
         # Flip the targeted failures back to 'pending' synchronously, BEFORE the
-        # async job starts. The background run can take seconds to begin flipping
-        # statuses (proxy resolution over the VPN), so without this the next
-        # /batches/table refresh lands in that gap and shows a stale "Failed"
-        # until something else triggers a re-render. 'pending' makes in_flight > 0
-        # immediately → the batch reads as running. run_job re-processes
-        # 'pending'/'error' items alike, so what actually runs is unchanged.
+        # worker picks the job up. The background run can take seconds to begin
+        # flipping statuses (proxy resolution over the VPN), so without this the
+        # next /batches/table refresh lands in that gap and shows a stale
+        # "Failed" until something else triggers a re-render. 'pending' makes
+        # in_flight > 0 immediately → the batch reads as running. The worker
+        # processes ONLY 'pending' items, so resetting just these targeted
+        # failures is exactly what scopes the retry — untargeted 'error' items in
+        # the same job are left alone and are NOT re-run (fix #1).
         for it in failed:
             await core.jobs_repo.update_item_status(core.db, it.id, "pending")
-        start_job_in_background(core, live, jid, only_clip_ids=only)
+        # Flip the job back to pending so the lifespan JobRunner re-claims it.
+        # Only the items reset to 'pending' above actually re-run. Routes never
+        # execute jobs themselves (ADR 0125).
+        await core.jobs_repo.update_status(core.db, jid, "pending")
         started.append(jid)
     return {"started": started}

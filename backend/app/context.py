@@ -76,6 +76,7 @@ from backend.app.services.connection_monitor import ConnectionMonitor
 from backend.app.services.enum_service import EnumService
 from backend.app.services.events import EventBus
 from backend.app.services.idle_disconnector import IdleDisconnector
+from backend.app.services.job_runner import JobRunner
 from backend.app.services.lru_eviction import LruEviction
 from backend.app.services.media_cache import MediaCacheBackend, build_media_cache_backend
 from backend.app.services.media_prefetcher import MediaPrefetcher
@@ -91,25 +92,6 @@ from backend.app.services.write_queue import WriteQueue
 from backend.app.settings import Settings
 
 MIGRATIONS = Path(__file__).resolve().parents[1] / "migrations"
-
-
-async def drain_running_jobs(
-    running: dict[int, object], *, timeout: float = 5.0
-) -> None:
-    """Cancel and await any in-flight annotation/studio job tasks tracked in
-    CoreCtx._running_jobs, so shutdown never closes the DB under a running
-    run_job(). Mirrors MediaPrefetcher.stop(): cancel, then a bounded await.
-    Each task's CancelledError handler reconciles its job's item state, which
-    is why this must run BEFORE core.aclose() closes the connection."""
-    tasks = [
-        t
-        for t in list(running.values())
-        if isinstance(t, asyncio.Task) and not t.done()
-    ]
-    for t in tasks:
-        t.cancel()
-    if tasks:
-        await asyncio.wait(tasks, timeout=timeout)
 
 
 @dataclass
@@ -146,8 +128,6 @@ class CoreCtx:
     app_meta_repo: AppMetaRepo = field(default_factory=AppMetaRepo)
     telemetry_ctx: TelemetryCtx = field(init=False)
     event_bus: EventBus = field(default_factory=EventBus)
-
-    _running_jobs: dict[int, object] = field(default_factory=dict)
 
     write_queue: WriteQueue = field(init=False)
     publish_service: PublishService = field(init=False)
@@ -299,6 +279,7 @@ class LiveCtx:
     thumbnail_service: ThumbnailService | None = None
     media_cache_backend: MediaCacheBackend | None = None
     media_prefetcher: MediaPrefetcher | None = None
+    job_runner: JobRunner | None = None
     idle_disconnector: IdleDisconnector | None = None
     vpn_supervisor: VpnSupervisor | None = None
 
@@ -455,10 +436,6 @@ class LiveCtx:
     def restore_service(self) -> RestoreService:
         return self.core.restore_service
 
-    @property
-    def _running_jobs(self) -> dict[int, object]:
-        return self.core._running_jobs
-
     async def aclose(self) -> None:
         # Stop the live services in the documented order, then close the
         # core (DB). Order matches the pre-split teardown exactly.
@@ -468,6 +445,8 @@ class LiveCtx:
         # master-switch order (see ADR 0075).
         if self.media_prefetcher is not None:
             await self.media_prefetcher.stop()
+        if self.job_runner is not None:
+            await self.job_runner.stop()
         if self.lru_eviction is not None:
             await self.lru_eviction.stop()
         if self.sync_engine is not None:
@@ -480,10 +459,6 @@ class LiveCtx:
             await self.catdv.__aexit__(None, None, None)
         if self.vpn_supervisor is not None:
             await self.vpn_supervisor.aclose()
-        # Drain fire-and-forget annotation/studio job tasks before the DB
-        # closes under them — they are NOT request-scoped, so uvicorn's
-        # connection draining does not cover them. See ADR 0115.
-        await drain_running_jobs(self.core._running_jobs)
         await self.core.aclose()
 
 
@@ -906,6 +881,27 @@ async def _build_sync_subsystem(
             tick_interval_s=float(settings.prefetch_tick_interval_s),
         )
 
+    # The lifespan-owned annotation/studio job worker. Built whenever the live
+    # stack run_job needs is present (same gate the old route auto-start used:
+    # a real proxy_resolver). Routes only insert pending jobs; this claims and
+    # runs them. See ADR 0125.
+    from backend.app.services.annotator import build_run_one_job
+
+    job_runner: JobRunner | None = None
+    if arch.proxy_resolver is not None:
+        job_runner = JobRunner(
+            jobs_repo=core.jobs_repo,
+            run_job_fn=build_run_one_job(
+                core,
+                archive=arch.archive,
+                proxy_resolver=arch.proxy_resolver,
+                ai_store=arch.ai_store,
+                gemini=arch.gemini,
+            ),
+            db_provider=lambda: core.db,
+            tick_interval_s=float(settings.job_tick_interval_s),
+        )
+
     idle_disconnector = None
     if flags.manual and arch.catdv is not None:
         from backend.app.services.idle_disconnector import IdleDisconnector
@@ -981,6 +977,7 @@ async def _build_sync_subsystem(
         thumbnail_service=arch.thumbnail_service,
         media_cache_backend=media_cache_backend,
         media_prefetcher=media_prefetcher,
+        job_runner=job_runner,
         idle_disconnector=idle_disconnector,
         vpn_supervisor=vpn_supervisor,
     )

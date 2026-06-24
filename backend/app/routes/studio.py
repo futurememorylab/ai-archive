@@ -4,7 +4,6 @@ All under /api/studio. See docs/specs/2026-05-26-prompt-studio-design.md.
 """
 
 import asyncio
-import contextlib
 import logging
 
 import aiosqlite
@@ -24,7 +23,6 @@ from pydantic import BaseModel
 from backend.app.auth.guards import require_permission
 from backend.app.deps import get_core_ctx
 from backend.app.routes.pages.templates import templates
-from backend.app.services.annotator import run_job
 from backend.app.services.upload_cleanup import UploadCleanup
 from backend.app.uploaded_ids import is_uploaded, to_clip_id
 
@@ -310,46 +308,9 @@ async def create_run(request: Request, body: RunCreate):
         kind="studio",
     )
     await ctx.studio_runs_repo.attach_job(ctx.db, run_id, job_id=job_id)
-
-    # Auto-run only when the full live stack is wired (and the resolver is
-    # not fs-only). Offline → run row is created but left for a later run.
-    live = request.app.state.live_ctx
-    if live is not None and live.proxy_resolver is not None:
-        task = asyncio.create_task(_run_in_bg(live, job_id))
-        ctx._running_jobs[job_id] = task
-
+    # The JobRunner claims this pending job when live; offline it resumes
+    # later. Routes never execute jobs themselves (ADR 0125).
     return {"run_id": run_id, "job_id": job_id}
-
-
-async def _run_in_bg(ctx, job_id: int) -> None:
-    try:
-        await run_job(
-            db=ctx.db,
-            job_id=job_id,
-            archive=ctx.archive,
-            proxy_resolver=ctx.proxy_resolver,
-            ai_store=ctx.ai_store,
-            gemini=ctx.gemini,
-            event_bus=ctx.event_bus,
-            annotations_repo=ctx.annotations_repo,
-            review_items_repo=ctx.review_items_repo,
-            jobs_repo=ctx.jobs_repo,
-            prompts_repo=ctx.prompts_repo,
-            studio_runs_repo=ctx.studio_runs_repo,
-            uploaded_clips_repo=ctx.uploaded_clips_repo,
-            run_telemetry_repo=ctx.run_telemetry_repo,
-            telemetry_ctx=ctx.telemetry_ctx,
-            model_config_repo=ctx.model_config_repo,
-            prefetch_queue_repo=ctx.prefetch_queue_repo,
-        )
-    except asyncio.CancelledError:
-        # Cancelled mid-flight (cancel route or shutdown drain): reconcile the
-        # job's item state before propagating so nothing is left 'prompting'.
-        with contextlib.suppress(Exception):
-            await ctx.jobs_repo.cancel_job(ctx.db, job_id)
-        raise
-    finally:
-        ctx._running_jobs.pop(job_id, None)
 
 
 @router.get("/runs/{run_id}")

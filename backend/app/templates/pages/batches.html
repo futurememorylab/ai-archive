@@ -299,10 +299,10 @@
           try {
             const r = await fetch("/api/jobs", {
               method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ prompt_version_id: Number(pv), clip_ids: ids, auto_start: true, run_group: runGroup }),
+              body: JSON.stringify({ prompt_version_id: Number(pv), clip_ids: ids, run_group: runGroup }),
             });
             if (!r.ok) failures.push(kind + ": HTTP " + r.status);
-            else { const d = await r.json(); if (d.started === false) failures.push(kind + ": not started (services offline)"); }
+            // else: enqueued; the JobRunner runs it (resumes if offline) — ADR 0125.
           } catch (e) { failures.push(kind + ": " + e); }
         }
         if (failures.length) {

@@ -95,6 +95,8 @@ async def lifespan(app: FastAPI):
         await live.lru_eviction.start()
         if live.media_prefetcher is not None:
             await live.media_prefetcher.start()
+        if live.job_runner is not None:
+            await live.job_runner.start()
     try:
         yield
     finally:

@@ -99,9 +99,20 @@ when offline). **No** Optional-service fields on a single context, **no**
 LiveCtx-accessors drift guard).
 *ADRs:* 0020, 0021, 0047.
 
+**8. All background work is a lifespan-owned DB-backed claim worker; routes
+never spawn execution.** Both the cache queue (`MediaPrefetcher`) and the
+annotation/studio runner (`JobRunner`) share one shape: start / poll /
+claim-CAS / orphan-resume / stop. Routes only insert `pending` rows (and, for
+cancel, call `job_runner.cancel`); execution is owned by the lifespan, not the
+request handler. Orphaned `running` rows are **resumed** on worker start, not
+cancelled — `run_job` is idempotent, so only unfinished items re-run.
+*Enforced by:* `tests/unit/test_jobs_no_route_spawn.py`;
+`services/media_prefetcher.py` + `services/job_runner.py`.
+*ADRs:* 0086, 0114, 0125.
+
 ## Writes & connectivity
 
-**8. Archive writes go through a durable journal.** Mutations are
+**9. Archive writes go through a durable journal.** Mutations are
 enqueued as `ChangeOp` rows in `pending_operations`; `SyncEngine` drains
 them only while `ConnectionMonitor` says online. Retries honour a uniform
 ceiling and per-row backoff; appends are idempotent and accumulate
@@ -113,7 +124,7 @@ Notes/bigNotes write to top-level clip properties, not the user-fields map.
 `services/sync_engine.py`, crash-recovery in `context.build()`.
 *ADRs:* 0004, 0090, 0091, 0093, 0094, 0097, 0098.
 
-**9. Clip seat discipline (CatDV 2-seat limit → assume 1).** One in-flight
+**10. Clip seat discipline (CatDV 2-seat limit → assume 1).** One in-flight
 CatDV session; graceful `SIGTERM` shutdown runs `lifespan` →
 `ctx.aclose()` → `DELETE /session` to release the seat. `kill -9` leaks the
 `JSESSIONID`. uvicorn's graceful-shutdown is bounded so open streams can't
@@ -125,7 +136,7 @@ the bounded-timeout code paths.
 
 ## Error handling
 
-**10. Absence requires evidence; generic exceptions are transient.**
+**11. Absence requires evidence; generic exceptions are transient.**
 "This clip is gone" is decided *only* by
 `archive/errors.py::is_provider_not_found(exc)` (recognises `NotFoundError`
 and `httpx 404`). Anything else is "try later" — never marked terminal.
@@ -135,7 +146,7 @@ A filtered list skips an un-hydratable clip rather than 502-ing the page.
 *Enforced by:* convention; the `is_provider_not_found` chokepoint.
 *ADRs:* 0042, 0088.
 
-**11. User-facing error strings go through `humanise()`.**
+**12. User-facing error strings go through `humanise()`.**
 `services/errors.py::humanise(exc)` produces a non-empty, actionable
 string for any exception. Never surface `str(exc) or exc.__class__.__name__`
 to a user (it returns `'HTTPStatusError'` for the most common SDK
@@ -145,7 +156,7 @@ failures).
 
 ## Performance
 
-**12. No N+1 reads.** Any repository method taking a list of keys uses
+**13. No N+1 reads.** Any repository method taking a list of keys uses
 `repositories/_batch.py::chunked_in_clause` (`WHERE (a,b) IN (…)`,
 chunked under SQLite's param limit) instead of looping. New per-key
 hydration methods ship with a query-count test asserting the same
@@ -154,13 +165,13 @@ statement count for 10 / 100 / 1000 keys.
 `tests/integration/test_clips_page_perf.py`.
 *ADRs:* 0046.
 
-**13. No sync filesystem I/O inside `async def`.** Wrap blocking fs calls
+**14. No sync filesystem I/O inside `async def`.** Wrap blocking fs calls
 in `asyncio.to_thread(...)`. The only escape hatch is an inline
 `# sync-io-ok` pragma on a justified pre-existing case.
 *Enforced by:* `tests/unit/test_no_sync_fs_in_async.py`.
 *ADRs:* ARCHITECTURE.md / Tier-3 (CLAUDE.md).
 
-**14. Complexity can hold or fall, never climb.** A pre-commit erosion
+**15. Complexity can hold or fall, never climb.** A pre-commit erosion
 gate ratchets the structural-erosion ratio (share of complexity mass in
 CC>10 functions) against `.erosion-baseline.json` + a hard CC cap.
 Raising the baseline is a conscious, reviewed act; a refactor that pushes
@@ -171,7 +182,7 @@ past the cap blocks until then.
 
 ## Frontend
 
-**15. Reuse the shared UI library; one vocabulary per primitive.** Buttons
+**16. Reuse the shared UI library; one vocabulary per primitive.** Buttons
 (`.btn` / `ui.button`), modals (`ui.modal` + `.modal-*`), menus
 (`ui.menu`/`ui.menu_item` + `popover()`), form fields (`ui.field` /
 `ui.textarea_field`), design tokens (not raw hex), and the `fmtTimecode` /
@@ -183,7 +194,7 @@ picker. New primitive vocabulary (`*-menu`, `modal-*`) is forbidden.
 `docs/design-language.md`.
 *ADRs:* 0025, 0056, 0062, 0063.
 
-**16. Cross-component Alpine state uses `Alpine.store`, never
+**17. Cross-component Alpine state uses `Alpine.store`, never
 `_x_dataStack`.** Shared studio state lives in `static/studioStore.js`.
 There is exactly **one** HTMX↔Alpine lifecycle helper
 (`static/htmxAlpine.js`); call `window.htmxAlpine.reinit(el)` for
@@ -194,7 +205,7 @@ directives).
 `tests/unit/test_htmx_alpine_single_lifecycle.py`.
 *ADRs:* 0048, 0083, 0089.
 
-**17. User-visible errors use the toast store; never `location.reload()`
+**18. User-visible errors use the toast store; never `location.reload()`
 after CRUD.** Errors go through `Alpine.store('toast').push(msg, {level})`
 — never `alert()`, silent `.catch()`, or `console.error` for actionable
 failures. CRUD endpoints return HTMX partials on `HX-Request: true`; JS
@@ -204,7 +215,7 @@ swaps them in place and pushes a toast.
 
 ## Data model
 
-**18. Enumerations are centralised, never hardcoded.** Fixed enums (every
+**19. Enumerations are centralised, never hardcoded.** Fixed enums (every
 value has matching code) are a `Literal` in `models/` plus a registry
 entry (`editable=False`), served from code. Editable lists (open data,
 e.g. model catalogs) are registry `editable=True` + the `enum_values`
@@ -215,7 +226,7 @@ template, `<select>`, or JS array. Backend reads via
 `get_args(<Literal>)`; `enums/registry.py`.
 *ADRs:* 0080.
 
-**19. Versioned prompts are immutable once promoted.** A Prompt has many
+**20. Versioned prompts are immutable once promoted.** A Prompt has many
 Versions; at most one is `production`; `production`/`archived` versions are
 immutable (partial unique index + `PromptsRepo`). Annotation output is
 materialised as `review_items` the user accepts/rejects, not raw
@@ -229,7 +240,7 @@ unique index.
 
 ## Cloud, deploy & access
 
-**20. Cloud Run runs one instance with Litestream-persisted SQLite.**
+**21. Cloud Run runs one instance with Litestream-persisted SQLite.**
 Pinned to a single instance (`maxScale=1`); SQLite is replicated to GCS via
 Litestream (`--no-cpu-throttling` so it flushes under scale-to-zero).
 Scale-to-zero releases the CatDV seat and VPN gracefully on the way down.
@@ -238,7 +249,7 @@ Litestream checkpoint lock contention.
 *Enforced by:* convention; `docs/DEPLOY.md`.
 *ADRs:* 0066, 0077.
 
-**21. Deploys promote one image by tag.** Push to `main` → builds and
+**22. Deploys promote one image by tag.** Push to `main` → builds and
 deploys *staging* (SHA-tagged single build). A `v*` tag promotes that
 exact SHA image to prod (no rebuild; guarded that the image exists).
 Staging and prod tunnels are mutually exclusive (shared WireGuard peer
@@ -246,7 +257,7 @@ key); staging persists to its own Litestream replica path.
 *Enforced by:* the deploy workflow gated on `github.ref`.
 *ADRs:* 0103, 0104, 0105.
 
-**22. Access: IAP authenticates, the app authorises.** The IAP edge is
+**23. Access: IAP authenticates, the app authorises.** The IAP edge is
 opened to `allAuthenticatedUsers` (never `allUsers`) — it only proves
 *who* you are. The app's default-deny gate is the **sole** authorization
 authority (2 roles: admin/member, managed in the admin console). The app
@@ -254,7 +265,7 @@ never edits the Google edge and holds no credential for it.
 *Enforced by:* convention; the default-deny gate (`get_gate_state`).
 *ADRs:* 0084, 0085, 0113.
 
-**23. The cloud media cache is AI-store-only.** On GCP there is no local
+**24. The cloud media cache is AI-store-only.** On GCP there is no local
 proxy layer; the cache UI hides the local-media layer and acts on the
 AI store. Thumbnails get a durable GCS-backed cache (the same treatment as
 proxies) rather than a lazy ephemeral fetch.
@@ -263,7 +274,7 @@ proxies) rather than a lazy ephemeral fetch.
 
 ## AI integration
 
-**24. Gemini Live is browser-direct with server-minted ephemeral tokens.**
+**25. Gemini Live is browser-direct with server-minted ephemeral tokens.**
 Audio bytes go straight from the browser to Google over WSS (no backend
 bridge). The browser never sees the raw `GEMINI_API_KEY`; the server mints
 a short-lived, single-use, config-bound ephemeral token
@@ -275,7 +286,7 @@ synchronously inside the user gesture and reuse one long-lived context.
 *Enforced by:* convention; `docs/gemini-live-lessons.md`.
 *ADRs:* 0016, 0018, 0109, 0110, 0112.
 
-**25. Run telemetry is local-first.** Usage/cost is captured locally first
+**26. Run telemetry is local-first.** Usage/cost is captured locally first
 with a deferred cloud pipeline; cost surfaces use total-spend semantics
 and a shared `usd` filter. Model names are verified available in the
 target region (e.g. `europe-west3`) before being added to a dropdown.
@@ -284,7 +295,7 @@ target region (e.g. `europe-west3`) before being added to a dropdown.
 
 ## Testing
 
-**26. Walkthrough tests run the real app in-process, fully offline.**
+**27. Walkthrough tests run the real app in-process, fully offline.**
 `tests/walkthrough/` drives the FastAPI app via Playwright on port 8766 in
 its own in-process instance with an injected `FakeArchive` — never the
 `:8765` dev server, never the CatDV seat. UI changes (template, Alpine

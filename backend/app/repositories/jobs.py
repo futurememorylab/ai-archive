@@ -36,14 +36,25 @@ class JobsRepo:
         clip_ids: list[int],
         kind: str | None = None,
         run_group: str | None = None,
+        force_resolution: str | None = None,
+        record_only: bool = False,
     ) -> int:
         cur = await conn.execute(
             """
             INSERT INTO jobs
-              (prompt_version_id, status, created_at, total_clips, kind, run_group)
-            VALUES (?, 'pending', ?, ?, ?, ?)
+              (prompt_version_id, status, created_at, total_clips, kind, run_group,
+               force_resolution, record_only)
+            VALUES (?, 'pending', ?, ?, ?, ?, ?, ?)
             """,
-            (prompt_version_id, _now_iso(), len(clip_ids), kind, run_group),
+            (
+                prompt_version_id,
+                _now_iso(),
+                len(clip_ids),
+                kind,
+                run_group,
+                force_resolution,
+                1 if record_only else 0,
+            ),
         )
         job_id = cur.lastrowid
         assert job_id is not None
@@ -55,9 +66,62 @@ class JobsRepo:
         await conn.commit()
         return job_id
 
+    async def claim_next_job(self, conn: aiosqlite.Connection) -> int | None:
+        """Atomically take the oldest `pending` job and mark it `running`.
+
+        CAS, same shape as PrefetchQueueRepo.claim_next: SELECT the oldest
+        pending id, then UPDATE guarded on status='pending'. If rowcount != 1
+        another claim won the race (cannot happen with the single JobRunner,
+        but kept for correctness), so return None. Returns the claimed job id
+        or None when the queue is empty."""
+        cur = await conn.execute(
+            "SELECT id FROM jobs WHERE status = 'pending' ORDER BY created_at ASC, id ASC LIMIT 1"
+        )
+        row = await cur.fetchone()
+        if row is None:
+            return None
+        jid = int(row[0])
+        upd = await conn.execute(
+            "UPDATE jobs SET status = 'running', started_at = COALESCE(started_at, ?) "
+            " WHERE id = ? AND status = 'pending'",
+            (_now_iso(), jid),
+        )
+        await conn.commit()
+        if upd.rowcount != 1:
+            return None
+        return jid
+
+    async def requeue_orphaned_running(self, conn: aiosqlite.Connection) -> int:
+        """Resume jobs left 'running' by a killed worker. Mirrors the
+        prefetcher's requeue_orphans (running -> re-runnable), the opposite of
+        the old cancel_orphaned_running. A job runs only inside the single
+        JobRunner; at boot nothing is in-flight, so any 'running' job is an
+        orphan from a crash/restart/dev-reload. Flip it back to 'pending' so
+        the worker re-claims it, and reset its stuck transient items
+        (resolving/uploading/prompting) to 'pending' too — run_job only
+        processes 'pending' items, so a transient item would otherwise be
+        skipped on resume and hang forever. Terminal items (done/annotated/
+        review_ready/applied/rejected/error/cancelled) are left as-is, so
+        resume re-runs only unfinished work — in particular an 'error' item is
+        terminal and is not re-run on resume. Returns the count of jobs
+        requeued."""
+        placeholders = ",".join("?" * len(TRANSIENT_STATUSES))
+        await conn.execute(
+            f"UPDATE job_items SET status = 'pending' "
+            f" WHERE status IN ({placeholders}) "
+            f"   AND job_id IN (SELECT id FROM jobs WHERE status = 'running')",
+            TRANSIENT_STATUSES,
+        )
+        cur = await conn.execute(
+            "UPDATE jobs SET status = 'pending', started_at = NULL WHERE status = 'running'"
+        )
+        await conn.commit()
+        return cur.rowcount or 0
+
     async def get_job(self, conn: aiosqlite.Connection, job_id: int) -> Job:
         cur = await conn.execute(
-            "SELECT id, prompt_version_id, status, total_clips, notes, kind, run_group "
+            "SELECT id, prompt_version_id, status, total_clips, notes, kind, run_group, "
+            "force_resolution, record_only "
             "FROM jobs WHERE id = ?",
             (job_id,),
         )
@@ -72,6 +136,8 @@ class JobsRepo:
             notes=row[4],
             kind=row[5],
             run_group=row[6],
+            force_resolution=row[7],
+            record_only=bool(row[8]),
         )
 
     async def list_jobs(self, conn: aiosqlite.Connection, *, limit: int = 50) -> list[Job]:
@@ -260,9 +326,9 @@ class JobsRepo:
     async def cancel_job(self, conn: aiosqlite.Connection, job_id: int) -> None:
         """User-initiated cancel of one job. Flips the job AND all its
         still-in-flight items (pending + transient) to 'cancelled' in a single
-        commit so the state is internally consistent — same invariant as
-        cancel_orphaned_running, but scoped to one job. Terminal items (done /
-        review_ready / applied / rejected / error / cancelled) are left as-is.
+        commit so the state is internally consistent — a terminal job must not
+        keep an in-flight item. Terminal items (done / review_ready / applied /
+        rejected / error / cancelled) are left as-is.
 
         Idempotent: the in-flight task's CancelledError handler re-runs this to
         mop up an item that raced into a transient state after the cancel route
@@ -279,31 +345,48 @@ class JobsRepo:
         )
         await conn.commit()
 
-    async def cancel_orphaned_running(self, conn: aiosqlite.Connection) -> int:
-        """Cancel jobs left 'running' by a killed worker, AND their unfinished
-        items. A job runs as a fire-and-forget background task; at boot nothing
-        is in-flight (single process, by construction — same reasoning as the
-        prefetcher's orphan recovery), so any still-'running' job is an orphan
-        from a crash / restart / dev --reload. Left alone it shows as active
-        forever and the clip page keeps 'resuming' a job that will never finish.
+    async def reconcile_interrupted_job(
+        self, conn: aiosqlite.Connection, job_id: int
+    ) -> None:
+        """Reconcile a job whose worker task was interrupted by CancelledError.
 
-        Both the job AND its unfinished items flip to 'cancelled' so the state
-        is internally consistent: a terminal job must not keep a 'pending' /
-        in-flight item, or the Batches view (which counts those as in-flight)
-        would still show the batch "Running" while the clip page — keyed on the
-        job status — shows it stopped. Already-finished items (done /
-        review_ready / error) are left as-is. Returns the count of jobs
-        cancelled."""
-        await conn.execute(
-            "UPDATE job_items SET status = 'cancelled' "
-            " WHERE status IN ('pending', 'resolving', 'uploading', 'prompting') "
-            "   AND job_id IN (SELECT id FROM jobs WHERE status = 'running')"
-        )
+        Two interrupts look identical to the worker; the job's DB status tells
+        them apart (the cancel route flips the job to 'cancelled' BEFORE
+        interrupting the task):
+        - status == 'cancelled' → user cancel: mop up any item that raced into a
+          transient state after the route's first sweep (idempotent cancel_job).
+        - status == 'running' → shutdown drain (stop()): leave the job untouched
+          so the next boot's requeue_orphaned_running resumes it. Cancelling here
+          would make the job terminal and defeat resume on every graceful
+          restart/deploy (fix #2, ADR 0125)."""
+        job = await self.get_job(conn, job_id)
+        if job.status == "cancelled":
+            await self.cancel_job(conn, job_id)
+
+    async def fail_job(
+        self, conn: aiosqlite.Connection, job_id: int, *, error: str = "job failed"
+    ) -> None:
+        """Terminal-fail a job that errored at the job level rather than per-item
+        — e.g. its prompt version was deleted, so run_job raised before it could
+        finalise. Flips the job to 'failed' and any still-in-flight item (pending
+        + transient) to 'error', in one commit. Guarded on status='running' so a
+        racing cancel/complete is never clobbered. Without this the job lingers
+        'running' forever (a phantom the clip page keeps 'resuming') and is
+        re-claimed and re-crashed on every restart (fix #3, ADR 0125)."""
         cur = await conn.execute(
-            "UPDATE jobs SET status = 'cancelled' WHERE status = 'running'"
+            "UPDATE jobs SET status = 'failed', finished_at = ? "
+            " WHERE id = ? AND status = 'running'",
+            (_now_iso(), job_id),
         )
+        if cur.rowcount:
+            await conn.execute(
+                "UPDATE job_items SET status = 'error', "
+                "  error_message = COALESCE(error_message, ?) "
+                " WHERE job_id = ? "
+                "   AND status IN ('pending', 'resolving', 'uploading', 'prompting')",
+                (error, job_id),
+            )
         await conn.commit()
-        return cur.rowcount or 0
 
     # --- Batches hub aggregation (read-only, offline-safe) -------------
     # A "batch" = a group of jobs sharing a run_group, OR a singleton job with

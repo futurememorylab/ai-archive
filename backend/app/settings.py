@@ -135,6 +135,9 @@ class Settings(BaseSettings):
     # media prefetch queue
     prefetch_tick_interval_s: int = 2
 
+    # annotation/studio job runner (services/job_runner.py)
+    job_tick_interval_s: float = 0.75
+
     @field_validator("instance_id")
     @classmethod
     def _instance_id_is_slug(cls, v: str) -> str:

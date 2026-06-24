@@ -133,50 +133,47 @@ def test_retry_failed_503_when_offline(monkeypatch, tmp_path):
         assert r.status_code == 503
 
 
-def test_retry_failed_starts_only_jobs_with_failures(monkeypatch, tmp_path):
+def test_retry_failed_requeues_only_jobs_with_failures(monkeypatch, tmp_path):
+    """Retry is a pure DB writer now (ADR 0125): it flips the job back to
+    'pending' so the lifespan JobRunner re-claims it. Only jobs that actually
+    have failed items are requeued."""
     with _make_client(monkeypatch, tmp_path) as client:
-        jid = asyncio.run(_seed_batch(client.app.state.core_ctx))
+        ctx = client.app.state.core_ctx
+        jid = asyncio.run(_seed_batch(ctx))
         install_live_ctx(client.app, proxy_resolver=MagicMock())  # online + resolver present
 
-        started: list[int] = []
-        import backend.app.routes.batches as batches_mod
-
-        monkeypatch.setattr(
-            batches_mod, "start_job_in_background",
-            lambda core, live, job_id, **kw: started.append(job_id),
-        )
         r = client.post("/batches/retry-failed", json={"job_ids": [jid]})
         assert r.status_code == 200
-        assert started == [jid]
         assert r.json()["started"] == [jid]
 
+        async def _job_status():
+            return (await JobsRepo().get_job(ctx.db, jid)).status
 
-def test_retry_failed_flips_failed_items_to_pending_synchronously(monkeypatch, tmp_path):
-    """Retry must reset the failed items to 'pending' before returning, so the
-    batch immediately reads as running (in_flight > 0) instead of a stale
-    'Failed' while the async run spins up. start_job_in_background is stubbed so
-    only the synchronous pre-reset is observed."""
+        assert asyncio.run(_job_status()) == "pending"  # requeued for the worker
+
+
+def test_retry_failed_flips_failed_items_and_job_to_pending(monkeypatch, tmp_path):
+    """Retry must reset the failed items to 'pending' (so the batch immediately
+    reads as running, in_flight > 0, instead of a stale 'Failed') AND flip the
+    job to 'pending' so the JobRunner re-claims it. run_job only re-processes
+    pending/error items, so only the reset clip actually re-runs."""
     with _make_client(monkeypatch, tmp_path) as client:
         ctx = client.app.state.core_ctx
         jid = asyncio.run(_seed_batch(ctx))
         install_live_ctx(client.app, proxy_resolver=MagicMock())
 
-        import backend.app.routes.batches as batches_mod
-
-        monkeypatch.setattr(
-            batches_mod, "start_job_in_background",
-            lambda core, live, job_id, **kw: None,  # don't actually run
-        )
         r = client.post("/batches/retry-failed", json={"job_ids": [jid]})
         assert r.status_code == 200
 
-        async def _statuses():
+        async def _state():
             jobs = JobsRepo()
-            return {it.catdv_clip_id: it.status for it in await jobs.list_items(ctx.db, jid)}
+            statuses = {it.catdv_clip_id: it.status for it in await jobs.list_items(ctx.db, jid)}
+            return statuses, (await jobs.get_job(ctx.db, jid)).status
 
-        statuses = asyncio.run(_statuses())
+        statuses, job_status = asyncio.run(_state())
         assert statuses[102] == "pending"        # was 'error' → reset
         assert statuses[101] == "review_ready"   # untouched
+        assert job_status == "pending"           # job requeued for the worker
 
 
 def _picker_clip(clip_id=12041, name="Abramcukova_Anna_09", file_path=None):

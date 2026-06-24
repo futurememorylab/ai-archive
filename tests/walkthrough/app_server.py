@@ -9,6 +9,7 @@ loop (so the aiosqlite connection is used from the loop that owns it).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import importlib
 import os
 import shutil
@@ -53,6 +54,7 @@ class WalkthroughApp:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._app = None
         self._thumb: Path | None = None
+        self._runner = None
 
     def start(self) -> None:
         for k, v in _OFFLINE_ENV.items():
@@ -141,6 +143,30 @@ class WalkthroughApp:
             db_provider=lambda: core.db,
         )
 
+        # Routes are pure DB writers now (ADR 0125): a job only runs if the
+        # lifespan-owned JobRunner claims it. The offline boot built none (no
+        # real proxy_resolver), so wire one over our injected fakes and start it
+        # on the server's own loop (it owns the aiosqlite connection). Without
+        # this the batch / cancel scenarios would enqueue a job that never runs.
+        from backend.app.services.annotator import build_run_one_job
+        from backend.app.services.job_runner import JobRunner
+
+        self._runner = JobRunner(
+            jobs_repo=core.jobs_repo,
+            run_job_fn=build_run_one_job(
+                core,
+                archive=live.archive,
+                proxy_resolver=live.proxy_resolver,
+                ai_store=live.ai_store,
+                gemini=live.gemini,
+            ),
+            db_provider=lambda: core.db,
+            tick_interval_s=0.05,
+        )
+        live.job_runner = self._runner
+        assert self._loop is not None
+        asyncio.run_coroutine_threadsafe(self._runner.start(), self._loop).result(timeout=5)
+
     def _wait_until_started(self, timeout: float = 30.0) -> None:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -151,6 +177,11 @@ class WalkthroughApp:
         raise RuntimeError("walkthrough app failed to start within timeout")
 
     def stop(self) -> None:
+        if self._runner is not None and self._loop is not None:
+            with contextlib.suppress(Exception):
+                asyncio.run_coroutine_threadsafe(
+                    self._runner.stop(), self._loop
+                ).result(timeout=5)
         if self._server is not None:
             self._server.should_exit = True
         if self._thread is not None:

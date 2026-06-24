@@ -13,6 +13,7 @@ from pathlib import Path
 from backend.app.models.telemetry import TelemetryCtx
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.jobs import JobsRepo
+from backend.app.repositories.model_config import ModelConfigRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.run_telemetry import RunTelemetryRepo
@@ -60,6 +61,7 @@ async def _run(db, clip_id: int, gemini: FakeGemini) -> tuple[JobsRepo, int]:
         uploaded_clips_repo=UploadedClipsRepo(),
         run_telemetry_repo=RunTelemetryRepo(),
         telemetry_ctx=_TELEMETRY_CTX,
+        model_config_repo=ModelConfigRepo(),
     )
     return jobs_repo, job_id
 

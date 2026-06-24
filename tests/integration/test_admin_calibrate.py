@@ -9,11 +9,11 @@ low+medium = 4 jobs, no high). The launch route reports the job count via
 the X-Calibration-Jobs response header.
 
 Harness: the same on-disk reload-and-seed pattern as
-test_admin_prompts_tab.py. The launch route needs a LiveCtx — the
-in-process test app boots offline (app.state.live_ctx is None), so the
-live-required tests set a minimal stub on app.state.live_ctx AND
-monkeypatch start_job_in_background to a no-op recorder. That cleanly
-exercises the orchestration without running real background tasks.
+test_admin_prompts_tab.py. Under the JobRunner model (ADR 0125) the launch
+route is a pure DB writer — it persists each sweep job (force_resolution +
+record_only) for the lifespan worker to run. The launch route needs a LiveCtx
+only to pass its offline guard, so the live-required tests set a minimal stub
+on app.state.live_ctx and then assert on the persisted jobs in the DB.
 """
 
 import asyncio
@@ -83,16 +83,38 @@ async def _seed_clip(db_path, clip_id: int, handle: str) -> None:
 
 
 class _LiveStub:
-    """Minimal stand-in for LiveCtx — start_job_in_background is
-    monkeypatched, so the stub is never dereferenced beyond the
-    `is None` check in the route."""
+    """Minimal stand-in for LiveCtx — the route only needs it to pass the
+    `is None` offline guard. Under the JobRunner model (ADR 0125) the route is
+    a pure DB writer: it persists each sweep job (with force_resolution +
+    record_only) and the lifespan worker runs it; nothing is spawned here."""
 
 
-def _recorder(calls: list[dict]):
-    def _rec(core, live, job_id, **kw):
-        calls.append({"job_id": job_id, **kw})
+async def _calibration_jobs(db_path) -> list[dict]:
+    """The calibration jobs the route persisted, each as
+    {job_id, force_resolution, record_only, clip_ids}."""
+    import aiosqlite
 
-    return _rec
+    from backend.app.repositories.jobs import JobsRepo
+
+    repo = JobsRepo()
+    async with aiosqlite.connect(db_path) as conn:
+        cur = await conn.execute(
+            "SELECT id FROM jobs WHERE run_group LIKE 'calibration:%' ORDER BY id"
+        )
+        job_ids = [row[0] for row in await cur.fetchall()]
+        out = []
+        for jid in job_ids:
+            job = await repo.get_job(conn, jid)
+            items = await repo.list_items(conn, jid)
+            out.append(
+                {
+                    "job_id": jid,
+                    "force_resolution": job.force_resolution,
+                    "record_only": job.record_only,
+                    "clip_ids": sorted(i.catdv_clip_id for i in items),
+                }
+            )
+        return out
 
 
 def test_calibrate_offline_503(monkeypatch, tmp_path):
@@ -133,21 +155,17 @@ def test_calibrate_one_clip_succeeds(monkeypatch, tmp_path):
         asyncio.run(_seed_clip(tmp_path / "app.db", 11, "photo.jpg"))
         client.app.state.live_ctx = _LiveStub()
 
-        calls: list[dict] = []
-        from backend.app.routes.pages import admin as admin_mod
-
-        monkeypatch.setattr(admin_mod, "start_job_in_background", _recorder(calls))
-
         r = client.post(
             f"/admin/prompts/{vid}/calibrate",
             data={"clip_ids": ["11"]},
         )
         assert r.status_code == 200
         assert r.headers["X-Calibration-Jobs"] == "6"
-        assert len(calls) == 6
-        resolutions = sorted(c["force_resolution"] for c in calls)
+        jobs = asyncio.run(_calibration_jobs(tmp_path / "app.db"))
+        assert len(jobs) == 6
+        resolutions = sorted(c["force_resolution"] for c in jobs)
         assert resolutions == ["high", "high", "low", "low", "medium", "medium"]
-        assert all(c["record_only"] is True for c in calls)
+        assert all(c["record_only"] is True for c in jobs)
 
 
 def test_calibrate_video_clips_skip_high(monkeypatch, tmp_path):
@@ -159,40 +177,21 @@ def test_calibrate_video_clips_skip_high(monkeypatch, tmp_path):
         asyncio.run(_seed_clip(tmp_path / "app.db", 22, "shotB.mov"))
         client.app.state.live_ctx = _LiveStub()
 
-        calls: list[dict] = []
-        from backend.app.routes.pages import admin as admin_mod
-
-        monkeypatch.setattr(admin_mod, "start_job_in_background", _recorder(calls))
-
         r = client.post(
             f"/admin/prompts/{vid}/calibrate",
             data={"clip_ids": ["11", "22"]},
         )
         assert r.status_code == 200
         assert r.headers["X-Calibration-Jobs"] == "4"
-        assert len(calls) == 4
-        resolutions = sorted(c["force_resolution"] for c in calls)
+        jobs = asyncio.run(_calibration_jobs(tmp_path / "app.db"))
+        assert len(jobs) == 4
+        resolutions = sorted(c["force_resolution"] for c in jobs)
         assert resolutions == ["low", "low", "medium", "medium"]
         # Critically: a HIGH job must NEVER contain a video clip → no high at all.
-        assert all(c["force_resolution"] != "high" for c in calls)
-
+        assert all(c["force_resolution"] != "high" for c in jobs)
         # Every created job holds both eligible (video) clips.
-        from backend.app.repositories.jobs import JobsRepo
-        import aiosqlite
-
-        async def _check():
-            async with aiosqlite.connect(tmp_path / "app.db") as conn:
-                cur = await conn.execute(
-                    "SELECT id FROM jobs WHERE run_group LIKE 'calibration:%'"
-                )
-                job_ids = [row[0] for row in await cur.fetchall()]
-                assert len(job_ids) == 4
-                repo = JobsRepo()
-                for jid in job_ids:
-                    items = await repo.list_items(conn, jid)
-                    assert sorted(i.catdv_clip_id for i in items) == [11, 22]
-
-        asyncio.run(_check())
+        for c in jobs:
+            assert c["clip_ids"] == [11, 22]
 
 
 def test_calibrate_mixed_high_only_images(monkeypatch, tmp_path):
@@ -204,11 +203,6 @@ def test_calibrate_mixed_high_only_images(monkeypatch, tmp_path):
         asyncio.run(_seed_clip(tmp_path / "app.db", 22, "shot.mov"))  # video
         client.app.state.live_ctx = _LiveStub()
 
-        calls: list[dict] = []
-        from backend.app.routes.pages import admin as admin_mod
-
-        monkeypatch.setattr(admin_mod, "start_job_in_background", _recorder(calls))
-
         r = client.post(
             f"/admin/prompts/{vid}/calibrate",
             data={"clip_ids": ["11", "22"]},
@@ -216,26 +210,13 @@ def test_calibrate_mixed_high_only_images(monkeypatch, tmp_path):
         assert r.status_code == 200
         assert r.headers["X-Calibration-Jobs"] == "6"
 
-        # Map each recorded launch to its persisted job items.
-        from backend.app.repositories.jobs import JobsRepo
-        import aiosqlite
-
-        async def _items_by_job():
-            async with aiosqlite.connect(tmp_path / "app.db") as conn:
-                repo = JobsRepo()
-                out = {}
-                for c in calls:
-                    items = await repo.list_items(conn, c["job_id"])
-                    out[c["job_id"]] = sorted(i.catdv_clip_id for i in items)
-                return out
-
-        items = asyncio.run(_items_by_job())
-        for c in calls:
-            clip_ids = items[c["job_id"]]
+        # Each persisted job's force_resolution determines which clips it holds.
+        jobs = asyncio.run(_calibration_jobs(tmp_path / "app.db"))
+        for c in jobs:
             if c["force_resolution"] == "high":
-                assert clip_ids == [11]  # image only — never the video clip
+                assert c["clip_ids"] == [11]  # image only — never the video clip
             else:
-                assert clip_ids == [11, 22]
+                assert c["clip_ids"] == [11, 22]
 
 
 def test_calibrate_rejects_too_many_clips(monkeypatch, tmp_path):

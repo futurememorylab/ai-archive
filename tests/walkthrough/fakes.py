@@ -265,7 +265,7 @@ class FakeGemini:
         race. Returns False on timeout."""
         return self._entered.wait(timeout)
 
-    def annotate(self, *, file_ref, prompt, schema, model):
+    def annotate(self, *, file_ref, prompt, schema, model, media_resolution=None):
         self._entered.set()
         # No-op when the gate is already set (default); blocks while held.
         self._gate.wait(timeout=_HOLD_TIMEOUT_SECS)

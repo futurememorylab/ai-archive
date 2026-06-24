@@ -1,14 +1,14 @@
-"""POST /api/jobs/{id}/cancel must actually interrupt the in-flight task.
+"""POST /api/jobs/{id}/cancel must flip DB state AND interrupt the in-flight
+job promptly.
 
-Before this fix the route only flipped the DB row to 'cancelled'; the
-fire-and-forget asyncio task tracked in CoreCtx._running_jobs was never
-cancelled, so an in-flight item (notably the long Gemini call) ran to
-completion and cancel latency was a whole clip. The route now also cancels
-the tracked task, and reconciles job + item state in one commit.
+Under the JobRunner claim-worker model (ADR 0125) the route is a pure DB
+writer for cancel: it flips the job + its in-flight items to 'cancelled'
+(offline-safe) and then, when a live worker is running this exact job, calls
+`live.job_runner.cancel(job_id)` so the long Gemini call is interrupted instead
+of running to completion. Cancel latency is no longer a whole clip.
 """
-from pathlib import Path
-
 import asyncio
+from pathlib import Path
 
 import aiosqlite
 import pytest
@@ -18,6 +18,7 @@ from backend.app.main import app
 from backend.app.migrations_runner import apply_migrations
 from backend.app.repositories.jobs import JobsRepo
 from backend.app.repositories.prompts import PromptsRepo
+from backend.app.services.job_runner import JobRunner
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "backend" / "migrations"
 
@@ -30,7 +31,6 @@ async def client_db(tmp_path):
     class _Ctx:
         db = conn
         jobs_repo = JobsRepo()
-        _running_jobs: dict[int, object] = {}
         settings = type("S", (), {"auth_backend": "dev", "dev_user_email": "dev@localhost"})()
 
     ctx = _Ctx()
@@ -43,7 +43,7 @@ async def client_db(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_cancel_route_cancels_inflight_task_and_reconciles(client_db):
+async def test_cancel_route_flips_db_and_interrupts_inflight_job(client_db):
     ac, conn, ctx = client_db
     _pid, vid = await PromptsRepo().create_with_initial_version(
         conn, name="p", description=None, body="b",
@@ -60,14 +60,21 @@ async def test_cancel_route_cancels_inflight_task_and_reconciles(client_db):
         started.set()
         await asyncio.sleep(3600)
 
-    ctx._running_jobs[job_id] = asyncio.create_task(_inflight())
+    inflight = asyncio.create_task(_inflight())
     await started.wait()
+
+    # A live JobRunner currently running this exact job.
+    runner = JobRunner(
+        jobs_repo=ctx.jobs_repo, run_job_fn=lambda jid: None, db_provider=lambda: conn
+    )
+    runner._current = (job_id, inflight)
+    app.state.live_ctx = type("Live", (), {"job_runner": runner})()
 
     resp = await ac.post(f"/api/jobs/{job_id}/cancel")
     assert resp.status_code == 200
     assert resp.json()["status"] == "cancelled"
 
     await asyncio.sleep(0)  # let the cancellation propagate
-    assert ctx._running_jobs[job_id].cancelled()
+    assert inflight.cancelled()
     assert (await ctx.jobs_repo.get_job(conn, job_id)).status == "cancelled"
     assert (await ctx.jobs_repo.list_items(conn, job_id))[0].status == "cancelled"
