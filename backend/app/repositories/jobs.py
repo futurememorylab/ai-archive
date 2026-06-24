@@ -23,7 +23,7 @@ _PHASE_STATUSES: dict[str, tuple[str, ...]] = {
     "caching": ("resolving", "uploading"),
     "annotating": ("prompting",),
     "error": ("error",),
-    "done": ("annotated", "review_ready", "applied", "rejected"),
+    "done": ("annotated", "review_ready", "applied", "rejected", "cancelled"),
 }
 
 
