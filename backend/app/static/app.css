@@ -111,6 +111,9 @@ a { color: inherit; text-decoration: none; }
   font-size: 10.5px; letter-spacing: 0.04em; color: var(--text-2); text-transform: uppercase;
   white-space: nowrap; flex-shrink: 0; }
 .pill .led { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
+.pill-x { background: none; border: 0; color: inherit; cursor: pointer; padding: 0 0 0 3px;
+  font-size: 11px; line-height: 1; opacity: 0.65; }
+.pill-x:hover { opacity: 1; }
 .pill.ok { color: var(--good); border-color: color-mix(in oklab, var(--good) 35%, transparent); }
 .pill.ok .led { background: var(--good); box-shadow: 0 0 6px var(--good); }
 .pill.accent { color: var(--accent); border-color: color-mix(in oklab, var(--accent) 35%, transparent); }

@@ -64,7 +64,7 @@
               <div>
                 <span class="pill">{{ res }}</span>
                 {{ s.count }} run{{ 's' if s.count != 1 else '' }}
-                · est {{ s.est_cost_usd | usd }} → actual {{ s.cost_usd | usd }}{% if s.priced_count < s.count %}<span class="muted" title="Only {{ s.priced_count }} of {{ s.count }} runs have a recorded cost; this actual is partial.">*</span>{% endif %}
+                · est {{ s.est_cost_usd | usd if s.est_cost_usd else '—' }} → actual {{ s.cost_usd | usd if s.cost_usd else '—' }}{% if s.priced_count < s.count %}<span class="muted" title="Only {{ s.priced_count }} of {{ s.count }} runs have a recorded cost; this actual is partial.">*</span>{% endif %}
                 · {{ s.confidence }}
               </div>
             {% endfor %}

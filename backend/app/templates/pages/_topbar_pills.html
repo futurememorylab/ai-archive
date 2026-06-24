@@ -19,6 +19,8 @@
     <span class="pill accent" x-show="calibratingCount() > 0" x-cloak
           title="Calibration jobs are running">
       <span class="led"></span>Calibrating… <span x-text="calibratingCount()"></span>
+      <button type="button" class="pill-x" @click="cancelCalibration()"
+              title="Cancel calibration sweep">✕</button>
     </span>
   </span>
   {# Stable container so the "N to review" count refreshes in place (poll +

@@ -122,9 +122,23 @@ function jobsIndicator() {
     dismiss() { this.failed = false; this.jobs = {}; },
 
     calibratingCount() {
-      return Object.values(this.jobs).filter(
-        (j) => (j.run_group || "").startsWith("calibration:")
-      ).length;
+      return this._calibrationIds().length;
+    },
+
+    _calibrationIds() {
+      return Object.keys(this.jobs)
+        .map(Number)
+        .filter((id) => this._isCalibration(id));
+    },
+
+    // Cancel an in-flight calibration sweep from the topbar pill. Calibration
+    // jobs are excluded from activeIds(), so cancel() (the batch X) never
+    // touches them — this is their dedicated stop affordance.
+    async cancelCalibration() {
+      for (const id of this._calibrationIds()) {
+        await fetch(`/api/jobs/${id}/cancel`, { method: "POST" });
+      }
+      await this.refresh();
     },
   };
 }
