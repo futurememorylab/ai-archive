@@ -25,7 +25,7 @@
           :class="{ active: tab === 'markers' }"
           :aria-selected="tab === 'markers'"
           @click="tab = 'markers'">
-    Markers <span class="count">{{ panels.markers|length }}</span>
+    Description <span class="count">{{ panels.markers|length }}</span>
   </button>
   {% endif %}
   <button type="button" class="anno-tab" role="tab"
@@ -54,6 +54,23 @@
 
 {% if not _is_image %}
 <div class="anno-section" role="tabpanel" x-show="tab === 'markers'" x-cloak>
+  {% if has_notes %}
+  {# Read-only echo of the Notes tab, shown first in Description. The editable
+     copy (keep / edit) stays in the Notes tab to avoid duplicate item controls. #}
+  <div class="anno-summary">
+    <h4 class="anno-summary-label">Summary</h4>
+    {% if _show_note_items %}
+      {% for n in panels.note_items %}
+        <p class="note">{{ n.text }}</p>
+      {% else %}
+        <p class="muted">No summary.</p>
+      {% endfor %}
+    {% else %}
+      {% if panels.notes %}<p class="note">{{ panels.notes }}</p>{% endif %}
+      {% if panels.big_notes %}<p class="note big">{{ panels.big_notes }}</p>{% endif %}
+    {% endif %}
+  </div>
+  {% endif %}
   {% for m in panels.markers %}
     <article class="marker"
              {% if follow_player %}data-anno-marker
@@ -61,7 +78,7 @@
              :class="{ active: isMarkerActive({in_secs: {{ m.in_secs }}, out_secs: {{ m.out_secs if m.out_secs is not none else 'null' }} }) }"{% endif %}
              @click="seek({{ m.in_secs }})">
       <header>
-        <span class="kind marker-kind">MARKER</span>
+        <span class="kind marker-kind">{{ 'Scene' if m.out_secs is not none else 'Shot' }}</span>
         {% if m.category %}<span class="cat">{{ m.category }}</span>{% endif %}
         <span class="tc mono">
           {{ smpte(m.in_secs, panels.fps or clip.fps) }}{% if m.out_secs is not none %} – {{ smpte(m.out_secs, panels.fps or clip.fps) }}{% endif %}

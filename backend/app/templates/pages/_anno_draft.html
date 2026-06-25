@@ -35,18 +35,27 @@
 </div>
 
 <div class="anno-tabs" role="tablist" x-show="totalCount() > 0 || deletedTotal() > 0">
-  <button type="button" class="anno-tab" :class="{ active: tab === 'markers' }" @click="tab = 'markers'">Markers <span class="count" x-text="draftMarkers.length"></span></button>
+  <button type="button" class="anno-tab" :class="{ active: tab === 'markers' }" @click="tab = 'markers'">Description <span class="count" x-text="draftMarkers.length"></span></button>
   <button type="button" class="anno-tab" :class="{ active: tab === 'fields' }" @click="tab = 'fields'">Fields <span class="count" x-text="draftFields.length"></span></button>
   <button type="button" class="anno-tab" :class="{ active: tab === 'notes' }" @click="tab = 'notes'">Notes <span class="count" x-text="draftNotes.length"></span></button>
 </div>
 
 <div class="anno-section" x-show="tab === 'markers'" x-cloak>
+  {# Read-only echo of the Notes tab, shown first in Description. Editing /
+     delete stays in the Notes tab to avoid duplicate item controls. #}
+  <div class="anno-summary" x-show="draftNotes.length > 0">
+    <h4 class="anno-summary-label">Summary</h4>
+    <template x-for="n in draftNotes" :key="n.item_id">
+      <p class="note" x-text="n.text"></p>
+    </template>
+  </div>
   <template x-for="m in draftMarkers" :key="m.item_id">
     <div class="ri-card ri-marker" data-anno-marker
          :data-in="m.in_secs" :data-out="m.out_secs ?? ''"
          :class="{ editing: editingItemId === m.item_id, active: isMarkerActive(m) }"
          @click="seek(m.in_secs)" title="Jump to marker and play">
       <div class="ri-card-top">
+        <span class="kind marker-kind" x-text="m.out_secs != null ? 'Scene' : 'Shot'"></span>
         <span class="cat" x-show="m.category" x-text="m.category"></span>
         <span class="ri-tc" x-text="tc(m.in_secs) + (m.out_secs != null ? ' – ' + tc(m.out_secs) : '')"></span>
       </div>
@@ -140,3 +149,4 @@
     </template>
   </div>
 </div>
+
