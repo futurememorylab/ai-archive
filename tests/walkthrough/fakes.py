@@ -86,12 +86,33 @@ def build_clip(video_path: Path, duration_secs: float = 8.0, fps: float = 25.0) 
         name=CLIP_NAME,
         duration_secs=duration_secs,
         fps=fps,
+        # Four markers on whole-second frame boundaries (2 scenes with in+out, 2
+        # point "shots" with no out) so the player's prev/next-marker transport
+        # has something to step through — drives the player walkthrough scenarios.
         markers=(
             Marker(
-                name="intro",
+                name="Opening titles",
                 in_=Timecode(secs=0.0, fps=fps, frm=0),
-                out=Timecode(secs=2.0, fps=fps, frm=50),
+                out=Timecode(secs=1.5, fps=fps, frm=38),
                 description="Opening title card",
+            ),
+            Marker(
+                name="Establishing shot",
+                in_=Timecode(secs=2.0, fps=fps, frm=50),
+                out=None,
+                description="Wide establishing shot",
+            ),
+            Marker(
+                name="Interview",
+                in_=Timecode(secs=4.0, fps=fps, frm=100),
+                out=Timecode(secs=5.5, fps=fps, frm=138),
+                description="Talking-head interview",
+            ),
+            Marker(
+                name="Closing shot",
+                in_=Timecode(secs=6.0, fps=fps, frm=150),
+                out=None,
+                description="Closing cutaway",
             ),
         ),
         fields={DECADE_IDENT: FieldValue(identifier=DECADE_IDENT, value=PUBLISHED_DECADE)},
