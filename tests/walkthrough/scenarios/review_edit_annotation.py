@@ -24,6 +24,16 @@ def run(wt):
         "Switch to the draft view",
         lambda p: p.locator('button[data-scope="draft"]').click(),
     )
+    # The draft opens on the Description tab (renamed from "Markers"): it shows a
+    # read-only Summary echo of the notes first, then each proposal badged as a
+    # "Shot" (single timestamp) or "Scene" (in + out). Visiting it documents the
+    # relabelled tab and the Shot/Scene badges.
+    wt.step(
+        "Review the Shot/Scene proposals in the Description tab",
+        lambda p: p.locator("#draft-aside")
+        .get_by_role("button", name="Description")
+        .click(),
+    )
     # From here on every locator is scoped to the draft panel (#draft-aside),
     # the Alpine-driven review surface rendered by _anno_draft.html. The draft
     # panel has its own tabs / edit / save controls (distinct from the
@@ -36,7 +46,7 @@ def run(wt):
         .click(),
     )
     # The field card is a plain .ri-card (marker cards carry .ri-marker and live
-    # on the hidden Markers tab, so exclude them); :visible pins us to the
+    # on the hidden Description tab, so exclude them); :visible pins us to the
     # field actually on screen under the Fields tab.
     wt.step(
         "Edit the proposed Decade field",
