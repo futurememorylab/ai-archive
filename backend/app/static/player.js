@@ -277,13 +277,28 @@ document.addEventListener("alpine:init", () => {
       const list = this.activeMarkers();
       if (!list.length) return;
       const EPS = 0.001;
-      const ahead = direction > 0;
-      const pick =
-        (ahead
-          ? list.find(m => m.in_secs > this.current + EPS)
-          : [...list].reverse().find(m => m.in_secs < this.current - EPS))
-        ?? list[ahead ? 0 : list.length - 1];
-      this.seek(pick.in_secs);
+      let target;
+      if (direction > 0) {
+        target = list.find(m => m.in_secs > this.current + EPS) ?? list[list.length - 1];
+      } else {
+        // CD-player "prev": the marker we're sitting on (last whose in_secs <=
+        // current). If we're within RECUE seconds of its start, step to the one
+        // before it instead — otherwise an auto-jump's sub-second playback drift
+        // would keep re-selecting the same marker and the previous one would be
+        // unreachable. Past RECUE, prev re-cues the current marker (point
+        // markers have a 40ms window, so time-not-window is what's reliable).
+        const RECUE = 2.0;
+        let anchor = -1;
+        for (let i = 0; i < list.length; i++) {
+          if (list[i].in_secs <= this.current + EPS) anchor = i; else break;
+        }
+        let idx = anchor;
+        if (anchor < 0) idx = 0;
+        else if (this.current - list[anchor].in_secs < RECUE) idx = anchor - 1;
+        target = list[Math.max(0, idx)];
+      }
+      // Keep playing if we were playing; don't autoplay from a stopped state.
+      this.seek(target.in_secs, { play: this.playing });
     },
 
     prevMarker() { this._jumpMarker(-1); },
