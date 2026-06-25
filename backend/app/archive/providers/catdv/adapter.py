@@ -4,6 +4,8 @@ offline; translates CatDV REST errors into ProviderError variants."""
 
 from __future__ import annotations
 
+import logging
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -34,6 +36,8 @@ from backend.app.services.catdv_client import (
     CatdvClient,
     CatdvError,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class CatdvArchiveAdapter:
@@ -120,6 +124,10 @@ class CatdvArchiveAdapter:
         if cached is not None:
             return cached
 
+        # Diagnostic timing (ADR-pending list-refresh slowness): this branch
+        # only runs on a cache MISS — i.e. exactly the `?refresh=1` path — so
+        # the logging is cheap and isolates network vs. write-through cost.
+        _t_net0 = time.monotonic()
         try:
             data = await self._client.list_clips(
                 int(catalog),
@@ -136,6 +144,7 @@ class CatdvArchiveAdapter:
             if msg.startswith("NOT_FOUND") or "not found" in msg.lower():
                 raise NotFoundError(msg) from exc
             raise FatalProviderError(msg) from exc
+        _net_s = time.monotonic() - _t_net0
 
         now = self._clock()
         raw_items = data.get("items") if isinstance(data, dict) else []
@@ -147,8 +156,21 @@ class CatdvArchiveAdapter:
             offset=query.offset,
             limit=query.limit,
         )
+        _t_w0 = time.monotonic()
         await self._write_list_through(catalog, query, page, fetched_at=now)
         await self._write_poster_cache(raw_items or [])
+        _write_s = time.monotonic() - _t_w0
+        logger.info(
+            "list_clips live fetch: catalog=%s offset=%d limit=%d items=%d "
+            "total=%d net=%.3fs write_through=%.3fs",
+            catalog,
+            query.offset,
+            query.limit,
+            len(items),
+            total,
+            _net_s,
+            _write_s,
+        )
         return page
 
     async def _list_clips_from_cache(self, catalog: str, query: ClipQuery) -> ClipPage:

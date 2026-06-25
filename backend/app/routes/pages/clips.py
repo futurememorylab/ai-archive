@@ -1,6 +1,7 @@
 """Clip-facing HTML pages: list, detail, draft partial, and live-history."""
 
 import logging
+import time
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Request
@@ -281,8 +282,14 @@ async def clips_list(
     # upstream changed. Wipe every cached page for this catalog so the next
     # list_clips() hits CatDV and we don't serve a stale neighbour page.
     if refresh:
+        _t_inv0 = time.monotonic()
         await ctx.clip_list_cache_repo.invalidate_catalog(
             ctx.db, provider_id="catdv", catalog_id=catalog_id
+        )
+        logger.info(
+            "refresh: invalidate_catalog took %.3fs (catalog=%s)",
+            time.monotonic() - _t_inv0,
+            catalog_id,
         )
 
     # In host-local mode `cache=local` matches every clip — collapse to "any"
@@ -290,6 +297,7 @@ async def clips_list(
     # filter status (resolve_filters short-circuits to empty downstream).
     effective_cache_f = "any" if (host_local_proxies and cache_f == "local") else cache_f
 
+    _t_q0 = time.monotonic()
     try:
         clip_rows, total, cache_fetched_at = await query_clip_page(
             ctx,
@@ -304,6 +312,13 @@ async def clips_list(
         )
     except ProviderError as exc:
         raise HTTPException(502, f"archive error: {exc}") from exc
+    if refresh:
+        logger.info(
+            "refresh: query_clip_page took %.3fs (catalog=%s total=%d)",
+            time.monotonic() - _t_q0,
+            catalog_id,
+            total,
+        )
 
     jobs = await ctx.jobs_repo.list_jobs(ctx.db, limit=50)
     prev_offset, next_offset = page_offsets(offset, limit, total)
