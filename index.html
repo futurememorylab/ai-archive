@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Archive — Describe the whole archive overnight</title>
+<meta name="description" content="AI metadata enrichment for media archives. Run annotation jobs against the clips already in your media system and write descriptions, summaries, and Shot/Scene markers back into the fields your team already uses.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'%3E%3Crect x='2' y='2' width='24' height='24' rx='6' fill='none' stroke='%23edf060' stroke-width='3'/%3E%3Crect x='9' y='9' width='10' height='10' rx='2' fill='%23edf060'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/archive.css">
+<style>
+  html,body{margin:0;background:var(--ink);}
+  *{box-sizing:border-box;}
+  @keyframes barPulse { 0%,100%{opacity:.82} 50%{opacity:1} }
+  .lk { color: var(--fg-on-dark-2); font: 500 13.5px/1 var(--font-sans); cursor: pointer; transition: color .14s; text-decoration:none; }
+  .lk:hover { color: var(--fg-on-dark-1); }
+  .ftl { color: var(--fg-on-dark-3); font: 400 13.5px/2 var(--font-sans); cursor: pointer; transition: color .14s; text-decoration:none; display:block; }
+  .ftl:hover { color: var(--fg-on-dark-1); }
+  .pbtn { transition: background .14s, transform .12s; }
+  .pbtn:hover { background: var(--signal-bright) !important; }
+  .pbtn:active { transform: scale(.98); }
+  .gbtn { transition: border-color .14s, background .14s; }
+  .gbtn:hover { border-color: rgba(255,255,255,.5) !important; }
+  .dbtn { transition: background .14s; }
+  .dbtn:hover { background: var(--n-800) !important; }
+  .card-lift { transition: transform .18s var(--ease-out), box-shadow .18s var(--ease-out), border-color .14s; }
+  .card-lift:hover { transform: translateY(-3px); box-shadow: var(--sh-3); border-color: var(--line-strong); }
+  @keyframes fadeUp { from { opacity:0; transform: translateY(16px); } to { opacity:1; transform:none; } }
+  [data-reveal]{ opacity:1; transform:none; }
+  [data-reveal].anim{ animation: fadeUp .6s var(--ease-out) both; }
+  @keyframes timelinePulse { 0%,100%{opacity:.7} 50%{opacity:1} }
+  @media (max-width: 860px){
+    .grid-2, .grid-3 { grid-template-columns: 1fr !important; }
+    h1 { font-size: 46px !important; }
+    .nav-links { display:none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div style="font-family:var(--font-sans);color:var(--fg-on-dark-1);background:var(--ink)">
+
+  <!-- ============ NAV ============ -->
+  <div style="position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:26px;height:66px;padding:0 40px;border-bottom:1px solid var(--line-dark);background:rgba(13,13,13,.86);backdrop-filter:blur(10px)">
+    <a href="#top" style="display:flex;align-items:center;gap:10px;text-decoration:none">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" style="display:block"><rect x="2" y="2" width="24" height="24" rx="6" stroke="#edf060" stroke-width="2.5"/><rect x="9.5" y="9.5" width="9" height="9" rx="2" fill="#edf060"/></svg>
+      <span style="font:800 17px/1 var(--font-display);letter-spacing:-0.01em;color:var(--signal)">archive</span>
+    </a>
+    <div class="nav-links" style="display:flex;gap:24px;margin-left:8px">
+      <a class="lk" href="#scale">Product</a><a class="lk" href="#resilient">Resilience</a><a class="lk" href="#studio">Prompt Studio</a><a class="lk" href="#deploy">Deploy</a>
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:18px">
+      <a class="lk nav-links" href="#deploy">Read the deploy guide</a>
+      <a class="pbtn" href="#cta" style="font:600 13.5px/1 var(--font-sans);background:var(--signal);color:var(--signal-ink);border:1px solid var(--signal-deep);border-radius:5px;padding:11px 17px;text-decoration:none">Book a walkthrough</a>
+    </div>
+  </div>
+
+  <!-- ============ HERO ============ -->
+  <div id="top" style="padding:84px 40px 40px;text-align:center;max-width:1180px;margin:0 auto">
+    <div style="font:var(--meta);letter-spacing:var(--track-meta);text-transform:uppercase;color:var(--signal);margin-bottom:22px">AI metadata layer for media archives</div>
+    <h1 style="font:700 72px/1.0 var(--font-display);letter-spacing:-0.025em;margin:0 auto 24px;max-width:15ch">Describe the whole archive overnight.</h1>
+    <p style="font:400 20px/1.55 var(--font-sans);color:var(--fg-on-dark-2);max-width:62ch;margin:0 auto 32px">AI Archive runs annotation jobs against the clips already in your media system — and writes descriptions, summaries, and Shot/Scene markers straight back into the fields your team already uses. No export. No migration.</p>
+    <div style="display:flex;gap:14px;justify-content:center;align-items:center;flex-wrap:wrap">
+      <a class="pbtn" href="#cta" style="font:600 15px/1 var(--font-sans);background:var(--signal);color:var(--signal-ink);border:1px solid var(--signal-deep);border-radius:5px;padding:15px 26px;text-decoration:none">Book a walkthrough on your archive →</a>
+      <a class="gbtn" href="#run" style="font:600 15px/1 var(--font-sans);background:transparent;color:var(--fg-on-dark-1);border:1px solid rgba(255,255,255,.25);border-radius:5px;padding:15px 26px;text-decoration:none;display:inline-flex;gap:9px;align-items:center"><span style="display:inline-flex;width:19px;height:19px;border-radius:50%;background:var(--signal);color:var(--signal-ink);align-items:center;justify-content:center;font-size:9px;padding-left:2px">▶</span> Watch a 45s run</a>
+    </div>
+    <div style="font:var(--meta);letter-spacing:var(--track-meta);text-transform:uppercase;color:var(--fg-on-dark-3);margin-top:20px">For post houses · broadcasters · archive teams</div>
+  </div>
+
+  <!-- ============ RUN MOCK (CSS — review AI draft annotations, offline) ============ -->
+  <div id="run" data-reveal style="padding:12px 40px 80px">
+    <div style="max-width:1180px;margin:0 auto;border:1px solid var(--line-dark);border-radius:10px;overflow:hidden;background:#0b0d10;box-shadow:var(--sh-pop)">
+      <!-- window bar -->
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;background:#14181d;border-bottom:1px solid rgba(255,255,255,.07)">
+        <span style="font:500 11px/1 var(--font-mono);color:#b6bcc6">clip 881603 · Strike vote, union hall</span>
+        <span style="margin-left:auto;display:inline-flex;align-items:center;gap:7px;font:500 10px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:#ff7676"><span style="width:7px;height:7px;border-radius:50%;background:#ff5d5d;display:inline-block"></span>offline — archive unreachable</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1.55fr 1fr" class="grid-2">
+        <!-- video pane -->
+        <div style="position:relative;border-right:1px solid rgba(255,255,255,.07)">
+          <div style="aspect-ratio:16/9;background:radial-gradient(120% 120% at 30% 20%, #1c2733 0%, #0c1014 70%);position:relative;display:flex;align-items:center;justify-content:center">
+            <div style="position:absolute;inset:0;background:linear-gradient(115deg, rgba(90,200,250,.06), rgba(237,240,96,.05))"></div>
+            <span style="position:relative;display:inline-flex;width:58px;height:58px;border-radius:50%;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);align-items:center;justify-content:center;color:#fff;font-size:20px;padding-left:4px;backdrop-filter:blur(2px)">▶</span>
+            <span style="position:absolute;left:14px;top:12px;font:500 10px/1 var(--font-mono);letter-spacing:.1em;color:rgba(255,255,255,.7)">PROXY · H.264</span>
+            <span style="position:absolute;right:14px;bottom:48px;font:600 12px/1 var(--font-mono);color:#fff;background:rgba(0,0,0,.45);padding:4px 7px;border-radius:4px">00:41:18 / 02:07:50</span>
+          </div>
+          <!-- timeline -->
+          <div style="padding:14px 16px;background:#0f1216">
+            <div style="position:relative;height:6px;border-radius:3px;background:#1d232a;overflow:visible">
+              <div style="position:absolute;left:0;top:0;height:100%;width:32%;background:#5ac8fa;border-radius:3px;opacity:.85"></div>
+              <span style="position:absolute;left:32%;top:-3px;width:2px;height:12px;background:#fff;border-radius:1px"></span>
+              <span title="Podium — call to vote" style="position:absolute;left:32%;top:-9px;width:9px;height:9px;border-radius:2px;background:var(--signal);transform:translateX(-50%);animation:timelinePulse 2.2s var(--ease) infinite"></span>
+              <span style="position:absolute;left:58%;top:-9px;width:9px;height:9px;border-radius:2px;background:var(--signal);transform:translateX(-50%)"></span>
+              <span style="position:absolute;left:80%;top:-9px;width:9px;height:9px;border-radius:2px;background:var(--signal);transform:translateX(-50%)"></span>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:9px;font:400 10px/1 var(--font-mono);color:#7e8693"><span>Shot/Scene markers</span><span>3 proposed</span></div>
+          </div>
+        </div>
+        <!-- draft annotation pane -->
+        <div style="padding:16px 17px;background:rgba(90,200,250,.03)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:13px">
+            <span style="font:600 9px/1 var(--font-mono);letter-spacing:.12em;text-transform:uppercase;color:#5ac8fa">AI draft · review &amp; apply</span>
+            <span style="margin-left:auto;font:600 9px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:#f5a623;background:rgba(245,166,35,.12);padding:3px 6px;border-radius:3px">7 proposals</span>
+          </div>
+          <div style="font:600 9px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:#7e8693;margin-bottom:5px">Description</div>
+          <div style="font:400 11.5px/1.5 var(--font-sans);color:#e6e9ee;margin-bottom:14px">Wide interior, union hall — a vote is called from the podium; hands raise across a packed room. Hand-painted strike banners line the back wall.</div>
+          <div style="font:600 9px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:#7e8693;margin-bottom:6px">Keywords</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px">
+            <span style="font:500 10px/1 var(--font-sans);background:#1d232a;border:1px solid rgba(255,255,255,.12);color:#b6bcc6;padding:3px 7px;border-radius:4px">labor union</span>
+            <span style="font:500 10px/1 var(--font-sans);background:#1d232a;border:1px solid rgba(255,255,255,.12);color:#b6bcc6;padding:3px 7px;border-radius:4px">strike vote</span>
+            <span style="font:500 10px/1 var(--font-sans);background:#1d232a;border:1px solid rgba(255,255,255,.12);color:#b6bcc6;padding:3px 7px;border-radius:4px">crowd</span>
+            <span style="font:500 10px/1 var(--font-sans);background:#1d232a;border:1px solid rgba(255,255,255,.12);color:#b6bcc6;padding:3px 7px;border-radius:4px">podium</span>
+          </div>
+          <div style="font:600 9px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:#7e8693;margin-bottom:6px">Markers</div>
+          <div style="font:400 10.5px/1.7 var(--font-mono);color:#b6bcc6"><span style="color:#5ac8fa">00:41:18</span> Podium — call to vote<br><span style="color:#5ac8fa">01:12:04</span> Hands raised — wide<br><span style="color:#5ac8fa">01:39:22</span> Banners — back wall</div>
+          <div style="margin-top:15px;display:flex;gap:8px">
+            <span style="font:600 11px/1 var(--font-sans);background:var(--signal);color:var(--signal-ink);padding:9px 13px;border-radius:5px">Apply all →</span>
+            <span style="font:600 11px/1 var(--font-sans);background:transparent;color:#b6bcc6;border:1px solid rgba(255,255,255,.18);padding:9px 13px;border-radius:5px">Edit draft</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:18px;flex-wrap:wrap;margin-top:16px">
+      <span style="display:inline-flex;align-items:center;gap:7px;font:500 11px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--fg-on-dark-2)"><span style="width:7px;height:7px;border-radius:50%;background:#5ac8fa;display:inline-block"></span>7 AI proposals in draft</span>
+      <span style="display:inline-flex;align-items:center;gap:7px;font:500 11px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--fg-on-dark-2)"><span style="width:7px;height:7px;border-radius:50%;background:#ff5d5d;display:inline-block"></span>working offline — archive unreachable</span>
+      <span style="display:inline-flex;align-items:center;gap:7px;font:500 11px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--fg-on-dark-2)"><span style="width:7px;height:7px;border-radius:50%;background:var(--signal);display:inline-block"></span>$0.099 this clip · review &amp; apply all</span>
+    </div>
+  </div>
+
+  <!-- ============ 3 MESSAGES (paper) ============ -->
+  <div style="background:var(--paper);color:var(--ink);padding:84px 40px">
+    <div data-reveal style="max-width:1080px;margin:0 auto">
+      <div style="font:var(--meta);letter-spacing:var(--track-meta);text-transform:uppercase;color:var(--fg-3);margin-bottom:44px">Three things to know</div>
+      <div class="grid-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:40px">
+        <div>
+          <div style="font:700 32px/1 var(--font-mono);color:var(--signal-deep);margin-bottom:16px">01</div>
+          <h3 style="font:600 23px/1.2 var(--font-display);letter-spacing:-0.01em;margin:0 0 12px">It works with what you have.</h3>
+          <p style="font:400 15px/1.6 var(--font-sans);color:var(--fg-2);margin:0">Reads clips, custom fields, and markers from your media system; writes annotations, summaries, and markers back into the same schema. No parallel database your team has to learn.</p>
+        </div>
+        <div>
+          <div style="font:700 32px/1 var(--font-mono);color:var(--signal-deep);margin-bottom:16px">02</div>
+          <h3 style="font:600 23px/1.2 var(--font-display);letter-spacing:-0.01em;margin:0 0 12px">It never loses your work.</h3>
+          <p style="font:400 15px/1.6 var(--font-sans);color:var(--fg-2);margin:0">Offline-first by design. The app stays navigable, cached clips stay playable, and every edit queues in a durable journal that flushes when you reconnect.</p>
+        </div>
+        <div>
+          <div style="font:700 32px/1 var(--font-mono);color:var(--signal-deep);margin-bottom:16px">03</div>
+          <h3 style="font:600 23px/1.2 var(--font-display);letter-spacing:-0.01em;margin:0 0 12px">You stay in control of the AI.</h3>
+          <p style="font:400 15px/1.6 var(--font-sans);color:var(--fg-2);margin:0">Prompt Studio versions prompts, builds clip sets, and compares outputs before anything touches the archive. Per-run cost is predicted up front.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ FEATURE: scale (paper, copy left / mock right) ============ -->
+  <div id="scale" style="background:var(--paper);color:var(--ink);padding:0 40px 80px">
+    <div data-reveal class="grid-2" style="max-width:1080px;margin:0 auto;display:grid;grid-template-columns:0.9fr 1.1fr;gap:52px;align-items:center">
+      <div>
+        <div style="font:var(--meta);letter-spacing:var(--track-meta);text-transform:uppercase;color:var(--fg-3);margin-bottom:14px">AI annotation at archive scale</div>
+        <h2 style="font:600 32px/1.1 var(--font-display);letter-spacing:-0.01em;margin:0 0 14px">Describe thousands of clips unattended.</h2>
+        <p style="font:400 16px/1.6 var(--font-sans);color:var(--fg-2);margin:0 0 18px">Batch and bulk annotate with a background job runner that resumes on restart. Kick off a pass at end of day; come back to a described archive.</p>
+        <ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:9px">
+          <li style="display:flex;gap:10px;font:400 14.5px/1.4 var(--font-sans)"><span style="color:var(--signal-deep)">✓</span> Batch + bulk annotate</li>
+          <li style="display:flex;gap:10px;font:400 14.5px/1.4 var(--font-sans)"><span style="color:var(--signal-deep)">✓</span> Background job runner, resume-on-restart</li>
+          <li style="display:flex;gap:10px;font:400 14.5px/1.4 var(--font-sans)"><span style="color:var(--signal-deep)">✓</span> Run telemetry &amp; progress you can watch</li>
+        </ul>
+      </div>
+      <!-- job queue mock -->
+      <div class="card-lift" style="border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#0b0d10;box-shadow:var(--sh-2)">
+        <div style="display:flex;align-items:center;gap:8px;padding:11px 15px;background:#14181d;border-bottom:1px solid rgba(255,255,255,.07)">
+          <span style="font:500 11px/1 var(--font-mono);color:#b6bcc6">Jobs · background runner</span>
+          <span style="margin-left:auto;font:500 10px/1 var(--font-mono);color:#3ddc84;display:inline-flex;align-items:center;gap:5px"><span style="width:6px;height:6px;border-radius:50%;background:#3ddc84"></span>RUNNING</span>
+        </div>
+        <div style="padding:6px 0">
+          <div style="display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="font:500 11px/1 var(--font-mono);color:#5ac8fa;width:70px">RUN 0042</span><div style="flex:1;height:5px;border-radius:3px;background:#1d232a;overflow:hidden"><div style="width:64%;height:100%;background:#f5a623"></div></div><span style="font:400 10.5px/1 var(--font-mono);color:#7e8693;width:78px;text-align:right">817 / 1,284</span></div>
+          <div style="display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="font:500 11px/1 var(--font-mono);color:#7e8693;width:70px">RUN 0041</span><div style="flex:1;height:5px;border-radius:3px;background:#1d232a;overflow:hidden"><div style="width:100%;height:100%;background:#3ddc84"></div></div><span style="font:400 10.5px/1 var(--font-mono);color:#3ddc84;width:78px;text-align:right">done · 540</span></div>
+          <div style="display:flex;align-items:center;gap:12px;padding:11px 16px"><span style="font:500 11px/1 var(--font-mono);color:#7e8693;width:70px">RUN 0040</span><div style="flex:1;height:5px;border-radius:3px;background:#1d232a;overflow:hidden"><div style="width:100%;height:100%;background:#3ddc84"></div></div><span style="font:400 10.5px/1 var(--font-mono);color:#3ddc84;width:78px;text-align:right">done · 96</span></div>
+        </div>
+        <div style="padding:11px 16px;background:#0f1216;border-top:1px solid rgba(255,255,255,.07);font:400 10.5px/1 var(--font-mono);color:#7e8693">queue 467 · conf 0.94 median · interrupted runs resume automatically</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ FEATURE: prompt studio (ink, mock left / copy right) ============ -->
+  <div id="studio" style="background:var(--ink-2);color:var(--fg-on-dark-1);padding:84px 40px">
+    <div data-reveal class="grid-2" style="max-width:1080px;margin:0 auto;display:grid;grid-template-columns:1.1fr 0.9fr;gap:52px;align-items:center">
+      <div class="card-lift" style="border:1px solid var(--line-dark);border-radius:10px;overflow:hidden;background:#0b0d10;box-shadow:var(--sh-pop)">
+        <div style="display:flex;align-items:center;gap:8px;padding:11px 15px;background:#14181d;border-bottom:1px solid rgba(255,255,255,.07)">
+          <span style="font:500 11px/1 var(--font-mono);color:#b6bcc6">Prompt Studio · compare</span>
+          <span style="margin-left:auto;display:flex;gap:12px;font:500 10px/1 var(--font-mono);color:#7e8693"><span style="display:inline-flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:2px;background:#5ac8fa"></span>v3 prod</span><span style="display:inline-flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:2px;background:#f5a623"></span>v4 draft</span></span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr">
+          <div style="padding:15px 16px;border-right:1px solid rgba(255,255,255,.07)">
+            <div style="display:flex;align-items:center;gap:7px;margin-bottom:11px"><span style="font:600 10px/1 var(--font-mono);color:#5ac8fa">v3</span><span style="font:500 9px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:#3ddc84;background:rgba(61,220,132,.12);padding:3px 6px;border-radius:3px">production</span></div>
+            <div style="font:400 11.5px/1.5 var(--font-sans);color:#b6bcc6">Vote called from podium; crowd raises hands. Banners visible.</div>
+            <div style="margin-top:12px;font:400 10.5px/1.4 var(--font-mono);color:#7e8693">3 keywords · 2 markers</div>
+          </div>
+          <div style="padding:15px 16px;background:rgba(245,166,35,.05)">
+            <div style="display:flex;align-items:center;gap:7px;margin-bottom:11px"><span style="font:600 10px/1 var(--font-mono);color:#f5a623">v4</span><span style="font:500 9px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:#f5a623;background:rgba(245,166,35,.12);padding:3px 6px;border-radius:3px">draft</span></div>
+            <div style="font:400 11.5px/1.5 var(--font-sans);color:#e6e9ee">Wide interior, union hall. A vote is called from the podium; hands raise across a packed room. Hand-painted strike banners line the back wall.</div>
+            <div style="margin-top:12px;font:400 10.5px/1.4 var(--font-mono);color:#f5a623">4 keywords · 3 markers · +speaker</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:11px 16px;background:#0f1216;border-top:1px solid rgba(255,255,255,.07)">
+          <span style="font:500 10px/1 var(--font-mono);color:#7e8693">switch version</span>
+          <span style="font:500 10px/1 var(--font-mono);color:#b6bcc6;background:#1d232a;border:1px solid rgba(255,255,255,.12);padding:5px 9px;border-radius:4px">v3</span>
+          <span style="font:500 10px/1 var(--font-mono);color:#0b0d10;background:#f5a623;padding:5px 9px;border-radius:4px">v4</span>
+          <span style="margin-left:auto;font:500 10px/1 var(--font-mono);color:#7e8693">same clip · faithful switch</span>
+        </div>
+      </div>
+      <div>
+        <div style="font:var(--meta);letter-spacing:var(--track-meta);text-transform:uppercase;color:var(--signal);margin-bottom:14px">Prompt Studio</div>
+        <h2 style="font:600 32px/1.1 var(--font-display);letter-spacing:-0.01em;margin:0 0 14px">Tune the prompt. Then commit.</h2>
+        <p style="font:400 16px/1.6 var(--font-sans);color:var(--fg-on-dark-2);margin:0 0 18px">Version prompts, build clip sets, run them, and compare outputs side-by-side on the same clip. Switch versions faithfully — annotation is a reviewed, deliberate action, not a black box.</p>
+        <a class="gbtn" href="#cta" style="font:600 14px/1 var(--font-sans);background:transparent;color:var(--fg-on-dark-1);border:1px solid rgba(255,255,255,.25);border-radius:5px;padding:12px 18px;text-decoration:none">See Prompt Studio →</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ FEATURE: writes back (paper, copy left / before-after right) ============ -->
+  <div style="background:var(--paper);color:var(--ink);padding:84px 40px">
+    <div data-reveal class="grid-2" style="max-width:1080px;margin:0 auto;display:grid;grid-template-columns:0.85fr 1.15fr;gap:52px;align-items:center">
+      <div>
+        <div style="font:var(--meta);letter-spacing:var(--track-meta);text-transform:uppercase;color:var(--fg-3);margin-bottom:14px">Writes back into your archive</div>
+        <h2 style="font:600 32px/1.1 var(--font-display);letter-spacing:-0.01em;margin:0 0 14px">Empty fields in. Described clip out.</h2>
+        <p style="font:400 16px/1.6 var(--font-sans);color:var(--fg-2);margin:0 0 18px">Annotations, summaries, Shot/Scene marker labels and notes write into your existing custom-field schema — idempotent, append-safe, conflict-rebasing. Review the draft, then commit.</p>
+        <ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:9px">
+          <li style="display:flex;gap:10px;font:400 14.5px/1.4 var(--font-sans)"><span style="color:var(--signal-deep)">✓</span> Your custom fields, your schema</li>
+          <li style="display:flex;gap:10px;font:400 14.5px/1.4 var(--font-sans)"><span style="color:var(--signal-deep)">✓</span> Published ↔ Draft before you commit</li>
+          <li style="display:flex;gap:10px;font:400 14.5px/1.4 var(--font-sans)"><span style="color:var(--signal-deep)">✓</span> Re-runs rebase, never clobber</li>
+        </ul>
+      </div>
+      <div class="card-lift" style="border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#0b0d10;box-shadow:var(--sh-3)">
+        <div style="display:flex;align-items:center;gap:8px;padding:11px 15px;background:#14181d;border-bottom:1px solid rgba(255,255,255,.07)">
+          <span style="font:500 11px/1 var(--font-mono);color:#b6bcc6">clip 881603 · Strike vote, union hall</span>
+          <span style="margin-left:auto;display:inline-flex;border:1px solid rgba(255,255,255,.12);border-radius:6px;overflow:hidden;font:600 10px/1 var(--font-mono);letter-spacing:.06em">
+            <span style="padding:6px 9px;color:#7e8693">PUBLISHED</span>
+            <span style="padding:6px 9px;background:#5ac8fa;color:#0b0d10">DRAFT</span>
+          </span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr">
+          <div style="padding:15px 16px;border-right:1px solid rgba(255,255,255,.07)">
+            <div style="font:600 9px/1 var(--font-mono);letter-spacing:.12em;text-transform:uppercase;color:#7e8693;margin-bottom:11px">Before · archive</div>
+            <div style="font:600 9px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:#545b66;margin-bottom:5px">Description</div>
+            <div style="height:10px;border-radius:3px;background:#181d23;margin-bottom:6px"></div>
+            <div style="height:10px;width:60%;border-radius:3px;background:#181d23;margin-bottom:15px"></div>
+            <div style="font:600 9px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:#545b66;margin-bottom:5px">Keywords</div>
+            <div style="display:flex;gap:5px;margin-bottom:15px"><span style="width:34px;height:15px;border-radius:4px;background:#181d23"></span><span style="width:48px;height:15px;border-radius:4px;background:#181d23"></span></div>
+            <div style="font:600 9px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:#545b66;margin-bottom:5px">Markers</div>
+            <div style="font:400 11px/1.4 var(--font-mono);color:#545b66">— none —</div>
+          </div>
+          <div style="padding:15px 16px;background:rgba(90,200,250,.04)">
+            <div style="font:600 9px/1 var(--font-mono);letter-spacing:.12em;text-transform:uppercase;color:#5ac8fa;margin-bottom:11px">After · AI draft</div>
+            <div style="font:600 9px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:#7e8693;margin-bottom:5px">Description</div>
+            <div style="font:400 11px/1.45 var(--font-sans);color:#e6e9ee;margin-bottom:13px">Wide interior, union hall — a vote is called from the podium; hands raise across a packed room.</div>
+            <div style="font:600 9px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:#7e8693;margin-bottom:5px">Keywords</div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:13px"><span style="font:500 10px/1 var(--font-sans);background:#1d232a;border:1px solid rgba(255,255,255,.12);color:#b6bcc6;padding:3px 7px;border-radius:4px">labor union</span><span style="font:500 10px/1 var(--font-sans);background:#1d232a;border:1px solid rgba(255,255,255,.12);color:#b6bcc6;padding:3px 7px;border-radius:4px">strike vote</span><span style="font:500 10px/1 var(--font-sans);background:#1d232a;border:1px solid rgba(255,255,255,.12);color:#b6bcc6;padding:3px 7px;border-radius:4px">crowd</span></div>
+            <div style="font:600 9px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:#7e8693;margin-bottom:5px">Markers</div>
+            <div style="font:400 10.5px/1.5 var(--font-mono);color:#b6bcc6"><span style="color:#5ac8fa">00:41:18</span> Podium — call to vote</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ COST BAND (lime) ============ -->
+  <div style="background:var(--signal);color:var(--signal-ink);padding:64px 40px">
+    <div data-reveal class="grid-2" style="max-width:1080px;margin:0 auto;display:grid;grid-template-columns:1fr auto;gap:44px;align-items:center">
+      <div>
+        <div style="font:var(--meta);letter-spacing:var(--track-meta);text-transform:uppercase;color:var(--signal-ink);opacity:.65;margin-bottom:12px">Cost before you run</div>
+        <h2 style="font:700 42px/1.04 var(--font-display);letter-spacing:-0.02em;margin:0 0 12px">No surprise AI bills.</h2>
+        <p style="font:400 16px/1.55 var(--font-sans);color:var(--signal-ink);opacity:.78;margin:0;max-width:48ch">Per-run cost is predicted up front, resolution-aware, before a single clip is touched. Run telemetry tracks predicted vs. actual, so the bill is never a surprise.</p>
+      </div>
+      <div style="background:rgba(0,0,0,.06);border:1px solid rgba(0,0,0,.16);border-radius:10px;padding:22px 26px;min-width:270px">
+        <div style="font:600 10px/1 var(--font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--signal-ink);opacity:.6;margin-bottom:6px">Estimated run</div>
+        <div style="font:700 48px/1 var(--font-mono);letter-spacing:-0.02em;color:var(--signal-ink)">$23.11</div>
+        <div style="margin-top:12px;font:400 12px/1.7 var(--font-mono);color:var(--signal-ink);opacity:.72">1,284 clips · 1080p proxy<br>≈ $0.018 / clip · predicted</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ RESILIENCE (ink) ============ -->
+  <div id="resilient" style="background:var(--ink);color:var(--fg-on-dark-1);padding:84px 40px">
+    <div data-reveal style="max-width:1080px;margin:0 auto">
+      <div style="max-width:60ch;margin-bottom:44px">
+        <div style="font:var(--meta);letter-spacing:var(--track-meta);text-transform:uppercase;color:var(--signal);margin-bottom:16px">Offline-first &amp; resilient</div>
+        <h2 style="font:700 40px/1.06 var(--font-display);letter-spacing:-0.02em;margin:0 0 14px">It never loses your work — online or off.</h2>
+        <p style="font:400 17px/1.6 var(--font-sans);color:var(--fg-on-dark-2);margin:0">Network drops, the server's down for maintenance, you're working remote — the app stays fully navigable, cached clips stay playable, and every edit is queued in a durable journal that flushes when you reconnect.</p>
+      </div>
+      <div class="grid-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+        <div class="card-lift" style="border:1px solid var(--line-dark);border-radius:10px;padding:24px;background:var(--ink-2)">
+          <div style="font:700 13px/1 var(--font-mono);color:var(--signal);margin-bottom:12px">01</div>
+          <h4 style="font:600 17px/1.3 var(--font-display);margin:0 0 8px">Three-layer media cache</h4>
+          <p style="font:400 13.5px/1.55 var(--font-sans);color:var(--fg-on-dark-2);margin:0">Proxies are served from local cache, so cached clips stay playable even with no network at all.</p>
+        </div>
+        <div class="card-lift" style="border:1px solid var(--line-dark);border-radius:10px;padding:24px;background:var(--ink-2)">
+          <div style="font:700 13px/1 var(--font-mono);color:var(--signal);margin-bottom:12px">02</div>
+          <h4 style="font:600 17px/1.3 var(--font-display);margin:0 0 8px">Graceful degradation</h4>
+          <p style="font:400 13.5px/1.55 var(--font-sans);color:var(--fg-on-dark-2);margin:0">Login fails or a probe drops? The app degrades to offline automatically — one click to reconnect.</p>
+        </div>
+        <div class="card-lift" style="border:1px solid var(--line-dark);border-radius:10px;padding:24px;background:var(--ink-2)">
+          <div style="font:700 13px/1 var(--font-mono);color:var(--signal);margin-bottom:12px">03</div>
+          <h4 style="font:600 17px/1.3 var(--font-display);margin:0 0 8px">Durable write queue</h4>
+          <p style="font:400 13.5px/1.55 var(--font-sans);color:var(--fg-on-dark-2);margin:0">Edits made offline are journaled and flushed in order when you're back — nothing lost, nothing doubled.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ RUNS ANYWHERE (paper) ============ -->
+  <div id="deploy" style="background:var(--paper);color:var(--ink);padding:84px 40px">
+    <div data-reveal style="max-width:1080px;margin:0 auto">
+      <div style="font:var(--meta);letter-spacing:var(--track-meta);text-transform:uppercase;color:var(--fg-3);margin-bottom:14px">Runs where you need it</div>
+      <h2 style="font:600 32px/1.1 var(--font-display);letter-spacing:-0.01em;margin:0 0 36px">Same app. Three places.</h2>
+      <div class="grid-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+        <div class="card-lift" style="border:1px solid var(--line);border-radius:10px;padding:26px;background:var(--white)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px"><span style="width:13px;height:13px;border-radius:3px;background:var(--signal);display:inline-block"></span><span style="font:700 12px/1 var(--font-mono);letter-spacing:.08em;color:var(--fg-1)">01 · HOST</span></div>
+          <h4 style="font:600 18px/1.3 var(--font-display);margin:0 0 8px">On the archive host</h4>
+          <p style="font:400 14px/1.55 var(--font-sans);color:var(--fg-2);margin:0">Zero-copy proxy reads straight from the media-store — no download, no second cache.</p>
+        </div>
+        <div class="card-lift" style="border:1px solid var(--line);border-radius:10px;padding:26px;background:var(--white)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px"><span style="width:13px;height:13px;border-radius:3px;background:var(--signal);display:inline-block"></span><span style="font:700 12px/1 var(--font-mono);letter-spacing:.08em;color:var(--fg-1)">02 · LAPTOP</span></div>
+          <h4 style="font:600 18px/1.3 var(--font-display);margin:0 0 8px">On a laptop</h4>
+          <p style="font:400 14px/1.55 var(--font-sans);color:var(--fg-2);margin:0">Behind your VPN, working remote. Degrades to offline automatically when the network drops.</p>
+        </div>
+        <div class="card-lift" style="border:1px solid var(--line);border-radius:10px;padding:26px;background:var(--white)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px"><span style="width:13px;height:13px;border-radius:3px;background:var(--signal);display:inline-block"></span><span style="font:700 12px/1 var(--font-mono);letter-spacing:.08em;color:var(--fg-1)">03 · CLOUD</span></div>
+          <h4 style="font:600 18px/1.3 var(--font-display);margin:0 0 8px">In the cloud</h4>
+          <p style="font:400 14px/1.55 var(--font-sans);color:var(--fg-2);margin:0">Deploy to Cloud Run when you want it always-on and reachable by the whole team.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ CTA ============ -->
+  <div id="cta" style="background:var(--ink);color:var(--fg-on-dark-1);text-align:center;padding:96px 40px">
+    <div data-reveal style="max-width:1080px;margin:0 auto">
+      <h2 style="font:700 50px/1.04 var(--font-display);letter-spacing:-0.025em;margin:0 0 18px">Book a walkthrough on your archive.</h2>
+      <p style="font:400 18px/1.55 var(--font-sans);color:var(--fg-on-dark-2);max-width:52ch;margin:0 auto 30px">Tell us about your collection and we'll run a sample annotation pass against your own clips — on your host, in your schema. See predicted cost and hours saved before you commit anything.</p>
+      <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap">
+        <a class="pbtn" href="mailto:hello@example.com?subject=AI%20Archive%20walkthrough" style="font:600 15px/1 var(--font-sans);background:var(--signal);color:var(--signal-ink);border:1px solid var(--signal-deep);border-radius:5px;padding:15px 26px;text-decoration:none">Book a walkthrough →</a>
+        <a class="gbtn" href="#deploy" style="font:600 15px/1 var(--font-sans);background:transparent;color:var(--fg-on-dark-1);border:1px solid rgba(255,255,255,.25);border-radius:5px;padding:15px 26px;text-decoration:none">Read the deploy guide</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ FOOTER ============ -->
+  <div style="background:#000;color:var(--fg-on-dark-2);padding:56px 40px 40px;border-top:1px solid var(--line-dark)">
+    <div class="grid-2" style="max-width:1080px;margin:0 auto;display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:32px">
+      <div>
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:14px">
+          <svg width="22" height="22" viewBox="0 0 28 28" fill="none" style="display:block"><rect x="2" y="2" width="24" height="24" rx="6" stroke="#edf060" stroke-width="2.5"/><rect x="9.5" y="9.5" width="9" height="9" rx="2" fill="#edf060"/></svg>
+          <span style="font:800 16px/1 var(--font-display);letter-spacing:-0.01em;color:var(--signal)">archive</span>
+        </div>
+        <p style="font:400 13.5px/1.6 var(--font-sans);color:var(--fg-on-dark-3);max-width:34ch;margin:0">AI metadata enrichment for media archives. Describe the whole archive overnight — into your system, in your schema.</p>
+      </div>
+      <div>
+        <h4 style="font:var(--meta);letter-spacing:var(--track-meta);text-transform:uppercase;color:var(--fg-on-dark-3);margin:0 0 12px">Product</h4>
+        <a class="ftl" href="#scale">Annotation at scale</a><a class="ftl" href="#studio">Prompt Studio</a><a class="ftl" href="#resilient">Resilience</a><a class="ftl" href="#cta">Cost control</a>
+      </div>
+      <div>
+        <h4 style="font:var(--meta);letter-spacing:var(--track-meta);text-transform:uppercase;color:var(--fg-on-dark-3);margin:0 0 12px">For</h4>
+        <a class="ftl">Post houses</a><a class="ftl">Broadcasters</a><a class="ftl">Archive teams</a><a class="ftl">Operators</a>
+      </div>
+      <div>
+        <h4 style="font:var(--meta);letter-spacing:var(--track-meta);text-transform:uppercase;color:var(--fg-on-dark-3);margin:0 0 12px">Deploy</h4>
+        <a class="ftl" href="#deploy">On the host</a><a class="ftl" href="#deploy">On a laptop</a><a class="ftl" href="#deploy">In the cloud</a><a class="ftl" href="#deploy">Deploy guide</a>
+      </div>
+    </div>
+    <div style="max-width:1080px;margin:40px auto 0;padding-top:22px;border-top:1px solid var(--line-dark);display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
+      <span style="font:400 11px/1 var(--font-mono);letter-spacing:.04em;color:var(--fg-on-dark-3)">© 2026 FUTURE MEMORY LAB</span>
+      <span style="font:400 11px/1 var(--font-mono);letter-spacing:.06em;color:var(--fg-on-dark-3)">NOT A DAM REPLACEMENT · IT BOLTS ON</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Progressive enhancement only: content is visible by default (CSS).
+  // When a section scrolls into view, add `.anim` to play a one-time fade-up.
+  (function(){
+    var els = Array.prototype.slice.call(document.querySelectorAll('[data-reveal]'));
+    if (!els.length || !('IntersectionObserver' in window)) return;
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){ if (en.isIntersecting){ en.target.classList.add('anim'); io.unobserve(en.target); } });
+    }, { threshold: 0.1, rootMargin: '0px 0px -6% 0px' });
+    els.forEach(function(e){ io.observe(e); });
+  })();
+</script>
+
+</body>
+</html>

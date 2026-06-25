@@ -1,0 +1,146 @@
+/* =========================================================================
+   ARCHIVE — Design System Foundations
+   colors_and_type.css
+   AI for the documentary film archive. Minimalist, technical, editorial.
+   Palette derived from the brand mark: lime signal + true black + paper.
+   ========================================================================= */
+
+/* ---- Fonts (Google Fonts CDN; swap for self-hosted woff2 if needed) ---- */
+@import url('https://fonts.googleapis.com/css2?family=Archivo:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,600&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root {
+  /* ====================  BRAND  ==================== */
+  --signal:        #edf060;  /* the lime. used sparingly, as a highlight */
+  --signal-bright: #f3f57a;  /* hover / lift */
+  --signal-deep:   #d9dc46;  /* press / on-light borders */
+  --signal-wash:   #f7f8d6;  /* faint tint backgrounds on paper */
+  --signal-ink:    #2c2e00;  /* readable text ON the lime */
+
+  /* ====================  CORE INK  ==================== */
+  --black:         #000000;  /* the mark's true black — logo only */
+  --ink:           #0d0d0d;  /* primary surfaces & text on light */
+  --ink-2:         #1a1a1a;  /* raised dark surface */
+  --ink-3:         #242424;  /* hairlines on dark, hover on dark */
+
+  /* ====================  WARM NEUTRAL SCALE  ====================
+     Slightly warm greys — the tone of archival paper & film leader.   */
+  --n-900: #14130f;
+  --n-800: #26241e;
+  --n-700: #3b382f;
+  --n-600: #565248;
+  --n-500: #7a766b;
+  --n-400: #9d988c;
+  --n-300: #c6c1b4;
+  --n-200: #e4e0d6;
+  --n-150: #ece9e0;
+  --n-100: #f3f1ea;
+  --paper: #f8f6ef;  /* default app background — warm off-white */
+  --white: #ffffff;
+
+  /* ====================  SEMANTIC (desaturated, film-faded)  ==================== */
+  --ok:        #5f8f5a;  /* "restored / ready" */
+  --ok-wash:   #e7efe2;
+  --warn:      #c98a2e;  /* "processing / review" */
+  --warn-wash: #f6ecd8;
+  --danger:    #c0533e;  /* "missing / failed" */
+  --danger-wash:#f5e1da;
+
+  /* ====================  TEXT ROLES (on paper)  ==================== */
+  --fg-1: var(--ink);     /* primary */
+  --fg-2: var(--n-600);   /* secondary */
+  --fg-3: var(--n-500);   /* tertiary / meta */
+  --fg-4: var(--n-400);   /* disabled / faint */
+  --fg-on-dark-1: #f4f2ea;
+  --fg-on-dark-2: #b4afa2;
+  --fg-on-dark-3: #837e72;
+
+  /* ====================  LINES & SURFACES  ==================== */
+  --line:        #e0dcd1;  /* default hairline on paper */
+  --line-strong: #c9c4b7;
+  --line-dark:   #2b2a24;  /* hairline on dark */
+  --surface:     var(--paper);
+  --surface-card:var(--white);
+  --surface-sunk:var(--n-100);
+
+  /* ====================  TYPE FAMILIES  ==================== */
+  --font-display: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+  --font-sans:    'Archivo', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* ====================  TYPE SCALE (px / line-height / weight / tracking) ====================
+     Display & headings use Archivo, tight tracking. Meta uses mono, wide. */
+  --display-xl: 700 72px/0.98 var(--font-display);
+  --display:    700 56px/1.02 var(--font-display);
+  --h1:         700 40px/1.06 var(--font-display);
+  --h2:         600 30px/1.12 var(--font-display);
+  --h3:         600 22px/1.2  var(--font-display);
+  --h4:         600 18px/1.3  var(--font-sans);
+  --body-lg:    400 18px/1.55 var(--font-sans);
+  --body:       400 15px/1.6  var(--font-sans);
+  --body-sm:    400 13px/1.5  var(--font-sans);
+  --meta:       500 12px/1.4  var(--font-mono);  /* uppercase + tracking via .meta */
+  --code:       400 13px/1.5  var(--font-mono);
+
+  /* tracking tokens */
+  --track-display: -0.02em;
+  --track-tight:   -0.01em;
+  --track-meta:     0.14em;  /* mono uppercase labels & timecodes */
+
+  /* ====================  RADIUS  ====================
+     Restrained. The mark's frame uses a soft square — echo that. */
+  --r-xs: 3px;
+  --r-sm: 5px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-pill: 999px;
+
+  /* ====================  ELEVATION  ====================
+     Low, matte shadows — paper & film, never glossy. */
+  --sh-1: 0 1px 2px rgba(20,19,15,.06), 0 1px 1px rgba(20,19,15,.04);
+  --sh-2: 0 2px 6px rgba(20,19,15,.07), 0 1px 2px rgba(20,19,15,.05);
+  --sh-3: 0 8px 24px rgba(20,19,15,.10), 0 2px 6px rgba(20,19,15,.06);
+  --sh-pop: 0 16px 48px rgba(20,19,15,.18), 0 4px 12px rgba(20,19,15,.10);
+  --sh-focus: 0 0 0 3px rgba(217,220,70,.55);  /* lime focus ring */
+
+  /* ====================  SPACING (4px base)  ==================== */
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
+  --s-5: 20px; --s-6: 24px; --s-8: 32px; --s-10: 40px;
+  --s-12: 48px; --s-16: 64px; --s-20: 80px; --s-24: 96px;
+
+  /* motion */
+  --ease: cubic-bezier(.2,.6,.2,1);     /* @kind other */
+  --ease-out: cubic-bezier(.16,1,.3,1); /* @kind other */
+  --dur: 160ms;    /* @kind other */
+  --dur-lg: 280ms; /* @kind other */
+}
+
+/* =========================================================================
+   SEMANTIC ELEMENT DEFAULTS — apply to a document or scope with .prose
+   ========================================================================= */
+.ds-scope, .prose {
+  color: var(--fg-1);
+  font: var(--body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.display-xl { font: var(--display-xl); letter-spacing: var(--track-display); }
+.display    { font: var(--display);    letter-spacing: var(--track-display); }
+h1, .h1 { font: var(--h1); letter-spacing: var(--track-display); margin: 0; }
+h2, .h2 { font: var(--h2); letter-spacing: var(--track-tight);   margin: 0; }
+h3, .h3 { font: var(--h3); letter-spacing: var(--track-tight);   margin: 0; }
+h4, .h4 { font: var(--h4); margin: 0; }
+.body-lg { font: var(--body-lg); }
+.body    { font: var(--body); }
+.body-sm { font: var(--body-sm); }
+
+/* mono meta label — timecodes, IDs, kicker labels */
+.meta {
+  font: var(--meta);
+  letter-spacing: var(--track-meta);
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+code, .code { font: var(--code); }
+
+a { color: inherit; text-decoration-color: var(--signal-deep); text-underline-offset: 3px; }
