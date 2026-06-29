@@ -7,7 +7,7 @@ something breaks.
 ## Top-level layout
 
 ```
-catdv-annotator/
+ai-archive/
 ├── backend/
 │   ├── app/               ← the FastAPI app (see below)
 │   ├── migrations/        ← hand-written SQL, applied in order at startup

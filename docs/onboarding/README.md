@@ -1,4 +1,4 @@
-# Onboarding — CatDV Annotator
+# Onboarding — AI Archive
 
 Welcome. This folder is the entry point for a new developer joining the
 project. It distils the design specs, ADRs, and `CLAUDE.md` into a

@@ -1,4 +1,4 @@
-# CONTEXT — domain glossary
+# CONTEXT — AI Archive domain glossary
 
 One sentence per noun. If reading a source file sends you bouncing between
 four others, the missing definition probably belongs here.

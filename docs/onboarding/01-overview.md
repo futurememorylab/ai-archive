@@ -1,15 +1,16 @@
-# 01 — What this app does and who it's for
+# 01 — What AI Archive does and who it's for
 
 ## In one paragraph
 
-The **CatDV Annotator** is a local-first web app that sits next to a
-CatDV archive and adds two things CatDV itself doesn't have:
+**AI Archive** is a local-first web app that sits next to a media
+archive and adds two things the archive system doesn't have on its own:
 a Google **Gemini-backed AI annotation pipeline** for video clips, and a
 durable **long-term annotation store** in SQLite that a future search
-app can layer on top of. It reads and edits a single CatDV catalog
-(*"AI katalog"*), drives Gemini batch jobs against clip
+app can layer on top of. It connects to the archive through a pluggable
+provider interface (`ArchiveProvider`) — CatDV and filesystem-sidecar
+archives are supported today. It drives Gemini batch jobs against clip
 proxies, gates every result behind a human review step, then writes
-the approved markers / fields / notes back to CatDV via its REST API.
+the approved markers / fields / notes back to the archive.
 
 ## Who it's for
 
