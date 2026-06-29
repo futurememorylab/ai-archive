@@ -1,4 +1,4 @@
-# CLAUDE.md — catdv-annotator
+# CLAUDE.md — ai-archive
 
 Project-scoped guidance for Claude Code sessions working inside this repo. Network/auth context (VPN, credentials, contacts) lives in the parent `sikl/CLAUDE.md`; this file only covers what's relevant when editing or running the code here.
 

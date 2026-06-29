@@ -1,7 +1,7 @@
 [project]
-name = "catdv-annotator"
+name = "ai-archive"
 version = "0.0.1"
-description = "AI annotation engine for CatDV archives"
+description = "AI-powered annotation engine for media archives"
 requires-python = ">=3.12"
 license = { text = "MIT" }
 classifiers = [

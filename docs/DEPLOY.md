@@ -1,7 +1,7 @@
 # Deployment
 
-This app runs in two places: the developer's Mac (dev) and the CatDV server (prod).
-The same code; only env vars differ.
+AI Archive runs in two places: the developer's Mac (dev) and the CatDV
+server (prod). The same code; only env vars differ.
 
 > **Cloud Run** is the primary deployment. Its complete guide —
 > one-time GCP setup, CI/CD pipeline, local-proxy access, and the
@@ -14,7 +14,7 @@ The same code; only env vars differ.
 
 ```bash
 git clone <repo>
-cd catdv-annotator
+cd ai-archive
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 cp .env.example .env
@@ -49,7 +49,7 @@ gcloud services enable aiplatform.googleapis.com storage.googleapis.com \
 # Bucket + service account (idempotent — skip if they exist)
 gsutil mb -p $PROJECT_ID -l $REGION gs://$BUCKET
 gcloud iam service-accounts create catdv-annotator \
-  --display-name="CatDV Annotator" --project=$PROJECT_ID
+  --display-name="AI Archive" --project=$PROJECT_ID
 
 # Roles: write the proxy bucket, call Vertex AI
 gsutil iam ch serviceAccount:${SA}:objectAdmin gs://$BUCKET
@@ -83,7 +83,7 @@ top-level `README.md`).
 ### Deploy
 
 ```bash
-# As the service user, in /opt/catdv-annotator
+# As the service user, in /opt/ai-archive
 git clone <repo> .
 python3 -m venv .venv
 .venv/bin/pip install -e .

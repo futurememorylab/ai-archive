@@ -50,7 +50,7 @@ Notes:
 
 ```bash
 git clone <repo>
-cd catdv-annotator
+cd ai-archive
 cp .env.example .env
 # Edit .env — at minimum CATDV_PASSWORD and GOOGLE_APPLICATION_CREDENTIALS
 ./run.sh

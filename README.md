@@ -1,17 +1,17 @@
-# CatDV Annotator — Backend
+# AI Archive
 
-Local-first web app for a CatDV archive: AI annotation jobs against
-Gemini (Vertex AI) with results written back to CatDV.
-
-**Backend only at this point.** UI is Plan B.
+Local-first web app for media archives: AI annotation jobs against
+Gemini (Vertex AI) with results written back to the archive provider.
+CatDV and filesystem-sidecar archives are supported today; the provider
+interface (`ArchiveProvider`) is the extension point for others.
 
 ## Quick start (dev)
 
 ```bash
 git clone <repo>
-cd catdv-annotator
+cd ai-archive
 cp .env.example .env
-# Edit .env — at minimum: CATDV_PASSWORD and GOOGLE_APPLICATION_CREDENTIALS
+# Edit .env — see .env.example for required variables per provider
 ./run.sh
 ```
 
@@ -27,7 +27,7 @@ Open the UI at `http://localhost:8765/` (clips list) — first user-facing surfa
 
 ## Running on the CatDV host (no proxy cache)
 
-When the annotator runs on the **same machine as the CatDV server**, it can read
+When the app runs on the **same machine as the CatDV server**, it can read
 each clip's web proxy directly from CatDV's media-store directory instead of
 downloading it over HTTP. No `data/cache/proxies/` is written, no
 `proxy_cache` rows are recorded, and Gemini still receives the small H.264
@@ -62,9 +62,9 @@ buttons) are hidden automatically in this mode.
 See `docs/DEPLOY.md` → "Running on the CatDV host (no proxy cache)"
 for failure-mode details.
 
-## Running offline (no CatDV at all)
+## Running offline (no archive provider)
 
-When the CatDV VPN is unavailable, run with:
+When the archive provider is unavailable (e.g. CatDV VPN down), run with:
 
 ```
 CATDV_OFFLINE=true
@@ -134,22 +134,16 @@ New to the codebase? Read these two first:
 ## Layout
 
 - `backend/app/` — FastAPI app, services, repositories, routes
+- `backend/app/archive/` — provider ports + adapters (CatDV, filesystem)
 - `backend/migrations/` — SQL migrations (applied at startup)
 - `backend/seeds/` — default templates
 - `tests/` — unit + integration tests
-- `docs/specs/` — design spec
+- `docs/specs/` — design specs
 - `docs/plans/` — implementation plans
 - `docs/DEPLOY.md` — local/on-prem deployment + one-time GCP bootstrap
 - `deploy/` — Cloud Run deployment (`deploy/README.md`), Gemini Live key script
 
-## Status
-
-- Backend plan: see `docs/plans/2026-05-18-catdv-annotator-backend.md`
-- UI MVP: `docs/plans/2026-05-20-ui-mvp.md` (clips list + clip detail, read-only)
-- Media prefetch + cache UI: `docs/plans/2026-05-20-pr8-media-prefetch-and-cache-ui.md`
-- Prompt management: `docs/plans/2026-05-21-prompt-management.md`
-
-## Annotate a clip from the UI
+## Annotating a clip
 
 Once the one-time GCP bootstrap (see `docs/DEPLOY.md` → "One-time GCP
 bootstrap") has been run and `.env` has the GCP variables set:
@@ -250,6 +244,6 @@ Released under the [MIT License](LICENSE) © 2026 Future Memory Lab.
 
 This repository also bundles a few third-party assets (Alpine.js, htmx, and
 the Inter and JetBrains Mono fonts) under their own licenses — see
-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). "CatDV" is a trademark of
-its respective owner; it is referenced here only for interoperability and this
-project is not affiliated with or endorsed by them.
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). "CatDV" is a trademark
+of Square Box Systems; it is referenced here only for interoperability and
+this project is not affiliated with or endorsed by them.

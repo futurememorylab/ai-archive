@@ -1,8 +1,12 @@
 # Cloud Run deployment
 
-Canonical reference for running this app on Google Cloud Run. Covers the
+Canonical reference for running AI Archive on Google Cloud Run. Covers the
 one-time GCP setup, the CI/CD pipeline, how to reach the private service
 through a local proxy, and the local-vs-cloud environment variables.
+
+> **Note:** the GCP project, Cloud Run service, and related infrastructure
+> still use the legacy `catdv-annotator` slug. These are deployed resources
+> and renaming them is not worth the operational risk.
 
 - **Design spec:** `docs/specs/2026-06-09-cloud-run-deployment-design.md`
 - **Decisions:** ADRs 0066–0076 (see `docs/decisions.md`)
