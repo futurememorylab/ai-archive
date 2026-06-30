@@ -7,6 +7,7 @@ empty). Lives on CoreCtx — DB-only, offline-safe. See the design spec.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -45,10 +46,12 @@ class EnumService:
         *,
         db_provider: Callable[[], aiosqlite.Connection],
         repo: EnumValuesRepo,
+        write_lock: asyncio.Lock | None = None,
         registry: dict[str, EnumSpec] | None = None,
     ) -> None:
         self._db = db_provider
         self._repo = repo
+        self._write_lock = write_lock or asyncio.Lock()
         self._registry = registry if registry is not None else ENUM_REGISTRY
 
     # ---- definitions ----
@@ -115,12 +118,13 @@ class EnumService:
         seed value absent from the table; never clobbers edits or revives a
         tombstone (INSERT OR IGNORE in the repo)."""
         conn = self._db()
-        for spec in self._registry.values():
-            if not spec.editable:
-                continue
-            for i, v in enumerate(spec.values):
-                await self._repo.upsert_seed(conn, spec.key, v, sort_order=i, commit=False)
-        await conn.commit()
+        async with self._write_lock:
+            for spec in self._registry.values():
+                if not spec.editable:
+                    continue
+                for i, v in enumerate(spec.values):
+                    await self._repo.upsert_seed(conn, spec.key, v, sort_order=i, commit=False)
+            await conn.commit()
 
     # ---- writes (implemented in Task 4) ----
     def _require_editable(self, key: str) -> EnumSpec:
@@ -135,9 +139,10 @@ class EnumService:
         conn = self._db()
         if not await self._repo.all_rows(conn, key):
             spec = self._spec(key)
-            for i, v in enumerate(spec.values):
-                await self._repo.upsert_seed(conn, key, v, sort_order=i, commit=False)
-            await conn.commit()
+            async with self._write_lock:
+                for i, v in enumerate(spec.values):
+                    await self._repo.upsert_seed(conn, key, v, sort_order=i, commit=False)
+                await conn.commit()
 
     async def add_value(self, key: str, value: str, *, label: str | None = None) -> None:
         self._require_editable(key)

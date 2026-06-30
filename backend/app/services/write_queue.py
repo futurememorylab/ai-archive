@@ -8,6 +8,7 @@ grouping logic that previously lived in `routes/review.py`.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -37,10 +38,12 @@ class WriteQueue:
         *,
         pending_ops_repo: PendingOperationsRepo,
         review_items_repo: ReviewItemsRepo,
+        write_lock: asyncio.Lock | None = None,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._pending = pending_ops_repo
         self._review_items = review_items_repo
+        self._write_lock = write_lock or asyncio.Lock()
         self._clock = clock or (lambda: datetime.now(UTC))
 
     async def enqueue_apply_for_clip(
@@ -116,10 +119,11 @@ class WriteQueue:
                 }
             )
 
-        op_ids = await self._pending.insert_many(conn, rows=rows, commit=False)
-        item_ids = [it.id for it in fresh_items if it.id is not None]
-        await self._review_items.mark_applied(conn, item_ids, commit=False)
-        await conn.commit()
+        async with self._write_lock:
+            op_ids = await self._pending.insert_many(conn, rows=rows, commit=False)
+            item_ids = [it.id for it in fresh_items if it.id is not None]
+            await self._review_items.mark_applied(conn, item_ids, commit=False)
+            await conn.commit()
         return op_ids
 
 

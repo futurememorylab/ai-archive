@@ -5,6 +5,7 @@ from the last synced annotation's items; author='—', no etag. Runs at boot."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 from itertools import groupby
 
@@ -13,7 +14,13 @@ import aiosqlite
 from backend.app.models.annotation import ClipVersion
 
 
-async def backfill_clip_versions(conn: aiosqlite.Connection, versions_repo) -> int:
+async def backfill_clip_versions(
+    conn: aiosqlite.Connection,
+    versions_repo,
+    *,
+    write_lock: asyncio.Lock | None = None,
+) -> int:
+    lock = write_lock or asyncio.Lock()
     # One grouped read for ALL un-backfilled clips (ordered so we can group in
     # Python), then the inserts in a single transaction — not a SELECT + commit
     # per clip. This runs synchronously at boot, so an N+1 stalls startup
@@ -30,26 +37,27 @@ async def backfill_clip_versions(conn: aiosqlite.Connection, versions_repo) -> i
     )
     all_rows = await cur.fetchall()
     created = 0
-    for clip_id, group in groupby(all_rows, key=lambda r: int(r[0])):
-        snapshot, model, annotation_id = _snapshot_from_rows([r[1:] for r in group])
-        await versions_repo.insert(
-            conn,
-            ClipVersion(
-                catdv_clip_id=clip_id,
-                version_num=1,
-                snapshot=snapshot,
-                diff=None,
-                origin="publish",
-                model=model,
-                annotation_id=annotation_id,
-                author="—",
-                publish_state="live",
-            ),
-            commit=False,
-        )
-        created += 1
-    if created:
-        await conn.commit()
+    async with lock:
+        for clip_id, group in groupby(all_rows, key=lambda r: int(r[0])):
+            snapshot, model, annotation_id = _snapshot_from_rows([r[1:] for r in group])
+            await versions_repo.insert(
+                conn,
+                ClipVersion(
+                    catdv_clip_id=clip_id,
+                    version_num=1,
+                    snapshot=snapshot,
+                    diff=None,
+                    origin="publish",
+                    model=model,
+                    annotation_id=annotation_id,
+                    author="—",
+                    publish_state="live",
+                ),
+                commit=False,
+            )
+            created += 1
+        if created:
+            await conn.commit()
     return created
 
 

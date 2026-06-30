@@ -171,6 +171,7 @@ class CoreCtx:
         ctx.write_queue = WriteQueue(
             pending_ops_repo=ctx.pending_ops_repo,
             review_items_repo=ctx.review_items_repo,
+            write_lock=ctx.write_lock,
         )
         ctx.publish_service = PublishService(
             annotations_repo=ctx.annotations_repo,
@@ -206,11 +207,13 @@ class CoreCtx:
         ctx.enum_service = EnumService(
             db_provider=lambda: ctx.db,
             repo=ctx.enum_values_repo,
+            write_lock=ctx.write_lock,
         )
         await ctx.enum_service.reconcile_seeds()
         ctx.pricing_service = PricingService(
             db_provider=lambda: ctx.db,
             repo=ctx.model_config_repo,
+            write_lock=ctx.write_lock,
         )
         await ctx.pricing_service.reconcile_seeds()
         await ctx.pricing_service.reload()
@@ -221,7 +224,7 @@ class CoreCtx:
         )
         from backend.app.services.clip_versions_backfill import backfill_clip_versions
 
-        await backfill_clip_versions(ctx.db, ctx.clip_versions_repo)
+        await backfill_clip_versions(ctx.db, ctx.clip_versions_repo, write_lock=ctx.write_lock)
         return ctx
 
     def _wire_cache_services(

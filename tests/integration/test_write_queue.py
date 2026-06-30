@@ -212,6 +212,54 @@ async def test_enqueue_apply_captures_expected_etag_per_row(db):
     assert all(r["expected_etag"] == "modify-date-v1" for r in rows)
 
 
+@pytest.mark.asyncio
+async def test_enqueue_apply_holds_lock_across_commit_false_window(db):
+    """The write_lock is held while insert_many(commit=False) and
+    mark_applied(commit=False) run, released only after conn.commit()."""
+    import asyncio
+
+    from backend.app.services.write_queue import WriteQueue
+
+    accepted, version, aid = await _seed(db)
+    lock = asyncio.Lock()
+    pending = PendingOperationsRepo()
+    items = ReviewItemsRepo()
+    q = WriteQueue(
+        pending_ops_repo=pending,
+        review_items_repo=items,
+        write_lock=lock,
+    )
+
+    lock_states: list[tuple[str, bool]] = []
+    orig_insert = pending.insert_many
+    orig_mark = items.mark_applied
+
+    async def spy_insert(conn, *, rows, commit=True):
+        lock_states.append(("insert", lock.locked()))
+        return await orig_insert(conn, rows=rows, commit=commit)
+
+    async def spy_mark(conn, item_ids, *, commit=True):
+        lock_states.append(("mark_applied", lock.locked()))
+        return await orig_mark(conn, item_ids, commit=commit)
+
+    pending.insert_many = spy_insert
+    items.mark_applied = spy_mark
+
+    await q.enqueue_apply(
+        db,
+        clip_key=("catdv", "1"),
+        items=accepted,
+        target_map=version.target_map,
+        expected_etag=None,
+        annotation_id=aid,
+        fps=25.0,
+    )
+
+    assert lock_states[0] == ("insert", True)
+    assert lock_states[1] == ("mark_applied", True)
+    assert not lock.locked()
+
+
 def test_edited_marker_dict_round_trips():
     """edited_value dict on a marker item → AddMarkers op with the edited fields."""
     from backend.app.models.prompt import TargetMap

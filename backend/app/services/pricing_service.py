@@ -8,6 +8,7 @@ network. Lives on CoreCtx.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from datetime import datetime, timezone
 
@@ -28,34 +29,37 @@ class PricingService:
         *,
         db_provider: Callable[[], aiosqlite.Connection],
         repo: ModelConfigRepo,
+        write_lock: asyncio.Lock | None = None,
     ) -> None:
         self._db = db_provider
         self._repo = repo
+        self._write_lock = write_lock or asyncio.Lock()
 
     async def reconcile_seeds(self) -> None:
         """Insert any seed model absent from model_config; never clobber edits
         or revive a tombstone (INSERT OR IGNORE in the repo)."""
         conn = self._db()
         now = _now()
-        for model, card in pricing.SEED_RATE_CARDS.items():
-            await self._repo.upsert_seed(
-                conn,
-                ModelConfigRow(
-                    model=model,
-                    input_text_video_image_per_1m=card.input_text_video_image_per_1m,
-                    input_audio_per_1m=card.input_audio_per_1m,
-                    input_cached_per_1m=card.input_cached_per_1m,
-                    output_per_1m=card.output_per_1m,
-                    source_url=card.source_url,
-                    default_media_resolution="medium",
-                    pricing_version=PRICING_VERSION,
-                    updated_at=now,
-                    removed=0,
-                    created_at=now,
-                ),
-                commit=False,
-            )
-        await conn.commit()
+        async with self._write_lock:
+            for model, card in pricing.SEED_RATE_CARDS.items():
+                await self._repo.upsert_seed(
+                    conn,
+                    ModelConfigRow(
+                        model=model,
+                        input_text_video_image_per_1m=card.input_text_video_image_per_1m,
+                        input_audio_per_1m=card.input_audio_per_1m,
+                        input_cached_per_1m=card.input_cached_per_1m,
+                        output_per_1m=card.output_per_1m,
+                        source_url=card.source_url,
+                        default_media_resolution="medium",
+                        pricing_version=PRICING_VERSION,
+                        updated_at=now,
+                        removed=0,
+                        created_at=now,
+                    ),
+                    commit=False,
+                )
+            await conn.commit()
 
     async def reload(self) -> None:
         """Load the live rows into the active rate cache."""
