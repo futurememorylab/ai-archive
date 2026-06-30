@@ -20,7 +20,7 @@ async def backfill_clip_versions(
     *,
     write_lock: asyncio.Lock | None = None,
 ) -> int:
-    lock = write_lock or asyncio.Lock()
+    write_lock = write_lock or asyncio.Lock()
     # One grouped read for ALL un-backfilled clips (ordered so we can group in
     # Python), then the inserts in a single transaction — not a SELECT + commit
     # per clip. This runs synchronously at boot, so an N+1 stalls startup
@@ -37,7 +37,7 @@ async def backfill_clip_versions(
     )
     all_rows = await cur.fetchall()
     created = 0
-    async with lock:
+    async with write_lock:
         for clip_id, group in groupby(all_rows, key=lambda r: int(r[0])):
             snapshot, model, annotation_id = _snapshot_from_rows([r[1:] for r in group])
             await versions_repo.insert(
