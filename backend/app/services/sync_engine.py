@@ -48,6 +48,7 @@ from backend.app.services.connection_monitor import (
     ConnectionMonitor,
     ConnectionState,
 )
+from backend.app.services.errors import humanise
 
 log = logging.getLogger(__name__)
 
@@ -221,14 +222,22 @@ class SyncEngine:
                 await self._retry_or_fail(db, op_ids, rows, error=f"{type(exc).__name__}: {exc}")
                 continue
 
-            await self._handle_result(
-                db,
-                provider_id=provider_id,
-                clip_id=clip_id,
-                op_ids=op_ids,
-                rows=rows,
-                result=result,
-            )
+            try:
+                await self._handle_result(
+                    db,
+                    provider_id=provider_id,
+                    clip_id=clip_id,
+                    op_ids=op_ids,
+                    rows=rows,
+                    result=result,
+                )
+            except Exception as exc:  # noqa: BLE001 — SQLITE_BUSY / constraint / unexpected
+                # _handle_result raised (e.g. SQLITE_BUSY from Litestream
+                # checkpoint contention, a constraint error). Reset the rows
+                # so they don't strand in_flight until boot-time recovery.
+                # See ADR 0126.
+                await self._retry_or_fail(db, op_ids, rows, error=humanise(exc))
+                continue
             processed += 1
             if self._event_bus is not None:
                 await self._event_bus.publish(

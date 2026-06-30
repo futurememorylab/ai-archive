@@ -212,3 +212,31 @@ async def test_drain_processes_when_backoff_elapsed(db):
     assert n == 1
     rows = await repo.list_pending(db, status="applied")
     assert len(rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_handle_result_exception_does_not_strand_in_flight(db):
+    """An exception in _handle_result (e.g. SQLITE_BUSY from Litestream
+    checkpoint contention) routes through _retry_or_fail instead of
+    stranding rows in_flight until boot-time reset."""
+    await _enqueue_one(db)
+    provider = FakeProvider()  # returns WriteResult(status="ok")
+
+    class ExplodingPendingRepo(PendingOperationsRepo):
+        async def mark_applied(self, conn, op_ids, **kw):
+            raise Exception("database is locked")
+
+    engine = SyncEngine(
+        provider=provider,
+        pending_ops_repo=ExplodingPendingRepo(),
+        write_log_repo=WriteLogRepo(),
+        connection_monitor=AlwaysOnlineMonitor(),
+        db_provider=lambda: db,
+    )
+    await engine.drain_once()
+
+    rows = await PendingOperationsRepo().list_pending(db)
+    assert len(rows) == 1
+    assert rows[0]["status"] == "pending"
+    assert rows[0]["attempts"] == 1
+    assert "database is locked" in (rows[0]["last_error"] or "")
