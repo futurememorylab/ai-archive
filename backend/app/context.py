@@ -101,6 +101,7 @@ class CoreCtx:
     settings: Settings
     db: aiosqlite.Connection
     db_cm: object
+    write_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     prompts_repo: PromptsRepo = field(default_factory=PromptsRepo)
     jobs_repo: JobsRepo = field(default_factory=JobsRepo)
@@ -299,6 +300,10 @@ class LiveCtx:
     @property
     def db_cm(self) -> object:
         return self.core.db_cm
+
+    @property
+    def write_lock(self) -> asyncio.Lock:
+        return self.core.write_lock
 
     @property
     def prompts_repo(self) -> PromptsRepo:

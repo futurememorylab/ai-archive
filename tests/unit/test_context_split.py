@@ -55,6 +55,7 @@ def test_core_ctx_has_no_optional_service_fields() -> None:
         "settings",
         "db",
         "db_cm",
+        "write_lock",
         "prompts_repo",
         "jobs_repo",
         "annotations_repo",
