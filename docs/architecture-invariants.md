@@ -124,6 +124,19 @@ Notes/bigNotes write to top-level clip properties, not the user-fields map.
 `services/sync_engine.py`, crash-recovery in `context.build()`.
 *ADRs:* 0004, 0090, 0091, 0093, 0094, 0097, 0098.
 
+**9a. Multi-statement DB writes hold `ctx.write_lock`.** Any call passing
+`commit=False` to a repo must be inside an `async with ctx.write_lock:`
+block — the lock spans first-DML through `commit()` so a concurrent writer
+can't prematurely commit the half-finished transaction on the shared
+`aiosqlite.Connection`. Single-statement `commit=True` writers don't take
+the lock (one execute+commit is indivisible). No network awaits inside the
+lock. `SyncEngine._handle_result` exceptions route through `_retry_or_fail`
+so rows never strand `in_flight` mid-run.
+*Enforced by:* `tests/unit/test_write_lock_guard.py` (AST scan for
+`commit=False` outside `write_lock`); `tests/integration/test_sync_engine.py`
+(stranding test).
+*ADRs:* 0126.
+
 **10. Clip seat discipline (CatDV 2-seat limit → assume 1).** One in-flight
 CatDV session; graceful `SIGTERM` shutdown runs `lifespan` →
 `ctx.aclose()` → `DELETE /session` to release the seat. `kill -9` leaks the
