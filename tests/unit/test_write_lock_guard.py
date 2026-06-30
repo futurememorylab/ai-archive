@@ -43,7 +43,11 @@ def _commit_false_calls(tree: ast.AST) -> list[tuple[int, str]]:
         if not isinstance(node, ast.Call):
             continue
         for kw in node.keywords:
-            if kw.arg == "commit" and isinstance(kw.value, ast.Constant) and kw.value.value is False:
+            if (
+                kw.arg == "commit"
+                and isinstance(kw.value, ast.Constant)
+                and kw.value.value is False
+            ):
                 hits.append((node.lineno, ""))
                 break
     return hits
