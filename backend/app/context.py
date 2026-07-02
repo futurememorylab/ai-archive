@@ -42,7 +42,7 @@ from backend.app.archive.ai_store import AIInputStore
 from backend.app.archive.ai_stores.registry import build_ai_input_store
 from backend.app.archive.provider import ArchiveProvider
 from backend.app.archive.registry import build_archive_provider
-from backend.app.db import open_db
+from backend.app.db import WriteSerializedConnection, open_db
 from backend.app.migrations_runner import apply_migrations
 from backend.app.models.telemetry import TelemetryCtx
 from backend.app.repositories import app_meta as app_meta_repo
@@ -164,7 +164,12 @@ class CoreCtx:
         )
         await conn.commit()
 
-        ctx = cls(settings=settings, db=conn, db_cm=cm)
+        # Every write from here on goes through the serializer: it holds a lock
+        # from the statement that opens a transaction until the matching
+        # commit(), so concurrent tasks sharing this one connection can never
+        # split each other's multi-statement writes. See ADR 0126.
+        db = WriteSerializedConnection(conn)
+        ctx = cls(settings=settings, db=db, db_cm=cm)
         await ctx.user_roles_repo.seed_admins(conn, settings.admin_email_list)
         # WriteQueue has no external deps; always available.
         ctx.write_queue = WriteQueue(

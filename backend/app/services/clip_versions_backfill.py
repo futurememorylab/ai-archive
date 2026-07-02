@@ -13,7 +13,10 @@ import aiosqlite
 from backend.app.models.annotation import ClipVersion
 
 
-async def backfill_clip_versions(conn: aiosqlite.Connection, versions_repo) -> int:
+async def backfill_clip_versions(
+    conn: aiosqlite.Connection,
+    versions_repo,
+) -> int:
     # One grouped read for ALL un-backfilled clips (ordered so we can group in
     # Python), then the inserts in a single transaction — not a SELECT + commit
     # per clip. This runs synchronously at boot, so an N+1 stalls startup
@@ -30,6 +33,8 @@ async def backfill_clip_versions(conn: aiosqlite.Connection, versions_repo) -> i
     )
     all_rows = await cur.fetchall()
     created = 0
+    # commit=False window → the connection serializer holds the write lock
+    # until conn.commit(), keeping the whole backfill atomic. See ADR 0126.
     for clip_id, group in groupby(all_rows, key=lambda r: int(r[0])):
         snapshot, model, annotation_id = _snapshot_from_rows([r[1:] for r in group])
         await versions_repo.insert(

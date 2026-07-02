@@ -212,6 +212,53 @@ async def test_enqueue_apply_captures_expected_etag_per_row(db):
     assert all(r["expected_etag"] == "modify-date-v1" for r in rows)
 
 
+@pytest.mark.asyncio
+async def test_enqueue_apply_window_serialized_on_the_connection(db):
+    """Through WriteSerializedConnection, the write lock is held across the
+    whole commit=False window (insert_many + mark_applied) and released only
+    after conn.commit() — so no concurrent writer can split it. See ADR 0126."""
+    from backend.app.db import WriteSerializedConnection
+    from backend.app.services.write_queue import WriteQueue
+
+    accepted, version, aid = await _seed(db)
+    sdb = WriteSerializedConnection(db)
+    pending = PendingOperationsRepo()
+    items = ReviewItemsRepo()
+    q = WriteQueue(pending_ops_repo=pending, review_items_repo=items)
+
+    lock_states: list[tuple[str, bool]] = []
+    orig_insert = pending.insert_many
+    orig_mark = items.mark_applied
+
+    async def spy_insert(conn, *, rows, commit=True):
+        # commit=False opens the transaction; the serializer holds the lock.
+        result = await orig_insert(conn, rows=rows, commit=commit)
+        lock_states.append(("insert", sdb.locked()))
+        return result
+
+    async def spy_mark(conn, item_ids, *, commit=True):
+        result = await orig_mark(conn, item_ids, commit=commit)
+        lock_states.append(("mark_applied", sdb.locked()))
+        return result
+
+    pending.insert_many = spy_insert
+    items.mark_applied = spy_mark
+
+    await q.enqueue_apply(
+        sdb,
+        clip_key=("catdv", "1"),
+        items=accepted,
+        target_map=version.target_map,
+        expected_etag=None,
+        annotation_id=aid,
+        fps=25.0,
+    )
+
+    # Lock held across the open window, released once conn.commit() lands.
+    assert lock_states == [("insert", True), ("mark_applied", True)]
+    assert not sdb.locked()
+
+
 def test_edited_marker_dict_round_trips():
     """edited_value dict on a marker item → AddMarkers op with the edited fields."""
     from backend.app.models.prompt import TargetMap

@@ -212,3 +212,62 @@ async def test_drain_processes_when_backoff_elapsed(db):
     assert n == 1
     rows = await repo.list_pending(db, status="applied")
     assert len(rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_ok_result_bookkeeping_failure_does_not_reapply(db):
+    """Issue #115 / ADR 0126: a bookkeeping exception AFTER the upstream write
+    landed (ok result) must NOT re-apply — that would duplicate the write on
+    the seat-limited CatDV server. The op is finalized 'applied' instead, so a
+    later tick never picks it up again."""
+    await _enqueue_one(db)
+    provider = FakeProvider()  # returns WriteResult(status="ok"), records .calls
+
+    class ExplodingWriteLog(WriteLogRepo):
+        async def record(self, *a, **k):
+            raise Exception("database is locked")
+
+    engine = SyncEngine(
+        provider=provider,
+        pending_ops_repo=PendingOperationsRepo(),
+        write_log_repo=ExplodingWriteLog(),
+        connection_monitor=AlwaysOnlineMonitor(),
+        db_provider=lambda: db,
+    )
+    await engine.drain_once()
+    await engine.drain_once()  # a second tick must NOT re-apply
+
+    assert len(provider.calls) == 1  # no duplicate upstream write
+    repo = PendingOperationsRepo()
+    assert len(await repo.list_pending(db, status="applied")) == 1
+    assert await repo.list_pending(db) == []  # nothing left pending
+
+
+@pytest.mark.asyncio
+async def test_non_ok_result_bookkeeping_failure_retries(db):
+    """A bookkeeping exception on a non-ok result (no upstream write landed)
+    resets the op for another attempt rather than stranding it in_flight."""
+    await _enqueue_one(db)
+    provider = FakeProvider()
+    provider.next_result = WriteResult(
+        status="conflict", upstream_response={}, conflict_detail=None
+    )
+
+    class ExplodingPendingRepo(PendingOperationsRepo):
+        async def mark_conflict(self, conn, op_ids, **kw):
+            raise Exception("database is locked")
+
+    engine = SyncEngine(
+        provider=provider,
+        pending_ops_repo=ExplodingPendingRepo(),
+        write_log_repo=WriteLogRepo(),
+        connection_monitor=AlwaysOnlineMonitor(),
+        db_provider=lambda: db,
+    )
+    await engine.drain_once()
+
+    rows = await PendingOperationsRepo().list_pending(db)
+    assert len(rows) == 1
+    assert rows[0]["status"] == "pending"
+    assert rows[0]["attempts"] == 1
+    assert "database is locked" in (rows[0]["last_error"] or "")

@@ -116,6 +116,9 @@ class WriteQueue:
                 }
             )
 
+        # commit=False → the connection serializer (WriteSerializedConnection)
+        # holds the write lock across this whole window until conn.commit(), so
+        # no other writer can split it. See ADR 0126.
         op_ids = await self._pending.insert_many(conn, rows=rows, commit=False)
         item_ids = [it.id for it in fresh_items if it.id is not None]
         await self._review_items.mark_applied(conn, item_ids, commit=False)

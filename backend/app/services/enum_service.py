@@ -115,6 +115,8 @@ class EnumService:
         seed value absent from the table; never clobbers edits or revives a
         tombstone (INSERT OR IGNORE in the repo)."""
         conn = self._db()
+        # commit=False window → the connection serializer holds the write lock
+        # until conn.commit(), keeping this multi-statement seed atomic. ADR 0126.
         for spec in self._registry.values():
             if not spec.editable:
                 continue

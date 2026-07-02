@@ -37,6 +37,8 @@ class PricingService:
         or revive a tombstone (INSERT OR IGNORE in the repo)."""
         conn = self._db()
         now = _now()
+        # commit=False window → the connection serializer holds the write lock
+        # until conn.commit(), keeping this multi-statement seed atomic. ADR 0126.
         for model, card in pricing.SEED_RATE_CARDS.items():
             await self._repo.upsert_seed(
                 conn,
