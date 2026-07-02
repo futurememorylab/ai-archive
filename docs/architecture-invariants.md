@@ -124,17 +124,23 @@ Notes/bigNotes write to top-level clip properties, not the user-fields map.
 `services/sync_engine.py`, crash-recovery in `context.build()`.
 *ADRs:* 0004, 0090, 0091, 0093, 0094, 0097, 0098.
 
-**9a. Multi-statement DB writes hold `ctx.write_lock`.** Any call passing
-`commit=False` to a repo must be inside an `async with ctx.write_lock:`
-block — the lock spans first-DML through `commit()` so a concurrent writer
-can't prematurely commit the half-finished transaction on the shared
-`aiosqlite.Connection`. Single-statement `commit=True` writers don't take
-the lock (one execute+commit is indivisible). No network awaits inside the
-lock. `SyncEngine._handle_result` exceptions route through `_retry_or_fail`
-so rows never strand `in_flight` mid-run.
-*Enforced by:* `tests/unit/test_write_lock_guard.py` (AST scan for
-`commit=False` outside `write_lock`); `tests/integration/test_sync_engine.py`
-(stranding test).
+**9a. Writes on the shared connection are serialized at the connection.**
+The shared `aiosqlite.Connection` is wrapped in `WriteSerializedConnection`
+(`backend/app/db.py`), created once in `CoreCtx.create`. Every statement takes
+one lock and consults `in_transaction` (SQLite's ground truth): a read opened
+no transaction so it releases at once, a write holds the lock through its
+matching `commit()`/`rollback()` — so no other writer can prematurely commit a
+half-finished multi-statement transaction, automatically and with no
+per-call-site locking. The wrapper is reentrant per task and reclaims a lock
+leaked by a cancelled mid-transaction task (its lock is created lazily per
+event loop). `SyncEngine._handle_result` never re-applies a write that already
+landed upstream: an `ok`-result bookkeeping failure is finalized `applied`
+(never routed through `_retry_or_fail`), so a transient DB error can't
+duplicate the CatDV write.
+*Enforced by:* `tests/unit/test_write_lock_guard.py` (only `db.py` opens a
+connection; `context.py` wraps it); `tests/unit/test_write_serialized_connection.py`
+(atomicity, reentrancy, cancellation, read-skip); `tests/integration/test_sync_engine.py`
+(no re-apply on ok-result failure).
 *ADRs:* 0126.
 
 **10. Clip seat discipline (CatDV 2-seat limit → assume 1).** One in-flight

@@ -42,7 +42,7 @@ from backend.app.archive.ai_store import AIInputStore
 from backend.app.archive.ai_stores.registry import build_ai_input_store
 from backend.app.archive.provider import ArchiveProvider
 from backend.app.archive.registry import build_archive_provider
-from backend.app.db import open_db
+from backend.app.db import WriteSerializedConnection, open_db
 from backend.app.migrations_runner import apply_migrations
 from backend.app.models.telemetry import TelemetryCtx
 from backend.app.repositories import app_meta as app_meta_repo
@@ -101,7 +101,6 @@ class CoreCtx:
     settings: Settings
     db: aiosqlite.Connection
     db_cm: object
-    write_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     prompts_repo: PromptsRepo = field(default_factory=PromptsRepo)
     jobs_repo: JobsRepo = field(default_factory=JobsRepo)
@@ -165,13 +164,17 @@ class CoreCtx:
         )
         await conn.commit()
 
-        ctx = cls(settings=settings, db=conn, db_cm=cm)
+        # Every write from here on goes through the serializer: it holds a lock
+        # from the statement that opens a transaction until the matching
+        # commit(), so concurrent tasks sharing this one connection can never
+        # split each other's multi-statement writes. See ADR 0126.
+        db = WriteSerializedConnection(conn)
+        ctx = cls(settings=settings, db=db, db_cm=cm)
         await ctx.user_roles_repo.seed_admins(conn, settings.admin_email_list)
         # WriteQueue has no external deps; always available.
         ctx.write_queue = WriteQueue(
             pending_ops_repo=ctx.pending_ops_repo,
             review_items_repo=ctx.review_items_repo,
-            write_lock=ctx.write_lock,
         )
         ctx.publish_service = PublishService(
             annotations_repo=ctx.annotations_repo,
@@ -207,13 +210,11 @@ class CoreCtx:
         ctx.enum_service = EnumService(
             db_provider=lambda: ctx.db,
             repo=ctx.enum_values_repo,
-            write_lock=ctx.write_lock,
         )
         await ctx.enum_service.reconcile_seeds()
         ctx.pricing_service = PricingService(
             db_provider=lambda: ctx.db,
             repo=ctx.model_config_repo,
-            write_lock=ctx.write_lock,
         )
         await ctx.pricing_service.reconcile_seeds()
         await ctx.pricing_service.reload()
@@ -224,7 +225,7 @@ class CoreCtx:
         )
         from backend.app.services.clip_versions_backfill import backfill_clip_versions
 
-        await backfill_clip_versions(ctx.db, ctx.clip_versions_repo, write_lock=ctx.write_lock)
+        await backfill_clip_versions(ctx.db, ctx.clip_versions_repo)
         return ctx
 
     def _wire_cache_services(
@@ -303,10 +304,6 @@ class LiveCtx:
     @property
     def db_cm(self) -> object:
         return self.core.db_cm
-
-    @property
-    def write_lock(self) -> asyncio.Lock:
-        return self.core.write_lock
 
     @property
     def prompts_repo(self) -> PromptsRepo:

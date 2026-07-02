@@ -233,9 +233,31 @@ class SyncEngine:
                 )
             except Exception as exc:  # noqa: BLE001 — SQLITE_BUSY / constraint / unexpected
                 # _handle_result raised (e.g. SQLITE_BUSY from Litestream
-                # checkpoint contention, a constraint error). Reset the rows
-                # so they don't strand in_flight until boot-time recovery.
-                # See ADR 0126.
+                # checkpoint contention, a constraint error). See ADR 0126.
+                if result.status == "ok":
+                    # The write ALREADY landed upstream. Re-applying would
+                    # duplicate it on the seat-limited CatDV server, so an ok
+                    # result must NEVER route through _retry_or_fail. Finalize
+                    # the terminal 'applied' state best-effort (mark_applied is
+                    # idempotent); if even that fails, the op stays in_flight and
+                    # boot-time reset_in_flight_to_pending reconciles it.
+                    log.exception(
+                        "post-apply bookkeeping failed for ops %s; already applied "
+                        "upstream — not retrying (would duplicate the write)",
+                        op_ids,
+                    )
+                    try:
+                        await self._pending.mark_applied(db, op_ids)
+                    except Exception:  # noqa: BLE001
+                        log.exception(
+                            "could not finalize applied state for ops %s; "
+                            "boot recovery will reconcile",
+                            op_ids,
+                        )
+                    continue
+                # conflict / fatal / retryable bookkeeping failed — the write did
+                # not land upstream (or was explicitly retryable), so resetting
+                # for another attempt is safe.
                 await self._retry_or_fail(db, op_ids, rows, error=humanise(exc))
                 continue
             processed += 1
