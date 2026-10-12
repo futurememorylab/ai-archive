@@ -24,4 +24,4 @@ def test_enums_api_serves_fixed_and_editable(monkeypatch, tmp_path):
         fixed = client.get("/api/enums/toast_level").json()
         assert [v["value"] for v in fixed] == ["info", "success", "error"]
         editable = client.get("/api/enums/gemini_generation_model").json()
-        assert any(v["value"] == "gemini-2.5-flash-lite" and v["default"] for v in editable)
+        assert any(v["value"] == "gemini-3.5-flash-lite" and v["default"] for v in editable)

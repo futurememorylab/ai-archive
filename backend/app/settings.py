@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     gcp_location: str = "europe-west3"
     gcs_bucket_name: str
     google_application_credentials: Path | None = None
-    gemini_model: str = "gemini-2.5-flash-lite"
+    gemini_model: str = "gemini-3.5-flash-lite"
     gemini_api_key: str | None = None
     gemini_live_model: str = "gemini-3.1-flash-live-preview"
     gemini_live_voice: str = "Aoede"

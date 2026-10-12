@@ -221,7 +221,7 @@ is set; the other three have working defaults.
 
 - `GEMINI_API_KEY` — Generative Language API key (printed by the script
   above). When unset, the Live feature is disabled.
-- `GEMINI_LIVE_MODEL` — default `gemini-2.5-flash-preview-native-audio-dialog`.
+- `GEMINI_LIVE_MODEL` — default `gemini-3.1-flash-live-preview`.
 - `GEMINI_LIVE_VOICE` — default `Aoede` (speaks `cs-CZ` because
   `speechConfig.languageCode` pins it).
 - `GEMINI_LIVE_INACTIVITY_S` — default `60`. Mutual-silence timeout

@@ -7,7 +7,7 @@ def test_generation_model_enum_is_editable_with_one_default():
     assert spec.editable is True
     defaults = [v for v in spec.values if v.default]
     assert len(defaults) == 1, "exactly one seeded default"
-    assert defaults[0].value == "gemini-2.5-flash-lite"
+    assert defaults[0].value == "gemini-3.5-flash-lite"
     assert len(spec.values) == 9
 
 

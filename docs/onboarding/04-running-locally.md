@@ -236,7 +236,7 @@ you'll touch most:
 | `PROXY_CACHE_CAP_GB=20` | Hard cap for the proxy cache directory. |
 | `MEDIA_CACHE_CAP_GB=50` | LRU eviction threshold for unpinned clips. |
 | `GCP_PROJECT_ID` / `GCS_BUCKET_NAME` / `GOOGLE_APPLICATION_CREDENTIALS` | Vertex + GCS plumbing. |
-| `GEMINI_MODEL` | Default `gemini-2.5-pro`. |
+| `GEMINI_MODEL` | Default `gemini-3.5-flash-lite`. |
 | `GEMINI_API_KEY` | Live assistant only — leave blank to disable. |
 | `APP_ENV` | `dev` or `prod`; in `dev` the external clients are bypassed when their creds are blank. |
 | `DEV_RELOAD=1` | Pass through to uvicorn's `--reload`. |
