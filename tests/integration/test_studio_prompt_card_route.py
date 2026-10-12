@@ -19,6 +19,7 @@ def _setenv(monkeypatch, tmp_path):
 def client(monkeypatch, tmp_path):
     _setenv(monkeypatch, tmp_path)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     with TestClient(main_mod.app) as c:
         yield c
@@ -26,10 +27,17 @@ def client(monkeypatch, tmp_path):
 
 def _make_prompt_two_versions(client):
     """Create a prompt with v1 promoted to production and v2 branched as draft."""
-    r = client.post("/api/prompts", json={
-        "name": "pc", "media_kind": "any", "model": "gemini-2.5-pro",
-        "target_map": {}, "output_schema": {}, "body": "v1",
-    })
+    r = client.post(
+        "/api/prompts",
+        json={
+            "name": "pc",
+            "media_kind": "any",
+            "model": "gemini-2.5-pro",
+            "target_map": {},
+            "output_schema": {},
+            "body": "v1",
+        },
+    )
     assert r.status_code == 201, r.text
     pid = r.json()["id"]
     v1 = client.get(f"/api/prompts/{pid}").json()["latest_version_id"]
@@ -141,6 +149,7 @@ def test_model_picker_orphan_safe_offers_saved_model(client):
                 (v2,),
             )
             await db.commit()
+
     loop = asyncio.new_event_loop()
     try:
         loop.run_until_complete(_orphan_model())
@@ -183,10 +192,10 @@ def test_cmp_side_renders_close_and_diff_toggle(client):
     assert 'data-side="cmp"' in r.text
     # close button keeps its layout-only class; diff toggle is identified by
     # its behavior (button class migrated to canonical .btn during UI consolidation)
-    assert 'btn-close-cmp' in r.text
+    assert "btn-close-cmp" in r.text
     # The Diff toggle now drives the shared store flag (compareDiff) so it
     # controls both the Prompt word-diff and the Output aligned table.
-    assert '$store.studio.compareDiff = !$store.studio.compareDiff' in r.text
+    assert "$store.studio.compareDiff = !$store.studio.compareDiff" in r.text
 
 
 def test_output_tab_includes_data_run_json_when_run_exists(client):
@@ -204,6 +213,7 @@ def test_output_tab_includes_data_run_json_when_run_exists(client):
                 (v1, 12041, json.dumps({"scenes": []})),
             )
             await db.commit()
+
     loop = asyncio.new_event_loop()
     try:
         loop.run_until_complete(_seed())
@@ -223,7 +233,7 @@ def test_prompt_card_lists_all_versions_in_picker(client):
     assert f'data-version-pick="{v1}"' in r.text
     assert f'data-version-pick="{v2}"' in r.text
     # Active version is marked.
-    assert 'is-current' in r.text
+    assert "is-current" in r.text
 
 
 def test_picker_uses_hx_get_to_swap_card(client):

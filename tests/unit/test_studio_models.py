@@ -15,10 +15,16 @@ def test_studio_set_clip_minimal():
 
 def test_studio_run_ok_with_output():
     r = StudioRun(
-        id=1, prompt_version_id=10, clip_id=12041, job_id=99,
+        id=1,
+        prompt_version_id=10,
+        clip_id=12041,
+        job_id=99,
         status="ok",
         output_json={"scenes": [{"name": "garden", "in_secs": 0, "out_secs": 12.4}]},
-        duration_s=7.4, tokens_in=14820, tokens_out=612, cost_usd=0.0218,
+        duration_s=7.4,
+        tokens_in=14820,
+        tokens_out=612,
+        cost_usd=0.0218,
         model="gemini-2.5-pro",
         started_at="2026-05-26T10:00:00+00:00",
         finished_at="2026-05-26T10:00:07+00:00",
@@ -29,7 +35,10 @@ def test_studio_run_ok_with_output():
 
 def test_studio_run_pending_no_output():
     r = StudioRun(
-        id=1, prompt_version_id=10, clip_id=12041, status="pending",
+        id=1,
+        prompt_version_id=10,
+        clip_id=12041,
+        status="pending",
         started_at="2026-05-26T10:00:00+00:00",
     )
     assert r.output_json is None

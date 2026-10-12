@@ -16,21 +16,28 @@ def _setenv(monkeypatch, tmp_path):
 def client(monkeypatch, tmp_path):
     _setenv(monkeypatch, tmp_path)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     with TestClient(main_mod.app) as c:
         yield c
 
 
 def _two_versions(client):
-    r = client.post("/api/prompts", json={
-        "name": "cmp", "media_kind": "any", "model": "gemini-2.5-pro",
-        "target_map": {}, "output_schema": {}, "body": "v1",
-    })
+    r = client.post(
+        "/api/prompts",
+        json={
+            "name": "cmp",
+            "media_kind": "any",
+            "model": "gemini-2.5-pro",
+            "target_map": {},
+            "output_schema": {},
+            "body": "v1",
+        },
+    )
     pid = r.json()["id"]
     v1 = client.get(f"/api/prompts/{pid}").json()["latest_version_id"]
     client.post(f"/api/prompts/{pid}/versions/{v1}:promote")
-    v2 = client.post(f"/api/prompts/{pid}/versions",
-                     json={"from_version_id": v1}).json()["id"]
+    v2 = client.post(f"/api/prompts/{pid}/versions", json={"from_version_id": v1}).json()["id"]
     return pid, v1, v2
 
 

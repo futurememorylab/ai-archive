@@ -170,20 +170,25 @@ async def test_reactivate_reconciles_markers_drops_later_versions(db):
     v1 = await repo.insert(
         db,
         ClipVersion(
-            catdv_clip_id=1, version_num=1,
+            catdv_clip_id=1,
+            version_num=1,
             snapshot={"markers": [{"name": "A", "in": {"secs": 4.0}}], "fields": {}, "notes": None},
-            origin="publish", publish_state="superseded",
+            origin="publish",
+            publish_state="superseded",
         ),
     )
     await repo.insert(
         db,
         ClipVersion(
-            catdv_clip_id=1, version_num=2,
+            catdv_clip_id=1,
+            version_num=2,
             snapshot={
                 "markers": [{"name": "A", "in": {"secs": 4.0}}, {"name": "B", "in": {"secs": 8.0}}],
-                "fields": {}, "notes": None,
+                "fields": {},
+                "notes": None,
             },
-            origin="publish", publish_state="live",
+            origin="publish",
+            publish_state="live",
         ),
     )
 

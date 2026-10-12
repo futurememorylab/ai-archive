@@ -433,8 +433,13 @@ def test_clips_list_running_batch_self_polls_then_stops(monkeypatch, tmp_path):
         async def _seed() -> int:
             prompts = PromptsRepo()
             _, vid = await prompts.create_with_initial_version(
-                ctx.db, name="p", description=None, body="b",
-                target_map={}, output_schema={}, model="m",
+                ctx.db,
+                name="p",
+                description=None,
+                body="b",
+                target_map={},
+                output_schema={},
+                model="m",
             )
             jobs = JobsRepo()
             # Fresh job → items are 'pending' (in-flight) → batch is running.
@@ -476,8 +481,13 @@ def test_batch_statuses_fragment_returns_oob_pills(monkeypatch, tmp_path):
         async def _seed() -> int:
             prompts = PromptsRepo()
             _, vid = await prompts.create_with_initial_version(
-                ctx.db, name="p", description=None, body="b",
-                target_map={}, output_schema={}, model="m",
+                ctx.db,
+                name="p",
+                description=None,
+                body="b",
+                target_map={},
+                output_schema={},
+                model="m",
             )
             jobs = JobsRepo()
             return await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[12041])
@@ -517,8 +527,13 @@ def test_topbar_to_review_chip_counts_unapplied_drafts(monkeypatch, tmp_path):
         async def _seed_unapplied() -> None:
             prompts = PromptsRepo()
             _, vid = await prompts.create_with_initial_version(
-                ctx.db, name="p", description=None, body="b",
-                target_map={}, output_schema={}, model="m",
+                ctx.db,
+                name="p",
+                description=None,
+                body="b",
+                target_map={},
+                output_schema={},
+                model="m",
             )
             jobs = JobsRepo()
             jid = await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[12041])
@@ -549,9 +564,7 @@ def test_topbar_to_review_chip_counts_unapplied_drafts(monkeypatch, tmp_path):
         assert 'href="/?anno=for_review"' in r.text
 
         async def _apply() -> None:
-            await ctx.db.execute(
-                "UPDATE review_items SET applied_at = '2026-06-02T01:00:00'"
-            )
+            await ctx.db.execute("UPDATE review_items SET applied_at = '2026-06-02T01:00:00'")
             await ctx.db.commit()
 
         asyncio.run(_apply())
@@ -575,8 +588,13 @@ def test_to_review_ignores_fully_decided_clips(monkeypatch, tmp_path):
         async def _seed() -> None:
             prompts = PromptsRepo()
             _, vid = await prompts.create_with_initial_version(
-                ctx.db, name="p", description=None, body="b",
-                target_map={}, output_schema={}, model="m",
+                ctx.db,
+                name="p",
+                description=None,
+                body="b",
+                target_map={},
+                output_schema={},
+                model="m",
             )
             jobs = JobsRepo()
             jid = await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[12041])
@@ -593,7 +611,8 @@ def test_to_review_ignores_fully_decided_clips(monkeypatch, tmp_path):
                 "INSERT INTO review_items "
                 "(annotation_id, studio_run_id, catdv_clip_id, kind, target_identifier, "
                 " proposed_value, edited_value, decision, applied_at) "
-                "VALUES (?, NULL, 12041, 'marker', NULL, '{}', NULL, 'accepted', '2026-06-02T01:00:00')",
+                "VALUES (?, NULL, 12041, 'marker', NULL, '{}', NULL, 'accepted', "
+                "'2026-06-02T01:00:00')",
                 (ann,),
             )
             await ctx.db.execute(
@@ -634,8 +653,13 @@ def test_to_review_ignores_superseded_annotation(monkeypatch, tmp_path):
         async def _seed() -> None:
             prompts = PromptsRepo()
             _, vid = await prompts.create_with_initial_version(
-                ctx.db, name="p", description=None, body="b",
-                target_map={}, output_schema={}, model="m",
+                ctx.db,
+                name="p",
+                description=None,
+                body="b",
+                target_map={},
+                output_schema={},
+                model="m",
             )
             jobs = JobsRepo()
             j_old = await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[12041])
@@ -666,7 +690,8 @@ def test_to_review_ignores_superseded_annotation(monkeypatch, tmp_path):
                 "INSERT INTO review_items "
                 "(annotation_id, studio_run_id, catdv_clip_id, kind, target_identifier, "
                 " proposed_value, edited_value, decision, applied_at) "
-                "VALUES (?, NULL, 12041, 'marker', NULL, '{}', NULL, 'accepted', '2026-06-02T01:00:00')",
+                "VALUES (?, NULL, 12041, 'marker', NULL, '{}', NULL, 'accepted', "
+                "'2026-06-02T01:00:00')",
                 (new_ann,),
             )
             await ctx.db.commit()

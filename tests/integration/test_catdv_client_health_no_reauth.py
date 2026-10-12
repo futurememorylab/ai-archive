@@ -18,6 +18,7 @@ async def test_health_raises_authentication_required_without_relogin():
             login_calls_before = fake.login_call_count
             # Force AUTH envelope on the next request.
             import time
+
             fake.force_auth_until = time.time() + 60
 
             with pytest.raises(CatdvAuthError):

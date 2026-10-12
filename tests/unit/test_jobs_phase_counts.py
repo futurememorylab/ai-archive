@@ -57,9 +57,7 @@ async def test_phase_counts_does_not_count_unknown_status_as_done(db):
     jid = await repo.create_job(db, prompt_version_id=10, clip_ids=[1, 2])
     items = await repo.list_items(db, jid)
     await repo.update_item_status(db, items[0].id, "applied")  # genuinely done
-    await db.execute(
-        "UPDATE job_items SET status = 'future_unknown' WHERE id = ?", (items[1].id,)
-    )
+    await db.execute("UPDATE job_items SET status = 'future_unknown' WHERE id = ?", (items[1].id,))
     await db.commit()
     pc = await repo.phase_counts(db, jid)
     assert pc["done"] == 1  # only the 'applied' item, not the unknown one

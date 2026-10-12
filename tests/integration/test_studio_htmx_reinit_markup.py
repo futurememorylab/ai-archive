@@ -20,16 +20,24 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setenv("APP_ENV", "dev")
     monkeypatch.delenv("CATDV_PASSWORD", raising=False)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     with TestClient(main_mod.app) as c:
         yield c
 
 
 def _make_prompt(client):
-    r = client.post("/api/prompts", json={
-        "name": "pc", "media_kind": "any", "model": "gemini-2.5-pro",
-        "target_map": {}, "output_schema": {}, "body": "v1",
-    })
+    r = client.post(
+        "/api/prompts",
+        json={
+            "name": "pc",
+            "media_kind": "any",
+            "model": "gemini-2.5-pro",
+            "target_map": {},
+            "output_schema": {},
+            "body": "v1",
+        },
+    )
     assert r.status_code == 201, r.text
     pid = r.json()["id"]
     v1 = client.get(f"/api/prompts/{pid}").json()["latest_version_id"]

@@ -31,12 +31,14 @@ class _FakeClient:
         return self._payload
 
 
-def _make_adapter(db: aiosqlite.Connection, poster_cache_repo: PosterCacheRepo) -> CatdvArchiveAdapter:
+def _make_adapter(
+    db: aiosqlite.Connection, poster_cache_repo: PosterCacheRepo
+) -> CatdvArchiveAdapter:
     payload = {
         "items": [
             {"ID": 888700, "posterID": 882119, "name": "clip-a"},
             {"ID": 888709, "posterID": 882156, "name": "clip-b"},
-            {"ID": 888711, "name": "clip-c"},            # no posterID → must not be written
+            {"ID": 888711, "name": "clip-c"},  # no posterID → must not be written
         ],
         "totalItems": 3,
     }

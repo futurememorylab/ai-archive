@@ -48,8 +48,14 @@ async def test_archive_branch(conn):
 @pytest.mark.asyncio
 async def test_uploaded_branch(conn):
     repo = UploadedClipsRepo()
-    pk = await repo.create(conn, original_filename="up.mp4", mime="video/mp4",
-                           size_bytes=10, ext=".mp4", duration_secs=8.0)
+    pk = await repo.create(
+        conn,
+        original_filename="up.mp4",
+        mime="video/mp4",
+        size_bytes=10,
+        ext=".mp4",
+        duration_secs=8.0,
+    )
     cid = to_clip_id(pk)
     meta = await _resolve_clip_meta(
         conn, clip_id=cid, archive=_FakeArchive(), uploaded_clips_repo=repo

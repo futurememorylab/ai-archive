@@ -83,9 +83,9 @@ async def test_session_config_returns_token_and_setup(client_and_db, monkeypatch
     # Live now mints a short-lived, config-bound ephemeral token server-side.
     # The raw GEMINI_API_KEY authenticates THIS mint call (server→Google) and
     # never reaches the browser. See ADR 0112 (supersedes 0043).
-    mint = respx.post(
-        "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
-    ).mock(return_value=Response(200, json={"name": "auth_tokens/ephemeral-XYZ"}))
+    mint = respx.post("https://generativelanguage.googleapis.com/v1alpha/auth_tokens").mock(
+        return_value=Response(200, json={"name": "auth_tokens/ephemeral-XYZ"})
+    )
 
     r = await ac.get("/api/live/session-config", params={"clip_id": 42})
     assert r.status_code == 200, r.text
@@ -112,9 +112,7 @@ async def test_session_config_returns_token_and_setup(client_and_db, monkeypatch
     # inside setup_payload (which must be a pure BidiGenerateContentSetup so
     # the browser can send it verbatim as the `setup` frame).
     assert "initial_context_turn" not in data["setup_payload"]
-    assert data["initial_context_turn"]["parts"][0]["text"].startswith(
-        "=== Publikované anotace"
-    )
+    assert data["initial_context_turn"]["parts"][0]["text"].startswith("=== Publikované anotace")
     repo = LiveSessionsRepo()
     row = await repo.get(conn, data["session_id"])
     assert row.state == "pending"
@@ -155,9 +153,9 @@ async def test_session_config_works_offline_when_clip_cached(client_and_db, monk
 
     # Minting the ephemeral token is a Google Developer API call (browser↔Google
     # direct, not VPN-dependent), so Live works even while CatDV is offline.
-    respx.post(
-        "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
-    ).mock(return_value=Response(200, json={"name": "auth_tokens/ephemeral-OFF"}))
+    respx.post("https://generativelanguage.googleapis.com/v1alpha/auth_tokens").mock(
+        return_value=Response(200, json={"name": "auth_tokens/ephemeral-OFF"})
+    )
 
     r = await ac.get("/api/live/session-config", params={"clip_id": 42})
     assert r.status_code == 200, r.text

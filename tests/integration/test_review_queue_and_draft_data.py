@@ -27,8 +27,13 @@ def _make_client(monkeypatch, tmp_path):
 async def _seed(ctx):
     prompts = PromptsRepo()
     _, vid = await prompts.create_with_initial_version(
-        ctx.db, name="P", description=None, body="b",
-        target_map={"x": {"kind": "markers"}}, output_schema={}, model="m",
+        ctx.db,
+        name="P",
+        description=None,
+        body="b",
+        target_map={"x": {"kind": "markers"}},
+        output_schema={},
+        model="m",
     )
     jobs = JobsRepo()
     jid = await jobs.create_job(
@@ -76,7 +81,12 @@ def test_draft_data_route(monkeypatch, tmp_path):
         assert r.status_code == 200
         body = r.json()
         assert set(body.keys()) == {
-            "markers", "fields", "notes", "applied_count", "synced_count", "deleted"
+            "markers",
+            "fields",
+            "notes",
+            "applied_count",
+            "synced_count",
+            "deleted",
         }
         # the seeded pending marker item is present as a "proposed" card
         assert any(m["status"] == "proposed" for m in body["markers"])

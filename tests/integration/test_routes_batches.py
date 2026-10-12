@@ -38,8 +38,13 @@ def _make_client(monkeypatch, tmp_path):
 async def _seed_batch(ctx):
     prompts = PromptsRepo()
     _, vid = await prompts.create_with_initial_version(
-        ctx.db, name="Scénické značky CZ", description=None, body="p",
-        target_map={"x": {"kind": "markers"}}, output_schema={}, model="gemini-2.5-pro",
+        ctx.db,
+        name="Scénické značky CZ",
+        description=None,
+        body="p",
+        target_map={"x": {"kind": "markers"}},
+        output_schema={},
+        model="gemini-2.5-pro",
     )
     jobs = JobsRepo()
     jid = await jobs.create_job(
@@ -110,8 +115,13 @@ def test_batches_cost_column_shows_dash_without_telemetry(monkeypatch, tmp_path)
         async def _seed_no_tele(ctx):
             prompts = PromptsRepo()
             _, vid = await prompts.create_with_initial_version(
-                ctx.db, name="No-cost batch", description=None, body="p",
-                target_map={"x": {"kind": "markers"}}, output_schema={}, model="gemini-2.5-pro",
+                ctx.db,
+                name="No-cost batch",
+                description=None,
+                body="p",
+                target_map={"x": {"kind": "markers"}},
+                output_schema={},
+                model="gemini-2.5-pro",
             )
             jobs = JobsRepo()
             await jobs.create_job(
@@ -171,9 +181,9 @@ def test_retry_failed_flips_failed_items_and_job_to_pending(monkeypatch, tmp_pat
             return statuses, (await jobs.get_job(ctx.db, jid)).status
 
         statuses, job_status = asyncio.run(_state())
-        assert statuses[102] == "pending"        # was 'error' → reset
-        assert statuses[101] == "review_ready"   # untouched
-        assert job_status == "pending"           # job requeued for the worker
+        assert statuses[102] == "pending"  # was 'error' → reset
+        assert statuses[101] == "review_ready"  # untouched
+        assert job_status == "pending"  # job requeued for the worker
 
 
 def _picker_clip(clip_id=12041, name="Abramcukova_Anna_09", file_path=None):
@@ -181,10 +191,19 @@ def _picker_clip(clip_id=12041, name="Abramcukova_Anna_09", file_path=None):
     # to a .mov (→ video) so existing tests stay "video".
     media_path = file_path if file_path is not None else f"/vol/{name}.mov"
     return CanonicalClip(
-        key=("catdv", str(clip_id)), name=name, duration_secs=60.0, fps=25.0,
-        markers=(), fields={}, notes={},
-        media=MediaRef(mime_type="video/quicktime", size_bytes=None,
-                       cached_path=None, upstream_handle=str(clip_id)),
+        key=("catdv", str(clip_id)),
+        name=name,
+        duration_secs=60.0,
+        fps=25.0,
+        markers=(),
+        fields={},
+        notes={},
+        media=MediaRef(
+            mime_type="video/quicktime",
+            size_bytes=None,
+            cached_path=None,
+            upstream_handle=str(clip_id),
+        ),
         provider_data={"ID": clip_id, "name": name, "media": {"filePath": media_path}},
         fetched_at=datetime.now(UTC),
     )
@@ -199,8 +218,12 @@ class _PickerArchive:
     async def list_clips(self, catalog, query: ClipQuery):
         self.last_query = query
         s = query.offset
-        return ClipPage(items=self._clips[s:s + query.limit], total=self._total,
-                        offset=query.offset, limit=query.limit)
+        return ClipPage(
+            items=self._clips[s : s + query.limit],
+            total=self._total,
+            offset=query.offset,
+            limit=query.limit,
+        )
 
     async def get_clip(self, clip_id_str):
         for c in self._clips:
@@ -216,9 +239,9 @@ def test_batches_picker_renders_rows(monkeypatch, tmp_path):
         assert r.status_code == 200
         assert "<!doctype html>" not in r.text.lower()
         assert 'class="vlist"' in r.text
-        assert 'value="catdv/12041"' in r.text          # selection checkbox
+        assert 'value="catdv/12041"' in r.text  # selection checkbox
         assert "Abramcukova_Anna_09" in r.text
-        assert 'id="nb-list-meta"' in r.text             # pager meta for the client
+        assert 'id="nb-list-meta"' in r.text  # pager meta for the client
         assert 'data-total="1"' in r.text
 
 
@@ -253,9 +276,9 @@ def test_batches_picker_kind_image_returns_only_images(monkeypatch, tmp_path):
         install_live_ctx(client.app, archive=_PickerArchive(_kind_clips()))
         r = client.get("/batches/picker?kind=image")
         assert r.status_code == 200
-        assert 'value="catdv/2"' in r.text      # the .jpg
-        assert 'value="catdv/1"' not in r.text   # the .mov filtered out
-        assert 'data-total="1"' in r.text        # total reflects the filtered set
+        assert 'value="catdv/2"' in r.text  # the .jpg
+        assert 'value="catdv/1"' not in r.text  # the .mov filtered out
+        assert 'data-total="1"' in r.text  # total reflects the filtered set
 
 
 def test_batches_picker_kind_video_returns_only_videos(monkeypatch, tmp_path):
@@ -263,8 +286,8 @@ def test_batches_picker_kind_video_returns_only_videos(monkeypatch, tmp_path):
         install_live_ctx(client.app, archive=_PickerArchive(_kind_clips()))
         r = client.get("/batches/picker?kind=video")
         assert r.status_code == 200
-        assert 'value="catdv/1"' in r.text       # the .mov
-        assert 'value="catdv/2"' not in r.text   # the .jpg filtered out
+        assert 'value="catdv/1"' in r.text  # the .mov
+        assert 'value="catdv/2"' not in r.text  # the .jpg filtered out
         assert 'data-total="1"' in r.text
 
 

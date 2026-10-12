@@ -52,11 +52,16 @@ def _install(app, client):
             class H:
                 ok = client.logged_in
                 reachable = True
+
             return H()
 
     monitor = ConnectionMonitor(
-        provider=P(), db_provider=lambda: ctx.db, interval_s=99999.0,
-        event_bus=ctx.event_bus, manual=True, logged_in=lambda: client.logged_in,
+        provider=P(),
+        db_provider=lambda: ctx.db,
+        interval_s=99999.0,
+        event_bus=ctx.event_bus,
+        manual=True,
+        logged_in=lambda: client.logged_in,
         initial_state=ConnectionState.disconnected,
     )
     install_live_ctx(app, connection_monitor=monitor, catdv=client)
@@ -141,6 +146,7 @@ def test_connect_success_emits_toast(monkeypatch, tmp_path):
         assert "HX-Trigger" in r.headers
         assert "CatDV connected" in r.headers["HX-Trigger"]
         import json
+
         assert json.loads(r.headers["HX-Trigger"])["toast"]["level"] == "success"
 
 
@@ -155,6 +161,7 @@ def test_disconnect_success_emits_toast(monkeypatch, tmp_path):
         assert "HX-Trigger" in r.headers
         assert "CatDV disconnected" in r.headers["HX-Trigger"]
         import json
+
         assert json.loads(r.headers["HX-Trigger"])["toast"]["level"] == "info"
 
 
@@ -185,12 +192,18 @@ def test_retry_forced_offline_returns_inner_partial_not_outer(monkeypatch, tmp_p
                 class H:
                     ok = False
                     reachable = True
+
                 return H()
 
         monitor = ConnectionMonitor(
-            provider=P(), db_provider=lambda: ctx.db, interval_s=99999.0,
-            event_bus=ctx.event_bus, manual=True, logged_in=lambda: c.logged_in,
-            initial_state=ConnectionState.offline, forced_offline=True,
+            provider=P(),
+            db_provider=lambda: ctx.db,
+            interval_s=99999.0,
+            event_bus=ctx.event_bus,
+            manual=True,
+            logged_in=lambda: c.logged_in,
+            initial_state=ConnectionState.offline,
+            forced_offline=True,
         )
         install_live_ctx(client.app, connection_monitor=monitor, catdv=c)
 

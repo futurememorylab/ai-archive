@@ -17,6 +17,5 @@ def test_routes_do_not_execute_jobs():
             if token in text:
                 offenders.append(f"{py.name}: {token}")
     assert not offenders, (
-        "Routes must not execute jobs — use the lifespan JobRunner (ADR 0125). "
-        f"Found: {offenders}"
+        f"Routes must not execute jobs — use the lifespan JobRunner (ADR 0125). Found: {offenders}"
     )

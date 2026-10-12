@@ -17,7 +17,7 @@ colour the indicator and warn on launch surfaces. It never blocks a run.
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import aiosqlite
 
@@ -37,11 +37,9 @@ def month_start_utc(now: datetime) -> datetime:
     the window boundary matches the UTC ISO timestamps stored on run_telemetry.
     """
     if now.tzinfo is None:
-        now = now.replace(tzinfo=timezone.utc)
-    now = now.astimezone(timezone.utc)
-    return now.replace(
-        day=1, hour=0, minute=0, second=0, microsecond=0
-    )
+        now = now.replace(tzinfo=UTC)
+    now = now.astimezone(UTC)
+    return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
 
 def _status_for(fraction: float | None) -> str:
@@ -123,13 +121,9 @@ class UsageService:
     async def by_model(self, *, now: datetime) -> list[dict]:
         """By-model spend breakdown for the current month."""
         start_iso = self._period_start_iso(now)
-        return await self._telemetry.spend_by_model_in_period(
-            self._db(), start_iso=start_iso
-        )
+        return await self._telemetry.spend_by_model_in_period(self._db(), start_iso=start_iso)
 
     async def by_day(self, *, now: datetime) -> list[dict]:
         """Daily spend series for the current month."""
         start_iso = self._period_start_iso(now)
-        return await self._telemetry.spend_by_day_in_period(
-            self._db(), start_iso=start_iso
-        )
+        return await self._telemetry.spend_by_day_in_period(self._db(), start_iso=start_iso)

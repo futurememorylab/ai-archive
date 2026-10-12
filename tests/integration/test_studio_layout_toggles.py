@@ -17,16 +17,24 @@ def _setenv(monkeypatch, tmp_path):
 def client(monkeypatch, tmp_path):
     _setenv(monkeypatch, tmp_path)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     with TestClient(main_mod.app) as c:
         yield c
 
 
 def _make_prompt(client):
-    r = client.post("/api/prompts", json={
-        "name": "ps", "media_kind": "any", "model": "gemini-2.5-pro",
-        "target_map": {}, "output_schema": {}, "body": "x",
-    })
+    r = client.post(
+        "/api/prompts",
+        json={
+            "name": "ps",
+            "media_kind": "any",
+            "model": "gemini-2.5-pro",
+            "target_map": {},
+            "output_schema": {},
+            "body": "x",
+        },
+    )
     assert r.status_code == 201, r.text
     return r.json()["id"]
 

@@ -293,7 +293,9 @@ async def _auth_gate(request: Request, call_next):
         try:
             await core.user_roles_repo.activate_on_first_sight(core.db, email)
         except Exception:  # noqa: BLE001 — bookkeeping write; never block the request
-            _auth_log.warning("activate_on_first_sight failed (non-fatal); continuing", exc_info=True)
+            _auth_log.warning(
+                "activate_on_first_sight failed (non-fatal); continuing", exc_info=True
+            )
     return await call_next(request)
 
 

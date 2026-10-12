@@ -10,8 +10,13 @@ async def _seed_version(
 ) -> tuple[int, int]:
     prompts = PromptsRepo()
     pid, vid = await prompts.create_with_initial_version(
-        db, name=name, description=None, body="p",
-        target_map={"x": {"kind": "markers"}}, output_schema={}, model=model,
+        db,
+        name=name,
+        description=None,
+        body="p",
+        target_map={"x": {"kind": "markers"}},
+        output_schema={},
+        model=model,
     )
     return pid, vid
 
@@ -137,10 +142,10 @@ async def test_list_batches_problem_clips_counts_failed_and_conflict_writebacks(
     jid = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[101, 102, 103, 104])
     for it in await jobs.list_items(db, jid):
         await jobs.update_item_status(db, it.id, "review_ready")
-    await _pending_op(db, clip_id=101, status="failed")    # problem
+    await _pending_op(db, clip_id=101, status="failed")  # problem
     await _pending_op(db, clip_id=102, status="conflict")  # problem
-    await _pending_op(db, clip_id=103, status="pending")   # syncing, not a problem
-    await _pending_op(db, clip_id=104, status="applied")   # landed → neither
+    await _pending_op(db, clip_id=103, status="pending")  # syncing, not a problem
+    await _pending_op(db, clip_id=104, status="applied")  # landed → neither
     rows = await jobs.list_batches(db, limit=50)
     assert rows[0]["problem_clips"] == 2  # 101 + 102
     assert rows[0]["syncing_clips"] == 1  # only 103
@@ -168,8 +173,8 @@ async def test_count_total_batches(db):
 async def test_count_total_batches_excludes_studio_jobs(db):
     _, vid = await _seed_version(db)
     jobs = JobsRepo()
-    await jobs.create_job(db, prompt_version_id=vid, clip_ids=[1])                    # normal
-    await jobs.create_job(db, prompt_version_id=vid, clip_ids=[2], kind="studio")     # excluded
+    await jobs.create_job(db, prompt_version_id=vid, clip_ids=[1])  # normal
+    await jobs.create_job(db, prompt_version_id=vid, clip_ids=[2], kind="studio")  # excluded
     assert await jobs.count_total_batches(db) == 1
 
 
@@ -181,8 +186,8 @@ async def test_list_batches_running_jobs_and_in_flight(db):
     jid = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[1, 2])
     await jobs.update_status(db, jid, "running")
     its = await jobs.list_items(db, jid)
-    await jobs.update_item_status(db, its[0].id, "prompting")      # in-flight
-    await jobs.update_item_status(db, its[1].id, "review_ready")   # finished
+    await jobs.update_item_status(db, its[0].id, "prompting")  # in-flight
+    await jobs.update_item_status(db, its[1].id, "review_ready")  # finished
 
     rows = await jobs.list_batches(db, limit=50)
     assert len(rows) == 1

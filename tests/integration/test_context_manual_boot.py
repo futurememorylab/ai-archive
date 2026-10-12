@@ -66,9 +66,9 @@ async def test_manual_mode_does_not_login_at_boot(monkeypatch, tmp_path):
     core, live = await ctx_mod.build_context(Settings(), init_external=True)
     try:
         assert live is not None
-        assert live.catdv is not None       # client built
+        assert live.catdv is not None  # client built
         assert live.catdv.logged_in is False
-        assert login_calls["n"] == 0        # but NOT logged in
+        assert login_calls["n"] == 0  # but NOT logged in
         from backend.app.services.connection_monitor import ConnectionState
 
         assert live.connection_monitor.current_state() == ConnectionState.disconnected

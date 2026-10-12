@@ -19,6 +19,7 @@ def _setenv(monkeypatch, tmp_path):
 def client(monkeypatch, tmp_path):
     _setenv(monkeypatch, tmp_path)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     with TestClient(main_mod.app) as c:
         yield c
@@ -39,4 +40,4 @@ def test_picker_shell_renders_offline(client):
 def test_picker_shell_has_no_bare_rows_or_htmx_search(client):
     r = client.get("/studio/_archive_picker?set_id=7")
     assert "picker-row" not in r.text  # bare renderer deleted
-    assert "hx-get" not in r.text      # search is Alpine-driven now
+    assert "hx-get" not in r.text  # search is Alpine-driven now

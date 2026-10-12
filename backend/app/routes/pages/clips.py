@@ -9,8 +9,8 @@ from fastapi.responses import HTMLResponse
 
 from backend.app.archive.errors import ProviderError, is_provider_not_found
 from backend.app.archive.model import CanonicalClip, ClipQuery
-from backend.app.media_kind import is_image_path
 from backend.app.deps import get_core_ctx, get_live_ctx
+from backend.app.media_kind import is_image_path
 from backend.app.repositories.jobs import TRANSIENT_STATUSES
 from backend.app.repositories.live_sessions import LiveSessionsRepo
 from backend.app.routes.pages.templates import templates
@@ -143,9 +143,7 @@ def _clip_kind(clip: CanonicalClip) -> str:
     return "image" if is_image_path(media.get("filePath")) else "video"
 
 
-def _filter_clips_by_kind(
-    clips: list[CanonicalClip], kind: str | None
-) -> list[CanonicalClip]:
+def _filter_clips_by_kind(clips: list[CanonicalClip], kind: str | None) -> list[CanonicalClip]:
     """Keep only clips of the requested kind. ``None``/``"any"`` is a no-op."""
     if not kind or kind == "any":
         return clips

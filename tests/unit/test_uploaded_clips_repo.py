@@ -21,8 +21,14 @@ async def conn(tmp_path: Path):
 async def test_create_sets_stored_filename_from_clip_id(conn):
     repo = UploadedClipsRepo()
     pk = await repo.create(
-        conn, original_filename="My Clip.mp4", mime="video/mp4",
-        size_bytes=123, ext=".mp4", duration_secs=12.5, width=1920, height=1080,
+        conn,
+        original_filename="My Clip.mp4",
+        mime="video/mp4",
+        size_bytes=123,
+        ext=".mp4",
+        duration_secs=12.5,
+        width=1920,
+        height=1080,
     )
     clip_id = to_clip_id(pk)
     row = await repo.get(conn, clip_id)
@@ -42,10 +48,12 @@ async def test_get_missing_returns_none(conn):
 @pytest.mark.asyncio
 async def test_get_many_keyed_by_clip_id(conn):
     repo = UploadedClipsRepo()
-    pk1 = await repo.create(conn, original_filename="a.mp4", mime="video/mp4",
-                            size_bytes=1, ext=".mp4")
-    pk2 = await repo.create(conn, original_filename="b.webm", mime="video/webm",
-                            size_bytes=2, ext=".webm")
+    pk1 = await repo.create(
+        conn, original_filename="a.mp4", mime="video/mp4", size_bytes=1, ext=".mp4"
+    )
+    pk2 = await repo.create(
+        conn, original_filename="b.webm", mime="video/webm", size_bytes=2, ext=".webm"
+    )
     got = await repo.get_many(conn, [to_clip_id(pk1), to_clip_id(pk2), 1_000_009_999])
     assert set(got) == {to_clip_id(pk1), to_clip_id(pk2)}
     assert got[to_clip_id(pk2)]["original_filename"] == "b.webm"
@@ -54,8 +62,9 @@ async def test_get_many_keyed_by_clip_id(conn):
 @pytest.mark.asyncio
 async def test_delete(conn):
     repo = UploadedClipsRepo()
-    pk = await repo.create(conn, original_filename="a.mp4", mime="video/mp4",
-                           size_bytes=1, ext=".mp4")
+    pk = await repo.create(
+        conn, original_filename="a.mp4", mime="video/mp4", size_bytes=1, ext=".mp4"
+    )
     cid = to_clip_id(pk)
     await repo.delete(conn, cid)
     assert await repo.get(conn, cid) is None

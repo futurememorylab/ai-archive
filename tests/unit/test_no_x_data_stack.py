@@ -41,6 +41,5 @@ def _scan(root: Path) -> list[str]:
 def test_no_x_data_stack_reach_ins():
     hits = _scan(STATIC) + _scan(TEMPLATES)
     assert hits == [], (
-        f"{NEEDLE} reach-ins found (use Alpine.store('studio') / DOM events "
-        f"instead): {hits}"
+        f"{NEEDLE} reach-ins found (use Alpine.store('studio') / DOM events instead): {hits}"
     )

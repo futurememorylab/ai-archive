@@ -34,9 +34,7 @@ def _now_month_iso(day: int = 5) -> str:
     from datetime import UTC, datetime
 
     now = datetime.now(UTC)
-    return now.replace(
-        day=day, hour=12, minute=0, second=0, microsecond=0
-    ).isoformat()
+    return now.replace(day=day, hour=12, minute=0, second=0, microsecond=0).isoformat()
 
 
 async def _seed_telemetry(db_path, *, cost_usd, model, occurred_at=None):
@@ -319,14 +317,10 @@ def test_model_row_shows_this_month_spend_and_runs(monkeypatch, tmp_path):
         client.app.state.live_ctx = None
         # gemini-2.5-flash-lite is a seeded catalog model.
         asyncio.run(
-            _seed_telemetry(
-                tmp_path / "app.db", cost_usd=3.00, model="gemini-2.5-flash-lite"
-            )
+            _seed_telemetry(tmp_path / "app.db", cost_usd=3.00, model="gemini-2.5-flash-lite")
         )
         asyncio.run(
-            _seed_telemetry(
-                tmp_path / "app.db", cost_usd=4.00, model="gemini-2.5-flash-lite"
-            )
+            _seed_telemetry(tmp_path / "app.db", cost_usd=4.00, model="gemini-2.5-flash-lite")
         )
         r = client.get("/admin/models")
         assert r.status_code == 200

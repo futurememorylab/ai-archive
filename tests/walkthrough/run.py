@@ -1,7 +1,7 @@
 """CLI to run/record walkthrough scenarios.
 
-  python -m tests.walkthrough.run --assert            # headless, no video, pass/fail
-  python -m tests.walkthrough.run --record [slug...]  # headed, annotated webm + gallery
+python -m tests.walkthrough.run --assert            # headless, no video, pass/fail
+python -m tests.walkthrough.run --record [slug...]  # headed, annotated webm + gallery
 """
 
 from __future__ import annotations
@@ -24,9 +24,7 @@ ARTIFACTS = Path(__file__).parent / "artifacts"
 
 
 def run_scenarios(slugs: list[str], *, record: bool) -> list[dict]:
-    scenarios = (
-        [get_scenario(s) for s in slugs] if slugs else load_scenarios()
-    )
+    scenarios = [get_scenario(s) for s in slugs] if slugs else load_scenarios()
     results: list[dict] = []
     if record:
         ARTIFACTS.mkdir(parents=True, exist_ok=True)

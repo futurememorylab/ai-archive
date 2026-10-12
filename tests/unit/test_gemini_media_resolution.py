@@ -1,6 +1,6 @@
 """annotate() maps media_resolution into the generate_content config."""
 
-from backend.app.services.gemini import GeminiService, _SDK_MEDIA_RESOLUTION
+from backend.app.services.gemini import _SDK_MEDIA_RESOLUTION, GeminiService
 
 
 class _FakeModels:

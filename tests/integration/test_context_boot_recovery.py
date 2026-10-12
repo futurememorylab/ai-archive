@@ -155,9 +155,7 @@ async def test_hanging_login_at_boot_is_bounded_and_recovers(tmp_path, monkeypat
         # If the boot login were unbounded it would hang ~30s; guard the
         # whole build with a 5s wall-clock budget so the failure mode is a
         # clear timeout rather than a 30s stall.
-        _, ctx = await asyncio.wait_for(
-            build_context(Settings(), init_external=True), timeout=5.0
-        )
+        _, ctx = await asyncio.wait_for(build_context(Settings(), init_external=True), timeout=5.0)
         try:
             # Timeout is transport-like: keep the client alive for retry.
             assert ctx.catdv is not None

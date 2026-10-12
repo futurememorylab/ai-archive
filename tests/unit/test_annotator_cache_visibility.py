@@ -3,6 +3,7 @@ caches a clip (AI-store miss → proxy download), it writes a prefetch_queue row
 so the cache appears in the queue page with live progress — identical in shape
 to a Cache-button row (downloading → done, progress on the download).
 """
+
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -38,18 +39,20 @@ async def db(tmp_path: Path):
 async def _seed_studio_job(db, *, clip_id=42):
     prompts = PromptsRepo()
     _pid, vid = await prompts.create_with_initial_version(
-        db, name="p", description=None, body="do x",
+        db,
+        name="p",
+        description=None,
+        body="do x",
         target_map={"scenes": {"kind": "markers"}},
-        output_schema={"type": "object"}, model="gemini-2.5-pro",
+        output_schema={"type": "object"},
+        model="gemini-2.5-pro",
     )
     runs = StudioRunsRepo()
     run_id = await runs.create_pending(
         db, prompt_version_id=vid, clip_id=clip_id, model="gemini-2.5-pro"
     )
     jobs = JobsRepo()
-    job_id = await jobs.create_job(
-        db, prompt_version_id=vid, clip_ids=[clip_id], kind="studio"
-    )
+    job_id = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[clip_id], kind="studio")
     await runs.attach_job(db, run_id, job_id=job_id)
     return prompts, runs, jobs, vid, run_id, job_id
 
@@ -58,7 +61,9 @@ def _gemini_ok():
     g = MagicMock()
     g.annotate = MagicMock(
         return_value={
-            "text": json.dumps({"scenes": [{"name": "s1", "in": {"secs": 0.0}, "out": {"secs": 5.0}}]}),
+            "text": json.dumps(
+                {"scenes": [{"name": "s1", "in": {"secs": 0.0}, "out": {"secs": 5.0}}]}
+            ),
             "raw": {"usageMetadata": {"promptTokenCount": 1, "candidatesTokenCount": 1}},
         }
     )
@@ -67,13 +72,20 @@ def _gemini_ok():
 
 async def _run(db, *, job_id, proxy, ai_store, jobs, prompts, runs, queue_repo, archive=None):
     await run_job(
-        db=db, job_id=job_id,
+        db=db,
+        job_id=job_id,
         archive=archive or MagicMock(),
-        proxy_resolver=proxy, ai_store=ai_store, gemini=_gemini_ok(),
+        proxy_resolver=proxy,
+        ai_store=ai_store,
+        gemini=_gemini_ok(),
         event_bus=EventBus(),
-        annotations_repo=AnnotationsRepo(), review_items_repo=ReviewItemsRepo(),
-        jobs_repo=jobs, prompts_repo=prompts, studio_runs_repo=runs,
-        uploaded_clips_repo=UploadedClipsRepo(), run_telemetry_repo=RunTelemetryRepo(),
+        annotations_repo=AnnotationsRepo(),
+        review_items_repo=ReviewItemsRepo(),
+        jobs_repo=jobs,
+        prompts_repo=prompts,
+        studio_runs_repo=runs,
+        uploaded_clips_repo=UploadedClipsRepo(),
+        run_telemetry_repo=RunTelemetryRepo(),
         telemetry_ctx=TelemetryCtx(install_id="t"),
         model_config_repo=ModelConfigRepo(),
         prefetch_queue_repo=queue_repo,
@@ -105,7 +117,17 @@ async def test_annotate_cache_miss_writes_done_queue_row_with_progress(db):
     ai_store.reference_for_gemini = AsyncMock(return_value={"uri": "gs://x"})
 
     queue_repo = PrefetchQueueRepo()
-    await _run(db, job_id=job_id, proxy=proxy, ai_store=ai_store, jobs=jobs, prompts=prompts, runs=runs, queue_repo=queue_repo, archive=archive)
+    await _run(
+        db,
+        job_id=job_id,
+        proxy=proxy,
+        ai_store=ai_store,
+        jobs=jobs,
+        prompts=prompts,
+        runs=runs,
+        queue_repo=queue_repo,
+        archive=archive,
+    )
 
     rows = await queue_repo.list_recent(db, limit=10)
     mine = [r for r in rows if str(r["provider_clip_id"]) == "42"]
@@ -127,7 +149,16 @@ async def test_annotate_cache_miss_marks_row_error_when_uncacheable(db):
     ai_store.status = AsyncMock(return_value=None)
 
     queue_repo = PrefetchQueueRepo()
-    await _run(db, job_id=job_id, proxy=proxy, ai_store=ai_store, jobs=jobs, prompts=prompts, runs=runs, queue_repo=queue_repo)
+    await _run(
+        db,
+        job_id=job_id,
+        proxy=proxy,
+        ai_store=ai_store,
+        jobs=jobs,
+        prompts=prompts,
+        runs=runs,
+        queue_repo=queue_repo,
+    )
 
     rows = await queue_repo.list_recent(db, limit=10)
     mine = [r for r in rows if str(r["provider_clip_id"]) == "77"]
@@ -153,7 +184,17 @@ async def test_annotate_ai_store_hit_writes_no_queue_row(db):
     ai_store.reference_for_gemini = AsyncMock(return_value={"uri": "gs://bucket/88.mp4"})
 
     queue_repo = PrefetchQueueRepo()
-    await _run(db, job_id=job_id, proxy=proxy, ai_store=ai_store, jobs=jobs, prompts=prompts, runs=runs, queue_repo=queue_repo, archive=archive)
+    await _run(
+        db,
+        job_id=job_id,
+        proxy=proxy,
+        ai_store=ai_store,
+        jobs=jobs,
+        prompts=prompts,
+        runs=runs,
+        queue_repo=queue_repo,
+        archive=archive,
+    )
 
     rows = await queue_repo.list_recent(db, limit=10)
     assert [r for r in rows if str(r["provider_clip_id"]) == "88"] == []

@@ -17,7 +17,7 @@ from backend.app.services.catdv_client import _sanitise_query
     [
         ("plain text", "plain text"),
         ("plain (with parens)", "plain with parens"),
-        ("quote\"injection", "quoteinjection"),
+        ('quote"injection', "quoteinjection"),
         ("backslash\\here", "backslashhere"),
         ("and-or-keyword", "and-or-keyword"),
         (") or (1)eq(1", " or 1eq1"),

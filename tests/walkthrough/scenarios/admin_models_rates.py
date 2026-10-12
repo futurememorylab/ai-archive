@@ -80,9 +80,7 @@ def _expect_save_control(p) -> None:
 def _expect_resolution_select(p) -> None:
     # A priced model row exposes its default media resolution as an editable
     # <select> (not a read-only cell); changing it POSTs the new resolution.
-    expect(
-        p.locator(".admin-models select[name='media_resolution']").first
-    ).to_be_visible()
+    expect(p.locator(".admin-models select[name='media_resolution']").first).to_be_visible()
 
 
 def _expect_unpriced_flagged(p) -> None:

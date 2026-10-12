@@ -1,3 +1,4 @@
+import asyncio as _asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -205,8 +206,11 @@ async def test_durable_hit_serves_offline_without_catdv(tmp_path: Path):
     catdv = _FakeCatdv()
     durable = _FakeDurable(has={42})
     svc = ThumbnailService(
-        cache_dir=tmp_path, archive=_FakeArchive({"posterID": 9000}),
-        catdv=catdv, is_online_provider=lambda: False, durable_store=durable,
+        cache_dir=tmp_path,
+        archive=_FakeArchive({"posterID": 9000}),
+        catdv=catdv,
+        is_online_provider=lambda: False,
+        durable_store=durable,
     )
     out = await svc.get_or_fetch(42)
     assert out == tmp_path / "42.jpg"
@@ -220,8 +224,10 @@ async def test_durable_miss_online_fetches_and_puts(tmp_path: Path):
     catdv = _FakeCatdv()
     durable = _FakeDurable(has=set())
     svc = ThumbnailService(
-        cache_dir=tmp_path, archive=_FakeArchive({"posterID": 9000}),
-        catdv=catdv, durable_store=durable,
+        cache_dir=tmp_path,
+        archive=_FakeArchive({"posterID": 9000}),
+        catdv=catdv,
+        durable_store=durable,
     )
     out = await svc.get_or_fetch(42)
     assert out == tmp_path / "42.jpg"
@@ -234,8 +240,11 @@ async def test_durable_miss_offline_returns_none(tmp_path: Path):
     catdv = _FakeCatdv()
     durable = _FakeDurable(has=set())
     svc = ThumbnailService(
-        cache_dir=tmp_path, archive=_FakeArchive({"posterID": 9000}),
-        catdv=catdv, is_online_provider=lambda: False, durable_store=durable,
+        cache_dir=tmp_path,
+        archive=_FakeArchive({"posterID": 9000}),
+        catdv=catdv,
+        is_online_provider=lambda: False,
+        durable_store=durable,
     )
     assert await svc.get_or_fetch(42) is None
     assert catdv.calls == []
@@ -248,8 +257,10 @@ async def test_data_hit_skips_durable(tmp_path: Path):
     (tmp_path / "42.jpg").write_bytes(b"local")
     durable = _FakeDurable(has={42})
     svc = ThumbnailService(
-        cache_dir=tmp_path, archive=_FakeArchive({"posterID": 9000}),
-        catdv=_FakeCatdv(), durable_store=durable,
+        cache_dir=tmp_path,
+        archive=_FakeArchive({"posterID": 9000}),
+        catdv=_FakeCatdv(),
+        durable_store=durable,
     )
     out = await svc.get_or_fetch(42)
     assert out.read_bytes() == b"local"
@@ -260,8 +271,10 @@ async def test_data_hit_skips_durable(tmp_path: Path):
 async def test_no_durable_store_unchanged_behavior(tmp_path: Path):
     catdv = _FakeCatdv()
     svc = ThumbnailService(
-        cache_dir=tmp_path, archive=_FakeArchive({"posterID": 9000}),
-        catdv=catdv, is_online_provider=lambda: False,
+        cache_dir=tmp_path,
+        archive=_FakeArchive({"posterID": 9000}),
+        catdv=catdv,
+        is_online_provider=lambda: False,
     )
     assert await svc.get_or_fetch(42) is None
 
@@ -269,10 +282,14 @@ async def test_no_durable_store_unchanged_behavior(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_uploaded_clip_served_from_durable(tmp_path: Path):
     from backend.app.uploaded_ids import to_clip_id
+
     cid = to_clip_id(3)
     durable = _FakeDurable(has={cid})
     svc = ThumbnailService(
-        cache_dir=tmp_path, archive=_FakeArchive({}), catdv=None, durable_store=durable,
+        cache_dir=tmp_path,
+        archive=_FakeArchive({}),
+        catdv=None,
+        durable_store=durable,
     )
     out = await svc.get_or_fetch(cid)
     assert out == svc.path_for(cid)
@@ -283,14 +300,15 @@ async def test_uploaded_clip_served_from_durable(tmp_path: Path):
 async def test_push_durable_forwards(tmp_path: Path):
     durable = _FakeDurable()
     svc = ThumbnailService(
-        cache_dir=tmp_path, archive=_FakeArchive({}), catdv=None, durable_store=durable,
+        cache_dir=tmp_path,
+        archive=_FakeArchive({}),
+        catdv=None,
+        durable_store=durable,
     )
-    p = tmp_path / "x.jpg"; p.write_bytes(b"jpg")
+    p = tmp_path / "x.jpg"
+    p.write_bytes(b"jpg")
     await svc.push_durable(99, p)
     assert durable.put_calls == [99]
-
-
-import asyncio as _asyncio
 
 
 class _PosterProvider:
@@ -310,23 +328,27 @@ async def test_poster_cache_fallback_downloads_without_get_clip(tmp_path: Path):
     catdv = _FakeCatdv()
     poster = _PosterProvider({42: 882156})
     svc = ThumbnailService(
-        cache_dir=tmp_path, archive=_RecordingArchive(), catdv=catdv,
+        cache_dir=tmp_path,
+        archive=_RecordingArchive(),
+        catdv=catdv,
         is_online_provider=lambda: True,
         metadata_cached_provider=lambda _cid: False,
         poster_id_provider=poster,
     )
     out = await svc.get_or_fetch(42)
     assert out == tmp_path / "42.jpg"
-    assert catdv.calls == [882156]      # downloaded the poster id from cache
+    assert catdv.calls == [882156]  # downloaded the poster id from cache
     assert poster.calls == [42]
 
 
 @pytest.mark.asyncio
 async def test_poster_cache_miss_returns_none(tmp_path: Path):
     catdv = _FakeCatdv()
-    poster = _PosterProvider({})        # no entry
+    poster = _PosterProvider({})  # no entry
     svc = ThumbnailService(
-        cache_dir=tmp_path, archive=_RecordingArchive(), catdv=catdv,
+        cache_dir=tmp_path,
+        archive=_RecordingArchive(),
+        catdv=catdv,
         is_online_provider=lambda: True,
         metadata_cached_provider=lambda _cid: False,
         poster_id_provider=poster,
@@ -340,7 +362,9 @@ async def test_no_poster_provider_gate_still_terminal(tmp_path: Path):
     # Without a poster provider, the gate miss is terminal as before.
     catdv = _FakeCatdv()
     svc = ThumbnailService(
-        cache_dir=tmp_path, archive=_RecordingArchive(), catdv=catdv,
+        cache_dir=tmp_path,
+        archive=_RecordingArchive(),
+        catdv=catdv,
         is_online_provider=lambda: True,
         metadata_cached_provider=lambda _cid: False,
     )
@@ -363,7 +387,9 @@ async def test_download_concurrency_is_bounded(tmp_path: Path):
 
     poster = _PosterProvider({i: 1000 + i for i in range(10)})
     svc = ThumbnailService(
-        cache_dir=tmp_path, archive=_RecordingArchive(), catdv=_SlowCatdv(),
+        cache_dir=tmp_path,
+        archive=_RecordingArchive(),
+        catdv=_SlowCatdv(),
         is_online_provider=lambda: True,
         metadata_cached_provider=lambda _cid: False,
         poster_id_provider=poster,
@@ -381,9 +407,7 @@ async def test_evict_removes_local_and_durable(tmp_path: Path):
     (tmp_path / "42.jpg").write_bytes(b"poster")
     durable = MagicMock()
     durable.delete = AsyncMock()
-    svc = ThumbnailService(
-        cache_dir=tmp_path, archive=_FakeArchive({}), durable_store=durable
-    )
+    svc = ThumbnailService(cache_dir=tmp_path, archive=_FakeArchive({}), durable_store=durable)
     await svc.evict(42)
     assert not (tmp_path / "42.jpg").exists()
     durable.delete.assert_awaited_once_with(42)

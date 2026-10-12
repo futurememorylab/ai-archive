@@ -1,6 +1,7 @@
 # tests/integration/test_admin_console.py
 """Admin console role CRUD: admin-only, self-protection, last-admin guard
 (spec 2026-06-14-iap-roles-admin-console-design.md)."""
+
 import importlib
 from pathlib import Path
 
@@ -11,17 +12,24 @@ from backend.app.auth.models import CurrentUser
 
 def _app(monkeypatch, tmp_path, holder, admins="boss@x.com"):
     for k, v in {
-        "APP_ENV": "dev", "AUTH_BACKEND": "iap", "IAP_AUDIENCE": "aud",
-        "ADMIN_EMAILS": admins, "CATDV_BASE_URL": "http://localhost:0",
-        "CATDV_USERNAME": "", "CATDV_PASSWORD": "p", "CATDV_CATALOG_ID": "881507",
-        "GCP_PROJECT_ID": "p", "GCS_BUCKET_NAME": "b", "PROXY_SOURCE": "rest",
+        "APP_ENV": "dev",
+        "AUTH_BACKEND": "iap",
+        "IAP_AUDIENCE": "aud",
+        "ADMIN_EMAILS": admins,
+        "CATDV_BASE_URL": "http://localhost:0",
+        "CATDV_USERNAME": "",
+        "CATDV_PASSWORD": "p",
+        "CATDV_CATALOG_ID": "881507",
+        "GCP_PROJECT_ID": "p",
+        "GCS_BUCKET_NAME": "b",
+        "PROXY_SOURCE": "rest",
         "DATA_DIR": str(tmp_path),
     }.items():
         monkeypatch.setenv(k, v)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
-    monkeypatch.setattr(main_mod, "resolve_user",
-                        lambda req, s: CurrentUser(email=holder["email"]))
+    monkeypatch.setattr(main_mod, "resolve_user", lambda req, s: CurrentUser(email=holder["email"]))
     return main_mod
 
 
@@ -41,9 +49,11 @@ def test_admin_lists_and_adds_member(monkeypatch, tmp_path: Path):
     with TestClient(main_mod.app) as client:
         page = client.get("/admin").text
         assert "Access" in page and "Permissions" in page
-        r = client.post("/admin/users",
-                        data={"email": "Annie@x.com", "role": "member", "display_name": "Annie"},
-                        headers={"HX-Request": "true"})
+        r = client.post(
+            "/admin/users",
+            data={"email": "Annie@x.com", "role": "member", "display_name": "Annie"},
+            headers={"HX-Request": "true"},
+        )
         assert r.status_code in (200, 201)
         members = client.get("/admin/access").text
         assert "annie@x.com" in members
@@ -95,6 +105,7 @@ def test_last_admin_guard(monkeypatch, tmp_path: Path):
 
 # --- Issue 1: add_member must not downgrade an active member ---
 
+
 def test_add_member_preserves_active_status(monkeypatch, tmp_path: Path):
     """Re-POSTing an already-active member with a different role must change the
     role but keep status='active'; it must NOT regress them to 'invited'."""
@@ -106,18 +117,22 @@ def test_add_member_preserves_active_status(monkeypatch, tmp_path: Path):
         ctx = main_mod.app.state.core_ctx
 
         # Step 1: invite the member as annotator
-        r = client.post("/admin/users",
-                        data={"email": "alice@x.com", "role": "member", "display_name": "Alice"})
+        r = client.post(
+            "/admin/users", data={"email": "alice@x.com", "role": "member", "display_name": "Alice"}
+        )
         assert r.status_code in (200, 201)
 
         # Step 2: simulate first sign-in — activate_on_first_sight flips invited→active
         asyncio.run(ctx.user_roles_repo.activate_on_first_sight(ctx.db, "alice@x.com"))
         row = asyncio.run(ctx.user_roles_repo.get(ctx.db, "alice@x.com"))
-        assert row["status"] == "active", "precondition: first sign-in should have flipped to active"
+        assert row["status"] == "active", (
+            "precondition: first sign-in should have flipped to active"
+        )
 
         # Step 3: admin re-adds alice with a different role
-        r2 = client.post("/admin/users",
-                         data={"email": "alice@x.com", "role": "admin", "display_name": ""})
+        r2 = client.post(
+            "/admin/users", data={"email": "alice@x.com", "role": "admin", "display_name": ""}
+        )
         assert r2.status_code in (200, 201)
 
         # Step 4: status must still be 'active'; role must have changed
@@ -128,6 +143,7 @@ def test_add_member_preserves_active_status(monkeypatch, tmp_path: Path):
 
 # --- Issue 2: PATCH and DELETE must surface a success toast (HTML attribute check) ---
 
+
 def test_patch_and_delete_carry_toast_handler(monkeypatch, tmp_path: Path):
     """The rendered members table must include @htmx:after-request toast handlers
     on both the role-change (hx-patch) and revoke (hx-delete) elements."""
@@ -135,21 +151,22 @@ def test_patch_and_delete_carry_toast_handler(monkeypatch, tmp_path: Path):
     main_mod = _app(monkeypatch, tmp_path, holder)
     with TestClient(main_mod.app) as client:
         # Add a second member so the table has non-self rows with actions
-        client.post("/admin/users",
-                    data={"email": "bob@x.com", "role": "member", "display_name": "Bob"})
+        client.post(
+            "/admin/users", data={"email": "bob@x.com", "role": "member", "display_name": "Bob"}
+        )
         html = client.get("/admin/access").text
 
     # The hx-patch items (role change menu items) must carry the toast handler
-    assert "@htmx:after-request" in html, \
+    assert "@htmx:after-request" in html, (
         "expected @htmx:after-request toast handler in rendered admin HTML"
+    )
     # Both role-change and revoke flavours of the toast text must appear
-    assert "Role updated" in html, \
-        "expected 'Role updated' toast text in hx-patch handler"
-    assert "Access revoked" in html, \
-        "expected 'Access revoked' toast text in hx-delete handler"
+    assert "Role updated" in html, "expected 'Role updated' toast text in hx-patch handler"
+    assert "Access revoked" in html, "expected 'Access revoked' toast text in hx-delete handler"
 
 
 # --- Issue 3: stat counts must reflect totals, not the filtered set ---
+
 
 def test_stat_counts_reflect_unfiltered_totals(monkeypatch, tmp_path: Path):
     """When a role filter is applied, the stat cards must still show global
@@ -175,15 +192,18 @@ def test_stat_counts_reflect_unfiltered_totals(monkeypatch, tmp_path: Path):
     # If counts come from the filtered list we'd get "1 Members / 0 Admins";
     # with the fix we must get "3 Members / 1 Admins".
     import re
+
     # Extract the Members stat value: text between class="n" span before "Members"
     members_match = re.search(r'<span class="n">(\d+)</span><span class="l">Members</span>', html)
     admins_match = re.search(r'<span class="n">(\d+)</span><span class="l">Admins</span>', html)
     assert members_match, "Members stat not found in admin page HTML"
     assert admins_match, "Admins stat not found in admin page HTML"
-    assert members_match.group(1) == "3", \
+    assert members_match.group(1) == "3", (
         f"Members stat must be 3 (global total), got {members_match.group(1)}"
-    assert admins_match.group(1) == "1", \
+    )
+    assert admins_match.group(1) == "1", (
         f"Admins stat must be 1 (global total), got {admins_match.group(1)}"
+    )
 
 
 def test_admin_link_only_for_admins(monkeypatch, tmp_path: Path):
@@ -191,7 +211,7 @@ def test_admin_link_only_for_admins(monkeypatch, tmp_path: Path):
     main_mod = _app(monkeypatch, tmp_path, holder)
     with TestClient(main_mod.app) as client:
         # admin: check on /admin page (core-only, renders layout.html)
-        admin_view = client.get("/admin").text      # admin sees it
+        admin_view = client.get("/admin").text  # admin sees it
         assert 'href="/admin"' in admin_view
         client.post("/admin/users", data={"email": "v@x.com", "role": "member", "display_name": ""})
         holder["email"] = "v@x.com"

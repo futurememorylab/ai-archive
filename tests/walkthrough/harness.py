@@ -8,7 +8,7 @@ call is skipped so headless runs do no recording work.
 from __future__ import annotations
 
 import html
-from typing import Callable
+from collections.abc import Callable
 
 
 def _patch_screencast_native_size() -> None:

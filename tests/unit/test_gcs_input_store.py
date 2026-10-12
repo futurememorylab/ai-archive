@@ -135,9 +135,7 @@ async def test_ensure_uploaded_offloads_blocking_upload_off_event_loop(adapter_f
     # running; if it blocks the loop, this gather still resolves but the upload
     # ran on the main thread — the ident check below is the real assertion.
     await asyncio.gather(
-        adapter.ensure_uploaded(
-            clip_key=("catdv", "1"), local_path=local, mime="video/quicktime"
-        ),
+        adapter.ensure_uploaded(clip_key=("catdv", "1"), local_path=local, mime="video/quicktime"),
         asyncio.sleep(0),
     )
 

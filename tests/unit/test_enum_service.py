@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import aiosqlite
 import pytest
 
 from backend.app.db import open_db

@@ -166,7 +166,8 @@ async def retry_failed(request: Request, body: RetryFailed):
     for jid in body.job_ids:
         items = await core.jobs_repo.list_items(core.db, jid)
         failed = [
-            it for it in items
+            it
+            for it in items
             if it.status == "error" and (only is None or it.catdv_clip_id in only)
         ]
         if not failed:

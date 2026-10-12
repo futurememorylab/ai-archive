@@ -1,8 +1,10 @@
 # tests/unit/test_auth_guards.py
 """Route guards read request.state.current_user (set by the gate) and raise
 403 fail-closed when the capability/role is missing."""
-import pytest
+
 from types import SimpleNamespace
+
+import pytest
 from fastapi import HTTPException
 
 from backend.app.auth.guards import require_permission, require_role

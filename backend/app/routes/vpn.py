@@ -23,12 +23,21 @@ def _supervisor(request: Request):
 
 def _status_dict(sup) -> dict:
     if sup is None:
-        return {"managed": False, "desired": "off",
-                "process_running": False, "healthy": False, "connecting": False}
+        return {
+            "managed": False,
+            "desired": "off",
+            "process_running": False,
+            "healthy": False,
+            "connecting": False,
+        }
     s = sup.status()
-    return {"managed": s.managed, "desired": s.desired,
-            "process_running": s.process_running, "healthy": s.healthy,
-            "connecting": s.connecting}
+    return {
+        "managed": s.managed,
+        "desired": s.desired,
+        "process_running": s.process_running,
+        "healthy": s.healthy,
+        "connecting": s.connecting,
+    }
 
 
 def _toast(message: str, level: str = "success") -> dict[str, str]:
@@ -38,9 +47,13 @@ def _toast(message: str, level: str = "success") -> dict[str, str]:
 async def _reply(request: Request, sup, *, headers: dict | None = None):
     if request.headers.get("HX-Request") == "true":
         return _templates.TemplateResponse(
-            request, "_connection_chip_inner.html", {}, headers=headers,
+            request,
+            "_connection_chip_inner.html",
+            {},
+            headers=headers,
         )
     from fastapi.responses import JSONResponse
+
     return JSONResponse(_status_dict(sup), headers=headers)
 
 

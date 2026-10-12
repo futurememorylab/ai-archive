@@ -60,9 +60,7 @@ _LIST_COLUMNS_WITH_NAME = """
 
 
 class PrefetchQueueRepo:
-    async def _active_row_id(
-        self, conn: aiosqlite.Connection, key: ClipKey
-    ) -> int | None:
+    async def _active_row_id(self, conn: aiosqlite.Connection, key: ClipKey) -> int | None:
         """Id of the clip's existing active (queued/downloading) row, if any.
         Shared dedup lookup for the idempotent enqueue / start_inline paths."""
         cur = await conn.execute(
@@ -182,9 +180,7 @@ class PrefetchQueueRepo:
         """Record mid-download progress on a `downloading` row. Throttling
         is the caller's job (MediaPrefetcher); this is a plain UPDATE."""
         await conn.execute(
-            "UPDATE prefetch_queue "
-            "   SET bytes_downloaded=?, bytes_total=? "
-            " WHERE id=?",
+            "UPDATE prefetch_queue    SET bytes_downloaded=?, bytes_total=?  WHERE id=?",
             (int(bytes_downloaded), int(bytes_total), rid),
         )
         await conn.commit()

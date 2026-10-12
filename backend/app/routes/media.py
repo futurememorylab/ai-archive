@@ -36,7 +36,9 @@ async def stream_thumbnail(request: Request, clip_id: int):
     if is_uploaded(clip_id):
         core = get_core_ctx(request)
         path = core.settings.data_dir / "cache" / "thumbs" / f"{clip_id}.jpg"
-        if path.exists() and path.stat().st_size > 0:  # sync-io-ok: uploaded poster lookup, tracked for the tier-4 async-io pass
+        if (
+            path.exists() and path.stat().st_size > 0
+        ):  # sync-io-ok: uploaded poster lookup, tracked for the tier-4 async-io pass
             return FileResponse(
                 path,
                 media_type="image/jpeg",
@@ -88,7 +90,9 @@ async def stream_media(request: Request, clip_id: int):
     path = located.path
 
     mime = mimetypes.guess_type(str(path))[0] or "video/quicktime"
-    size = path.stat().st_size  # sync-io-ok: pre-existing, single metadata call on the stream-response path
+    size = (
+        path.stat().st_size
+    )  # sync-io-ok: pre-existing, single metadata call on the stream-response path
     range_header = request.headers.get("range")
 
     if range_header and range_header.startswith("bytes="):
@@ -103,7 +107,9 @@ async def stream_media(request: Request, clip_id: int):
         length = end - start + 1
 
         def _stream():
-            with open(path, "rb") as f:  # sync-io-ok: pre-existing, runs inside a StreamingResponse body generator
+            with open(
+                path, "rb"
+            ) as f:  # sync-io-ok: pre-existing, runs inside a StreamingResponse body generator
                 f.seek(start)
                 remaining = length
                 while remaining > 0:

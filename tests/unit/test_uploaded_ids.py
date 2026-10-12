@@ -18,5 +18,5 @@ def test_roundtrip_pk_to_clip_id_and_back():
 def test_is_uploaded_predicate():
     assert is_uploaded(1_000_000_000) is True
     assert is_uploaded(1_000_000_999) is True
-    assert is_uploaded(999_999_999) is False   # plausible CatDV id
+    assert is_uploaded(999_999_999) is False  # plausible CatDV id
     assert is_uploaded(42) is False

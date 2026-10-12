@@ -61,9 +61,7 @@ _VPN_VALUES = ("on", "off")
 async def get_vpn_desired(conn: aiosqlite.Connection) -> str:
     """Return the persisted desired VPN state, defaulting to 'off' (opt-in;
     keeps the cloud from grabbing the shared WG peer key on boot)."""
-    cur = await conn.execute(
-        "SELECT value FROM app_meta WHERE key = ?", (_VPN_DESIRED_KEY,)
-    )
+    cur = await conn.execute("SELECT value FROM app_meta WHERE key = ?", (_VPN_DESIRED_KEY,))
     row = await cur.fetchone()
     return row[0] if row is not None and row[0] in _VPN_VALUES else "off"
 

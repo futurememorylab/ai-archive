@@ -44,6 +44,7 @@ async def test_locate_prefers_local_file(tmp_path):
 async def test_locate_falls_back_to_gcs(tmp_path):
     class _Ref:
         handle = "gs://bucket/clips/1.mov"
+
     b = LocalProxyBackend(
         resolver=_Resolver(raise_exc=RuntimeError("not on disk")),
         ai_store=_AiStore(ref=_Ref()),

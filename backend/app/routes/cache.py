@@ -268,9 +268,7 @@ async def cache_popover(request: Request, provider_id: str, clip_id: str) -> HTM
     status = await ctx.cache_inspector.status_for_clip((provider_id, clip_id))
     # is_host_local is a live-resolver detail; absent (False) when offline.
     live = request.app.state.live_ctx
-    host_local_proxies = getattr(
-        getattr(live, "proxy_resolver", None), "is_host_local", False
-    )
+    host_local_proxies = getattr(getattr(live, "proxy_resolver", None), "is_host_local", False)
     return templates.TemplateResponse(
         request,
         "cache_popover.html",
@@ -282,9 +280,7 @@ async def cache_popover(request: Request, provider_id: str, clip_id: str) -> HTM
 
 
 @ui_router.get("/cache-actions/{clip_id}", response_class=HTMLResponse)
-async def cache_actions(
-    request: Request, clip_id: int, kind: str = "video"
-) -> HTMLResponse:
+async def cache_actions(request: Request, clip_id: int, kind: str = "video") -> HTMLResponse:
     """Re-render the per-clip cache control (badge + Cache/Purge/Evict).
 
     The cacheActions Alpine component fetches this after a cache or purge
@@ -388,5 +384,3 @@ def _cache_row(status) -> dict:
         "local_bytes": local_bytes,
         "ai_bytes": ai_bytes,
     }
-
-

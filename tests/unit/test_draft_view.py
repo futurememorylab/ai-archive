@@ -338,17 +338,25 @@ def test_build_draft_view_passes_applied_at_through():
     ann = _annotation()
     items = [
         ReviewItem(
-            annotation_id=42, catdv_clip_id=101, kind="marker",
+            annotation_id=42,
+            catdv_clip_id=101,
+            kind="marker",
             proposed_value={"name": "S", "in": {"secs": 1.0}},
             applied_at="2026-06-04T10:00:00",
         ),
         ReviewItem(
-            annotation_id=42, catdv_clip_id=101, kind="field",
-            target_identifier="x.y", proposed_value="v",
+            annotation_id=42,
+            catdv_clip_id=101,
+            kind="field",
+            target_identifier="x.y",
+            proposed_value="v",
         ),
         ReviewItem(
-            annotation_id=42, catdv_clip_id=101, kind="note",
-            target_identifier="n", proposed_value="t",
+            annotation_id=42,
+            catdv_clip_id=101,
+            kind="note",
+            target_identifier="n",
+            proposed_value="t",
             applied_at="2026-06-04T11:00:00",
         ),
     ]

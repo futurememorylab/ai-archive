@@ -43,9 +43,7 @@ def _ratio(a: str, b: str) -> float:
     return SequenceMatcher(None, a, b, autojunk=False).ratio()
 
 
-def _line_row(
-    idx: int, status: str, cmp_text: str | None, cur_text: str | None
-) -> dict[str, Any]:
+def _line_row(idx: int, status: str, cmp_text: str | None, cur_text: str | None) -> dict[str, Any]:
     # Skip the O(n·m) word diff for unchanged lines — the result is just a
     # single "eq" segment, which the template renders identically to the text.
     if status == "unchanged":
@@ -113,8 +111,7 @@ def build_prompt_compare(cur_body: str | None, cmp_body: str | None) -> dict[str
     for tag, i1, i2, j1, j2 in sm.get_opcodes():
         if tag == "equal":
             for k in range(i2 - i1):
-                rows.append(_line_row(len(rows), "unchanged", cmp_lines[i1 + k],
-                                      cur_lines[j1 + k]))
+                rows.append(_line_row(len(rows), "unchanged", cmp_lines[i1 + k], cur_lines[j1 + k]))
         elif tag == "delete":
             for ln in cmp_lines[i1:i2]:
                 rows.append(_line_row(len(rows), "removed", ln, None))

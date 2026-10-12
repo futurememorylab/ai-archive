@@ -21,13 +21,20 @@ def _setenv(monkeypatch, tmp_path):
 def client(monkeypatch, tmp_path):
     _setenv(monkeypatch, tmp_path)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     with TestClient(main_mod.app) as c:
         yield c
 
 
 def _seed_run_with_items(
-    app, *, version_id, clip_id, scenes=None, fields=None, notes=None,
+    app,
+    *,
+    version_id,
+    clip_id,
+    scenes=None,
+    fields=None,
+    notes=None,
     cost_usd=None,
 ):
     """Seed a studio_run + review_items rows.
@@ -57,7 +64,7 @@ def _seed_run_with_items(
             )
             run_id = cur.lastrowid
 
-            for scene in (scenes or []):
+            for scene in scenes or []:
                 await db.execute(
                     "INSERT INTO review_items(studio_run_id, catdv_clip_id, "
                     "kind, proposed_value, decision) VALUES (?, ?, ?, ?, 'pending')",
@@ -89,10 +96,17 @@ def _seed_run_with_items(
 
 def _make_prompt_with_version(client, *, target_map: dict):
     """Create a prompt via POST then read its latest_version_id via GET."""
-    r = client.post("/api/prompts", json={
-        "name": "t", "media_kind": "any", "model": "gemini-2.5-pro",
-        "target_map": target_map, "output_schema": {}, "body": "x",
-    })
+    r = client.post(
+        "/api/prompts",
+        json={
+            "name": "t",
+            "media_kind": "any",
+            "model": "gemini-2.5-pro",
+            "target_map": target_map,
+            "output_schema": {},
+            "body": "x",
+        },
+    )
     assert r.status_code == 201, r.text
     pid = r.json()["id"]
     env = client.get(f"/api/prompts/{pid}").json()
@@ -100,13 +114,19 @@ def _make_prompt_with_version(client, *, target_map: dict):
 
 
 def test_run_output_uses_anno_panels_and_has_run_json(client):
-    pid, vid = _make_prompt_with_version(client, target_map={
-        "scenes": {"kind": "markers"},
-        "summary": {"kind": "field", "identifier": "pf.summary"},
-    })
+    pid, vid = _make_prompt_with_version(
+        client,
+        target_map={
+            "scenes": {"kind": "markers"},
+            "summary": {"kind": "field", "identifier": "pf.summary"},
+        },
+    )
     from backend.app import main as main_mod
+
     _seed_run_with_items(
-        main_mod.app, version_id=vid, clip_id=12041,
+        main_mod.app,
+        version_id=vid,
+        clip_id=12041,
         scenes=[{"name": "scene-a", "in": {"secs": 1.0}, "out": {"secs": 2.0}}],
         fields={"pf.summary": "krátký"},
         cost_usd=0.012,
@@ -129,7 +149,7 @@ def test_run_output_uses_anno_panels_and_has_run_json(client):
     assert "tab === 'history'" not in html
     # Raw JSON is embedded for OutputDiff.
     assert 'type="application/json"' in html
-    assert 'data-run-json' in html
+    assert "data-run-json" in html
     # Marker article rendering works.
     assert "scene-a" in html
     # Field identifier was looked up via target_map.
@@ -147,12 +167,18 @@ def test_run_output_empty_state_when_no_run(client):
 def test_marker_articles_have_seek_handler(client):
     """Smoke: rendered marker @click attr is present (the seek wiring is
     JS-only — exercised at runtime via studioPromptCard.seek())."""
-    pid, vid = _make_prompt_with_version(client, target_map={
-        "scenes": {"kind": "markers"},
-    })
+    pid, vid = _make_prompt_with_version(
+        client,
+        target_map={
+            "scenes": {"kind": "markers"},
+        },
+    )
     from backend.app import main as main_mod
+
     _seed_run_with_items(
-        main_mod.app, version_id=vid, clip_id=12041,
+        main_mod.app,
+        version_id=vid,
+        clip_id=12041,
         scenes=[{"name": "s", "in": {"secs": 5.0}, "out": {"secs": 6.0}}],
     )
     r = client.get(f"/studio/_run?prompt_version_id={vid}&clip_id=12041")

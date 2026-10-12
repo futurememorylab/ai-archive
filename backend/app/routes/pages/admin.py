@@ -247,9 +247,7 @@ async def _prompts_view(ctx) -> dict:
     # (ADR 0046 — the page's query count must not scale with the number of
     # prompts OR versions).
     prompts = await ctx.prompts_repo.list_active(ctx.db)
-    versions_by_pid = await ctx.prompts_repo.versions_by_prompt_ids(
-        ctx.db, [p.id for p in prompts]
-    )
+    versions_by_pid = await ctx.prompts_repo.versions_by_prompt_ids(ctx.db, [p.id for p in prompts])
     prelim: list = []
     for p in prompts:
         for v in versions_by_pid[p.id]:
@@ -292,9 +290,7 @@ async def _prompts_view(ctx) -> dict:
         seconds = t["media_seconds"] if t else 0.0
         est_cost = t["est_cost_usd"] if t else 0.0
         actual_cost = t["actual_cost_usd"] if t else 0.0
-        annotated_label = (
-            f"{runs} run{'s' if runs != 1 else ''} · {_humanize_secs(seconds)}"
-        )
+        annotated_label = f"{runs} run{'s' if runs != 1 else ''} · {_humanize_secs(seconds)}"
         rows.append(
             {
                 "prompt_name": p.name,
@@ -356,9 +352,7 @@ async def admin_set_budget(request: Request, budget_usd: str = Form("")):
 
 
 @router.post("/admin/prompts/{version_id}/calibrate", response_class=HTMLResponse)
-async def admin_calibrate(
-    request: Request, version_id: int, clip_ids: list[int] = Form(...)
-):
+async def admin_calibrate(request: Request, version_id: int, clip_ids: list[int] = Form(...)):
     """Launch a calibration sweep over any number of clips (≥1): for each
     resolution × 2 repeats, run the eligible clips telemetry-only
     (record_only). HIGH applies only to image clips — a resolution with no
@@ -374,8 +368,7 @@ async def admin_calibrate(
     if len(clip_ids) > CALIBRATION_MAX_CLIPS:
         raise HTTPException(
             422,
-            f"too many clips for one sweep (max {CALIBRATION_MAX_CLIPS}, "
-            f"got {len(clip_ids)})",
+            f"too many clips for one sweep (max {CALIBRATION_MAX_CLIPS}, got {len(clip_ids)})",
         )
     try:
         await core.prompts_repo.get_version(core.db, version_id)
@@ -391,9 +384,7 @@ async def admin_calibrate(
     jobs_created = 0
     for res in CALIBRATION_RESOLUTIONS:
         eligible = [
-            c
-            for c in clip_ids
-            if resolution_valid_for_kind(res, kinds.get(c, "video+audio"))
+            c for c in clip_ids if resolution_valid_for_kind(res, kinds.get(c, "video+audio"))
         ]
         if not eligible:
             continue
@@ -417,9 +408,7 @@ async def admin_calibrate(
 
 
 @router.post("/admin/prompts/{version_id}/calibrate/estimate")
-async def admin_calibrate_estimate(
-    request: Request, version_id: int, body: dict = Body(...)
-):
+async def admin_calibrate_estimate(request: Request, version_id: int, body: dict = Body(...)):
     """Advisory projected cost for a calibration sweep. CoreCtx only —
     fully offline-capable; failures must never block the launch."""
     require_role(request, "admin")
@@ -452,9 +441,7 @@ async def admin_calibrate_estimate(
     total_runs = 0
     for res in CALIBRATION_RESOLUTIONS:
         eligible = sum(
-            1
-            for c in clip_ids
-            if resolution_valid_for_kind(res, kinds.get(c, "video+audio"))
+            1 for c in clip_ids if resolution_valid_for_kind(res, kinds.get(c, "video+audio"))
         )
         total_runs += eligible * CALIBRATION_REPEATS
     p50 = est["cost_usd_p50"]
@@ -469,9 +456,7 @@ async def admin_calibrate_estimate(
     budget = summary["budget_usd"]
     month_spend = summary["spend_usd"]
     would_exceed = bool(
-        budget is not None
-        and projected is not None
-        and (month_spend + projected) > budget
+        budget is not None and projected is not None and (month_spend + projected) > budget
     )
     return {
         "projected_cost_usd": projected,

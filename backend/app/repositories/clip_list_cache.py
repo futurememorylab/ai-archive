@@ -104,8 +104,7 @@ class ClipListCacheRepo:
         provider_clip_id. Lets filtered views hydrate locally in one query
         instead of a per-clip CatDV round-trip."""
         cur = await conn.execute(
-            "SELECT items_json FROM clip_list_cache "
-            "WHERE provider_id = ? AND catalog_id = ?",
+            "SELECT items_json FROM clip_list_cache WHERE provider_id = ? AND catalog_id = ?",
             (provider_id, catalog_id),
         )
         out: dict[str, CanonicalClip] = {}

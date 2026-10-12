@@ -10,9 +10,7 @@ from backend.app.models.media import DEFAULT_MEDIA_RESOLUTION, MediaResolution
 _VALID = frozenset(get_args(MediaResolution))
 
 
-def resolve_media_resolution(
-    version_override: str | None, model_default: str | None
-) -> str:
+def resolve_media_resolution(version_override: str | None, model_default: str | None) -> str:
     for candidate in (version_override, model_default):
         if candidate in _VALID:
             return candidate

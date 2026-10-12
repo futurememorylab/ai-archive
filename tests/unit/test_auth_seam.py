@@ -75,8 +75,6 @@ async def test_get_current_user_reads_settings_from_app_state():
     delegates to resolve_user (mirrors deps.get_core_ctx)."""
     s = _settings(auth_backend="dev", dev_user_email="wired@local")
     req = _request()
-    req.scope["app"] = SimpleNamespace(
-        state=SimpleNamespace(core_ctx=SimpleNamespace(settings=s))
-    )
+    req.scope["app"] = SimpleNamespace(state=SimpleNamespace(core_ctx=SimpleNamespace(settings=s)))
     user = await get_current_user(req)
     assert user.email == "wired@local"

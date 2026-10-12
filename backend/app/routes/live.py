@@ -81,9 +81,7 @@ async def session_config(request: Request, clip_id: int) -> dict:
     # Bind the FULL setup (incl. system prompt + tools) into the ephemeral
     # token, then strip the secret fields before sending setup to the browser.
     token = await mint_ephemeral_token(setup=setup_payload, settings=settings)
-    client_setup = {
-        k: v for k, v in setup_payload.items() if k not in _TOKEN_ONLY_SETUP_FIELDS
-    }
+    client_setup = {k: v for k, v in setup_payload.items() if k not in _TOKEN_ONLY_SETUP_FIELDS}
 
     session_id = uuid.uuid4().hex
     repo = LiveSessionsRepo()

@@ -79,8 +79,13 @@ async def test_boot_resume_requeues_and_runs_orphan(monkeypatch, tmp_path):
         from backend.app.repositories.prompts import PromptsRepo
 
         _pid, vid = await PromptsRepo().create_with_initial_version(
-            core.db, name="p", description=None, body="b",
-            target_map={"x": {"kind": "markers"}}, output_schema={}, model="m",
+            core.db,
+            name="p",
+            description=None,
+            body="b",
+            target_map={"x": {"kind": "markers"}},
+            output_schema={},
+            model="m",
         )
         # Seed an orphaned 'running' job whose only item is already terminal,
         # so the resumed run_job has nothing to process (no network).

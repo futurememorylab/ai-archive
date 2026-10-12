@@ -21,12 +21,8 @@ CSS = Path("backend/app/static/app.css")
 
 def test_studio_right_tracks_use_player_size_vars():
     css = CSS.read_text()
-    assert "--studio-player-h" in css, (
-        ".studio-right under-layout track must use --studio-player-h"
-    )
-    assert "--studio-player-w" in css, (
-        ".studio-right right-layout track must use --studio-player-w"
-    )
+    assert "--studio-player-h" in css, ".studio-right under-layout track must use --studio-player-h"
+    assert "--studio-player-w" in css, ".studio-right right-layout track must use --studio-player-w"
 
 
 def test_cmp_cur_basis_gated_by_has_cmp_card():
@@ -38,12 +34,8 @@ def test_cmp_cur_basis_gated_by_has_cmp_card():
         "the cur card flex-basis must be var(--studio-cmp-cur) when comparing"
     )
     # The two appear together in a cur-card rule gated by :has(.cmp-card).
-    m = re.search(
-        r":has\(\.cmp-card\)[^{}]*\{[^}]*--studio-cmp-cur[^}]*\}", normalized
-    )
-    assert m, (
-        "expected a :has(.cmp-card) cur-card rule referencing --studio-cmp-cur"
-    )
+    m = re.search(r":has\(\.cmp-card\)[^{}]*\{[^}]*--studio-cmp-cur[^}]*\}", normalized)
+    assert m, "expected a :has(.cmp-card) cur-card rule referencing --studio-cmp-cur"
 
 
 def test_cmp_divider_hidden_when_not_comparing():
@@ -65,6 +57,5 @@ def test_body_studio_resizing_disables_select():
     css = CSS.read_text()
     normalized = re.sub(r"\s+", " ", css)
     assert "body.studio-resizing" in normalized or ".studio-resizing" in normalized, (
-        "a body.studio-resizing rule must exist to suppress text selection "
-        "during a drag"
+        "a body.studio-resizing rule must exist to suppress text selection during a drag"
     )

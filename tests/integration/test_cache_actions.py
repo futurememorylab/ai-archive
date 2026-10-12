@@ -318,9 +318,7 @@ async def test_evict_ai_offline_prunes_index_no_store(db):
     out = await actions.evict_ai_media(key)
     assert out.result == "ok"
     assert out.bytes_freed == 42
-    cur = await db.execute(
-        "SELECT COUNT(*) FROM ai_store_files WHERE provider_clip_id='77'"
-    )
+    cur = await db.execute("SELECT COUNT(*) FROM ai_store_files WHERE provider_clip_id='77'")
     assert (await cur.fetchone())[0] == 0
 
 
@@ -333,9 +331,7 @@ async def test_evict_metadata_bytes_freed_is_canonical_json_length(db):
     out = await actions.evict_metadata(key)
     assert out.result == "ok"
     assert out.bytes_freed == len(payload)
-    cur = await db.execute(
-        "SELECT COUNT(*) FROM clip_cache WHERE provider_clip_id='88'"
-    )
+    cur = await db.execute("SELECT COUNT(*) FROM clip_cache WHERE provider_clip_id='88'")
     assert (await cur.fetchone())[0] == 0
 
 

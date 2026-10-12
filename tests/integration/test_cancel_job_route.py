@@ -7,6 +7,7 @@ writer for cancel: it flips the job + its in-flight items to 'cancelled'
 `live.job_runner.cancel(job_id)` so the long Gemini call is interrupted instead
 of running to completion. Cancel latency is no longer a whole clip.
 """
+
 import asyncio
 from pathlib import Path
 
@@ -46,8 +47,13 @@ async def client_db(tmp_path):
 async def test_cancel_route_flips_db_and_interrupts_inflight_job(client_db):
     ac, conn, ctx = client_db
     _pid, vid = await PromptsRepo().create_with_initial_version(
-        conn, name="p", description=None, body="b",
-        target_map={"x": {"kind": "markers"}}, output_schema={}, model="m",
+        conn,
+        name="p",
+        description=None,
+        body="b",
+        target_map={"x": {"kind": "markers"}},
+        output_schema={},
+        model="m",
     )
     job_id = await ctx.jobs_repo.create_job(conn, prompt_version_id=vid, clip_ids=[1])
     await ctx.jobs_repo.update_status(conn, job_id, "running")

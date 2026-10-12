@@ -47,9 +47,7 @@ async def test_prepare_marks_transient_error_not_permanent(tmp_path):
     async with open_db(db_path) as conn:
         await apply_migrations(conn, MIGRATIONS)
         repo = WorkspacesRepo()
-        ws_id = await repo.create(
-            conn, name="ws", provider_id="catdv", catalog_id="1"
-        )
+        ws_id = await repo.create(conn, name="ws", provider_id="catdv", catalog_id="1")
         await repo.add_clips(conn, ws_id, [("catdv", "42")])
 
         mgr = WorkspaceManager(
@@ -64,9 +62,7 @@ async def test_prepare_marks_transient_error_not_permanent(tmp_path):
         # Single-clip workspace + provider that fails on first call → the
         # only event yielded should be the transient_error one. Tightened
         # to catch any spurious extra event a future bug might emit.
-        assert states == ["transient_error"], (
-            f"expected exactly ['transient_error']; got {states}"
-        )
+        assert states == ["transient_error"], f"expected exactly ['transient_error']; got {states}"
 
 
 @pytest.mark.asyncio
@@ -75,9 +71,7 @@ async def test_prepare_marks_permanent_error_for_not_found(tmp_path):
     async with open_db(db_path) as conn:
         await apply_migrations(conn, MIGRATIONS)
         repo = WorkspacesRepo()
-        ws_id = await repo.create(
-            conn, name="ws", provider_id="catdv", catalog_id="1"
-        )
+        ws_id = await repo.create(conn, name="ws", provider_id="catdv", catalog_id="1")
         await repo.add_clips(conn, ws_id, [("catdv", "42")])
 
         mgr = WorkspaceManager(

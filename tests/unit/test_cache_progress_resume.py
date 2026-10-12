@@ -9,6 +9,7 @@
    still in flight, the in-progress state is lost. cacheActions must detect a
    running prefetch for its clip on init and resume the spinner + poll.
 """
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -20,7 +21,7 @@ def test_polling_queue_panel_is_exempt_from_request_dim():
     # The 2s background poll must not inherit the .htmx-request opacity dim,
     # otherwise the table blinks on every tick.
     assert "#prefetch-panel.htmx-request" in css
-    seg = css[css.index("#prefetch-panel.htmx-request"):]
+    seg = css[css.index("#prefetch-panel.htmx-request") :]
     block = seg[: seg.index("}")]
     assert "opacity: 1" in block
 

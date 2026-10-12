@@ -58,7 +58,8 @@ def test_unset_audience_logs_discovered_aud_then_fails_closed(monkeypatch, caplo
     # The one-time discovery aid: signature-only decode logs the aud claim so the
     # operator can set IAP_AUDIENCE, but we STILL fail closed (never admit).
     monkeypatch.setattr(
-        iap.id_token, "verify_token",
+        iap.id_token,
+        "verify_token",
         lambda *a, **k: {"aud": "DISCOVERED-AUD", "email": "x@y.com"},
     )
     s = _settings(iap_audience=None)

@@ -8,13 +8,15 @@ reconcile never re-adds a value the user deleted.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import aiosqlite
 
 from backend.app.enums.registry import EnumValueSpec
 
-_COLS = "enum_key, value, label, enabled, is_default, sort_order, source, removed, metadata, created_at"
+_COLS = (
+    "enum_key, value, label, enabled, is_default, sort_order, source, removed, metadata, created_at"
+)
 
 
 @dataclass(frozen=True)
@@ -36,7 +38,7 @@ def _row(r: tuple) -> EnumValueRow:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class EnumValuesRepo:
@@ -55,7 +57,9 @@ class EnumValuesRepo:
         )
         return [_row(r) for r in await cur.fetchall()]
 
-    async def get(self, conn: aiosqlite.Connection, enum_key: str, value: str) -> EnumValueRow | None:
+    async def get(
+        self, conn: aiosqlite.Connection, enum_key: str, value: str
+    ) -> EnumValueRow | None:
         cur = await conn.execute(
             f"SELECT {_COLS} FROM enum_values WHERE enum_key = ? AND value = ?",
             (enum_key, value),
@@ -111,8 +115,7 @@ class EnumValuesRepo:
         else:
             next_sort = await self._next_sort(conn, enum_key)
             await conn.execute(
-                "INSERT INTO enum_values "
-                f"({_COLS}) VALUES (?, ?, ?, 1, 0, ?, 'user', 0, ?, ?)",
+                f"INSERT INTO enum_values ({_COLS}) VALUES (?, ?, ?, 1, 0, ?, 'user', 0, ?, ?)",
                 (enum_key, value, label, next_sort, None, _now()),
             )
         if commit:
@@ -145,7 +148,8 @@ class EnumValuesRepo:
             (enum_key,),
         )
         await conn.execute(
-            "UPDATE enum_values SET is_default = 1 WHERE enum_key = ? AND value = ? AND removed = 0",
+            "UPDATE enum_values SET is_default = 1 "
+            "WHERE enum_key = ? AND value = ? AND removed = 0",
             (enum_key, value),
         )
         if commit:

@@ -46,9 +46,7 @@ async def apply_migrations(conn: aiosqlite.Connection, migrations_dir: Path) -> 
 
     # Build the sentinel set.
     sentinel_nums = {
-        _num_prefix(p.name)
-        for p in migrations_dir.glob("*.txt")
-        if _num_prefix(p.name) is not None
+        _num_prefix(p.name) for p in migrations_dir.glob("*.txt") if _num_prefix(p.name) is not None
     }
 
     # Detect collisions before applying anything.

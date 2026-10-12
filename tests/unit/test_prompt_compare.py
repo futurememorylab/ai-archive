@@ -76,7 +76,10 @@ def test_inserted_paragraph_does_not_mispair_a_later_edit():
     )
     model = build_prompt_compare(cur, cmp)
     assert [r["status"] for r in model["scenes"]] == [
-        "added", "changed", "unchanged", "unchanged",
+        "added",
+        "changed",
+        "unchanged",
+        "unchanged",
     ]
     changed = model["scenes"][1]
     types = {s["type"] for s in changed["segs"]}
@@ -90,7 +93,9 @@ def test_wholesale_rewrite_in_place_is_a_single_changed_row():
     cur = _body("Alpha.", "Totally fresh new wording instead.", "Omega.")
     model = build_prompt_compare(cur, cmp)
     assert [r["status"] for r in model["scenes"]] == [
-        "unchanged", "changed", "unchanged",
+        "unchanged",
+        "changed",
+        "unchanged",
     ]
 
 
@@ -103,14 +108,16 @@ def test_splits_on_lines_so_a_one_line_edit_stays_localized():
     model = build_prompt_compare(cur, cmp)
     assert model["scene_count"] == 3
     assert [r["status"] for r in model["scenes"]] == [
-        "unchanged", "changed", "unchanged",
+        "unchanged",
+        "changed",
+        "unchanged",
     ]
 
 
 def test_blank_line_differences_do_not_misalign_shared_lines():
     # One body groups its lines into blank-line blocks, the other doesn't —
     # the shared lines must still align (the real-world v8/v9 failure).
-    cmp = "Alpha\n\nBeta\n\nGamma"          # blank-line separated
-    cur = "Alpha\nBeta\nGamma"              # same lines, no blanks
+    cmp = "Alpha\n\nBeta\n\nGamma"  # blank-line separated
+    cur = "Alpha\nBeta\nGamma"  # same lines, no blanks
     model = build_prompt_compare(cur, cmp)
     assert [r["status"] for r in model["scenes"]] == ["unchanged"] * 3

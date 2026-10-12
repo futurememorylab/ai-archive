@@ -146,9 +146,7 @@ class WorkspaceManager:
                         await self._repo.set_cache_state(
                             db, ws_id, key, "transient_error", error=f"metadata: {exc}"
                         )
-                        yield PrepEvent(
-                            clip_key=key, state="transient_error", error=str(exc)
-                        )
+                        yield PrepEvent(clip_key=key, state="transient_error", error=str(exc))
                     continue
                 await self._repo.set_primary_pin(db, key, ws_id)
                 await self._repo.set_cache_state(db, ws_id, key, "metadata")
@@ -184,9 +182,7 @@ class WorkspaceManager:
                             await self._repo.set_cache_state(
                                 db, ws_id, key, "transient_error", error=f"media: {exc}"
                             )
-                            yield PrepEvent(
-                                clip_key=key, state="transient_error", error=str(exc)
-                            )
+                            yield PrepEvent(clip_key=key, state="transient_error", error=str(exc))
                         continue
                     await self._repo.set_cache_state(db, ws_id, key, "media")
                     yield PrepEvent(clip_key=key, state="media")

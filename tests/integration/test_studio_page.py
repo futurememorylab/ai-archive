@@ -52,10 +52,17 @@ def test_studio_page_with_prompt_id_renders(client):
 
 def _make_prompt_two_versions(client, *, name: str):
     """Create a prompt with v1 promoted to production and v2 branched as draft."""
-    r = client.post("/api/prompts", json={
-        "name": name, "media_kind": "any", "model": "gemini-2.5-pro",
-        "target_map": {}, "output_schema": {}, "body": "v1",
-    })
+    r = client.post(
+        "/api/prompts",
+        json={
+            "name": name,
+            "media_kind": "any",
+            "model": "gemini-2.5-pro",
+            "target_map": {},
+            "output_schema": {},
+            "body": "v1",
+        },
+    )
     assert r.status_code == 201, r.text
     pid = r.json()["id"]
     v1 = client.get(f"/api/prompts/{pid}").json()["latest_version_id"]
@@ -75,19 +82,19 @@ def test_studio_page_respects_version_id_param(client):
     # Without param: default = draft = v2.
     r = client.get(f"/studio?prompt_id={pid}")
     assert r.status_code == 200
-    assert f'activeVersionId: {v2}' in r.text
+    assert f"activeVersionId: {v2}" in r.text
 
     # With param: pick v1 explicitly.
     r = client.get(f"/studio?prompt_id={pid}&version_id={v1}")
     assert r.status_code == 200
-    assert f'activeVersionId: {v1}' in r.text
+    assert f"activeVersionId: {v1}" in r.text
 
 
 def test_studio_page_respects_compare_version_id_param(client):
     pid, v1, v2 = _make_prompt_two_versions(client, name="vp2")
     r = client.get(f"/studio?prompt_id={pid}&version_id={v2}&compare_version_id={v1}")
     assert r.status_code == 200
-    assert f'compareVersionId: {v1}' in r.text
+    assert f"compareVersionId: {v1}" in r.text
 
 
 def test_studio_page_ignores_compare_equal_to_cur(client):
@@ -114,6 +121,7 @@ def test_source_param_preserves_tab(client, monkeypatch):
     # When a prompt switch carries the current tab (?source=…), the server
     # honors it instead of snapping back to the availability default.
     from backend.app.routes.pages import studio as studio_mod
+
     monkeypatch.setattr(studio_mod, "_archive_available", lambda req: True)
     # No source → default is archive (archive available).
     assert "studioNav('archive')" in client.get("/studio").text
@@ -123,6 +131,7 @@ def test_source_param_preserves_tab(client, monkeypatch):
 
 def test_source_param_selects_matching_set_list(client, monkeypatch):
     from backend.app.routes.pages import studio as studio_mod
+
     monkeypatch.setattr(studio_mod, "_archive_available", lambda req: True)
     client.post("/api/studio/sets?source=archive", json={"name": "arc-set"})
     client.post("/api/studio/sets?source=uploaded", json={"name": "up-set"})
@@ -132,9 +141,7 @@ def test_source_param_selects_matching_set_list(client, monkeypatch):
 
 
 def test_open_set_id_expands_that_set(client):
-    sid = client.post(
-        "/api/studio/sets?source=uploaded", json={"name": "up"}
-    ).json()["id"]
+    sid = client.post("/api/studio/sets?source=uploaded", json={"name": "up"}).json()["id"]
     html = client.get(f"/studio?source=uploaded&open_set_id={sid}").text
     # studioSets is seeded with the open set id so it auto-expands on load.
     assert f"studioSets({sid})" in html
@@ -142,6 +149,7 @@ def test_open_set_id_expands_that_set(client):
 
 def test_prompt_switch_link_carries_tab_and_open_set():
     from pathlib import Path
+
     js = Path("backend/app/static/studio.js").read_text()
     assert "u.searchParams.set('source'" in js
     assert "u.searchParams.set('open_set_id'" in js

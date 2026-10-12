@@ -1,6 +1,7 @@
 # tests/unit/test_roles_caps.py
 """ROLE_CAPS is the single source of truth for role→permission. Two roles:
 'admin' (manage access + everything) and 'member' (a regular non-admin user)."""
+
 from backend.app.auth.roles import ROLE_CAPS, ROLE_ORDER, has_permission
 
 

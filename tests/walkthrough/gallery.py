@@ -41,7 +41,7 @@ def render_gallery(entries: list[GalleryEntry]) -> str:
         anchor = _anchor(topic)
         sub_links = "\n".join(
             f'          <li><a href="#video-{html.escape(e["slug"], quote=True)}">'
-            f'{html.escape(e["title"])}</a></li>'
+            f"{html.escape(e['title'])}</a></li>"
             for e in items
         )
         nav_items.append(

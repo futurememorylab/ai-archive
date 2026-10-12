@@ -58,8 +58,13 @@ def test_active_jobs_lists_running_with_progress(monkeypatch, tmp_path):
             from backend.app.repositories.prompts import PromptsRepo
 
             _, vid = await PromptsRepo().create_with_initial_version(
-                ctx.db, name="t", description=None, body="p",
-                target_map={"x": {"kind": "markers"}}, output_schema={}, model="m",
+                ctx.db,
+                name="t",
+                description=None,
+                body="p",
+                target_map={"x": {"kind": "markers"}},
+                output_schema={},
+                model="m",
             )
             jid = await ctx.jobs_repo.create_job(
                 ctx.db, prompt_version_id=vid, clip_ids=[1, 2], kind="video"
@@ -94,9 +99,15 @@ def test_create_job_reports_queued(monkeypatch, tmp_path):
 
         async def seed_version():
             from backend.app.repositories.prompts import PromptsRepo
+
             _, vid = await PromptsRepo().create_with_initial_version(
-                ctx.db, name="t", description=None, body="p",
-                target_map={"x": {"kind": "markers"}}, output_schema={}, model="m",
+                ctx.db,
+                name="t",
+                description=None,
+                body="p",
+                target_map={"x": {"kind": "markers"}},
+                output_schema={},
+                model="m",
             )
             return vid
 
@@ -120,8 +131,13 @@ def test_active_jobs_exposes_run_group_for_calibration_jobs(monkeypatch, tmp_pat
             from backend.app.repositories.prompts import PromptsRepo
 
             _, vid = await PromptsRepo().create_with_initial_version(
-                ctx.db, name="cal", description=None, body="p",
-                target_map={"x": {"kind": "markers"}}, output_schema={}, model="m",
+                ctx.db,
+                name="cal",
+                description=None,
+                body="p",
+                target_map={"x": {"kind": "markers"}},
+                output_schema={},
+                model="m",
             )
             # Real calibration jobs are kind="studio" (ADR 0116). Plain studio
             # runs are hidden from the topbar, but calibration ones must show —
@@ -166,8 +182,7 @@ def test_jobs_events_route_resolves_before_job_id(monkeypatch, tmp_path):
     # Find the /{job_id} catch-all — it's the one containing {job_id} but not
     # also containing /events (that's the per-job stream, not the global one).
     catch_all_paths = [
-        p for p in paths
-        if p is not None and "{job_id}" in p and not p.endswith("/events")
+        p for p in paths if p is not None and "{job_id}" in p and not p.endswith("/events")
     ]
     assert catch_all_paths, "No /api/jobs/{job_id} route found"
     i_events = paths.index("/api/jobs/events")

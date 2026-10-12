@@ -15,11 +15,7 @@ def test_root_defines_range_cur_and_range_cmp():
 def test_range_tokens_use_color_mix_with_existing_tokens():
     css = Path("backend/app/static/app.css").read_text()
     root_block = css.split(":root", 1)[1].split("}", 1)[0]
-    cur_line = next(
-        ln for ln in root_block.splitlines() if "--range-cur" in ln
-    )
-    cmp_line = next(
-        ln for ln in root_block.splitlines() if "--range-cmp" in ln
-    )
+    cur_line = next(ln for ln in root_block.splitlines() if "--range-cur" in ln)
+    cmp_line = next(ln for ln in root_block.splitlines() if "--range-cmp" in ln)
     assert "color-mix" in cur_line and "var(--info)" in cur_line
     assert "color-mix" in cmp_line and "var(--accent)" in cmp_line

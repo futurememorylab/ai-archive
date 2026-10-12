@@ -43,9 +43,7 @@ def _clip_key(clip_id: int) -> ClipKey:
 
 
 class MediaCacheBackend(Protocol):
-    async def ensure_cached(
-        self, clip_id: int, progress_cb: "ProgressCb | None" = None
-    ) -> None: ...
+    async def ensure_cached(self, clip_id: int, progress_cb: ProgressCb | None = None) -> None: ...
 
     async def locate(self, clip_id: int) -> LocalFile | RemoteUrl | None: ...
 
@@ -62,9 +60,7 @@ class LocalProxyBackend:
             prefer="local",
         )
 
-    async def ensure_cached(
-        self, clip_id: int, progress_cb: "ProgressCb | None" = None
-    ) -> None:
+    async def ensure_cached(self, clip_id: int, progress_cb: ProgressCb | None = None) -> None:
         await self._resolver.path_for_clip_id(clip_id, progress_cb)
 
     async def locate(self, clip_id: int) -> LocalFile | RemoteUrl | None:
@@ -79,18 +75,14 @@ class AiStoreBackend:
     staging file is deleted after upload. Playback is a signed URL. The
     local proxy cache is never consulted for reads."""
 
-    def __init__(
-        self, *, rest_resolver, ai_store, gcs, proxy_cache_repo, db_provider
-    ) -> None:
+    def __init__(self, *, rest_resolver, ai_store, gcs, proxy_cache_repo, db_provider) -> None:
         self._resolver = rest_resolver
         self._ai_store = ai_store
         self._gcs = gcs
         self._proxy_cache_repo = proxy_cache_repo
         self._db_provider = db_provider
 
-    async def ensure_cached(
-        self, clip_id: int, progress_cb: "ProgressCb | None" = None
-    ) -> None:
+    async def ensure_cached(self, clip_id: int, progress_cb: ProgressCb | None = None) -> None:
         key = _clip_key(clip_id)
         if await self._ai_store.status(key) is not None:
             return  # already in GCS -- no tunnel hit (status-first fast-path)
@@ -117,9 +109,7 @@ class AiStoreBackend:
         ref = await self._ai_store.status(_clip_key(clip_id))
         if ref is None or not ref.handle.startswith("gs://"):
             return None
-        url = await asyncio.to_thread(
-            self._gcs.signed_url, ref.handle, expires_s=SIGNED_URL_TTL_S
-        )
+        url = await asyncio.to_thread(self._gcs.signed_url, ref.handle, expires_s=SIGNED_URL_TTL_S)
         return RemoteUrl(url)
 
 
@@ -134,7 +124,10 @@ def build_media_cache_backend(
 ) -> MediaCacheBackend:
     if media_cache == "ai_store":
         return AiStoreBackend(
-            rest_resolver=resolver, ai_store=ai_store, gcs=gcs,
-            proxy_cache_repo=proxy_cache_repo, db_provider=db_provider,
+            rest_resolver=resolver,
+            ai_store=ai_store,
+            gcs=gcs,
+            proxy_cache_repo=proxy_cache_repo,
+            db_provider=db_provider,
         )
     return LocalProxyBackend(resolver=resolver, ai_store=ai_store, gcs=gcs)

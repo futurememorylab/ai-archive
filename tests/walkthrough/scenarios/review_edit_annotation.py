@@ -30,9 +30,7 @@ def run(wt):
     # relabelled tab and the Shot/Scene badges.
     wt.step(
         "Review the Shot/Scene proposals in the Description tab",
-        lambda p: p.locator("#draft-aside")
-        .get_by_role("button", name="Description")
-        .click(),
+        lambda p: p.locator("#draft-aside").get_by_role("button", name="Description").click(),
     )
     # From here on every locator is scoped to the draft panel (#draft-aside),
     # the Alpine-driven review surface rendered by _anno_draft.html. The draft
@@ -41,35 +39,32 @@ def run(wt):
     # published panel's same-named elements.
     wt.step(
         "Open the Fields tab",
-        lambda p: p.locator("#draft-aside")
-        .get_by_role("button", name="Fields")
-        .click(),
+        lambda p: p.locator("#draft-aside").get_by_role("button", name="Fields").click(),
     )
     # The field card is a plain .ri-card (marker cards carry .ri-marker and live
     # on the hidden Description tab, so exclude them); :visible pins us to the
     # field actually on screen under the Fields tab.
     wt.step(
         "Edit the proposed Decade field",
-        lambda p: p.locator(
-            "#draft-aside .ri-card:not(.ri-marker):visible"
-        )
-        .first.get_by_role("button", name="Edit")
-        .click(),
+        lambda p: (
+            p.locator("#draft-aside .ri-card:not(.ri-marker):visible")
+            .first.get_by_role("button", name="Edit")
+            .click()
+        ),
     )
     wt.step(
         "Correct the value to 40.léta",
-        lambda p: p.locator(
-            "#draft-aside .ri-card.editing:not(.ri-marker) input.txt"
-        )
-        .first.fill("40.léta"),
+        lambda p: p.locator("#draft-aside .ri-card.editing:not(.ri-marker) input.txt").first.fill(
+            "40.léta"
+        ),
     )
     wt.step(
         "Save the corrected value",
-        lambda p: p.locator(
-            "#draft-aside .ri-card.editing:not(.ri-marker)"
-        )
-        .first.get_by_role("button", name="Save")
-        .click(),
+        lambda p: (
+            p.locator("#draft-aside .ri-card.editing:not(.ri-marker)")
+            .first.get_by_role("button", name="Save")
+            .click()
+        ),
     )
     wt.step(
         "Accept & apply (publish) the draft",

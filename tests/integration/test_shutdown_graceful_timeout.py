@@ -47,9 +47,7 @@ def _wait_health(port: int, timeout_s: float = 15.0) -> bool:
     while time.monotonic() < deadline:
         try:
             with socket.create_connection(("127.0.0.1", port), timeout=0.5) as s:
-                s.sendall(
-                    b"GET /api/health HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n"
-                )
+                s.sendall(b"GET /api/health HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
                 if b"200" in s.recv(256):
                     return True
         except OSError:
@@ -102,9 +100,7 @@ def test_open_sse_stream_does_not_block_graceful_shutdown(tmp_path):
         # Hold an SSE connection open — the raw StreamingResponse generator
         # blocks on queue.get() and never reacts to the exit signal.
         sse = socket.create_connection(("127.0.0.1", port), timeout=2)
-        sse.sendall(
-            b"GET /api/connection/events HTTP/1.1\r\nHost: x\r\n\r\n"
-        )
+        sse.sendall(b"GET /api/connection/events HTTP/1.1\r\nHost: x\r\n\r\n")
         sse.settimeout(2)
         with contextlib.suppress(socket.timeout):
             sse.recv(256)  # read the 200 response head so the stream is active

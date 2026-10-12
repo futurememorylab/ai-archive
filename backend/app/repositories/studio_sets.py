@@ -31,9 +31,7 @@ class StudioSetsRepo:
         await conn.commit()
         return sid
 
-    async def get_or_create_default_uploaded_set(
-        self, conn: aiosqlite.Connection
-    ) -> int:
+    async def get_or_create_default_uploaded_set(self, conn: aiosqlite.Connection) -> int:
         """Return the id of the well-known uploaded 'Uploads' set, creating
         it on first use. Lets a user drop a file before making a set."""
         cur = await conn.execute(
@@ -43,16 +41,10 @@ class StudioSetsRepo:
         row = await cur.fetchone()
         if row is not None:
             return int(row[0])
-        return await self.create_set(
-            conn, name=DEFAULT_UPLOADED_SET_NAME, source="uploaded"
-        )
+        return await self.create_set(conn, name=DEFAULT_UPLOADED_SET_NAME, source="uploaded")
 
-    async def rename_set(
-        self, conn: aiosqlite.Connection, set_id: int, *, name: str
-    ) -> None:
-        await conn.execute(
-            "UPDATE studio_set SET name = ? WHERE id = ?", (name, set_id)
-        )
+    async def rename_set(self, conn: aiosqlite.Connection, set_id: int, *, name: str) -> None:
+        await conn.execute("UPDATE studio_set SET name = ? WHERE id = ?", (name, set_id))
         await conn.commit()
 
     async def delete_set(self, conn: aiosqlite.Connection, set_id: int) -> None:
@@ -112,8 +104,7 @@ class StudioSetsRepo:
         added = 0
         for cid in set(clip_ids):
             cur = await conn.execute(
-                "INSERT OR IGNORE INTO studio_set_clip(set_id, clip_id, added_at) "
-                "VALUES (?, ?, ?)",
+                "INSERT OR IGNORE INTO studio_set_clip(set_id, clip_id, added_at) VALUES (?, ?, ?)",
                 (set_id, cid, now),
             )
             if cur.rowcount:
@@ -121,18 +112,14 @@ class StudioSetsRepo:
         await conn.commit()
         return added
 
-    async def remove_clip(
-        self, conn: aiosqlite.Connection, set_id: int, *, clip_id: int
-    ) -> None:
+    async def remove_clip(self, conn: aiosqlite.Connection, set_id: int, *, clip_id: int) -> None:
         await conn.execute(
             "DELETE FROM studio_set_clip WHERE set_id = ? AND clip_id = ?",
             (set_id, clip_id),
         )
         await conn.commit()
 
-    async def count_sets_for_clip(
-        self, conn: aiosqlite.Connection, clip_id: int
-    ) -> int:
+    async def count_sets_for_clip(self, conn: aiosqlite.Connection, clip_id: int) -> int:
         """How many sets currently reference `clip_id`.
 
         Used by the upload orphan-GC: an uploaded clip is only safe to
@@ -143,29 +130,20 @@ class StudioSetsRepo:
         )
         return int((await cur.fetchone())[0])
 
-    async def list_clips(
-        self, conn: aiosqlite.Connection, set_id: int
-    ) -> list[dict[str, Any]]:
+    async def list_clips(self, conn: aiosqlite.Connection, set_id: int) -> list[dict[str, Any]]:
         cur = await conn.execute(
-            "SELECT clip_id, added_at FROM studio_set_clip "
-            "WHERE set_id = ? ORDER BY added_at DESC",
+            "SELECT clip_id, added_at FROM studio_set_clip WHERE set_id = ? ORDER BY added_at DESC",
             (set_id,),
         )
         return [{"clip_id": r[0], "added_at": r[1]} for r in await cur.fetchall()]
 
-    async def source_for_set(
-        self, conn: aiosqlite.Connection, set_id: int
-    ) -> str | None:
+    async def source_for_set(self, conn: aiosqlite.Connection, set_id: int) -> str | None:
         """The `source` ('archive' | 'uploaded') of a set, or None if missing."""
-        cur = await conn.execute(
-            "SELECT source FROM studio_set WHERE id = ?", (set_id,)
-        )
+        cur = await conn.execute("SELECT source FROM studio_set WHERE id = ?", (set_id,))
         row = await cur.fetchone()
         return str(row[0]) if row is not None else None
 
-    async def set_id_for_clip(
-        self, conn: aiosqlite.Connection, clip_id: int
-    ) -> int | None:
+    async def set_id_for_clip(self, conn: aiosqlite.Connection, clip_id: int) -> int | None:
         """Lowest set_id containing `clip_id`, or None if not in any set.
 
         A clip can live in multiple sets; callers that need "the" set
@@ -173,8 +151,7 @@ class StudioSetsRepo:
         pick.
         """
         cur = await conn.execute(
-            "SELECT set_id FROM studio_set_clip "
-            "WHERE clip_id = ? ORDER BY set_id LIMIT 1",
+            "SELECT set_id FROM studio_set_clip WHERE clip_id = ? ORDER BY set_id LIMIT 1",
             (clip_id,),
         )
         row = await cur.fetchone()

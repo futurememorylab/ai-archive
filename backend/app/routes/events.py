@@ -83,4 +83,3 @@ async def job_events(request: Request, job_id: int):
             bus.unsubscribe(topic, q)
 
     return EventSourceResponse(stream())
-

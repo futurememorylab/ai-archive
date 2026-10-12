@@ -46,8 +46,15 @@ async def test_uploaded_hit_serves_local_file_without_inner(conn, tmp_path):
     f.write_bytes(b"video-bytes")
     clip_id = to_clip_id(1)
     repo = ProxyCacheRepo()
-    await repo.record(conn, clip_id=clip_id, file_path=str(f), size_bytes=11,
-                      etag=None, provider_id="uploaded", provider_clip_id=str(clip_id))
+    await repo.record(
+        conn,
+        clip_id=clip_id,
+        file_path=str(f),
+        size_bytes=11,
+        etag=None,
+        provider_id="uploaded",
+        provider_clip_id=str(clip_id),
+    )
     inner = _Inner()
     r = UploadAwareResolver(inner, repo=repo, db_provider=lambda: conn)
     assert await r.path_for_clip_id(clip_id) == f

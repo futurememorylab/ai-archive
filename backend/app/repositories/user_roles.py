@@ -42,7 +42,8 @@ class UserRolesRepo:
         (issue #73: the per-request UPDATE+commit was the Litestream lock
         contention that crashed the container)."""
         cur = await conn.execute(
-            "SELECT role, status FROM user_roles WHERE email = ? AND status IN ('active','invited')",
+            "SELECT role, status FROM user_roles "
+            "WHERE email = ? AND status IN ('active','invited')",
             (_norm(email),),
         )
         row = await cur.fetchone()

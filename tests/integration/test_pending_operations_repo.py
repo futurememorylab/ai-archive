@@ -228,9 +228,7 @@ async def test_status_counts_for_clip(db):
     await repo.mark_applied(db, [ids[0]])
     await repo.mark_failed(db, [ids[1]], error="boom")
     # ids[2] stays pending; `other` belongs to a different clip
-    counts = await repo.status_counts_for_clip(
-        db, provider_id="catdv", provider_clip_id="7"
-    )
+    counts = await repo.status_counts_for_clip(db, provider_id="catdv", provider_clip_id="7")
     assert counts == {"pending": 1, "applied": 1, "failed": 1}
     # absent statuses simply don't appear
     assert "conflict" not in counts
@@ -240,9 +238,7 @@ async def test_status_counts_for_clip(db):
 @pytest.mark.asyncio
 async def test_status_counts_for_clip_empty_when_no_ops(db):
     repo = PendingOperationsRepo()
-    counts = await repo.status_counts_for_clip(
-        db, provider_id="catdv", provider_clip_id="999"
-    )
+    counts = await repo.status_counts_for_clip(db, provider_id="catdv", provider_clip_id="999")
     assert counts == {}
 
 

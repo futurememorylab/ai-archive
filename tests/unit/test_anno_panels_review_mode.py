@@ -10,15 +10,28 @@ Alpine.initTree can wire the injected output without throwing)."""
 from backend.app.routes.pages.templates import templates
 
 PANELS = {
-    "markers": [{
-        "name": "Scene 1", "in_secs": 0.0, "out_secs": 5.6,
-        "category": "x", "description": "d", "item_id": 1, "decision": "pending",
-    }],
-    "fields": [{
-        "identifier": "a.b", "value": "v", "multi": False,
-        "item_id": 2, "decision": "pending",
-    }],
-    "notes": None, "big_notes": None,
+    "markers": [
+        {
+            "name": "Scene 1",
+            "in_secs": 0.0,
+            "out_secs": 5.6,
+            "category": "x",
+            "description": "d",
+            "item_id": 1,
+            "decision": "pending",
+        }
+    ],
+    "fields": [
+        {
+            "identifier": "a.b",
+            "value": "v",
+            "multi": False,
+            "item_id": 2,
+            "decision": "pending",
+        }
+    ],
+    "notes": None,
+    "big_notes": None,
     "note_items": [{"text": "a note", "item_id": 3, "decision": "pending"}],
     "fps": 25.0,
 }

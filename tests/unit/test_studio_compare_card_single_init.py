@@ -17,7 +17,6 @@ contract so the `reinit` (initTree + process) double-init can't creep back
 onto the compare-card injection path.
 """
 
-import re
 from pathlib import Path
 
 STATIC = Path("backend/app/static")
@@ -44,7 +43,7 @@ def test_htmx_alpine_exposes_htmx_only_wiring():
     # Slice the wireHtmx method body precisely: from its definition to the
     # closing "},".
     start = src.index("wireHtmx(el)")
-    body = src[start:src.index("},", start)]
+    body = src[start : src.index("},", start)]
     assert ".process(" in body, "wireHtmx must call htmx.process()"
     assert "initTree(" not in body, (
         "wireHtmx must NOT call Alpine.initTree() — the whole point is to let "

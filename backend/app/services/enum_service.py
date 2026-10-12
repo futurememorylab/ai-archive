@@ -86,8 +86,7 @@ class EnumService:
 
     def _seed_values(self, spec: EnumSpec) -> list[EnumValue]:
         return [
-            EnumValue(v.value, v.label, True, bool(v.default), i)
-            for i, v in enumerate(spec.values)
+            EnumValue(v.value, v.label, True, bool(v.default), i) for i, v in enumerate(spec.values)
         ]
 
     # ---- generation-model convenience ----

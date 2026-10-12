@@ -91,9 +91,7 @@ class WalkthroughApp:
         asyncio.run(seed.build_seed_db(seed_template, clips=clips, catalog_id=CATALOG_ID))
         shutil.copyfile(seed_template, run_db)
 
-        config = uvicorn.Config(
-            self._app, host="127.0.0.1", port=self.port, log_level="warning"
-        )
+        config = uvicorn.Config(self._app, host="127.0.0.1", port=self.port, log_level="warning")
         self._server = uvicorn.Server(config)
 
         def _run() -> None:
@@ -179,9 +177,7 @@ class WalkthroughApp:
     def stop(self) -> None:
         if self._runner is not None and self._loop is not None:
             with contextlib.suppress(Exception):
-                asyncio.run_coroutine_threadsafe(
-                    self._runner.stop(), self._loop
-                ).result(timeout=5)
+                asyncio.run_coroutine_threadsafe(self._runner.stop(), self._loop).result(timeout=5)
         if self._server is not None:
             self._server.should_exit = True
         if self._thread is not None:

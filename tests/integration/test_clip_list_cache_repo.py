@@ -220,14 +220,24 @@ async def test_clips_for_catalog_unions_pages_keyed_by_clip_id(db):
     filtered/batch views without per-clip CatDV fetches."""
     repo = ClipListCacheRepo()
     await repo.upsert(
-        db, provider_id="catdv", catalog_id="881507", query_text=None,
-        offset=0, limit=2, total=4,
+        db,
+        provider_id="catdv",
+        catalog_id="881507",
+        query_text=None,
+        offset=0,
+        limit=2,
+        total=4,
         items=(_make_clip("1", name="A"), _make_clip("2", name="B")),
         fetched_at_iso="2026-05-19T10:00:00+00:00",
     )
     await repo.upsert(
-        db, provider_id="catdv", catalog_id="881507", query_text=None,
-        offset=2, limit=2, total=4,
+        db,
+        provider_id="catdv",
+        catalog_id="881507",
+        query_text=None,
+        offset=2,
+        limit=2,
+        total=4,
         items=(_make_clip("3", name="C"),),
         fetched_at_iso="2026-05-19T10:00:00+00:00",
     )

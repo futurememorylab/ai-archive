@@ -25,9 +25,7 @@ from backend.app.context import CoreCtx, LiveCtx
 
 def _livectx_accessible_names() -> set[str]:
     field_names = {f.name for f in dataclasses.fields(LiveCtx)}
-    property_names = {
-        name for name, value in vars(LiveCtx).items() if isinstance(value, property)
-    }
+    property_names = {name for name, value in vars(LiveCtx).items() if isinstance(value, property)}
     return field_names | property_names
 
 

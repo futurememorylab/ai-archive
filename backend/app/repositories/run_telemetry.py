@@ -135,9 +135,7 @@ class RunTelemetryRepo:
         priced_count < count, cost_usd is a partial subtotal (SQL SUM skips
         NULLs) — the UI flags it rather than presenting it as a complete total.
         Batched form: stats_by_resolution_many."""
-        many = await self.stats_by_resolution_many(
-            conn, prompt_version_ids=[prompt_version_id]
-        )
+        many = await self.stats_by_resolution_many(conn, prompt_version_ids=[prompt_version_id])
         return many.get(prompt_version_id, {})
 
     async def stats_by_resolution_many(
@@ -149,9 +147,7 @@ class RunTelemetryRepo:
         is the priced (non-NULL) subset; GROUP-BY aggregates merge with += so a
         key split across chunks stays correct."""
         out: dict[int, dict[str | None, dict]] = {}
-        for fragment, params in chunked_in_clause(
-            (v,) for v in prompt_version_ids
-        ):
+        for fragment, params in chunked_in_clause((v,) for v in prompt_version_ids):
             cur = await conn.execute(
                 "SELECT prompt_version_id, media_resolution_setting, COUNT(*), "
                 "COUNT(cost_usd), COALESCE(SUM(cost_usd), 0), "

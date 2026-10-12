@@ -1,6 +1,7 @@
 """ADMIN_EMAILS is a comma-separated env string parsed into a normalized list
 (lowercased, trimmed, de-duped) — the deploy-time root of trust for the first
 admins (spec 2026-06-14-iap-roles-admin-console-design.md)."""
+
 import pytest
 from pydantic import ValidationError
 

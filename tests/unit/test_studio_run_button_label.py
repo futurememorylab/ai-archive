@@ -11,140 +11,245 @@ from tests._helpers.studio_state import run_button_label
 
 
 def test_idle_with_version():
-    assert run_button_label(
-        running=False, cancelling=False,
-        done_flash_until_ms=0, cancelled_flash_until_ms=0, now_ms=1000.0,
-        active_version_num=3, elapsed_label="0:00",
-    ) == "▶ Run on this clip · v3"
+    assert (
+        run_button_label(
+            running=False,
+            cancelling=False,
+            done_flash_until_ms=0,
+            cancelled_flash_until_ms=0,
+            now_ms=1000.0,
+            active_version_num=3,
+            elapsed_label="0:00",
+        )
+        == "▶ Run on this clip · v3"
+    )
 
 
 def test_idle_with_no_version_uses_question_mark():
-    assert run_button_label(
-        running=False, cancelling=False,
-        done_flash_until_ms=0, cancelled_flash_until_ms=0, now_ms=1000.0,
-        active_version_num=None, elapsed_label="0:00",
-    ) == "▶ Run on this clip · v?"
+    assert (
+        run_button_label(
+            running=False,
+            cancelling=False,
+            done_flash_until_ms=0,
+            cancelled_flash_until_ms=0,
+            now_ms=1000.0,
+            active_version_num=None,
+            elapsed_label="0:00",
+        )
+        == "▶ Run on this clip · v?"
+    )
 
 
 def test_running_renders_elapsed():
-    assert run_button_label(
-        running=True, cancelling=False,
-        done_flash_until_ms=0, cancelled_flash_until_ms=0, now_ms=5000.0,
-        active_version_num=3, elapsed_label="0:05",
-    ) == "⟳ Running… 0:05"
+    assert (
+        run_button_label(
+            running=True,
+            cancelling=False,
+            done_flash_until_ms=0,
+            cancelled_flash_until_ms=0,
+            now_ms=5000.0,
+            active_version_num=3,
+            elapsed_label="0:05",
+        )
+        == "⟳ Running… 0:05"
+    )
 
 
 def test_running_renders_with_minute_elapsed():
-    assert run_button_label(
-        running=True, cancelling=False,
-        done_flash_until_ms=0, cancelled_flash_until_ms=0, now_ms=90000.0,
-        active_version_num=3, elapsed_label="1:30",
-    ) == "⟳ Running… 1:30"
+    assert (
+        run_button_label(
+            running=True,
+            cancelling=False,
+            done_flash_until_ms=0,
+            cancelled_flash_until_ms=0,
+            now_ms=90000.0,
+            active_version_num=3,
+            elapsed_label="1:30",
+        )
+        == "⟳ Running… 1:30"
+    )
 
 
 def test_cancelling_overrides_running():
-    assert run_button_label(
-        running=True, cancelling=True,
-        done_flash_until_ms=0, cancelled_flash_until_ms=0, now_ms=5000.0,
-        active_version_num=3, elapsed_label="0:05",
-    ) == "⟳ Cancelling…"
+    assert (
+        run_button_label(
+            running=True,
+            cancelling=True,
+            done_flash_until_ms=0,
+            cancelled_flash_until_ms=0,
+            now_ms=5000.0,
+            active_version_num=3,
+            elapsed_label="0:05",
+        )
+        == "⟳ Cancelling…"
+    )
 
 
 def test_done_flash_when_active_overrides_everything():
-    assert run_button_label(
-        running=False, cancelling=False,
-        done_flash_until_ms=12000.0, cancelled_flash_until_ms=0, now_ms=11500.0,
-        active_version_num=3, elapsed_label="0:00",
-    ) == "✓ Done"
+    assert (
+        run_button_label(
+            running=False,
+            cancelling=False,
+            done_flash_until_ms=12000.0,
+            cancelled_flash_until_ms=0,
+            now_ms=11500.0,
+            active_version_num=3,
+            elapsed_label="0:00",
+        )
+        == "✓ Done"
+    )
 
 
 def test_done_flash_expired_returns_to_idle():
-    assert run_button_label(
-        running=False, cancelling=False,
-        done_flash_until_ms=10000.0, cancelled_flash_until_ms=0, now_ms=11500.0,
-        active_version_num=3, elapsed_label="0:00",
-    ) == "▶ Run on this clip · v3"
+    assert (
+        run_button_label(
+            running=False,
+            cancelling=False,
+            done_flash_until_ms=10000.0,
+            cancelled_flash_until_ms=0,
+            now_ms=11500.0,
+            active_version_num=3,
+            elapsed_label="0:00",
+        )
+        == "▶ Run on this clip · v3"
+    )
 
 
 def test_done_flash_takes_precedence_over_running_mid_transition():
     """Brief moment where running has flipped false and the flash is
     set — label should already read Done."""
-    assert run_button_label(
-        running=False, cancelling=False,
-        done_flash_until_ms=12000.0, cancelled_flash_until_ms=0, now_ms=11500.0,
-        active_version_num=3, elapsed_label="0:42",
-    ) == "✓ Done"
+    assert (
+        run_button_label(
+            running=False,
+            cancelling=False,
+            done_flash_until_ms=12000.0,
+            cancelled_flash_until_ms=0,
+            now_ms=11500.0,
+            active_version_num=3,
+            elapsed_label="0:42",
+        )
+        == "✓ Done"
+    )
 
 
-@pytest.mark.parametrize("v,expected", [
-    (1, "▶ Run on this clip · v1"),
-    (10, "▶ Run on this clip · v10"),
-    (99, "▶ Run on this clip · v99"),
-])
+@pytest.mark.parametrize(
+    "v,expected",
+    [
+        (1, "▶ Run on this clip · v1"),
+        (10, "▶ Run on this clip · v10"),
+        (99, "▶ Run on this clip · v99"),
+    ],
+)
 def test_version_number_renders_verbatim(v, expected):
-    assert run_button_label(
-        running=False, cancelling=False,
-        done_flash_until_ms=0, cancelled_flash_until_ms=0, now_ms=0,
-        active_version_num=v, elapsed_label="0:00",
-    ) == expected
+    assert (
+        run_button_label(
+            running=False,
+            cancelling=False,
+            done_flash_until_ms=0,
+            cancelled_flash_until_ms=0,
+            now_ms=0,
+            active_version_num=v,
+            elapsed_label="0:00",
+        )
+        == expected
+    )
 
 
 def test_selection_switches_to_run_on_n_clips():
     # When clips are checked, the single Run button targets the selection.
-    assert run_button_label(
-        running=False, cancelling=False,
-        done_flash_until_ms=0, cancelled_flash_until_ms=0, now_ms=1000.0,
-        active_version_num=3, elapsed_label="0:00",
-        selected_count=4,
-    ) == "▶ Run on 4 clips · v3"
+    assert (
+        run_button_label(
+            running=False,
+            cancelling=False,
+            done_flash_until_ms=0,
+            cancelled_flash_until_ms=0,
+            now_ms=1000.0,
+            active_version_num=3,
+            elapsed_label="0:00",
+            selected_count=4,
+        )
+        == "▶ Run on 4 clips · v3"
+    )
 
 
 def test_selection_of_one_is_singular():
-    assert run_button_label(
-        running=False, cancelling=False,
-        done_flash_until_ms=0, cancelled_flash_until_ms=0, now_ms=1000.0,
-        active_version_num=3, elapsed_label="0:00",
-        selected_count=1,
-    ) == "▶ Run on 1 clip · v3"
+    assert (
+        run_button_label(
+            running=False,
+            cancelling=False,
+            done_flash_until_ms=0,
+            cancelled_flash_until_ms=0,
+            now_ms=1000.0,
+            active_version_num=3,
+            elapsed_label="0:00",
+            selected_count=1,
+        )
+        == "▶ Run on 1 clip · v3"
+    )
 
 
 def test_bulk_running_shows_progress():
-    assert run_button_label(
-        running=False, cancelling=False,
-        done_flash_until_ms=0, cancelled_flash_until_ms=0, now_ms=1000.0,
-        active_version_num=3, elapsed_label="0:00",
-        selected_count=4, bulk_running=True, bulk_done=2, bulk_total=4,
-    ) == "⟳ Running… 2/4"
+    assert (
+        run_button_label(
+            running=False,
+            cancelling=False,
+            done_flash_until_ms=0,
+            cancelled_flash_until_ms=0,
+            now_ms=1000.0,
+            active_version_num=3,
+            elapsed_label="0:00",
+            selected_count=4,
+            bulk_running=True,
+            bulk_done=2,
+            bulk_total=4,
+        )
+        == "⟳ Running… 2/4"
+    )
 
 
 def test_cancelled_flash_renders():
-    assert run_button_label(
-        running=False, cancelling=False,
-        done_flash_until_ms=0,
-        cancelled_flash_until_ms=2000.0,
-        now_ms=1500.0,
-        active_version_num=3, elapsed_label="0:00",
-    ) == "⊘ Cancelled"
+    assert (
+        run_button_label(
+            running=False,
+            cancelling=False,
+            done_flash_until_ms=0,
+            cancelled_flash_until_ms=2000.0,
+            now_ms=1500.0,
+            active_version_num=3,
+            elapsed_label="0:00",
+        )
+        == "⊘ Cancelled"
+    )
 
 
 def test_cancelled_flash_expires():
     # Past the flash window — fall through to idle label.
-    assert run_button_label(
-        running=False, cancelling=False,
-        done_flash_until_ms=0,
-        cancelled_flash_until_ms=1000.0,
-        now_ms=2000.0,
-        active_version_num=3, elapsed_label="0:00",
-    ) == "▶ Run on this clip · v3"
+    assert (
+        run_button_label(
+            running=False,
+            cancelling=False,
+            done_flash_until_ms=0,
+            cancelled_flash_until_ms=1000.0,
+            now_ms=2000.0,
+            active_version_num=3,
+            elapsed_label="0:00",
+        )
+        == "▶ Run on this clip · v3"
+    )
 
 
 def test_done_flash_wins_over_cancelled_flash():
     # Both set (impossible in production but defensive): Done wins because
     # it appears first in the label function. The JS mirror must match.
-    assert run_button_label(
-        running=False, cancelling=False,
-        done_flash_until_ms=2000.0,
-        cancelled_flash_until_ms=2000.0,
-        now_ms=1500.0,
-        active_version_num=3, elapsed_label="0:00",
-    ) == "✓ Done"
+    assert (
+        run_button_label(
+            running=False,
+            cancelling=False,
+            done_flash_until_ms=2000.0,
+            cancelled_flash_until_ms=2000.0,
+            now_ms=1500.0,
+            active_version_num=3,
+            elapsed_label="0:00",
+        )
+        == "✓ Done"
+    )

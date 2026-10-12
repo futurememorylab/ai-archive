@@ -88,7 +88,5 @@ class MediaLocator:
         if ref is None or not ref.handle.startswith("gs://"):
             misses.append("ai store: not uploaded")
             return None
-        url = await asyncio.to_thread(
-            self._gcs.signed_url, ref.handle, expires_s=SIGNED_URL_TTL_S
-        )
+        url = await asyncio.to_thread(self._gcs.signed_url, ref.handle, expires_s=SIGNED_URL_TTL_S)
         return RemoteUrl(url)

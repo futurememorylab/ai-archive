@@ -12,6 +12,7 @@ def _make_app_ai_store(monkeypatch, tmp_path):
     monkeypatch.setenv("MEDIA_CACHE", "ai_store")
     monkeypatch.delenv("CATDV_PASSWORD", raising=False)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     return main_mod.app, tmp_path
 
@@ -21,6 +22,7 @@ def test_uploaded_thumb_served_from_durable_after_restart(monkeypatch, tmp_path)
     # poster is in GCS. The route must fall through to the durable store.
     app, data_dir = _make_app_ai_store(monkeypatch, tmp_path)
     from backend.app.uploaded_ids import to_clip_id
+
     cid = to_clip_id(5)
     poster_file = data_dir / "cache" / "thumbs" / f"{cid}.jpg"
 
@@ -45,6 +47,7 @@ def test_uploaded_thumb_served_from_durable_after_restart(monkeypatch, tmp_path)
 def test_uploaded_thumb_404_when_durable_misses(monkeypatch, tmp_path):
     app, data_dir = _make_app_ai_store(monkeypatch, tmp_path)
     from backend.app.uploaded_ids import to_clip_id
+
     cid = to_clip_id(6)
 
     fake_thumb = MagicMock()

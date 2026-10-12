@@ -279,7 +279,11 @@ async def _model_options(ctx, selected_version) -> list[str]:
     offer the saved value so editing never silently switches models)."""
     models = [v.value for v in await ctx.enum_service.generation_models()]
     # selected_version is a dict (produced by _version_view) in these routes
-    saved = selected_version.get("model") if isinstance(selected_version, dict) else getattr(selected_version, "model", None)
+    saved = (
+        selected_version.get("model")
+        if isinstance(selected_version, dict)
+        else getattr(selected_version, "model", None)
+    )
     if saved and saved not in models:
         models = [*models, saved]
     return models

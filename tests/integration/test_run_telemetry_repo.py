@@ -132,14 +132,30 @@ async def _insert_run(db, **over):
 @pytest.mark.asyncio
 async def test_recent_output_rates_filtered_by_resolution(db):
     repo = RunTelemetryRepo()
-    await _insert_run(db, model="m", media_kind="video", media_resolution_setting="high",
-                      media_duration_secs=10.0, tokens_out=1000, tokens_thinking=0)
-    await _insert_run(db, model="m", media_kind="video", media_resolution_setting="low",
-                      media_duration_secs=10.0, tokens_out=100, tokens_thinking=0)
-    high = await repo.recent_output_rates(db, model="m", media_kind="video", media_resolution="high")
+    await _insert_run(
+        db,
+        model="m",
+        media_kind="video",
+        media_resolution_setting="high",
+        media_duration_secs=10.0,
+        tokens_out=1000,
+        tokens_thinking=0,
+    )
+    await _insert_run(
+        db,
+        model="m",
+        media_kind="video",
+        media_resolution_setting="low",
+        media_duration_secs=10.0,
+        tokens_out=100,
+        tokens_thinking=0,
+    )
+    high = await repo.recent_output_rates(
+        db, model="m", media_kind="video", media_resolution="high"
+    )
     low = await repo.recent_output_rates(db, model="m", media_kind="video", media_resolution="low")
-    assert high == [100.0]   # 1000/10
-    assert low == [10.0]     # 100/10
+    assert high == [100.0]  # 1000/10
+    assert low == [10.0]  # 100/10
     both = await repo.recent_output_rates(db, model="m", media_kind="video")  # no filter
     assert sorted(both) == [10.0, 100.0]
 
@@ -147,21 +163,51 @@ async def test_recent_output_rates_filtered_by_resolution(db):
 @pytest.mark.asyncio
 async def test_recent_input_ratios_filtered_by_resolution(db):
     repo = RunTelemetryRepo()
-    await _insert_run(db, model="m", media_kind="video", media_resolution_setting="high",
-                      media_duration_secs=10.0, tokens_in_video=2000)
-    await _insert_run(db, model="m", media_kind="video", media_resolution_setting="low",
-                      media_duration_secs=10.0, tokens_in_video=500)
-    assert await repo.recent_input_ratios(db, model="m", media_kind="video", media_resolution="high") == [200.0]
-    assert await repo.recent_input_ratios(db, model="m", media_kind="video", media_resolution="low") == [50.0]
+    await _insert_run(
+        db,
+        model="m",
+        media_kind="video",
+        media_resolution_setting="high",
+        media_duration_secs=10.0,
+        tokens_in_video=2000,
+    )
+    await _insert_run(
+        db,
+        model="m",
+        media_kind="video",
+        media_resolution_setting="low",
+        media_duration_secs=10.0,
+        tokens_in_video=500,
+    )
+    assert await repo.recent_input_ratios(
+        db, model="m", media_kind="video", media_resolution="high"
+    ) == [200.0]
+    assert await repo.recent_input_ratios(
+        db, model="m", media_kind="video", media_resolution="low"
+    ) == [50.0]
 
 
 @pytest.mark.asyncio
 async def test_est_cost_sums_by_job(db):
     repo = RunTelemetryRepo()
-    await _insert_run(db, job_id=7, model="m", media_kind="video", status="ok",
-                      cost_usd=0.20, est_cost_usd_p50=0.15)
-    await _insert_run(db, job_id=7, model="m", media_kind="video", status="ok",
-                      cost_usd=0.10, est_cost_usd_p50=0.05)
+    await _insert_run(
+        db,
+        job_id=7,
+        model="m",
+        media_kind="video",
+        status="ok",
+        cost_usd=0.20,
+        est_cost_usd_p50=0.15,
+    )
+    await _insert_run(
+        db,
+        job_id=7,
+        model="m",
+        media_kind="video",
+        status="ok",
+        cost_usd=0.10,
+        est_cost_usd_p50=0.05,
+    )
     sums = await repo.est_cost_sums_by_job(db, [7])
     assert sums[7] == pytest.approx(0.20)  # 0.15 + 0.05
 
@@ -170,15 +216,43 @@ async def test_est_cost_sums_by_job(db):
 async def test_totals_by_prompt_version(db):
     repo = RunTelemetryRepo()
     # Version 5: two ok runs (video + image) + one error (excluded).
-    await _insert_run(db, prompt_version_id=5, status="ok", media_kind="video",
-                      media_duration_secs=30.0, cost_usd=0.20, est_cost_usd_p50=0.15)
-    await _insert_run(db, prompt_version_id=5, status="ok", media_kind="image",
-                      media_duration_secs=0.0, cost_usd=0.05, est_cost_usd_p50=0.04)
-    await _insert_run(db, prompt_version_id=5, status="error", media_kind="video",
-                      media_duration_secs=99.0, cost_usd=9.0, est_cost_usd_p50=9.0)
+    await _insert_run(
+        db,
+        prompt_version_id=5,
+        status="ok",
+        media_kind="video",
+        media_duration_secs=30.0,
+        cost_usd=0.20,
+        est_cost_usd_p50=0.15,
+    )
+    await _insert_run(
+        db,
+        prompt_version_id=5,
+        status="ok",
+        media_kind="image",
+        media_duration_secs=0.0,
+        cost_usd=0.05,
+        est_cost_usd_p50=0.04,
+    )
+    await _insert_run(
+        db,
+        prompt_version_id=5,
+        status="error",
+        media_kind="video",
+        media_duration_secs=99.0,
+        cost_usd=9.0,
+        est_cost_usd_p50=9.0,
+    )
     # Version 6: one ok run.
-    await _insert_run(db, prompt_version_id=6, status="ok", media_kind="video",
-                      media_duration_secs=12.0, cost_usd=1.00, est_cost_usd_p50=0.90)
+    await _insert_run(
+        db,
+        prompt_version_id=6,
+        status="ok",
+        media_kind="video",
+        media_duration_secs=12.0,
+        cost_usd=1.00,
+        est_cost_usd_p50=0.90,
+    )
     totals = await repo.totals_by_prompt_version(db, prompt_version_ids=[5, 6, 99])
     assert totals[5] == {
         "runs": 2,
@@ -203,10 +277,24 @@ async def test_totals_by_prompt_version_partial_pricing(db):
     """M2: priced_runs counts only non-NULL cost rows, so a caller can tell when
     actual_cost_usd is a partial subtotal."""
     repo = RunTelemetryRepo()
-    await _insert_run(db, prompt_version_id=7, status="ok", media_kind="video",
-                      media_duration_secs=10.0, cost_usd=0.30, est_cost_usd_p50=0.20)
-    await _insert_run(db, prompt_version_id=7, status="ok", media_kind="video",
-                      media_duration_secs=10.0, cost_usd=None, est_cost_usd_p50=0.20)
+    await _insert_run(
+        db,
+        prompt_version_id=7,
+        status="ok",
+        media_kind="video",
+        media_duration_secs=10.0,
+        cost_usd=0.30,
+        est_cost_usd_p50=0.20,
+    )
+    await _insert_run(
+        db,
+        prompt_version_id=7,
+        status="ok",
+        media_kind="video",
+        media_duration_secs=10.0,
+        cost_usd=None,
+        est_cost_usd_p50=0.20,
+    )
     totals = await repo.totals_by_prompt_version(db, prompt_version_ids=[7])
     assert totals[7]["runs"] == 2
     assert totals[7]["priced_runs"] == 1
@@ -225,37 +313,85 @@ async def test_totals_by_prompt_version_no_n_plus_1(db):
 @pytest.mark.asyncio
 async def test_stats_by_resolution(db):
     repo = RunTelemetryRepo()
-    await _insert_run(db, prompt_version_id=5, media_kind="video", status="ok",
-                      media_resolution_setting="low", cost_usd=0.10, est_cost_usd_p50=0.08)
-    await _insert_run(db, prompt_version_id=5, media_kind="video", status="ok",
-                      media_resolution_setting="low", cost_usd=0.20, est_cost_usd_p50=0.25)
-    await _insert_run(db, prompt_version_id=5, media_kind="video", status="ok",
-                      media_resolution_setting="high", cost_usd=1.00, est_cost_usd_p50=0.90)
+    await _insert_run(
+        db,
+        prompt_version_id=5,
+        media_kind="video",
+        status="ok",
+        media_resolution_setting="low",
+        cost_usd=0.10,
+        est_cost_usd_p50=0.08,
+    )
+    await _insert_run(
+        db,
+        prompt_version_id=5,
+        media_kind="video",
+        status="ok",
+        media_resolution_setting="low",
+        cost_usd=0.20,
+        est_cost_usd_p50=0.25,
+    )
+    await _insert_run(
+        db,
+        prompt_version_id=5,
+        media_kind="video",
+        status="ok",
+        media_resolution_setting="high",
+        cost_usd=1.00,
+        est_cost_usd_p50=0.90,
+    )
     stats = await repo.stats_by_resolution(db, prompt_version_id=5)
     assert stats["low"] == {
-        "count": 2, "priced_count": 2,
-        "cost_usd": pytest.approx(0.30), "est_cost_usd": pytest.approx(0.33),
+        "count": 2,
+        "priced_count": 2,
+        "cost_usd": pytest.approx(0.30),
+        "est_cost_usd": pytest.approx(0.33),
     }
     assert stats["high"] == {
-        "count": 1, "priced_count": 1,
-        "cost_usd": pytest.approx(1.00), "est_cost_usd": pytest.approx(0.90),
+        "count": 1,
+        "priced_count": 1,
+        "cost_usd": pytest.approx(1.00),
+        "est_cost_usd": pytest.approx(0.90),
     }
 
 
 @pytest.mark.asyncio
 async def test_stats_by_resolution_excludes_errors_and_other_versions(db):
     repo = RunTelemetryRepo()
-    await _insert_run(db, prompt_version_id=5, media_kind="video", status="ok",
-                      media_resolution_setting="low", cost_usd=0.10, est_cost_usd_p50=0.07)
-    await _insert_run(db, prompt_version_id=5, media_kind="video", status="error",
-                      media_resolution_setting="low", cost_usd=0.0, est_cost_usd_p50=0.50)
-    await _insert_run(db, prompt_version_id=6, media_kind="video", status="ok",
-                      media_resolution_setting="low", cost_usd=9.0, est_cost_usd_p50=9.0)
+    await _insert_run(
+        db,
+        prompt_version_id=5,
+        media_kind="video",
+        status="ok",
+        media_resolution_setting="low",
+        cost_usd=0.10,
+        est_cost_usd_p50=0.07,
+    )
+    await _insert_run(
+        db,
+        prompt_version_id=5,
+        media_kind="video",
+        status="error",
+        media_resolution_setting="low",
+        cost_usd=0.0,
+        est_cost_usd_p50=0.50,
+    )
+    await _insert_run(
+        db,
+        prompt_version_id=6,
+        media_kind="video",
+        status="ok",
+        media_resolution_setting="low",
+        cost_usd=9.0,
+        est_cost_usd_p50=9.0,
+    )
     stats = await repo.stats_by_resolution(db, prompt_version_id=5)
     assert stats == {
         "low": {
-            "count": 1, "priced_count": 1,
-            "cost_usd": pytest.approx(0.10), "est_cost_usd": pytest.approx(0.07),
+            "count": 1,
+            "priced_count": 1,
+            "cost_usd": pytest.approx(0.10),
+            "est_cost_usd": pytest.approx(0.07),
         }
     }
 
@@ -266,10 +402,24 @@ async def test_stats_by_resolution_partial_pricing(db):
     priced_count < count, so the UI can flag the partial subtotal instead of
     presenting it as a complete actual."""
     repo = RunTelemetryRepo()
-    await _insert_run(db, prompt_version_id=8, media_kind="video", status="ok",
-                      media_resolution_setting="low", cost_usd=0.40, est_cost_usd_p50=0.30)
-    await _insert_run(db, prompt_version_id=8, media_kind="video", status="ok",
-                      media_resolution_setting="low", cost_usd=None, est_cost_usd_p50=0.30)
+    await _insert_run(
+        db,
+        prompt_version_id=8,
+        media_kind="video",
+        status="ok",
+        media_resolution_setting="low",
+        cost_usd=0.40,
+        est_cost_usd_p50=0.30,
+    )
+    await _insert_run(
+        db,
+        prompt_version_id=8,
+        media_kind="video",
+        status="ok",
+        media_resolution_setting="low",
+        cost_usd=None,
+        est_cost_usd_p50=0.30,
+    )
     stats = await repo.stats_by_resolution(db, prompt_version_id=8)
     assert stats["low"]["count"] == 2
     assert stats["low"]["priced_count"] == 1  # only one row had a cost
@@ -281,10 +431,24 @@ async def test_stats_by_resolution_many_batched(db):
     """The batched form returns {vid: {res: {...}}} for several versions and
     runs a bounded number of statements (no N+1 across version count)."""
     repo = RunTelemetryRepo()
-    await _insert_run(db, prompt_version_id=1, media_kind="video", status="ok",
-                      media_resolution_setting="low", cost_usd=0.10, est_cost_usd_p50=0.08)
-    await _insert_run(db, prompt_version_id=2, media_kind="video", status="ok",
-                      media_resolution_setting="high", cost_usd=0.50, est_cost_usd_p50=0.40)
+    await _insert_run(
+        db,
+        prompt_version_id=1,
+        media_kind="video",
+        status="ok",
+        media_resolution_setting="low",
+        cost_usd=0.10,
+        est_cost_usd_p50=0.08,
+    )
+    await _insert_run(
+        db,
+        prompt_version_id=2,
+        media_kind="video",
+        status="ok",
+        media_resolution_setting="high",
+        cost_usd=0.50,
+        est_cost_usd_p50=0.40,
+    )
     many = await repo.stats_by_resolution_many(db, prompt_version_ids=[1, 2, 99])
     assert many[1]["low"]["count"] == 1
     assert many[2]["high"]["cost_usd"] == pytest.approx(0.50)
@@ -313,18 +477,23 @@ async def test_cost_counts_by_job_partial(db):
 async def _seed_two_months(db):
     """Seed run_telemetry across May + June 2026 with priced + un-priced rows."""
     # June 2026 (the "current" month under test).
-    await _insert_run(db, occurred_at="2026-06-01T09:00:00+00:00",
-                      model="gemini-flash", cost_usd=1.00)
-    await _insert_run(db, occurred_at="2026-06-01T15:00:00+00:00",
-                      model="gemini-pro", cost_usd=2.50)
-    await _insert_run(db, occurred_at="2026-06-10T12:00:00+00:00",
-                      model="gemini-flash", cost_usd=0.50)
+    await _insert_run(
+        db, occurred_at="2026-06-01T09:00:00+00:00", model="gemini-flash", cost_usd=1.00
+    )
+    await _insert_run(
+        db, occurred_at="2026-06-01T15:00:00+00:00", model="gemini-pro", cost_usd=2.50
+    )
+    await _insert_run(
+        db, occurred_at="2026-06-10T12:00:00+00:00", model="gemini-flash", cost_usd=0.50
+    )
     # Un-priced June run (NULL cost) — counts in total, not priced, adds 0 spend.
-    await _insert_run(db, occurred_at="2026-06-15T12:00:00+00:00",
-                      model="gemini-flash", cost_usd=None)
+    await _insert_run(
+        db, occurred_at="2026-06-15T12:00:00+00:00", model="gemini-flash", cost_usd=None
+    )
     # May 2026 — outside the June window.
-    await _insert_run(db, occurred_at="2026-05-20T12:00:00+00:00",
-                      model="gemini-flash", cost_usd=99.0)
+    await _insert_run(
+        db, occurred_at="2026-05-20T12:00:00+00:00", model="gemini-flash", cost_usd=99.0
+    )
 
 
 @pytest.mark.asyncio

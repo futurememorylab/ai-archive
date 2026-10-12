@@ -31,8 +31,6 @@ async def test_set_rejects_bad_value(conn):
 
 async def test_corrupt_value_in_db_falls_back_to_off(conn):
     """An unrecognised value already in the DB should return 'off' defensively."""
-    await conn.execute(
-        "INSERT INTO app_meta(key, value) VALUES ('vpn_desired', 'maybe')"
-    )
+    await conn.execute("INSERT INTO app_meta(key, value) VALUES ('vpn_desired', 'maybe')")
     await conn.commit()
     assert await get_vpn_desired(conn) == "off"

@@ -248,7 +248,9 @@ async def upload_clip(
 
         def _write_poster() -> None:
             thumbs_dir.mkdir(parents=True, exist_ok=True)
-            thumb_dest.write_bytes(poster_bytes)  # sync-io-ok: runs inside asyncio.to_thread (_write_poster)
+            thumb_dest.write_bytes(
+                poster_bytes
+            )  # sync-io-ok: runs inside asyncio.to_thread (_write_poster)
 
         await asyncio.to_thread(_write_poster)
 
