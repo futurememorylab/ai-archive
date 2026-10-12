@@ -29,9 +29,7 @@ def _component_body(text: str, marker: str) -> str:
 
 
 def test_archive_picker_spreads_shared_core():
-    body = _component_body(
-        STUDIO_JS.read_text(encoding="utf-8"), "Alpine.data('archivePicker'"
-    )
+    body = _component_body(STUDIO_JS.read_text(encoding="utf-8"), "Alpine.data('archivePicker'")
     assert "clipPickerCore" in body, (
         "archivePicker must spread window.clipPickerCore() — the shared "
         "picker — not define its own list logic"

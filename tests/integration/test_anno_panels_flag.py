@@ -18,6 +18,7 @@ def _setenv(monkeypatch, tmp_path):
 def client(monkeypatch, tmp_path):
     _setenv(monkeypatch, tmp_path)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     with TestClient(main_mod.app) as c:
         yield c
@@ -59,15 +60,15 @@ def _render_review_panels(**panels_overrides):
 
 def test_review_items_render_readonly_with_edit_gate():
     html = _render_review_panels()
-    assert "editingItemId" in html      # edit toggle wired to player-root state
-    assert "ri-editor" in html          # the gated editor container exists
-    assert 'class="ri-accept' in html   # keep-checkbox preserved (accent-styled)
+    assert "editingItemId" in html  # edit toggle wired to player-root state
+    assert "ri-editor" in html  # the gated editor container exists
+    assert 'class="ri-accept' in html  # keep-checkbox preserved (accent-styled)
 
 
 def test_review_marker_preserves_persistence_hooks():
     html = _render_review_panels()
     # JS persistence hooks review.js relies on must survive the restructure.
-    assert 'class="ri-row ri-marker"' in html   # _decideMarker closest('.ri-marker')
+    assert 'class="ri-row ri-marker"' in html  # _decideMarker closest('.ri-marker')
     assert 'data-k="name"' in html
     assert 'data-k="in"' in html and 'data-k="out"' in html
     assert "ri-mfield" in html
@@ -81,8 +82,8 @@ def test_marker_in_out_spinners_replaced_with_readout():
     timeline. The editor now shows a live read-only SMPTE readout and keeps
     HIDDEN data-k="in"/"out" inputs (Alpine-bound) for review.js persistence."""
     html = _render_review_panels()
-    assert 'type="number"' not in html          # spinners removed
-    assert "riReadout(42, 'in')" in html         # live readout wired to player root
+    assert 'type="number"' not in html  # spinners removed
+    assert "riReadout(42, 'in')" in html  # live readout wired to player root
     assert "riReadout(42, 'out')" in html
     # persistence still works: hidden inputs bound to the dragged Alpine model
     assert 'type="hidden"' in html

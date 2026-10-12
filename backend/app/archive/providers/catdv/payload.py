@@ -39,47 +39,12 @@ def build_put_payload(
       - AppendNote joins with a separator when prior text exists.
     """
     payload: dict[str, Any] = {}
-    fps = _clip_fps(current)
 
     ops_list = list(ops)
     add_ops = [o for o in ops_list if isinstance(o, AddMarkers)]
     reconcile_ops = [o for o in ops_list if isinstance(o, ReconcileMarkers)]
     if add_ops or reconcile_ops:
-        # CatDV replaces the markers array wholesale on PUT, so `working` is the
-        # final set we send. Start from the live clip's markers and apply ops.
-        working = list(current.get("markers") or [])
-        # AddMarkers (additive publish-forward): our markers win on a same-frm
-        # conflict (anti-mojibake); markers we don't touch are preserved.
-        if add_ops:
-            new_markers: list[dict[str, Any]] = []
-            new_frms: set[int] = set()
-            for op in add_ops:
-                for marker in op.markers:
-                    raw = marker_to_catdv(marker, fps)
-                    frm = _in_frm(raw)
-                    if frm is not None and frm in new_frms:
-                        continue
-                    new_markers.append(raw)
-                    if frm is not None:
-                        new_frms.add(frm)
-            working = [m for m in working if _in_frm(m) not in new_frms] + new_markers
-        # ReconcileMarkers (switch / Make-live): drop OUR other-version markers
-        # (drop_frm) and re-assert the target's (desired), but KEEP markers we
-        # never authored (pre-existing / human). Frames derive from the clip's
-        # real fps via the Timecode fps=0.0 sentinel.
-        for op in reconcile_ops:
-            desired = [marker_to_catdv(m, fps) for m in op.desired]
-            desired_frm = {_in_frm(m) for m in desired}
-            drop_frm = {round(s * fps) for s in op.drop_secs}
-            working = [
-                m
-                for m in working
-                if _in_frm(m) not in drop_frm and _in_frm(m) not in desired_frm
-            ] + desired
-        # Marker text is sent as-is: _call_json declares charset=utf-8, so CatDV
-        # stores our UTF-8 exactly — there is no per-write mis-encoding left to
-        # pre-empt (confirmed against the live server).
-        payload["markers"] = working
+        payload["markers"] = _merged_markers(current, add_ops, reconcile_ops)
 
     field_changes: dict[str, Any] = {}
     # Accumulate note text per target across this batch's ops. The SyncEngine
@@ -122,6 +87,50 @@ def build_put_payload(
     if field_changes:
         payload["fields"] = field_changes
     return payload
+
+
+def _merged_markers(
+    current: dict[str, Any],
+    add_ops: list[AddMarkers],
+    reconcile_ops: list[ReconcileMarkers],
+) -> list[dict[str, Any]]:
+    """The full markers array to PUT after applying the marker ops.
+
+    CatDV replaces the markers array wholesale on PUT, so the result is the
+    final set we send: the live clip's markers with the ops applied.
+    """
+    fps = _clip_fps(current)
+    working = list(current.get("markers") or [])
+    # AddMarkers (additive publish-forward): our markers win on a same-frm
+    # conflict (anti-mojibake); markers we don't touch are preserved.
+    if add_ops:
+        new_markers: list[dict[str, Any]] = []
+        new_frms: set[int] = set()
+        for op in add_ops:
+            for marker in op.markers:
+                raw = marker_to_catdv(marker, fps)
+                frm = _in_frm(raw)
+                if frm is not None and frm in new_frms:
+                    continue
+                new_markers.append(raw)
+                if frm is not None:
+                    new_frms.add(frm)
+        working = [m for m in working if _in_frm(m) not in new_frms] + new_markers
+    # ReconcileMarkers (switch / Make-live): drop OUR other-version markers
+    # (drop_frm) and re-assert the target's (desired), but KEEP markers we
+    # never authored (pre-existing / human). Frames derive from the clip's
+    # real fps via the Timecode fps=0.0 sentinel.
+    for op in reconcile_ops:
+        desired = [marker_to_catdv(m, fps) for m in op.desired]
+        desired_frm = {_in_frm(m) for m in desired}
+        drop_frm = {round(s * fps) for s in op.drop_secs}
+        working = [
+            m for m in working if _in_frm(m) not in drop_frm and _in_frm(m) not in desired_frm
+        ] + desired
+    # Marker text is sent as-is: _call_json declares charset=utf-8, so CatDV
+    # stores our UTF-8 exactly — there is no per-write mis-encoding left to
+    # pre-empt (confirmed against the live server).
+    return working
 
 
 def _clip_fps(current: dict[str, Any]) -> float:

@@ -2,6 +2,7 @@
 """Offline proof of the full switch path: a version's snapshot, through
 _switch_ops, through build_put_payload, against a live clip that also carries a
 human-added marker. The human marker must survive; our later markers must go."""
+
 from backend.app.archive.providers.catdv.payload import build_put_payload
 from backend.app.models.annotation import ClipVersion
 from backend.app.services.publish_service import _switch_ops

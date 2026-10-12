@@ -105,10 +105,12 @@ annotation/studio runner (`JobRunner`) share one shape: start / poll /
 claim-CAS / orphan-resume / stop. Routes only insert `pending` rows (and, for
 cancel, call `job_runner.cancel`); execution is owned by the lifespan, not the
 request handler. Orphaned `running` rows are **resumed** on worker start, not
-cancelled — `run_job` is idempotent, so only unfinished items re-run.
+cancelled — `run_job` is idempotent, so only unfinished items re-run. Cancel
+flips the job and its in-flight items in one idempotent commit, and shutdown
+drains running jobs before the DB closes.
 *Enforced by:* `tests/unit/test_jobs_no_route_spawn.py`;
 `services/media_prefetcher.py` + `services/job_runner.py`.
-*ADRs:* 0086, 0114, 0125.
+*ADRs:* 0086, 0114, 0115, 0125.
 
 ## Writes & connectivity
 
@@ -120,9 +122,12 @@ ceiling and per-row backoff; appends are idempotent and accumulate
 re-base on the live clip's freshest ETag rather than re-conflicting
 forever; terminal failures flip status + attempts in one atomic SQL.
 Notes/bigNotes write to top-level clip properties, not the user-fields map.
+Clip-version state changes after a write go through one chokepoint
+(`SyncEngine._advance_versions`) that advances every merged sibling, so none
+is left `publishing`.
 *Enforced by:* convention; `repositories/pending_operations.py`,
 `services/sync_engine.py`, crash-recovery in `context.build()`.
-*ADRs:* 0004, 0090, 0091, 0093, 0094, 0097, 0098.
+*ADRs:* 0004, 0090, 0091, 0093, 0094, 0097, 0098, 0118.
 
 **9a. Writes on the shared connection are serialized at the connection.**
 The shared `aiosqlite.Connection` is wrapped in `WriteSerializedConnection`
@@ -309,14 +314,18 @@ synchronously inside the user gesture and reuse one long-lived context.
 with a deferred cloud pipeline; cost surfaces use total-spend semantics
 and a shared `usd` filter. Model names are verified available in the
 target region (e.g. `europe-west3`) before being added to a dropdown.
-*Enforced by:* convention.
-*ADRs:* 0058, 0059, 0080.
+Cost is never silently $0: unknown pricing stays `NULL` and is shown as
+missing, every catalog model has a seed rate card, and a run never sends a
+media resolution the model rejects for that media kind (HIGH is images-only).
+*Enforced by:* `tests/unit/test_rate_card_coverage.py` (catalog ↔ rate-card
+coverage); otherwise convention.
+*ADRs:* 0058, 0059, 0080, 0119, 0121.
 
 ## Testing
 
 **27. Walkthrough tests run the real app in-process, fully offline.**
-`tests/walkthrough/` drives the FastAPI app via Playwright on port 8766 in
-its own in-process instance with an injected `FakeArchive` — never the
+`tests/walkthrough/` drives the FastAPI app via Playwright in its own
+in-process instance (a free port under pytest; 8766 for the `/e2e` CLI) with an injected `FakeArchive` — never the
 `:8765` dev server, never the CatDV seat. UI changes (template, Alpine
 component, page route, user flow) update the affected scenario in the same
 PR. The unit/integration split: run the touched slice in-loop, the full

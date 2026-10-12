@@ -23,16 +23,24 @@ def _setenv(monkeypatch, tmp_path):
 def client(monkeypatch, tmp_path):
     _setenv(monkeypatch, tmp_path)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     with TestClient(main_mod.app) as c:
         yield c
 
 
 def _two_versions(client):
-    r = client.post("/api/prompts", json={
-        "name": "cmp", "media_kind": "any", "model": "gemini-2.5-pro",
-        "target_map": {}, "output_schema": {}, "body": "v1",
-    })
+    r = client.post(
+        "/api/prompts",
+        json={
+            "name": "cmp",
+            "media_kind": "any",
+            "model": "gemini-2.5-pro",
+            "target_map": {},
+            "output_schema": {},
+            "body": "v1",
+        },
+    )
     assert r.status_code == 201, r.text
     pid = r.json()["id"]
     v1 = client.get(f"/api/prompts/{pid}").json()["latest_version_id"]
@@ -61,8 +69,6 @@ def test_cmp_resizer_present_when_not_comparing(client):
 
 def test_cmp_resizer_present_when_comparing(client):
     pid, v1, v2 = _two_versions(client)
-    r = client.get(
-        f"/studio?prompt_id={pid}&version_id={v2}&compare_version_id={v1}"
-    )
+    r = client.get(f"/studio?prompt_id={pid}&version_id={v2}&compare_version_id={v1}")
     assert r.status_code == 200
     assert 'data-studio-resizer="cmp"' in r.text

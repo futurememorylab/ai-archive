@@ -43,3 +43,15 @@ def test_record_mode_starts_screencast_and_advances_steps():
     page.screencast.show_chapter.assert_called_once()
     page.screencast.stop.assert_called_once()
     assert wt.step_count == 2
+
+
+def test_record_mode_records_at_the_viewport_size():
+    """Pass the viewport as screencast `size` so Playwright's 800px cap doesn't
+    shrink the video (playwright>=1.63 accepts it natively)."""
+    page = MagicMock()
+    page.viewport_size = {"width": 1280, "height": 800}
+    wt = Walkthrough(page, record=True, video_path="/tmp/x.webm")
+    wt.start("Title", "Desc")
+    page.screencast.start.assert_called_once_with(
+        path="/tmp/x.webm", size={"width": 1280, "height": 800}
+    )

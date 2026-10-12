@@ -1,12 +1,10 @@
-
-
-
 def _mk(monkeypatch):
     monkeypatch.setenv("CATDV_BASE_URL", "http://x")
     monkeypatch.setenv("CATDV_CATALOG_ID", "1")
     monkeypatch.setenv("GCP_PROJECT_ID", "p")
     monkeypatch.setenv("GCS_BUCKET_NAME", "b")
     from backend.app.settings import Settings
+
     return Settings()
 
 

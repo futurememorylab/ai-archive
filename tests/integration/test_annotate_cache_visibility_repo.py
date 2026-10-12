@@ -6,6 +6,7 @@
 - JobsRepo.find_running_item_for_clip: powers GET /api/jobs/active-for-clip,
   so the clip page can resume the annotate button after a reload.
 """
+
 import pytest
 
 from backend.app.repositories.jobs import JobsRepo
@@ -38,8 +39,13 @@ async def test_start_inline_is_idempotent_with_active_row(db):
 async def _seed_running_job(db, *, clip_id, item_status="uploading"):
     prompts = PromptsRepo()
     _pid, vid = await prompts.create_with_initial_version(
-        db, name="P", description=None, body="b",
-        target_map={"x": {"kind": "markers"}}, output_schema={}, model="m",
+        db,
+        name="P",
+        description=None,
+        body="b",
+        target_map={"x": {"kind": "markers"}},
+        output_schema={},
+        model="m",
     )
     jobs = JobsRepo()
     job_id = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[clip_id])

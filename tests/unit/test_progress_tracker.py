@@ -18,9 +18,7 @@ class _SpyRepo:
 async def test_tracker_throttles_db_writes_but_tracks_latest():
     clock = {"t": 0.0}
     repo = _SpyRepo()
-    tracker = ProgressTracker(
-        repo, conn=None, rid=1, min_interval_s=0.75, clock=lambda: clock["t"]
-    )
+    tracker = ProgressTracker(repo, conn=None, rid=1, min_interval_s=0.75, clock=lambda: clock["t"])
 
     # First call always writes.
     await tracker(1_000, 10_000)

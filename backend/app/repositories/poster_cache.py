@@ -44,8 +44,7 @@ class PosterCacheRepo:
         provider_clip_id: str,
     ) -> int | None:
         async with conn.execute(
-            "SELECT poster_id FROM poster_cache "
-            "WHERE provider_id = ? AND provider_clip_id = ?",
+            "SELECT poster_id FROM poster_cache WHERE provider_id = ? AND provider_clip_id = ?",
             (provider_id, provider_clip_id),
         ) as cur:
             row = await cur.fetchone()

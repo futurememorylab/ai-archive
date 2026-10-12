@@ -92,6 +92,7 @@ def test_thumb_serves_jpeg(monkeypatch, tmp_path):
 def test_thumb_404_when_unavailable(monkeypatch, tmp_path):
     app = _app(monkeypatch, tmp_path)
     with TestClient(app) as client:
+
         async def get_or_fetch(clip_id):
             return None
 
@@ -110,6 +111,7 @@ def test_thumb_404_is_short_lived_cacheable(monkeypatch, tmp_path):
     offline and the file isn't local."""
     app = _app(monkeypatch, tmp_path)
     with TestClient(app) as client:
+
         async def get_or_fetch(clip_id):
             return None
 

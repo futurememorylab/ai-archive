@@ -29,7 +29,8 @@ class _RaisingProvider:
 async def _seed_one_clip(conn):
     await conn.execute(
         "INSERT INTO clip_cache"
-        "(provider_id, provider_clip_id, name, catalog_id, duration_secs, fps, canonical_json, fetched_at) "
+        "(provider_id, provider_clip_id, name, catalog_id, duration_secs, fps, "
+        "canonical_json, fetched_at) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))",
         ("catdv", "42", "clip 42", "1", 1.0, 25.0, '{"id": 42}'),
     )
@@ -55,9 +56,7 @@ async def test_deep_orphan_check_does_not_orphan_on_transient_error(tmp_path):
             provider=provider,
         )
         orphans = await inspector.list_orphans(deep=True)
-        assert orphans == [], (
-            f"clip 42 should NOT be orphaned by a transient 500; got {orphans}"
-        )
+        assert orphans == [], f"clip 42 should NOT be orphaned by a transient 500; got {orphans}"
 
 
 @pytest.mark.asyncio

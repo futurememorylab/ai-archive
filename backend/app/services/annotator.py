@@ -466,17 +466,13 @@ async def _process_item(
         rid: int | None = None
         tracker: ProgressTracker | None = None
         if prefetch_queue_repo is not None:
-            rid = await prefetch_queue_repo.start_inline(
-                db, key=clip_key, who="annotate"
-            )
+            rid = await prefetch_queue_repo.start_inline(db, key=clip_key, who="annotate")
             tracker = ProgressTracker(prefetch_queue_repo, conn=db, rid=rid)
 
         await jobs_repo.update_item_status(db, item.id, "resolving")
         await event_bus.publish(topic, {"item_id": item.id, "status": "resolving"})
         try:
-            local_path: Path = await proxy_resolver.path_for_clip_id(
-                item.catdv_clip_id, tracker
-            )
+            local_path: Path = await proxy_resolver.path_for_clip_id(item.catdv_clip_id, tracker)
         except ProxyNotFound:
             msg = (
                 f"clip {item.catdv_clip_id} is not locally cached and not in "
@@ -504,9 +500,7 @@ async def _process_item(
                 await prefetch_queue_repo.mark_error(db, rid, _humanise_error(exc))
             raise
         if rid is not None and tracker is not None and prefetch_queue_repo is not None:
-            await prefetch_queue_repo.mark_done(
-                db, rid, bytes_downloaded=tracker.last_downloaded
-            )
+            await prefetch_queue_repo.mark_done(db, rid, bytes_downloaded=tracker.last_downloaded)
 
     file_ref = await ai_store.reference_for_gemini(upload)
 
@@ -548,8 +542,7 @@ async def _process_item(
         # Covers both branches above — even a stray calibration force_resolution
         # of 'high' on a non-image clip is sanitized here.
         log.info(
-            "downgrading media_resolution %s->medium for %s clip %s "
-            "(HIGH is image-only)",
+            "downgrading media_resolution %s->medium for %s clip %s (HIGH is image-only)",
             media_resolution,
             media_kind,
             item.catdv_clip_id,

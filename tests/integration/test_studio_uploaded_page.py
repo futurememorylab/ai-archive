@@ -9,6 +9,7 @@ def _make_app(monkeypatch, tmp_path):
     monkeypatch.setenv("APP_ENV", "dev")
     monkeypatch.delenv("CATDV_PASSWORD", raising=False)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     return main_mod.app
 
@@ -33,7 +34,7 @@ def test_uploaded_set_renders_filename(client):
 def test_uploaded_sets_list_renders(client):
     client.post("/api/studio/uploads", files={"file": ("a.mp4", b"x", "video/mp4")})
     html = client.get("/studio/_sets?source=uploaded").text
-    assert "Uploads" in html             # the default set name
+    assert "Uploads" in html  # the default set name
 
 
 def test_uploaded_set_body_shows_dropzone_not_archive_button(client):
@@ -51,9 +52,7 @@ def test_uploaded_set_body_shows_dropzone_not_archive_button(client):
 
 
 def test_archive_set_body_shows_archive_button_not_dropzone(client):
-    sid = client.post("/api/studio/sets?source=archive", json={"name": "arc"}).json()[
-        "id"
-    ]
+    sid = client.post("/api/studio/sets?source=archive", json={"name": "arc"}).json()["id"]
     html = client.get(f"/studio/_set?set_id={sid}").text
     assert "Add from archive" in html
     assert "studio-dropzone" not in html
@@ -62,17 +61,13 @@ def test_archive_set_body_shows_archive_button_not_dropzone(client):
 def test_empty_uploaded_set_shows_dropzone_without_empty_placeholder(client):
     # An empty uploaded set is "empty" by the absence of cards; the dropzone is
     # its only content. The "Empty set." placeholder would be redundant noise.
-    sid = client.post("/api/studio/sets?source=uploaded", json={"name": "up"}).json()[
-        "id"
-    ]
+    sid = client.post("/api/studio/sets?source=uploaded", json={"name": "up"}).json()["id"]
     html = client.get(f"/studio/_set?set_id={sid}").text
     assert "studio-dropzone" in html
     assert "Empty set." not in html
 
 
 def test_empty_archive_set_still_shows_empty_placeholder(client):
-    sid = client.post("/api/studio/sets?source=archive", json={"name": "arc2"}).json()[
-        "id"
-    ]
+    sid = client.post("/api/studio/sets?source=archive", json={"name": "arc2"}).json()["id"]
     html = client.get(f"/studio/_set?set_id={sid}").text
     assert "Empty set." in html

@@ -30,8 +30,11 @@ def humanise(exc: BaseException) -> str:
         body = (exc.response.text or "").strip()
         if len(body) > _MAX_BODY_CHARS:
             body = body[:_MAX_BODY_CHARS] + "…(truncated)"
-        return f"HTTP {exc.response.status_code} from {exc.request.url}: {body}" if body \
+        return (
+            f"HTTP {exc.response.status_code} from {exc.request.url}: {body}"
+            if body
             else f"HTTP {exc.response.status_code} from {exc.request.url}"
+        )
     # Transport errors: httpx timeout/connect exceptions frequently carry no
     # message (str(exc) == ""), e.g. ReadTimeout on a stalled tunnel stream.
     # Always name the failure mode AND the concrete type so the string is

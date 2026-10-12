@@ -9,8 +9,13 @@ from backend.app.services.events import EventBus
 async def _seed_job(db) -> int:
     prompts = PromptsRepo()
     _, vid = await prompts.create_with_initial_version(
-        db, name="t", description=None, body="p",
-        target_map={"x": {"kind": "markers"}}, output_schema={}, model="m",
+        db,
+        name="t",
+        description=None,
+        body="p",
+        target_map={"x": {"kind": "markers"}},
+        output_schema={},
+        model="m",
     )
     jobs = JobsRepo()
     return await jobs.create_job(db, prompt_version_id=vid, clip_ids=[1, 2])

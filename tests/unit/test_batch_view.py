@@ -3,10 +3,20 @@ from backend.app.ui.view_models import batch_view
 
 def _row(**over):
     base = {
-        "batch_key": "rg-1", "primary_job_id": 42, "started_at": "2026-06-02T09:04:00",
-        "job_ids": [42, 43], "prompt_count": 1, "running_jobs": 0,
-        "prompt_name": "Scénické značky CZ", "version_num": 5, "model": "gemini-2.5-pro",
-        "ran": 12, "failed": 1, "completed": 11, "in_flight": 0, "awaiting_clips": 5,
+        "batch_key": "rg-1",
+        "primary_job_id": 42,
+        "started_at": "2026-06-02T09:04:00",
+        "job_ids": [42, 43],
+        "prompt_count": 1,
+        "running_jobs": 0,
+        "prompt_name": "Scénické značky CZ",
+        "version_num": 5,
+        "model": "gemini-2.5-pro",
+        "ran": 12,
+        "failed": 1,
+        "completed": 11,
+        "in_flight": 0,
+        "awaiting_clips": 5,
     }
     base.update(over)
     return base
@@ -19,19 +29,26 @@ def test_basic_counts_and_reviewed_clamp():
     assert v["ran"] == 12
     assert v["completed"] == 11
     assert v["failed"] == 1
-    assert v["reviewed"] == 6          # completed(11) - awaiting(5)
-    assert v["pct_done"] == 100        # (completed+failed)/ran = 12/12
-    assert v["pct_reviewed"] == 55     # round(6/11*100)
+    assert v["reviewed"] == 6  # completed(11) - awaiting(5)
+    assert v["pct_done"] == 100  # (completed+failed)/ran = 12/12
+    assert v["pct_reviewed"] == 55  # round(6/11*100)
 
 
 def test_status_cancelled_orphan_is_not_running_or_applied():
     # A job interrupted by a restart is cancelled (job + its in-flight items).
     # The batch must read "Cancelled" — never "Running" (the bug: a leftover
     # pending item counted as in_flight) and never green "Applied".
-    v = batch_view(_row(
-        running_jobs=0, in_flight=0, cancelled=1,
-        ran=1, completed=0, failed=0, awaiting_clips=0,
-    ))
+    v = batch_view(
+        _row(
+            running_jobs=0,
+            in_flight=0,
+            cancelled=1,
+            ran=1,
+            completed=0,
+            failed=0,
+            awaiting_clips=0,
+        )
+    )
     assert v["running"] is False
     assert v["status_label"] == "Cancelled"
     assert v["status_state"] != "ok"
@@ -40,10 +57,17 @@ def test_status_cancelled_orphan_is_not_running_or_applied():
 def test_awaiting_review_takes_precedence_over_cancelled():
     # A partly-done batch (some clips annotated + awaiting, one cancelled) should
     # still point the user at the actionable review, not "Cancelled".
-    v = batch_view(_row(
-        running_jobs=0, in_flight=0, cancelled=1,
-        ran=4, completed=3, failed=0, awaiting_clips=1,
-    ))
+    v = batch_view(
+        _row(
+            running_jobs=0,
+            in_flight=0,
+            cancelled=1,
+            ran=4,
+            completed=3,
+            failed=0,
+            awaiting_clips=1,
+        )
+    )
     assert v["status_label"] == "1 to review"
 
 
@@ -101,8 +125,9 @@ def test_status_sync_failed_must_not_read_applied():
     # A write-back that exhausted retries (failed) or hit a conflict must NOT
     # let the batch read green "Applied" — it surfaces as a problem state so the
     # batch row and the topbar sync chip can never disagree.
-    v = batch_view(_row(running_jobs=0, completed=10, awaiting_clips=0,
-                        syncing_clips=0, problem_clips=2))
+    v = batch_view(
+        _row(running_jobs=0, completed=10, awaiting_clips=0, syncing_clips=0, problem_clips=2)
+    )
     assert v["status_state"] == "bad"
     assert v["status_label"] == "2 failed to sync"
 
@@ -110,8 +135,9 @@ def test_status_sync_failed_must_not_read_applied():
 def test_sync_problem_takes_precedence_over_syncing():
     # One clip's write failed while another is still in-flight → the failure
     # wins, so it isn't masked until the in-flight ops happen to settle.
-    v = batch_view(_row(running_jobs=0, completed=10, awaiting_clips=0,
-                        syncing_clips=1, problem_clips=1))
+    v = batch_view(
+        _row(running_jobs=0, completed=10, awaiting_clips=0, syncing_clips=1, problem_clips=1)
+    )
     assert v["status_state"] == "bad"
     assert v["status_label"] == "1 failed to sync"
 

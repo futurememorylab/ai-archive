@@ -183,7 +183,7 @@ def test_published_timeline_band_visible_in_both_scopes(monkeypatch, tmp_path):
         # Split is keyed on whether published markers exist.
         assert "'has-published-markers': markers.length > 0" in r.text
         # The draft band stays scope-gated to draft.
-        assert 'x-show="scope === \'draft\'"' in r.text
+        assert "x-show=\"scope === 'draft'\"" in r.text
 
 
 def test_clip_detail_has_player_annotations_resizer(monkeypatch, tmp_path):

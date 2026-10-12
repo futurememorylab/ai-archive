@@ -33,19 +33,31 @@ def test_compute_scroll_uses_viewport_threshold_for_behavior():
 
 
 _PANELS = {
-    "markers": [{
-        "name": "Scene 1", "in_secs": 1.5, "out_secs": 5.6,
-        "category": "x", "description": "d", "item_id": 7, "decision": "pending",
-    }],
-    "fields": [], "notes": None, "big_notes": None, "note_items": [],
+    "markers": [
+        {
+            "name": "Scene 1",
+            "in_secs": 1.5,
+            "out_secs": 5.6,
+            "category": "x",
+            "description": "d",
+            "item_id": 7,
+            "decision": "pending",
+        }
+    ],
+    "fields": [],
+    "notes": None,
+    "big_notes": None,
+    "note_items": [],
     "fps": 25.0,
 }
 
 
 def _render_panels(review_mode=None, follow_player=None):
     ctx = {
-        "panels": _PANELS, "scope": "published",
-        "clip": {"fps": 25.0, "kind": "video"}, "show_history": False,
+        "panels": _PANELS,
+        "scope": "published",
+        "clip": {"fps": 25.0, "kind": "video"},
+        "show_history": False,
     }
     if review_mode is not None:
         ctx["review_mode"] = review_mode
@@ -115,8 +127,8 @@ def test_driver_reads_visible_cards_only():
 def test_manual_scroll_stops_until_intentional_nav():
     # Manual scroll stops follow and STAYS stopped — no auto-resume timer.
     assert "followSuspended" in PLAYER_JS
-    assert "_selfScrolling" in PLAYER_JS     # ignore our own programmatic scroll
+    assert "_selfScrolling" in PLAYER_JS  # ignore our own programmatic scroll
     assert "4000" not in PLAYER_JS, "the timed auto-resume must be gone"
     # Resume only on intentional navigation: the next play, or a timeline move.
     assert "this.playing = true; this.followSuspended = false" in PLAYER_JS
-    assert "this.followSuspended = false" in PLAYER_JS   # also in seek()
+    assert "this.followSuspended = false" in PLAYER_JS  # also in seek()

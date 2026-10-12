@@ -53,9 +53,7 @@ class RestProxyResolver:
         self._db_provider = db_provider
         self._archive = archive
 
-    async def path_for_clip_id(
-        self, clip_id: int, progress_cb: "ProgressCb | None" = None
-    ) -> Path:
+    async def path_for_clip_id(self, clip_id: int, progress_cb: "ProgressCb | None" = None) -> Path:
         # Cache hit by recorded row — avoids a get_clip round-trip and works
         # for both image ({id}.jpg) and video ({id}.mov) files. Also repairs
         # legacy rows with NULL provider_* columns.
@@ -64,7 +62,9 @@ class RestProxyResolver:
             existing = await self._repo.get(conn, clip_id)
             if existing is not None:
                 cached = Path(existing["file_path"])
-                if cached.exists() and cached.stat().st_size > 0:  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
+                if (
+                    cached.exists() and cached.stat().st_size > 0
+                ):  # sync-io-ok: tier-4 async-io backlog
                     if existing.get("provider_id"):
                         await self._repo.touch(conn, clip_id)
                     else:
@@ -72,7 +72,7 @@ class RestProxyResolver:
                             conn,
                             clip_id=clip_id,
                             file_path=str(cached),
-                            size_bytes=cached.stat().st_size,  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
+                            size_bytes=cached.stat().st_size,  # sync-io-ok: tier-4 async-io backlog
                             etag=None,
                             provider_id="catdv",
                             provider_clip_id=str(clip_id),
@@ -80,7 +80,7 @@ class RestProxyResolver:
                     return cached
 
         dest, download = await self._dest_and_downloader(clip_id, progress_cb)
-        if not dest.exists() or dest.stat().st_size == 0:  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
+        if not dest.exists() or dest.stat().st_size == 0:  # sync-io-ok: tier-4 async-io backlog
             await download()
 
         if self._repo is not None and self._db_provider is not None:
@@ -89,7 +89,7 @@ class RestProxyResolver:
                 conn,
                 clip_id=clip_id,
                 file_path=str(dest),
-                size_bytes=dest.stat().st_size,  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
+                size_bytes=dest.stat().st_size,  # sync-io-ok: tier-4 async-io backlog
                 etag=None,
                 provider_id="catdv",
                 provider_clip_id=str(clip_id),
@@ -156,9 +156,7 @@ class FilesystemProxyResolver:
         self._archive = archive
         self._map = media_store_map
 
-    async def path_for_clip_id(
-        self, clip_id: int, progress_cb: "ProgressCb | None" = None
-    ) -> Path:
+    async def path_for_clip_id(self, clip_id: int, progress_cb: "ProgressCb | None" = None) -> Path:
         # progress_cb intentionally unused: these resolvers never download.
         clip = await self._archive.get_clip(str(clip_id))
         media = (clip.provider_data or {}).get("media") or {}
@@ -168,7 +166,7 @@ class FilesystemProxyResolver:
         proxy = self._map.resolve_proxy(hires)
         if proxy is None:
             raise ProxyNotFound(f"clip {clip_id}: no mediastore rule for {hires!r}")
-        if not proxy.exists():  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
+        if not proxy.exists():  # sync-io-ok: tier-4 async-io backlog
             raise ProxyNotFound(f"clip {clip_id}: proxy not on disk: {proxy}")
         if not os.access(proxy, os.R_OK):
             raise ProxyNotFound(f"clip {clip_id}: proxy not readable: {proxy}")
@@ -199,15 +197,15 @@ class LocalCacheOnlyResolver:
         self._db_provider = db_provider
         self._cache_dir = cache_dir
 
-    async def path_for_clip_id(
-        self, clip_id: int, progress_cb: "ProgressCb | None" = None
-    ) -> Path:
+    async def path_for_clip_id(self, clip_id: int, progress_cb: "ProgressCb | None" = None) -> Path:
         # progress_cb intentionally unused: these resolvers never download.
         row = await self._repo.get(self._db_provider(), clip_id)
         if row is None:
             raise ProxyNotFound(f"clip {clip_id} not cached locally")
         file_path = Path(row["file_path"])
-        if not file_path.exists() or file_path.stat().st_size == 0:  # sync-io-ok: pre-existing, tracked for the tier-4 async-io pass
+        if (
+            not file_path.exists() or file_path.stat().st_size == 0
+        ):  # sync-io-ok: tier-4 async-io backlog
             raise ProxyNotFound(f"clip {clip_id} cache row present but file missing: {file_path}")
         return file_path
 
@@ -243,9 +241,7 @@ class UploadAwareResolver:
     def inner(self) -> ProxyResolver:
         return self._inner
 
-    async def path_for_clip_id(
-        self, clip_id: int, progress_cb: "ProgressCb | None" = None
-    ) -> Path:
+    async def path_for_clip_id(self, clip_id: int, progress_cb: "ProgressCb | None" = None) -> Path:
         if not is_uploaded(clip_id):
             return await self._inner.path_for_clip_id(clip_id, progress_cb)
         # uploaded clips are served from local cache; no download, cb unused
@@ -253,7 +249,9 @@ class UploadAwareResolver:
         if row is None:
             raise ProxyNotFound(f"uploaded clip {clip_id} not in local cache")
         p = Path(row["file_path"])
-        if not p.exists() or p.stat().st_size == 0:  # sync-io-ok: pre-existing pattern, tier-4 async-io pass
+        if (
+            not p.exists() or p.stat().st_size == 0
+        ):  # sync-io-ok: pre-existing pattern, tier-4 async-io pass
             raise ProxyNotFound(f"uploaded clip {clip_id} cache row present but file missing: {p}")
         return p
 

@@ -46,8 +46,11 @@ class _ProxyCacheRepo:
 async def test_ensure_cached_status_hit_skips_download(tmp_path):
     r = _Resolver(tmp_path / "5.mov")
     b = AiStoreBackend(
-        rest_resolver=r, ai_store=_AiStore(status_ref=_Ref()),
-        gcs=_Gcs(), proxy_cache_repo=_ProxyCacheRepo(), db_provider=lambda: None,
+        rest_resolver=r,
+        ai_store=_AiStore(status_ref=_Ref()),
+        gcs=_Gcs(),
+        proxy_cache_repo=_ProxyCacheRepo(),
+        db_provider=lambda: None,
     )
     await b.ensure_cached(5)
     assert r.calls == []  # dedup fast-path: no tunnel hit
@@ -58,13 +61,16 @@ async def test_ensure_cached_uploads_then_deletes_temp(tmp_path):
     p.write_bytes(b"video")
     store, repo, r = _AiStore(), _ProxyCacheRepo(), _Resolver(p)
     b = AiStoreBackend(
-        rest_resolver=r, ai_store=store, gcs=_Gcs(),
-        proxy_cache_repo=repo, db_provider=lambda: None,
+        rest_resolver=r,
+        ai_store=store,
+        gcs=_Gcs(),
+        proxy_cache_repo=repo,
+        db_provider=lambda: None,
     )
     await b.ensure_cached(5)
     assert store.uploaded and store.uploaded[0][0] == ("catdv", "5")
-    assert not p.exists()           # temp deleted
-    assert repo.deleted == [5]      # proxy_cache row removed
+    assert not p.exists()  # temp deleted
+    assert repo.deleted == [5]  # proxy_cache row removed
 
 
 async def test_ensure_cached_deletes_temp_on_upload_failure(tmp_path):
@@ -77,19 +83,25 @@ async def test_ensure_cached_deletes_temp_on_upload_failure(tmp_path):
             raise RuntimeError("gcs down")
 
     b = AiStoreBackend(
-        rest_resolver=_Resolver(p), ai_store=_Boom(), gcs=_Gcs(),
-        proxy_cache_repo=repo, db_provider=lambda: None,
+        rest_resolver=_Resolver(p),
+        ai_store=_Boom(),
+        gcs=_Gcs(),
+        proxy_cache_repo=repo,
+        db_provider=lambda: None,
     )
     with pytest.raises(RuntimeError):
         await b.ensure_cached(5)
-    assert not p.exists()           # temp still cleaned up
-    assert repo.deleted == [5]      # proxy_cache row still removed
+    assert not p.exists()  # temp still cleaned up
+    assert repo.deleted == [5]  # proxy_cache row still removed
 
 
 async def test_locate_returns_signed_url_on_status_hit():
     b = AiStoreBackend(
-        rest_resolver=_Resolver(None), ai_store=_AiStore(status_ref=_Ref()),
-        gcs=_Gcs(), proxy_cache_repo=_ProxyCacheRepo(), db_provider=lambda: None,
+        rest_resolver=_Resolver(None),
+        ai_store=_AiStore(status_ref=_Ref()),
+        gcs=_Gcs(),
+        proxy_cache_repo=_ProxyCacheRepo(),
+        db_provider=lambda: None,
     )
     located = await b.locate(5)
     assert located == RemoteUrl("https://signed/gs://bucket/clips/5.mov")
@@ -97,7 +109,10 @@ async def test_locate_returns_signed_url_on_status_hit():
 
 async def test_locate_returns_none_on_miss():
     b = AiStoreBackend(
-        rest_resolver=_Resolver(None), ai_store=_AiStore(status_ref=None),
-        gcs=_Gcs(), proxy_cache_repo=_ProxyCacheRepo(), db_provider=lambda: None,
+        rest_resolver=_Resolver(None),
+        ai_store=_AiStore(status_ref=None),
+        gcs=_Gcs(),
+        proxy_cache_repo=_ProxyCacheRepo(),
+        db_provider=lambda: None,
     )
     assert await b.locate(5) is None

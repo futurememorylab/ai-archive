@@ -139,7 +139,7 @@ New to the codebase? Read these two first:
 - `backend/seeds/` — default templates
 - `tests/` — unit + integration tests
 - `docs/specs/` — design specs
-- `docs/plans/` — implementation plans
+- `docs/plans/` — plans for in-flight work (deleted once merged)
 - `docs/DEPLOY.md` — local/on-prem deployment + one-time GCP bootstrap
 - `deploy/` — Cloud Run deployment (`deploy/README.md`), Gemini Live key script
 

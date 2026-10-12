@@ -22,12 +22,10 @@ async def _seed(conn) -> None:
         "'2026-05-28T00:00:00Z', '2026-05-28T00:00:00Z')"
     )
     await conn.execute(
-        "INSERT INTO studio_run(id, prompt_version_id, clip_id, status) "
-        "VALUES (1, 1, 42, 'ok')"
+        "INSERT INTO studio_run(id, prompt_version_id, clip_id, status) VALUES (1, 1, 42, 'ok')"
     )
     await conn.execute(
-        "INSERT INTO studio_run(id, prompt_version_id, clip_id, status) "
-        "VALUES (2, 1, 99, 'ok')"
+        "INSERT INTO studio_run(id, prompt_version_id, clip_id, status) VALUES (2, 1, 99, 'ok')"
     )
     await conn.commit()
 
@@ -40,11 +38,15 @@ async def test_bulk_insert_with_studio_run_id_persists(tmp_path: Path):
         repo = ReviewItemsRepo()
         items = [
             ReviewItem(
-                studio_run_id=1, catdv_clip_id=42, kind="marker",
+                studio_run_id=1,
+                catdv_clip_id=42,
+                kind="marker",
                 proposed_value={"in": {"secs": 1.0}, "out": {"secs": 2.0}, "name": "a"},
             ),
             ReviewItem(
-                studio_run_id=1, catdv_clip_id=42, kind="field",
+                studio_run_id=1,
+                catdv_clip_id=42,
+                kind="field",
                 target_identifier="pragafilm.dekada",
                 proposed_value={"value": "30.léta"},
             ),
@@ -60,12 +62,17 @@ async def test_list_by_studio_run_filters(tmp_path: Path):
         await apply_migrations(conn, Path("backend/migrations"))
         await _seed(conn)
         repo = ReviewItemsRepo()
-        await repo.bulk_insert(conn, [
-            ReviewItem(studio_run_id=1, catdv_clip_id=42, kind="marker",
-                       proposed_value={"name": "r1m"}),
-            ReviewItem(studio_run_id=2, catdv_clip_id=99, kind="marker",
-                       proposed_value={"name": "r2m"}),
-        ])
+        await repo.bulk_insert(
+            conn,
+            [
+                ReviewItem(
+                    studio_run_id=1, catdv_clip_id=42, kind="marker", proposed_value={"name": "r1m"}
+                ),
+                ReviewItem(
+                    studio_run_id=2, catdv_clip_id=99, kind="marker", proposed_value={"name": "r2m"}
+                ),
+            ],
+        )
         run1_items = await repo.list_by_studio_run(conn, 1)
         assert len(run1_items) == 1
         assert run1_items[0].proposed_value == {"name": "r1m"}

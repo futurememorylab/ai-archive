@@ -11,9 +11,14 @@ from tests._helpers.live_ctx import install_live_ctx
 
 def _make_app(monkeypatch, tmp_path):
     for k, v in {
-        "APP_ENV": "dev", "CATDV_BASE_URL": "http://localhost:0",
-        "CATDV_USERNAME": "", "CATDV_PASSWORD": "p", "CATDV_CATALOG_ID": "881507",
-        "GCP_PROJECT_ID": "p", "GCS_BUCKET_NAME": "b", "DATA_DIR": str(tmp_path),
+        "APP_ENV": "dev",
+        "CATDV_BASE_URL": "http://localhost:0",
+        "CATDV_USERNAME": "",
+        "CATDV_PASSWORD": "p",
+        "CATDV_CATALOG_ID": "881507",
+        "GCP_PROJECT_ID": "p",
+        "GCS_BUCKET_NAME": "b",
+        "DATA_DIR": str(tmp_path),
     }.items():
         monkeypatch.setenv(k, v)
     from backend.app import main as main_mod

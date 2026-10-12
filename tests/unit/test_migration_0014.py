@@ -48,8 +48,7 @@ async def test_0014_check_constraint_enforces_exactly_one_owner(tmp_path: Path):
             "VALUES (1, 1, 'c', 1, 'm', 'p', '{}', '{}', '{}', '2026-05-28T00:00:00Z')"
         )
         await conn.execute(
-            "INSERT INTO studio_run(id, prompt_version_id, clip_id, status) "
-            "VALUES (1, 1, 1, 'ok')"
+            "INSERT INTO studio_run(id, prompt_version_id, clip_id, status) VALUES (1, 1, 1, 'ok')"
         )
         await conn.commit()
 

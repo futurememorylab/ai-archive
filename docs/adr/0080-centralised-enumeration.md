@@ -25,7 +25,7 @@ Two distinct needs sit behind "centralise enums":
   hide an unsupported one at runtime without a deploy.
 
 The full design lives in
-`docs/superpowers/specs/2026-06-14-centralised-enumeration-design.md`; the
+`docs/specs/2026-06-14-centralised-enumeration-design.md`; the
 implementation plan in
 `docs/superpowers/plans/2026-06-14-centralised-enumeration.md`.
 

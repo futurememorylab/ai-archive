@@ -33,8 +33,8 @@ dev = [
   "pytest-asyncio>=0.24",
   "pytest-timeout>=2.3",
   "pytest-xdist>=3.6",  # parallel runs: `-n auto` for the full pre-commit sweep
-  "playwright>=1.59",
-  "ruff>=0.7",
+  "playwright>=1.63",
+  "ruff==0.15.13",  # keep in lockstep with .pre-commit-config.yaml (CI runs this one)
   "respx>=0.21",
   "basedpyright>=1.18",
   "pre-commit>=3.7",
@@ -68,6 +68,18 @@ ignore = ["ASYNC240"]
 # Tests sometimes assert against the broad exception surface a contract
 # raises, so `pytest.raises(Exception)` is intentional, not a bug.
 "tests/**/*.py" = ["B017"]
+# Inline CSS/HTML template for the walkthrough gallery page.
+"tests/walkthrough/gallery.py" = ["E501"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI parameter markers are evaluated once by design, not mutable defaults.
+extend-immutable-calls = [
+  "fastapi.Body",
+  "fastapi.Depends",
+  "fastapi.File",
+  "fastapi.Form",
+  "fastapi.Query",
+]
 
 [tool.interrogate]
 ignore-init-method = true

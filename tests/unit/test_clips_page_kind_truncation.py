@@ -81,9 +81,9 @@ async def test_kind_filter_logs_warning_when_catalog_hits_cap(monkeypatch, caplo
             kind="image",
         )
 
-    assert any(
-        "hit the" in r.message and "cap" in r.message for r in caplog.records
-    ), "expected a truncation warning when the kind-filter fetch hits the cap"
+    assert any("hit the" in r.message and "cap" in r.message for r in caplog.records), (
+        "expected a truncation warning when the kind-filter fetch hits the cap"
+    )
     # Sanity: the filter still works (only image clips, page-sliced).
     assert total == 2  # ids 0 and 2 are images among the 4 fetched
     assert len(summaries) <= 2

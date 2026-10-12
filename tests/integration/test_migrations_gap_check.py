@@ -16,9 +16,7 @@ async def test_collision_with_sentinel_raises(tmp_path: Path):
     migs = tmp_path / "migs"
     migs.mkdir()
     (migs / "0001_init.sql").write_text("CREATE TABLE a (id INTEGER PRIMARY KEY);")
-    (migs / "0011_REVERTED.txt").write_text(
-        "0011 was reverted; do not reuse this number."
-    )
+    (migs / "0011_REVERTED.txt").write_text("0011 was reverted; do not reuse this number.")
     (migs / "0011_thing.sql").write_text("CREATE TABLE b (id INTEGER PRIMARY KEY);")
 
     async with open_db(db_path) as conn:

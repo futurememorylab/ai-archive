@@ -10,9 +10,7 @@ from backend.app.services.errors import humanise
 
 def test_humanise_handles_httpx_status_error_with_body():
     request = httpx.Request("POST", "http://example/x")
-    response = httpx.Response(
-        500, request=request, text='{"error": "internal", "code": "EFOO"}'
-    )
+    response = httpx.Response(500, request=request, text='{"error": "internal", "code": "EFOO"}')
     exc = httpx.HTTPStatusError("500", request=request, response=response)
     msg = humanise(exc)
     assert "500" in msg

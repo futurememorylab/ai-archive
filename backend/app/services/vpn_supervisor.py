@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 class VpnStatus(NamedTuple):
     managed: bool
-    desired: str            # "on" | "off"
+    desired: str  # "on" | "off"
     process_running: bool
     healthy: bool
     # True while the tunnel is coming up (desired on, health not yet confirmed
@@ -83,8 +83,8 @@ class VpnSupervisor:
         self._health_task: asyncio.Task[None] | None = None
         self._desired = "off"
         self._healthy = False
-        self._ever_healthy = False   # healthy at least once since this spin-up
-        self._connect_fails = 0      # consecutive failed probes while connecting
+        self._ever_healthy = False  # healthy at least once since this spin-up
+        self._connect_fails = 0  # consecutive failed probes while connecting
         self._stop = asyncio.Event()
         self._lock = asyncio.Lock()
 
@@ -159,7 +159,7 @@ class VpnSupervisor:
     def _spin_up(self) -> None:
         self._stop.clear()
         self._healthy = False
-        self._ever_healthy = False    # fresh tunnel → re-enter the connecting phase
+        self._ever_healthy = False  # fresh tunnel → re-enter the connecting phase
         self._connect_fails = 0
         self._supervise_task = asyncio.create_task(self._supervise())
         self._health_task = asyncio.create_task(self._health_loop())
@@ -175,7 +175,7 @@ class VpnSupervisor:
 
     async def _spin_down(self) -> None:
         self._stop.set()
-        await self._kill_proc()          # terminate any live proc; _supervise also exits via the _stop flag
+        await self._kill_proc()  # terminate any live proc; _supervise also exits via the _stop flag
         for t in (self._supervise_task, self._health_task):
             if t is not None:
                 try:

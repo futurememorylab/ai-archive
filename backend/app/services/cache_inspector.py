@@ -288,9 +288,7 @@ class CacheInspector:
                  WHERE cc.provider_id IS NULL
             """
         else:
-            base_sql = (
-                "SELECT provider_id, provider_clip_id FROM clip_cache"
-            )
+            base_sql = "SELECT provider_id, provider_clip_id FROM clip_cache"
 
         # Wrap as subquery so the filters apply uniformly.
         from_sql = f"FROM ({base_sql}) AS k"
@@ -343,9 +341,7 @@ class CacheInspector:
             where_sql = " WHERE " + " AND ".join(where_clauses)
 
         # COUNT
-        count_cur = await db.execute(
-            f"SELECT COUNT(*) {from_sql}{where_sql}", params
-        )
+        count_cur = await db.execute(f"SELECT COUNT(*) {from_sql}{where_sql}", params)
         total = int((await count_cur.fetchone())[0])
 
         # Page SELECT
@@ -355,9 +351,7 @@ class CacheInspector:
             "LIMIT ? OFFSET ?",
             [*params, limit, offset],
         )
-        page_keys: list[ClipKey] = [
-            (row[0], row[1]) for row in await page_cur.fetchall()
-        ]
+        page_keys: list[ClipKey] = [(row[0], row[1]) for row in await page_cur.fetchall()]
 
         statuses = await self.status_for_clips(page_keys)
         return statuses, total
@@ -521,14 +515,16 @@ class CacheInspector:
             )
             for row in await cur.fetchall():
                 key = (row[0], row[1])
-                out.setdefault(key, []).append({
-                    "store_id": row[2],
-                    "gcs_uri": row[3],
-                    "mime_type": row[4],
-                    "size_bytes": row[5],
-                    "uploaded_at": row[6],
-                    "last_used_at": row[7],
-                })
+                out.setdefault(key, []).append(
+                    {
+                        "store_id": row[2],
+                        "gcs_uri": row[3],
+                        "mime_type": row[4],
+                        "size_bytes": row[5],
+                        "uploaded_at": row[6],
+                        "last_used_at": row[7],
+                    }
+                )
         return out
 
     async def _load_pins(

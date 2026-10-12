@@ -143,9 +143,7 @@ LOCAL_MEDIA = LayerPolicy(
     check_pins=True,
     check_pending=False,
     remove_bytes=_remove_local_bytes,
-    delete_sql=(
-        "DELETE FROM proxy_cache WHERE provider_id = ? AND provider_clip_id = ?"
-    ),
+    delete_sql=("DELETE FROM proxy_cache WHERE provider_id = ? AND provider_clip_id = ?"),
     pins_sql=(
         "SELECT workspace_id FROM workspace_clips "
         "WHERE provider_id = ? AND provider_clip_id = ? "
@@ -163,9 +161,7 @@ AI_MEDIA = LayerPolicy(
     check_pins=False,
     check_pending=True,
     remove_bytes=_remove_ai_bytes,
-    delete_sql=(
-        "DELETE FROM ai_store_files WHERE provider_id = ? AND provider_clip_id = ?"
-    ),
+    delete_sql=("DELETE FROM ai_store_files WHERE provider_id = ? AND provider_clip_id = ?"),
 )
 
 METADATA = LayerPolicy(
@@ -178,12 +174,9 @@ METADATA = LayerPolicy(
     check_pins=True,
     check_pending=True,
     remove_bytes=_remove_no_bytes,
-    delete_sql=(
-        "DELETE FROM clip_cache WHERE provider_id = ? AND provider_clip_id = ?"
-    ),
+    delete_sql=("DELETE FROM clip_cache WHERE provider_id = ? AND provider_clip_id = ?"),
     pins_sql=(
-        "SELECT workspace_id FROM workspace_clips "
-        "WHERE provider_id = ? AND provider_clip_id = ?"
+        "SELECT workspace_id FROM workspace_clips WHERE provider_id = ? AND provider_clip_id = ?"
     ),
 )
 

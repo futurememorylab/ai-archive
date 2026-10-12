@@ -5,6 +5,7 @@ the contract between clipAnnotate (the annotate button) and cacheActions (the
 cache badge) so a refactor can't silently drop the upload/cache feedback or the
 running timer.
 """
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -26,7 +27,7 @@ def test_clip_annotate_runs_a_timer_and_toasts():
     assert "elapsedTimer" in js
     assert "runElapsed" in js
     # Toasts on start and end (issue #58 §3).
-    assert "Alpine.store(\"toast\")" in js or "Alpine.store('toast')" in js
+    assert 'Alpine.store("toast")' in js or "Alpine.store('toast')" in js
 
 
 def test_clip_annotate_flips_cache_badge_to_cached_when_done():
@@ -67,7 +68,7 @@ def test_cache_badge_settles_at_caching_handoff_not_run_end():
     js = (STATIC / "clipAnnotate.js").read_text()
     assert "this._onCachingDone()" in js, "handoff must settle the cache badge"
     # The settle handler is what emits the cache-refresh (badge → cached).
-    body = js[js.index("_onCachingDone() {"):]
+    body = js[js.index("_onCachingDone() {") :]
     method = body[: body.index("\n    },")]
     assert "clip-cache-refresh" in method
 

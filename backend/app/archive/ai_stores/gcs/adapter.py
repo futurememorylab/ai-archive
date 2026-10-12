@@ -103,15 +103,14 @@ class GcsInputStore:
         row = await self._repo.get(db, store_id=self.id, clip_id=clip_id)
         if row is None:
             return
-        try:
-            self._gcs.delete(clip_id=clip_id)
-        except Exception:  # noqa: BLE001
-            log.exception("gcs delete failed for clip_id=%s", clip_id)
+        # A failed delete raises before the row is pruned: the row is what
+        # orphan GC retries from, and the caller reports the error (#117).
+        await asyncio.to_thread(self._gcs.delete, clip_id=clip_id)
         await self._repo.delete(db, store_id=self.id, clip_id=clip_id)
 
     async def health(self) -> StoreHealth:
         try:
-            ok = self._gcs._bucket.exists()
+            ok = await asyncio.to_thread(self._gcs.bucket_exists)
         except Exception as exc:  # noqa: BLE001
             return StoreHealth(ok=False, detail=str(exc))
         if not ok:

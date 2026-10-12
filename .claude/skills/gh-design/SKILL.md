@@ -1,6 +1,6 @@
 ---
 name: gh-design
-description: Run the Design phase for a GitHub issue in the AI-Archive Flow board. Use when the user says "design #N", "refine issue N", or "start design on <idea>". Moves the issue to Design, creates its feature branch, runs the superpowers brainstorming→plan flow, and commits the spec + plan on the branch ready for hand-off. Local only — does not launch the cloud session.
+description: Run the Design phase for a GitHub issue in the AI-Archive Flow board. Use when the user says "design #N", "refine issue N", or "start design on <idea>". Moves the issue to Design, creates its feature branch, agrees a design with the user, writes a spec and a plan, and commits the spec + plan on the branch ready for hand-off. Local only — does not launch the cloud session.
 ---
 
 # gh-design — Design phase orchestrator
@@ -67,15 +67,21 @@ If `item_id` comes back empty the issue is not on the board yet — add it with
    git switch -c "${N}-${SLUG}" main   # e.g. 13-centralised-enumeration
    ```
 
-4. **Brainstorm.** Invoke `superpowers:brainstorming` with the issue body as the
-   idea. It writes the spec to `docs/superpowers/specs/`.
+4. **Design.** Work in plan mode: read the issue and the code it touches, ask
+   the user clarifying questions one at a time, and propose an approach with
+   its trade-offs. When the user agrees, write the spec to
+   `docs/specs/<YYYY-MM-DD>-<slug>-design.md`. It ends with a **Manual
+   acceptance flows** section (see `AGENTS.md`).
 
-5. **Plan.** Invoke `superpowers:writing-plans` against that spec. It writes the
-   plan to `docs/superpowers/plans/`.
+5. **Plan.** Write `docs/plans/<YYYY-MM-DD>-<slug>.md`: numbered tasks
+   (`### Task 1: <title>`), each small enough for one commit, each naming the
+   files it touches and the test that proves it. The cloud session works
+   through these in order and ticks one PR checkbox per task, so keep task
+   titles short and stable.
 
 6. **Commit & push the design.**
    ```bash
-   git add docs/superpowers/specs docs/superpowers/plans
+   git add docs/specs docs/plans
    git commit -m "docs(#${N}): design spec + implementation plan"
    git push -u origin "${N}-${SLUG}"
    ```

@@ -18,6 +18,7 @@ class _FakeStreamResp:
 def _client():
     # _stream_to_file uses only self via the method; construct without network.
     from backend.app.services.catdv_client import CatdvClient
+
     return CatdvClient.__new__(CatdvClient)
 
 
@@ -32,8 +33,13 @@ async def test_stream_reports_absolute_progress_with_base(tmp_path):
 
     resp = _FakeStreamResp([b"a" * 10, b"b" * 5])
     await client._stream_to_file(
-        resp, dest, append=False, chunk_size=1024,
-        progress_cb=cb, base=100, total=200,
+        resp,
+        dest,
+        append=False,
+        chunk_size=1024,
+        progress_cb=cb,
+        base=100,
+        total=200,
     )
     # absolute = base(100) + cumulative written
     assert seen == [(110, 200), (115, 200)]

@@ -36,9 +36,7 @@ async def test_only_uploaded_rows_deleted(conn):
 
     # Re-run the 0021 statement directly (migrations are idempotent by
     # version; re-applying the DELETE proves the intended scope).
-    await conn.execute(
-        "DELETE FROM ai_store_files WHERE catdv_clip_id >= ?", (UPLOAD_ID_BASE,)
-    )
+    await conn.execute("DELETE FROM ai_store_files WHERE catdv_clip_id >= ?", (UPLOAD_ID_BASE,))
     await conn.commit()
 
     cur = await conn.execute("SELECT catdv_clip_id FROM ai_store_files")

@@ -43,9 +43,7 @@ class ModelConfigRepo:
         if absent. Reconcile/admin paths need to see tombstones (so a deleted
         model is not silently re-seeded); callers that want only live rows use
         `all_live`."""
-        cur = await conn.execute(
-            f"SELECT {_COLS} FROM model_config WHERE model = ?", (model,)
-        )
+        cur = await conn.execute(f"SELECT {_COLS} FROM model_config WHERE model = ?", (model,))
         r = await cur.fetchone()
         return _row(r) if r else None
 
@@ -159,11 +157,7 @@ class ModelConfigRepo:
         if commit:
             await conn.commit()
 
-    async def soft_delete(
-        self, conn: aiosqlite.Connection, model: str, *, commit: bool
-    ) -> None:
-        await conn.execute(
-            "UPDATE model_config SET removed = 1 WHERE model = ?", (model,)
-        )
+    async def soft_delete(self, conn: aiosqlite.Connection, model: str, *, commit: bool) -> None:
+        await conn.execute("UPDATE model_config SET removed = 1 WHERE model = ?", (model,))
         if commit:
             await conn.commit()

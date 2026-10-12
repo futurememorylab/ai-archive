@@ -21,16 +21,24 @@ def _setenv(monkeypatch, tmp_path):
 def client(monkeypatch, tmp_path):
     _setenv(monkeypatch, tmp_path)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     with TestClient(main_mod.app) as c:
         yield c
 
 
 def _make_prompt(client):
-    r = client.post("/api/prompts", json={
-        "name": "ee", "media_kind": "any", "model": "gemini-2.5-pro",
-        "target_map": {}, "output_schema": {}, "body": "x",
-    })
+    r = client.post(
+        "/api/prompts",
+        json={
+            "name": "ee",
+            "media_kind": "any",
+            "model": "gemini-2.5-pro",
+            "target_map": {},
+            "output_schema": {},
+            "body": "x",
+        },
+    )
     assert r.status_code == 201, r.text
     pid = r.json()["id"]
     env = client.get(f"/api/prompts/{pid}").json()
@@ -46,11 +54,16 @@ def _seed_run(app, *, version_id, clip_id, status, output_json=None, error=None)
                 "INSERT INTO studio_run(prompt_version_id, clip_id, status, "
                 "output_json, error, model, finished_at) "
                 "VALUES (?, ?, ?, ?, ?, 'gemini-2.5-pro', '2026-05-28T00:00:00Z')",
-                (version_id, clip_id, status,
-                 json.dumps(output_json) if output_json else None,
-                 error),
+                (
+                    version_id,
+                    clip_id,
+                    status,
+                    json.dumps(output_json) if output_json else None,
+                    error,
+                ),
             )
             await db.commit()
+
     asyncio.run(_go())
 
 
@@ -72,6 +85,7 @@ def test_no_run_renders_run_empty_shell(client):
 def test_pending_run_renders_run_empty_shell(client):
     _, vid = _make_prompt(client)
     from backend.app import main as main_mod
+
     _seed_run(main_mod.app, version_id=vid, clip_id=12041, status="pending")
     r = client.get(f"/studio/_run?prompt_version_id={vid}&clip_id=12041")
     assert r.status_code == 200
@@ -82,8 +96,14 @@ def test_pending_run_renders_run_empty_shell(client):
 def test_error_run_renders_run_error_shell(client):
     _, vid = _make_prompt(client)
     from backend.app import main as main_mod
-    _seed_run(main_mod.app, version_id=vid, clip_id=12041,
-              status="error", error="Gemini API: 503 backend overloaded")
+
+    _seed_run(
+        main_mod.app,
+        version_id=vid,
+        clip_id=12041,
+        status="error",
+        error="Gemini API: 503 backend overloaded",
+    )
     r = client.get(f"/studio/_run?prompt_version_id={vid}&clip_id=12041")
     assert r.status_code == 200
     assert 'class="run-error"' in r.text
@@ -97,6 +117,7 @@ def test_error_run_message_is_selectable():
     enclosing CSS rule for .run-error-msg includes user-select: text
     and word-break."""
     from pathlib import Path
+
     css = Path("backend/app/static/app.css").read_text()
     assert ".run-error-msg" in css, "missing .run-error-msg rule"
     rule_start = css.index(".run-error-msg")

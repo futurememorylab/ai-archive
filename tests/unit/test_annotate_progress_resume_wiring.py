@@ -1,6 +1,7 @@
 """Spec 2026-06-23-annotate-cache-queue-consistency §3–§4: static wiring guards
 for the annotate button's caching percentage + reload resume. Same
 source-presence style as test_clip_annotate_feedback.py (no JS runtime)."""
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]

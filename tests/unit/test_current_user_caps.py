@@ -1,6 +1,7 @@
 # tests/unit/test_current_user_caps.py
 """CurrentUser derives permissions from role via ROLE_CAPS — no stored
 permission state to drift."""
+
 from backend.app.auth.models import CurrentUser
 
 

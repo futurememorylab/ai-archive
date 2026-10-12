@@ -16,16 +16,24 @@ def _setenv(monkeypatch, tmp_path):
 def client(monkeypatch, tmp_path):
     _setenv(monkeypatch, tmp_path)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     with TestClient(main_mod.app) as c:
         yield c
 
 
 def _two_versions(client):
-    r = client.post("/api/prompts", json={
-        "name": "cmp", "media_kind": "any", "model": "gemini-2.5-pro",
-        "target_map": {}, "output_schema": {}, "body": "v1",
-    })
+    r = client.post(
+        "/api/prompts",
+        json={
+            "name": "cmp",
+            "media_kind": "any",
+            "model": "gemini-2.5-pro",
+            "target_map": {},
+            "output_schema": {},
+            "body": "v1",
+        },
+    )
     assert r.status_code == 201, r.text
     pid = r.json()["id"]
     v1 = client.get(f"/api/prompts/{pid}").json()["latest_version_id"]
@@ -67,7 +75,7 @@ def test_both_cards_bind_tabs_to_root_mode(client):
     assert cur_count >= 2  # both cards have one each
     assert out_count >= 2
     # Per-card `mode` ref should not appear in the partial.
-    assert 'this.mode' not in html
+    assert "this.mode" not in html
 
 
 def test_compare_table_region_reacts_to_store_signals_including_save(client):

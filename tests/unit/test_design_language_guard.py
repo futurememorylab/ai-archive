@@ -21,7 +21,7 @@ in place and forbids *new* growth on each:
   ``fmtBytes`` (`static/format.js`).
 
 Each allow-list shrinks as the migration PRs land (see
-`docs/plans/2026-06-09-ui-consolidation-rollout-plan.md`). A coder who trips
+`docs/plans/2026-06-09-ui-consolidation-rollout-plan.md` in git history). A coder who trips
 this is routed to the reuse path by the assert message.
 
 Scope/limits (intentional): only the named families are covered, and only
@@ -191,11 +191,7 @@ def test_no_inline_style_on_form_controls():
     """No inline style= on input/textarea/select, except a sole min-height."""
     offenders: dict[str, list[str]] = {}
     for name, text, _tokens in _scanned_templates():
-        bad = [
-            s
-            for s in _CONTROL_STYLE.findall(text)
-            if not _MIN_HEIGHT_ONLY.match(s)
-        ]
+        bad = [s for s in _CONTROL_STYLE.findall(text) if not _MIN_HEIGHT_ONLY.match(s)]
         if bad:
             offenders[name] = bad
     assert not offenders, (
@@ -218,9 +214,7 @@ def test_no_hand_rolled_formatters_in_js():
             flags.append("byte-scaling loop -> window.fmtBytes")
         if flags:
             offenders[path.name] = flags
-    assert not offenders, (
-        f"Hand-rolled formatter(s) found — call format.js helpers: {offenders}"
-    )
+    assert not offenders, f"Hand-rolled formatter(s) found — call format.js helpers: {offenders}"
 
 
 def test_guard_detects_fresh_bespoke_shapes():

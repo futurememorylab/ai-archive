@@ -345,9 +345,7 @@ class JobsRepo:
         )
         await conn.commit()
 
-    async def reconcile_interrupted_job(
-        self, conn: aiosqlite.Connection, job_id: int
-    ) -> None:
+    async def reconcile_interrupted_job(self, conn: aiosqlite.Connection, job_id: int) -> None:
         """Reconcile a job whose worker task was interrupted by CancelledError.
 
         Two interrupts look identical to the worker; the job's DB status tells

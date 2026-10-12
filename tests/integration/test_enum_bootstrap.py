@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 def _client(monkeypatch, tmp_path) -> TestClient:
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     return TestClient(main_mod.app)
 

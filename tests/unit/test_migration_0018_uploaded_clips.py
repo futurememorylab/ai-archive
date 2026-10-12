@@ -22,8 +22,15 @@ async def test_uploaded_clip_table_columns(conn):
     cur = await conn.execute("PRAGMA table_info(uploaded_clip)")
     cols = {row[1] for row in await cur.fetchall()}
     assert {
-        "id", "original_filename", "stored_filename", "mime",
-        "size_bytes", "duration_secs", "width", "height", "created_at",
+        "id",
+        "original_filename",
+        "stored_filename",
+        "mime",
+        "size_bytes",
+        "duration_secs",
+        "width",
+        "height",
+        "created_at",
     } <= cols
 
 

@@ -15,8 +15,15 @@ from backend.app.repositories._batch import chunked_in_clause
 from backend.app.uploaded_ids import to_clip_id, to_pk
 
 _COLS = (
-    "id", "original_filename", "stored_filename", "mime",
-    "size_bytes", "duration_secs", "width", "height", "created_at",
+    "id",
+    "original_filename",
+    "stored_filename",
+    "mime",
+    "size_bytes",
+    "duration_secs",
+    "width",
+    "height",
+    "created_at",
 )
 
 

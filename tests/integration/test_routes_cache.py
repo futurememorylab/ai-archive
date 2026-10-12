@@ -203,10 +203,10 @@ def test_cache_popover_datetime_isoformat(monkeypatch, tmp_path: Path):
     # a date-looking substring (i.e. not "—" placeholder, and not a space-separated
     # datetime like "2026-05-30 12:00:00").  We look for the isoformat pattern.
     import re
+
     # Any ISO-8601 datetime with a T in the rendered HTML
     assert re.search(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}", body), (
-        "Expected isoformat datetime with 'T' separator in popover — "
-        "got: " + body[:400]
+        "Expected isoformat datetime with 'T' separator in popover — got: " + body[:400]
     )
 
 

@@ -57,9 +57,7 @@ async def test_status_for_clips_query_count_is_constant_under_400(tmp_path):
             f"query count must not scale with N; got {count_10} vs {count_100}"
         )
         # Belt-and-braces: should be exactly 5 (one statement per loader).
-        assert count_10 == 5, (
-            f"expected 5 statements (one per loader); got {count_10}"
-        )
+        assert count_10 == 5, f"expected 5 statements (one per loader); got {count_10}"
 
 
 @pytest.mark.asyncio

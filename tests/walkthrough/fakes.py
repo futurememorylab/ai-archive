@@ -54,7 +54,7 @@ NO_RESULTS_TERM = "zzqxnomatch"
 # job against (bulk-annotate-start, cancel-running-batch) without perturbing the
 # other scenarios. The single source of truth shared with those scenarios.
 ANNOTATE_SAFE_NAMES = (
-    "Wartime newsreel, reel 12",    # clip 105
+    "Wartime newsreel, reel 12",  # clip 105
     "Studio interview (unedited)",  # clip 106
 )
 
@@ -173,9 +173,13 @@ class FakeArchive:
 
     async def list_clips(self, catalog, query):
         needle = (query.text or "").strip().casefold()
-        matches = [c for c in self._clips if needle in c.name.casefold()] if needle else list(self._clips)
+        matches = (
+            [c for c in self._clips if needle in c.name.casefold()] if needle else list(self._clips)
+        )
         page = matches[query.offset : query.offset + query.limit]
-        return ClipPage(items=tuple(page), total=len(matches), offset=query.offset, limit=query.limit)
+        return ClipPage(
+            items=tuple(page), total=len(matches), offset=query.offset, limit=query.limit
+        )
 
     async def get_clip(self, clip_id_str: str):
         for clip in self._clips:

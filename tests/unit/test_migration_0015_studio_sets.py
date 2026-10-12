@@ -47,8 +47,7 @@ async def test_0015_preserves_rows_and_defaults_source(conn):
         "INSERT INTO studio_folder(id, name, created_at) VALUES (1, 'keep', '2026-01-01')"
     )
     await conn.execute(
-        "INSERT INTO studio_folder_clip(folder_id, clip_id, added_at) "
-        "VALUES (1, 999, '2026-01-02')"
+        "INSERT INTO studio_folder_clip(folder_id, clip_id, added_at) VALUES (1, 999, '2026-01-02')"
     )
     await conn.commit()
     await conn.executescript((MIG / STUDIO_SETS).read_text())

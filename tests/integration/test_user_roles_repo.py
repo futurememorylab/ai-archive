@@ -1,11 +1,13 @@
 """user_roles persistence — the app-side authorization layer (spec
 2026-06-14-iap-roles-admin-console-design.md). Google owns the gate; this
 table owns roles."""
+
 import pytest
 
+from backend.app.context import MIGRATIONS
 from backend.app.db import open_db
 from backend.app.migrations_runner import apply_migrations
-from backend.app.context import MIGRATIONS
+from backend.app.repositories.user_roles import UserRolesRepo
 
 
 @pytest.fixture
@@ -26,14 +28,10 @@ async def test_user_roles_table_exists(conn):
 
 async def test_role_check_constraint_rejects_bad_role(conn):
     import aiosqlite
+
     with pytest.raises(aiosqlite.IntegrityError):
-        await conn.execute(
-            "INSERT INTO user_roles(email, role) VALUES ('x@y.com', 'wizard')"
-        )
+        await conn.execute("INSERT INTO user_roles(email, role) VALUES ('x@y.com', 'wizard')")
         await conn.commit()
-
-
-from backend.app.repositories.user_roles import UserRolesRepo
 
 
 async def test_upsert_gate_state_and_seed(conn):

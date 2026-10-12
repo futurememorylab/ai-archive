@@ -45,8 +45,9 @@ def _monitor(request: Request):
     return live.connection_monitor if live is not None else None
 
 
-async def _pill_or_json(request: Request, monitor, *, status_code: int = 200,
-                        headers: dict[str, str] | None = None):
+async def _pill_or_json(
+    request: Request, monitor, *, status_code: int = 200, headers: dict[str, str] | None = None
+):
     if request.headers.get("HX-Request") == "true":
         # The topbar chip is the live control surface; return it when the
         # chip targets us. (The connection pill is an alternate surface and
@@ -56,8 +57,11 @@ async def _pill_or_json(request: Request, monitor, *, status_code: int = 200,
             # Return the inner partial — it swaps into the stable
             # #connection-chip container's innerHTML.
             return _templates.TemplateResponse(
-                request, "_connection_chip_inner.html", {},
-                status_code=status_code, headers=headers,
+                request,
+                "_connection_chip_inner.html",
+                {},
+                status_code=status_code,
+                headers=headers,
             )
         from backend.app.routes.ui import _pill_context
 
@@ -69,11 +73,16 @@ async def _pill_or_json(request: Request, monitor, *, status_code: int = 200,
         rows = await ctx.pending_ops_repo.list_pending(ctx.db)
         context["pending_count"] = len(rows)
         return _templates.TemplateResponse(
-            request, "connection_pill.html", context,
-            status_code=status_code, headers=headers,
+            request,
+            "connection_pill.html",
+            context,
+            status_code=status_code,
+            headers=headers,
         )
-    body = {"state": str(monitor.current_state().value) if monitor else "online",
-            "mode": _mode(monitor)}
+    body = {
+        "state": str(monitor.current_state().value) if monitor else "online",
+        "mode": _mode(monitor),
+    }
     from fastapi.responses import JSONResponse
 
     return JSONResponse(body, status_code=status_code, headers=headers)
@@ -184,18 +193,31 @@ async def connect(request: Request):
     try:
         await live.catdv.login()
     except CatdvBusyError as exc:
-        return await _pill_or_json(request, monitor, status_code=409,
-                                   headers=_toast_header(f"CatDV seat busy: {humanise(exc)}"))
+        return await _pill_or_json(
+            request,
+            monitor,
+            status_code=409,
+            headers=_toast_header(f"CatDV seat busy: {humanise(exc)}"),
+        )
     except CatdvAuthError as exc:
-        return await _pill_or_json(request, monitor, status_code=401,
-                                   headers=_toast_header(f"CatDV login rejected: {humanise(exc)}"))
+        return await _pill_or_json(
+            request,
+            monitor,
+            status_code=401,
+            headers=_toast_header(f"CatDV login rejected: {humanise(exc)}"),
+        )
     except Exception as exc:  # noqa: BLE001 — transport / unreachable
-        return await _pill_or_json(request, monitor, status_code=502,
-                                   headers=_toast_header(f"CatDV unreachable: {humanise(exc)}"))
+        return await _pill_or_json(
+            request,
+            monitor,
+            status_code=502,
+            headers=_toast_header(f"CatDV unreachable: {humanise(exc)}"),
+        )
     if monitor is not None:
         await monitor.probe_once()
     return await _pill_or_json(
-        request, monitor,
+        request,
+        monitor,
         headers=_toast_header("CatDV connected — browsing live data.", "success"),
     )
 
@@ -209,7 +231,8 @@ async def disconnect(request: Request):
     if monitor is not None:
         await monitor.probe_once()
     return await _pill_or_json(
-        request, monitor,
+        request,
+        monitor,
         headers=_toast_header("CatDV disconnected — back to cached clips.", "info"),
     )
 

@@ -2,8 +2,13 @@ from backend.app.services.output_compare import build_output_compare
 
 
 def _marker(in_s, out_s, name, desc=None):
-    return {"in_secs": float(in_s), "out_secs": float(out_s),
-            "name": name, "description": desc, "category": None}
+    return {
+        "in_secs": float(in_s),
+        "out_secs": float(out_s),
+        "name": name,
+        "description": desc,
+        "category": None,
+    }
 
 
 def _panels(markers=None, fields=None, notes=None):
@@ -11,25 +16,33 @@ def _panels(markers=None, fields=None, notes=None):
 
 
 # Mock 1 data: v4 (cmp) vs v5 (cur).
-CMP = _panels(markers=[
-    _marker(0, 7, "Celkovy pohled na statek se vzrostlym stromem"),
-    _marker(7, 28, "Zeny pracuji na dvore u lavice"),
-    _marker(28, 42, "Zena stoji u zdi domu"),
-])
-CUR = _panels(markers=[
-    _marker(0, 7, "Celkovy pohled na statek se vzrostlym stromem"),
-    _marker(7, 17, "Zena v satku loupe brambory na drevene lavici"),
-    _marker(17, 24, "Dite v bilem cepci sedi u stolu vedle zeny"),
-    _marker(24, 35, "Zena ve vzorovanych satech stoji u zdi domu"),
-    _marker(35, 42, "Detail naradi a nadob u zdi staveni"),
-])
+CMP = _panels(
+    markers=[
+        _marker(0, 7, "Celkovy pohled na statek se vzrostlym stromem"),
+        _marker(7, 28, "Zeny pracuji na dvore u lavice"),
+        _marker(28, 42, "Zena stoji u zdi domu"),
+    ]
+)
+CUR = _panels(
+    markers=[
+        _marker(0, 7, "Celkovy pohled na statek se vzrostlym stromem"),
+        _marker(7, 17, "Zena v satku loupe brambory na drevene lavici"),
+        _marker(17, 24, "Dite v bilem cepci sedi u stolu vedle zeny"),
+        _marker(24, 35, "Zena ve vzorovanych satech stoji u zdi domu"),
+        _marker(35, 42, "Detail naradi a nadob u zdi staveni"),
+    ]
+)
 
 
 def test_mock1_aligns_to_five_scenes_with_expected_statuses():
     model = build_output_compare(CUR, CMP)
     assert model["scene_count"] == 5
     assert [r["status"] for r in model["scenes"]] == [
-        "unchanged", "changed", "added", "changed", "added",
+        "unchanged",
+        "changed",
+        "added",
+        "changed",
+        "added",
     ]
 
 
@@ -86,14 +99,18 @@ def test_empty_inputs_produce_empty_model():
 
 
 def test_fields_align_by_identifier():
-    cur = _panels(fields=[
-        {"identifier": "location", "value": "Harbor Beach"},
-        {"identifier": "mood", "value": "serene"},
-    ])
-    cmp = _panels(fields=[
-        {"identifier": "location", "value": "Beach"},
-        {"identifier": "weather", "value": "sunny"},
-    ])
+    cur = _panels(
+        fields=[
+            {"identifier": "location", "value": "Harbor Beach"},
+            {"identifier": "mood", "value": "serene"},
+        ]
+    )
+    cmp = _panels(
+        fields=[
+            {"identifier": "location", "value": "Beach"},
+            {"identifier": "weather", "value": "sunny"},
+        ]
+    )
     model = build_output_compare(cur, cmp)
     by = {f["identifier"]: f for f in model["fields"]}
     assert by["location"]["status"] == "changed"
@@ -116,12 +133,15 @@ def test_notes_none_when_both_empty():
 
 
 def test_scene_dur_falls_back_when_out_missing():
-    cur = _panels(markers=[{"in_secs": 5.0, "out_secs": None, "name": "X",
-                            "description": None, "category": None}])
+    cur = _panels(
+        markers=[
+            {"in_secs": 5.0, "out_secs": None, "name": "X", "description": None, "category": None}
+        ]
+    )
     model = build_output_compare(cur, _panels())
     side = model["scenes"][0]["cur"]
     assert side["out_secs"] is None
-    assert side["dur_s"] == 1   # in+1 fallback
+    assert side["dur_s"] == 1  # in+1 fallback
     assert side["tc"] == "0:05"
 
 
@@ -129,8 +149,8 @@ def test_time_changed_flag_set_when_times_differ_same_text():
     cur = _panels(markers=[_marker(7, 17, "Same name")])
     cmp = _panels(markers=[_marker(7, 28, "Same name")])
     row = build_output_compare(cur, cmp)["scenes"][0]
-    assert row["status"] == "unchanged"   # text identical
-    assert row["time_changed"] is True    # but the out-point moved
+    assert row["status"] == "unchanged"  # text identical
+    assert row["time_changed"] is True  # but the out-point moved
 
 
 def test_time_changed_false_when_times_identical():

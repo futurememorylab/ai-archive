@@ -18,9 +18,9 @@ media_prefetcher, routes/media). They are tracked for the tier-4 async-io
 pass, NOT introduced by tier-3. To keep the guard's real value — failing
 on NEW un-pragma'd sync-IO — each known site carries an inline escape
 hatch: either a `# sync-io-ok` pragma (with a short justification) or an
-existing `# noqa: ASYNC2*` async-lint suppression. A line carrying either
-is allowed; anything else inside an `async def` that matches a banned
-call is a failure.
+existing `# noqa: ASYNC2*` async-lint suppression. A statement carrying
+either (on any of its physical lines) is allowed; anything else inside an
+`async def` that matches a banned call is a failure.
 
 The one site that should stay WRAPPED (not pragma'd) is
 `cache_actions.py`, which routes its file ops through `asyncio.to_thread`
@@ -30,7 +30,9 @@ match the banned regex — the regex anchors on the opening `(`.
 """
 
 import ast
+import io
 import re
+import tokenize
 from pathlib import Path
 
 APP = Path(__file__).resolve().parents[2] / "backend" / "app"
@@ -50,6 +52,29 @@ _BANNED = re.compile(
 # `# sync-io-ok` pragma, or an existing `# noqa: ASYNC2*` async-lint
 # suppression (these mark the same pre-existing tech debt).
 _ALLOW = re.compile(r"#\s*sync-io-ok|#\s*noqa:\s*ASYNC2")
+
+
+def _allowed_lines(text: str) -> set[int]:
+    """Lines covered by an escape hatch.
+
+    A pragma covers its whole logical line (statement), not just the physical
+    line it sits on: ruff format moves a trailing comment to the closing line
+    when it wraps a long statement, so a per-physical-line check would make
+    the formatter and this guard fight each other.
+    """
+    lines = text.splitlines()
+    allowed: set[int] = set()
+    start: int | None = None
+    skip = {tokenize.NL, tokenize.COMMENT, tokenize.INDENT, tokenize.DEDENT, tokenize.ENCODING}
+    for tok in tokenize.generate_tokens(io.StringIO(text).readline):
+        if start is None and tok.type not in skip | {tokenize.NEWLINE}:
+            start = tok.start[0]
+        if tok.type == tokenize.NEWLINE and start is not None:
+            span = range(start, tok.end[0] + 1)
+            if any(_ALLOW.search(lines[n - 1]) for n in span):
+                allowed.update(span)
+            start = None
+    return allowed
 
 
 def _iter_py_files() -> list[Path]:
@@ -72,15 +97,34 @@ def _async_def_lines(tree: ast.AST) -> set[int]:
     return inside
 
 
+def test_pragma_covers_whole_wrapped_statement():
+    # ruff format moves a trailing comment to the closing line when it wraps
+    # a statement; the pragma must still cover the call on the first line.
+    src = (
+        "async def f(dest):\n"
+        "    if (\n"
+        "        dest.exists()\n"
+        "    ):  # sync-io-ok: why\n"
+        "        dest.unlink(\n"
+        "            missing_ok=True\n"
+        "        )  # sync-io-ok: why\n"
+        "    dest.stat()\n"
+    )
+    allowed = _allowed_lines(src)
+    assert {2, 3, 4, 5, 6, 7} <= allowed
+    assert 8 not in allowed
+
+
 def test_no_sync_fs_inside_async_def():
     bad: list[tuple[Path, int, str]] = []
     for path in _iter_py_files():
         text = path.read_text()
         async_lines = _async_def_lines(ast.parse(text))
+        allowed = _allowed_lines(text)
         for lineno, line in enumerate(text.splitlines(), start=1):
             if lineno not in async_lines:
                 continue
-            if _ALLOW.search(line):
+            if lineno in allowed:
                 continue
             if _BANNED.search(line):
                 bad.append((path, lineno, line.strip()))

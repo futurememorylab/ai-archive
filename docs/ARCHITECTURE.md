@@ -80,7 +80,8 @@ routes. Run `.venv/bin/lint-imports` to check locally.
   (`NNNN-slug.md`). `docs/decisions.md` is the index + the methodology for
   how decisions are tracked and synthesised.
 - `docs/specs/` — feature designs (one per dated spec).
-- `docs/plans/` — implementation plans, one per PR / feature slice.
+- `docs/plans/` — plans for in-flight work, deleted once the PR merges
+  (older plans are in git history; see `docs/plans/README.md`).
 - `docs/DEPLOY.md` — production deployment guide.
 - `docs/fs-archive-format.md` — sidecar layout for the FS provider.
 - `docs/gemini-live-lessons.md` — what we learned wiring Live.

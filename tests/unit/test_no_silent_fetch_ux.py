@@ -35,13 +35,14 @@ ALLOWED_EMPTY_CATCH = {
     # video.play() can reject under the browser autoplay policy when the
     # user hasn't interacted yet — expected, not actionable, not a failure
     # the user can do anything about. Toasting it would be noise.
-    ("player.js", "v.paused"),       # togglePlay()
+    ("player.js", "v.paused"),  # togglePlay()
     ("player.js", "if (v) v.play"),  # play()
-    ("player.js", "v.play().catch"), # seek()
+    ("player.js", "v.play().catch"),  # seek()
 }
 
 JS_FILES = sorted(
-    p for p in STATIC_DIR.glob("*.js")
+    p
+    for p in STATIC_DIR.glob("*.js")
     # vendor/ is a subdir, glob("*.js") already excludes it; guard anyway.
     if "vendor" not in p.parts
 )
@@ -107,14 +108,12 @@ def test_no_silent_empty_catch():
             if "// silent-catch-ok" in line:
                 continue
             if any(
-                path.name == fname and marker in line
-                for (fname, marker) in ALLOWED_EMPTY_CATCH
+                path.name == fname and marker in line for (fname, marker) in ALLOWED_EMPTY_CATCH
             ):
                 continue
             offenders.append(f"{path.name}:{lineno}: {line.strip()}")
     assert not offenders, (
         "empty `.catch(() => {})` swallows a failure silently — surface it "
         "via toast, or add a justified allowlist entry / `// silent-catch-ok` "
-        "pragma if it is genuinely non-actionable. Offenders:\n"
-        + "\n".join(offenders)
+        "pragma if it is genuinely non-actionable. Offenders:\n" + "\n".join(offenders)
     )

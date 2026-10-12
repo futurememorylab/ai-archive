@@ -16,8 +16,12 @@ class _ExplodingCatdv:
 
 @pytest.mark.asyncio
 async def test_uploaded_hit_returns_poster(tmp_path):
-    svc = ThumbnailService(cache_dir=tmp_path, archive=_ExplodingArchive(),
-                           catdv=_ExplodingCatdv(), is_online_provider=lambda: True)
+    svc = ThumbnailService(
+        cache_dir=tmp_path,
+        archive=_ExplodingArchive(),
+        catdv=_ExplodingCatdv(),
+        is_online_provider=lambda: True,
+    )
     cid = to_clip_id(1)
     poster = svc.path_for(cid)
     poster.write_bytes(b"jpeg")
@@ -26,6 +30,10 @@ async def test_uploaded_hit_returns_poster(tmp_path):
 
 @pytest.mark.asyncio
 async def test_uploaded_miss_returns_none_without_network(tmp_path):
-    svc = ThumbnailService(cache_dir=tmp_path, archive=_ExplodingArchive(),
-                           catdv=_ExplodingCatdv(), is_online_provider=lambda: True)
+    svc = ThumbnailService(
+        cache_dir=tmp_path,
+        archive=_ExplodingArchive(),
+        catdv=_ExplodingCatdv(),
+        is_online_provider=lambda: True,
+    )
     assert await svc.get_or_fetch(to_clip_id(2)) is None

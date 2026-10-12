@@ -37,7 +37,9 @@ async def test_list_for_inventory_pagination_uses_sql_limit(tmp_path):
 
         async with assert_query_count(conn, max_n=10) as counter:
             rows, total = await inspector.list_for_inventory(
-                tab="all", offset=0, limit=50,
+                tab="all",
+                offset=0,
+                limit=50,
             )
 
         assert total == 1000, "total clip count is over the full set"
@@ -66,7 +68,9 @@ async def test_list_for_inventory_tab_local_filters_in_sql(tmp_path):
 
         inspector = CacheInspector(db_provider=lambda: conn)
         rows, total = await inspector.list_for_inventory(
-            tab="local", offset=0, limit=50,
+            tab="local",
+            offset=0,
+            limit=50,
         )
         assert total == 1, f"tab=local should return only the seeded clip; got total={total}"
         assert len(rows) == 1
@@ -91,7 +95,10 @@ async def test_list_for_inventory_orphans_filter(tmp_path):
 
         inspector = CacheInspector(db_provider=lambda: conn)
         rows, total = await inspector.list_for_inventory(
-            tab="all", orphans=True, offset=0, limit=50,
+            tab="all",
+            orphans=True,
+            offset=0,
+            limit=50,
         )
         assert total == 1
         assert rows[0].clip_key == ("catdv", "999")
@@ -114,8 +121,7 @@ async def test_list_for_inventory_store_filter_matches_bucket_name(tmp_path):
             "provider_id, provider_clip_id) "
             "VALUES (?, ?, ?, 'video/mp4', 1000, 'abc', "
             "datetime('now'), datetime('now'), ?, ?)",
-            ("gcs:catdav-proxies", 0, "gs://catdav-proxies/x.mov",
-             "catdv", "0"),
+            ("gcs:catdav-proxies", 0, "gs://catdav-proxies/x.mov", "catdv", "0"),
         )
         await conn.execute(
             "INSERT INTO ai_store_files(store_id, catdv_clip_id, gcs_uri, "
@@ -123,8 +129,7 @@ async def test_list_for_inventory_store_filter_matches_bucket_name(tmp_path):
             "provider_id, provider_clip_id) "
             "VALUES (?, ?, ?, 'video/mp4', 1000, 'abc', "
             "datetime('now'), datetime('now'), ?, ?)",
-            ("gcs:other-bucket", 1, "gs://other-bucket/y.mov",
-             "catdv", "1"),
+            ("gcs:other-bucket", 1, "gs://other-bucket/y.mov", "catdv", "1"),
         )
         await conn.commit()
 
@@ -132,14 +137,20 @@ async def test_list_for_inventory_store_filter_matches_bucket_name(tmp_path):
 
         # Bucket name alone matches via gcs_uri substring.
         rows, total = await inspector.list_for_inventory(
-            tab="all", store="catdav-proxies", offset=0, limit=50,
+            tab="all",
+            store="catdav-proxies",
+            offset=0,
+            limit=50,
         )
         assert total == 1
         assert rows[0].clip_key == ("catdv", "0")
 
         # Full store_id also matches.
         rows, total = await inspector.list_for_inventory(
-            tab="all", store="gcs:other-bucket", offset=0, limit=50,
+            tab="all",
+            store="gcs:other-bucket",
+            offset=0,
+            limit=50,
         )
         assert total == 1
         assert rows[0].clip_key == ("catdv", "1")

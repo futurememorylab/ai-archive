@@ -8,6 +8,7 @@ JobRunner.start() (requeue_orphaned_running: running -> pending, transient
 items -> pending) instead of cancelling them. run_startup_cleanup no longer
 touches jobs at all.
 """
+
 from pathlib import Path
 
 import aiosqlite
@@ -23,8 +24,13 @@ MIGRATIONS = Path(__file__).resolve().parents[2] / "backend" / "migrations"
 
 async def _seed_running_job(conn, *, clip_id, item_status):
     _pid, vid = await PromptsRepo().create_with_initial_version(
-        conn, name=f"p{clip_id}", description=None, body="b",
-        target_map={"x": {"kind": "markers"}}, output_schema={}, model="m",
+        conn,
+        name=f"p{clip_id}",
+        description=None,
+        body="b",
+        target_map={"x": {"kind": "markers"}},
+        output_schema={},
+        model="m",
     )
     jobs = JobsRepo()
     job_id = await jobs.create_job(conn, prompt_version_id=vid, clip_ids=[clip_id])

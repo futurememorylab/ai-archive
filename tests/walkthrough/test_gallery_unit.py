@@ -28,9 +28,27 @@ def test_gallery_escapes_title():
 def test_gallery_groups_by_topic_with_nav():
     html = render_gallery(
         [
-            {"slug": "find", "topic": "Search page", "title": "Find", "description": "d", "video": "find.webm"},
-            {"slug": "empty", "topic": "Search page", "title": "Empty", "description": "d", "video": "empty.webm"},
-            {"slug": "review", "topic": "Clip page", "title": "Review", "description": "d", "video": "review.webm"},
+            {
+                "slug": "find",
+                "topic": "Search page",
+                "title": "Find",
+                "description": "d",
+                "video": "find.webm",
+            },
+            {
+                "slug": "empty",
+                "topic": "Search page",
+                "title": "Empty",
+                "description": "d",
+                "video": "empty.webm",
+            },
+            {
+                "slug": "review",
+                "topic": "Clip page",
+                "title": "Review",
+                "description": "d",
+                "video": "review.webm",
+            },
         ]
     )
     # One section per topic, anchored.

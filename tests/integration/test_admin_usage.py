@@ -33,9 +33,7 @@ def _now_month_iso(day: int = 5) -> str:
     """An occurred_at inside the current calendar month (UTC), so the route's
     ``datetime.now(UTC)`` window includes it."""
     now = datetime.now(UTC)
-    return now.replace(
-        day=day, hour=12, minute=0, second=0, microsecond=0
-    ).isoformat()
+    return now.replace(day=day, hour=12, minute=0, second=0, microsecond=0).isoformat()
 
 
 async def _seed_telemetry(db_path, *, cost_usd, model="gemini-flash", occurred_at=None):
@@ -242,9 +240,7 @@ def test_calibrate_estimate_would_exceed_budget(monkeypatch, tmp_path):
         # exactly !selCount() (unchanged) — never gated on the budget.
         from pathlib import Path
 
-        admin_html = Path(
-            "backend/app/templates/pages/_admin_prompts_table.html"
-        ).read_text()
+        admin_html = Path("backend/app/templates/pages/_admin_prompts_table.html").read_text()
         assert ':disabled="!selCount()"' in admin_html
         assert "would_exceed_budget" not in admin_html  # no :disabled gate added here
 

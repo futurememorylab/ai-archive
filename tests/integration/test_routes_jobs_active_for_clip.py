@@ -1,6 +1,7 @@
 """Spec 2026-06-23-annotate-cache-queue-consistency §2: GET
 /api/jobs/active-for-clip/{clip_id} lets the clip page resume the annotate
 button after a reload by reporting the running job (if any) for that clip."""
+
 import importlib
 
 from fastapi.testclient import TestClient
@@ -35,8 +36,13 @@ def test_active_for_clip_reports_running_job_and_status(monkeypatch, tmp_path):
             from backend.app.repositories.prompts import PromptsRepo
 
             _, vid = await PromptsRepo().create_with_initial_version(
-                ctx.db, name="t", description=None, body="p",
-                target_map={"x": {"kind": "markers"}}, output_schema={}, model="m",
+                ctx.db,
+                name="t",
+                description=None,
+                body="p",
+                target_map={"x": {"kind": "markers"}},
+                output_schema={},
+                model="m",
             )
             jid = await ctx.jobs_repo.create_job(
                 ctx.db, prompt_version_id=vid, clip_ids=[314], kind="video"

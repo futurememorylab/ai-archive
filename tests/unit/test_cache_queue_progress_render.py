@@ -11,9 +11,15 @@ def _render(rows) -> str:
 
 def _row(**kw):
     base = {
-        "id": 1, "provider_id": "catdv", "provider_clip_id": "5",
-        "status": "downloading", "requested_at": "t", "started_at": "t",
-        "error": None, "bytes_downloaded": 0, "bytes_total": 0,
+        "id": 1,
+        "provider_id": "catdv",
+        "provider_clip_id": "5",
+        "status": "downloading",
+        "requested_at": "t",
+        "started_at": "t",
+        "error": None,
+        "bytes_downloaded": 0,
+        "bytes_total": 0,
         "clip_name": "clip.mov",
     }
     base.update(kw)

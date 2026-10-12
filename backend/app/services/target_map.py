@@ -58,21 +58,22 @@ def expand(
     content past the end on multi-minute video.
     """
     if (annotation_id is None) == (studio_run_id is None):
-        raise ValueError(
-            "expand() requires exactly one of annotation_id or studio_run_id"
-        )
+        raise ValueError("expand() requires exactly one of annotation_id or studio_run_id")
     items: list[ReviewItem] = []
     for key, entry in target_map.fields.items():
         if key not in structured or structured[key] is None:
             continue
         value = structured[key]
-        items.extend(_expand_one(
-            entry, value,
-            annotation_id=annotation_id,
-            studio_run_id=studio_run_id,
-            catdv_clip_id=catdv_clip_id,
-            clip_duration_secs=clip_duration_secs,
-        ))
+        items.extend(
+            _expand_one(
+                entry,
+                value,
+                annotation_id=annotation_id,
+                studio_run_id=studio_run_id,
+                catdv_clip_id=catdv_clip_id,
+                clip_duration_secs=clip_duration_secs,
+            )
+        )
     return items
 
 

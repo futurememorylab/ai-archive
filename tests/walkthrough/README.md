@@ -62,7 +62,7 @@ missing. One-time setup:
 - **Annotated recording** (`harness.py`). `Walkthrough.step(label, action)`
   shows a "Step N — label" overlay, runs the action, then dwells so the result
   (e.g. an HTMX table swap) paints and is captured under that step's overlay.
-  Recording forces the page's native viewport size to defeat Playwright's
+  Recording passes the viewport as the screencast `size` to defeat Playwright's
   800px screencast cap, so videos are 1280×800. All of this is skipped in
   assert mode.
 - **Gallery** (`gallery.py`). `--record` writes `artifacts/index.html`: videos

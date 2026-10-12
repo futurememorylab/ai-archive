@@ -7,6 +7,7 @@ untouched. It must be idempotent so the in-flight task's CancelledError
 handler can re-run it to mop up an item that raced into a transient state
 after the cancel route's first sweep.
 """
+
 from pathlib import Path
 
 import aiosqlite
@@ -21,8 +22,13 @@ MIGRATIONS = Path(__file__).resolve().parents[2] / "backend" / "migrations"
 
 async def _seed_job(conn, *, clip_ids):
     _pid, vid = await PromptsRepo().create_with_initial_version(
-        conn, name="p", description=None, body="b",
-        target_map={"x": {"kind": "markers"}}, output_schema={}, model="m",
+        conn,
+        name="p",
+        description=None,
+        body="b",
+        target_map={"x": {"kind": "markers"}},
+        output_schema={},
+        model="m",
     )
     jobs = JobsRepo()
     job_id = await jobs.create_job(conn, prompt_version_id=vid, clip_ids=clip_ids)

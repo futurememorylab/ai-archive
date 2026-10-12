@@ -1,4 +1,5 @@
 import hashlib
+import threading
 from datetime import UTC
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -53,8 +54,11 @@ class FakeGcsService:
         self.bucket_name = bucket_name
         self.uploads: list[tuple[int, Path, str]] = []
         self.deletes: list[int] = []
-        self._bucket = MagicMock()
-        self._bucket.exists = MagicMock(return_value=True)
+        self.delete_error: Exception | None = None
+        self.bucket_ok = True
+        # Thread each network call ran on: GCS calls are blocking and must
+        # stay off the event-loop thread.
+        self.call_threads: list[threading.Thread] = []
 
     def gs_uri(self, clip_id: int) -> str:
         return f"gs://{self.bucket_name}/clips/{clip_id}.mov"
@@ -64,7 +68,14 @@ class FakeGcsService:
         return self.gs_uri(clip_id)
 
     def delete(self, *, clip_id: int) -> None:
+        self.call_threads.append(threading.current_thread())
+        if self.delete_error is not None:
+            raise self.delete_error
         self.deletes.append(clip_id)
+
+    def bucket_exists(self) -> bool:
+        self.call_threads.append(threading.current_thread())
+        return self.bucket_ok
 
 
 @pytest.fixture
@@ -135,9 +146,7 @@ async def test_ensure_uploaded_offloads_blocking_upload_off_event_loop(adapter_f
     # running; if it blocks the loop, this gather still resolves but the upload
     # ran on the main thread — the ident check below is the real assertion.
     await asyncio.gather(
-        adapter.ensure_uploaded(
-            clip_key=("catdv", "1"), local_path=local, mime="video/quicktime"
-        ),
+        adapter.ensure_uploaded(clip_key=("catdv", "1"), local_path=local, mime="video/quicktime"),
         asyncio.sleep(0),
     )
 
@@ -241,6 +250,20 @@ async def test_evict_deletes_blob_and_row(adapter_factory):
     await adapter.evict(("catdv", "7"))
     assert gcs.deletes == [7]
     assert ("gcs:test-bucket", 7) not in repo.rows
+    assert threading.main_thread() not in gcs.call_threads
+
+
+@pytest.mark.asyncio
+async def test_evict_keeps_row_and_raises_when_gcs_delete_fails(adapter_factory):
+    """#117: a failed GCS delete must leave the ai_store_files row so orphan
+    GC can retry, and must raise so cache_actions reports the error instead of
+    pruning the index itself."""
+    adapter, gcs, repo, _ = adapter_factory()
+    repo.rows[("gcs:test-bucket", 7)] = {"gcs_uri": "gs://test-bucket/clips/7.mov"}
+    gcs.delete_error = RuntimeError("503 backend unavailable")
+    with pytest.raises(RuntimeError, match="503"):
+        await adapter.evict(("catdv", "7"))
+    assert ("gcs:test-bucket", 7) in repo.rows
 
 
 @pytest.mark.asyncio
@@ -279,12 +302,13 @@ async def test_health_reports_bucket_exists(adapter_factory):
     h = await adapter.health()
     assert isinstance(h, StoreHealth)
     assert h.ok is True
+    assert gcs.call_threads and threading.main_thread() not in gcs.call_threads
 
 
 @pytest.mark.asyncio
 async def test_health_reports_failure_when_bucket_missing(adapter_factory):
     adapter, gcs, _, _ = adapter_factory()
-    gcs._bucket.exists = MagicMock(return_value=False)
+    gcs.bucket_ok = False
     h = await adapter.health()
     assert h.ok is False
     assert "test-bucket" in (h.detail or "")

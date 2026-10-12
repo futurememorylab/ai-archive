@@ -57,7 +57,9 @@ async def test_event_generator_yields_sse_frames():
 @pytest.mark.asyncio
 async def test_replay_emits_current_uploading_status(db):
     repo = JobsRepo()
-    job_id = await repo.create_job(db, prompt_version_id=await _seed_prompt_version(db), clip_ids=[888894])
+    job_id = await repo.create_job(
+        db, prompt_version_id=await _seed_prompt_version(db), clip_ids=[888894]
+    )
     item = (await repo.list_items(db, job_id))[0]
     await repo.update_item_status(db, item.id, "uploading")
 
@@ -70,14 +72,18 @@ async def test_replay_skips_pending_items(db):
     # A job whose item hasn't started yet has nothing to replay — don't emit
     # noise frames the frontend would ignore anyway.
     repo = JobsRepo()
-    job_id = await repo.create_job(db, prompt_version_id=await _seed_prompt_version(db), clip_ids=[1])
+    job_id = await repo.create_job(
+        db, prompt_version_id=await _seed_prompt_version(db), clip_ids=[1]
+    )
     assert await _replay_frames(repo, db, job_id) == []
 
 
 @pytest.mark.asyncio
 async def test_replay_carries_error_and_annotation_id(db):
     repo = JobsRepo()
-    job_id = await repo.create_job(db, prompt_version_id=await _seed_prompt_version(db), clip_ids=[1, 2])
+    job_id = await repo.create_job(
+        db, prompt_version_id=await _seed_prompt_version(db), clip_ids=[1, 2]
+    )
     items = await repo.list_items(db, job_id)
     await repo.update_item_status(db, items[0].id, "error", error="boom")
     await repo.update_item_status(db, items[1].id, "review_ready")

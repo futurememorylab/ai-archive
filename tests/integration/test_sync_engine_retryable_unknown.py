@@ -28,15 +28,17 @@ async def _seed_pending_op(conn) -> int:
     repo = PendingOperationsRepo()
     ids = await repo.insert_many(
         conn,
-        rows=[{
-            "provider_id": "catdv",
-            "provider_clip_id": "42",
-            "op_kind": "AddMarkers",
-            "op_json": '{"kind": "AddMarkers", "markers": []}',
-            "origin_annotation_id": None,
-            "origin_review_item_ids": None,
-            "expected_etag": None,
-        }],
+        rows=[
+            {
+                "provider_id": "catdv",
+                "provider_clip_id": "42",
+                "op_kind": "AddMarkers",
+                "op_json": '{"kind": "AddMarkers", "markers": []}',
+                "origin_annotation_id": None,
+                "origin_review_item_ids": None,
+                "expected_etag": None,
+            }
+        ],
     )
     return ids[0]
 

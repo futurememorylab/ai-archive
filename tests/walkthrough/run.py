@@ -1,7 +1,7 @@
 """CLI to run/record walkthrough scenarios.
 
-  python -m tests.walkthrough.run --assert            # headless, no video, pass/fail
-  python -m tests.walkthrough.run --record [slug...]  # headed, annotated webm + gallery
+python -m tests.walkthrough.run --assert            # headless, no video, pass/fail
+python -m tests.walkthrough.run --record [slug...]  # headed, annotated webm + gallery
 """
 
 from __future__ import annotations
@@ -23,16 +23,14 @@ from tests.walkthrough.scenarios import get_scenario, load_scenarios
 ARTIFACTS = Path(__file__).parent / "artifacts"
 
 
-def run_scenarios(slugs: list[str], *, record: bool) -> list[dict]:
-    scenarios = (
-        [get_scenario(s) for s in slugs] if slugs else load_scenarios()
-    )
+def run_scenarios(slugs: list[str], *, record: bool, port: int = 8766) -> list[dict]:
+    scenarios = [get_scenario(s) for s in slugs] if slugs else load_scenarios()
     results: list[dict] = []
     if record:
         ARTIFACTS.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory() as data_dir:
-        app = WalkthroughApp(data_dir=Path(data_dir), port=8766)
+        app = WalkthroughApp(data_dir=Path(data_dir), port=port)
         app.start()
         try:
             with sync_playwright() as pw:

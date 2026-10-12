@@ -40,10 +40,9 @@ def _marker_text(m: dict) -> str:
 
 
 def _overlaps(a: dict, b: dict) -> bool:
-    return (
-        float(a.get("in_secs") or 0.0) < _out_or_default(b)
-        and float(b.get("in_secs") or 0.0) < _out_or_default(a)
-    )
+    return float(a.get("in_secs") or 0.0) < _out_or_default(b) and float(
+        b.get("in_secs") or 0.0
+    ) < _out_or_default(a)
 
 
 def _side(m: dict) -> dict[str, Any]:
@@ -64,10 +63,7 @@ def _time_changed(cmp_m: dict | None, cur_m: dict | None) -> bool:
     Independent of whether the marker *text* changed."""
     if not cmp_m or not cur_m:
         return False
-    return (
-        _tc(cmp_m.get("in_secs")) != _tc(cur_m.get("in_secs"))
-        or _dur_s(cmp_m) != _dur_s(cur_m)
-    )
+    return _tc(cmp_m.get("in_secs")) != _tc(cur_m.get("in_secs")) or _dur_s(cmp_m) != _dur_s(cur_m)
 
 
 def _scene_row(
@@ -94,29 +90,24 @@ def _align_scenes(cmp_markers: list[dict], cur_markers: list[dict]) -> list[dict
             # Unchanged text needs no diff — a single "eq" segment renders the
             # same, skipping the O(n·m) LCS for the common stable-scene case.
             if at == bt:
-                rows.append(_scene_row(len(rows), "unchanged", a, b,
-                                       [{"type": "eq", "text": at}]))
+                rows.append(_scene_row(len(rows), "unchanged", a, b, [{"type": "eq", "text": at}]))
             else:
                 rows.append(_scene_row(len(rows), "changed", a, b, word_diff(at, bt)))
             i += 1
             j += 1
         elif _out_or_default(a) <= float(b.get("in_secs") or 0.0):
-            rows.append(_scene_row(len(rows), "removed", a, None,
-                                   word_diff(_marker_text(a), "")))
+            rows.append(_scene_row(len(rows), "removed", a, None, word_diff(_marker_text(a), "")))
             i += 1
         else:
-            rows.append(_scene_row(len(rows), "added", None, b,
-                                   word_diff("", _marker_text(b))))
+            rows.append(_scene_row(len(rows), "added", None, b, word_diff("", _marker_text(b))))
             j += 1
     while i < n:
         a = cmp_markers[i]
-        rows.append(_scene_row(len(rows), "removed", a, None,
-                               word_diff(_marker_text(a), "")))
+        rows.append(_scene_row(len(rows), "removed", a, None, word_diff(_marker_text(a), "")))
         i += 1
     while j < m:
         b = cur_markers[j]
-        rows.append(_scene_row(len(rows), "added", None, b,
-                               word_diff("", _marker_text(b))))
+        rows.append(_scene_row(len(rows), "added", None, b, word_diff("", _marker_text(b))))
         j += 1
     return rows
 
@@ -135,19 +126,17 @@ def _align_fields(cmp_fields: list[dict], cur_fields: list[dict]) -> list[dict]:
             status = "removed"
         else:
             status = "unchanged" if cv == uv else "changed"
-        segs = (
-            [{"type": "eq", "text": cv}]
-            if status == "unchanged"
-            else word_diff(cv, uv)
+        segs = [{"type": "eq", "text": cv}] if status == "unchanged" else word_diff(cv, uv)
+        rows.append(
+            {
+                "key": f"field-{k}",
+                "identifier": k,
+                "status": status,
+                "has_cmp": c is not None,
+                "has_cur": u is not None,
+                "segs": segs,
+            }
         )
-        rows.append({
-            "key": f"field-{k}",
-            "identifier": k,
-            "status": status,
-            "has_cmp": c is not None,
-            "has_cur": u is not None,
-            "segs": segs,
-        })
     return rows
 
 
@@ -162,10 +151,8 @@ def _notes_diff(cmp_panels: dict, cur_panels: dict) -> dict | None:
 
 def build_output_compare(cur_panels: dict, cmp_panels: dict) -> dict[str, Any]:
     """Align cur (newer) vs cmp (older) panels into scene/field/note rows."""
-    scenes = _align_scenes(cmp_panels.get("markers") or [],
-                           cur_panels.get("markers") or [])
-    fields = _align_fields(cmp_panels.get("fields") or [],
-                           cur_panels.get("fields") or [])
+    scenes = _align_scenes(cmp_panels.get("markers") or [], cur_panels.get("markers") or [])
+    fields = _align_fields(cmp_panels.get("fields") or [], cur_panels.get("fields") or [])
     return {
         "scene_count": len(scenes),
         "scenes": scenes,

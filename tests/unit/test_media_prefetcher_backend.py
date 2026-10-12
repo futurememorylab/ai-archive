@@ -39,7 +39,8 @@ async def test_tick_calls_backend_ensure_cached():
 async def test_tick_marks_error_on_backend_failure():
     q = _Queue({"id": 2, "provider_clip_id": "7"})
     pf = MediaPrefetcher(
-        queue_repo=q, backend=_Backend(raise_exc=RuntimeError("tunnel down")),
+        queue_repo=q,
+        backend=_Backend(raise_exc=RuntimeError("tunnel down")),
         db_provider=lambda: None,
     )
     cid = await pf.tick_once()

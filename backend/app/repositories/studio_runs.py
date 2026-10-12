@@ -62,18 +62,12 @@ class StudioRunsRepo:
         await conn.commit()
         return rid
 
-    async def attach_job(
-        self, conn: aiosqlite.Connection, run_id: int, *, job_id: int
-    ) -> None:
-        await conn.execute(
-            "UPDATE studio_run SET job_id = ? WHERE id = ?", (job_id, run_id)
-        )
+    async def attach_job(self, conn: aiosqlite.Connection, run_id: int, *, job_id: int) -> None:
+        await conn.execute("UPDATE studio_run SET job_id = ? WHERE id = ?", (job_id, run_id))
         await conn.commit()
 
     async def mark_running(self, conn: aiosqlite.Connection, run_id: int) -> None:
-        await conn.execute(
-            "UPDATE studio_run SET status = 'running' WHERE id = ?", (run_id,)
-        )
+        await conn.execute("UPDATE studio_run SET status = 'running' WHERE id = ?", (run_id,))
         await conn.commit()
 
     async def complete_ok(
@@ -103,20 +97,15 @@ class StudioRunsRepo:
         )
         await conn.commit()
 
-    async def complete_error(
-        self, conn: aiosqlite.Connection, run_id: int, *, error: str
-    ) -> None:
+    async def complete_error(self, conn: aiosqlite.Connection, run_id: int, *, error: str) -> None:
         await conn.execute(
-            "UPDATE studio_run SET status = 'error', error = ?, finished_at = ? "
-            "WHERE id = ?",
+            "UPDATE studio_run SET status = 'error', error = ?, finished_at = ? WHERE id = ?",
             (error, _now_iso(), run_id),
         )
         await conn.commit()
 
     async def get(self, conn: aiosqlite.Connection, run_id: int) -> StudioRun:
-        cur = await conn.execute(
-            f"SELECT {_RUN_COLS} FROM studio_run WHERE id = ?", (run_id,)
-        )
+        cur = await conn.execute(f"SELECT {_RUN_COLS} FROM studio_run WHERE id = ?", (run_id,))
         row = await cur.fetchone()
         if row is None:
             raise LookupError(f"studio_run {run_id} not found")
@@ -138,13 +127,10 @@ class StudioRunsRepo:
         row = await cur.fetchone()
         return _row_to_run(row) if row else None
 
-    async def versions_run_on_clip(
-        self, conn: aiosqlite.Connection, *, clip_id: int
-    ) -> list[int]:
+    async def versions_run_on_clip(self, conn: aiosqlite.Connection, *, clip_id: int) -> list[int]:
         """Returns distinct prompt_version_ids that have a successful run on this clip."""
         cur = await conn.execute(
-            "SELECT DISTINCT prompt_version_id FROM studio_run "
-            "WHERE clip_id = ? AND status = 'ok'",
+            "SELECT DISTINCT prompt_version_id FROM studio_run WHERE clip_id = ? AND status = 'ok'",
             (clip_id,),
         )
         return [r[0] for r in await cur.fetchall()]
@@ -158,8 +144,7 @@ class StudioRunsRepo:
         row this completed job_item corresponds to.
         """
         cur = await conn.execute(
-            "SELECT id FROM studio_run WHERE job_id = ? AND clip_id = ? "
-            "ORDER BY id DESC LIMIT 1",
+            "SELECT id FROM studio_run WHERE job_id = ? AND clip_id = ? ORDER BY id DESC LIMIT 1",
             (job_id, clip_id),
         )
         row = await cur.fetchone()

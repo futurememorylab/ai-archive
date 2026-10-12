@@ -327,7 +327,10 @@ class CatdvClient:
                         # whole body onto the partial.
                         append = resp.status_code == 206 and existing > 0
                         await self._stream_to_file(
-                            resp, dest, append=append, chunk_size=chunk_size,
+                            resp,
+                            dest,
+                            append=append,
+                            chunk_size=chunk_size,
                             progress_cb=progress_cb,
                             base=(existing if append else 0),
                             total=(expected_total or 0),
@@ -385,15 +388,23 @@ class CatdvClient:
                 async with self.http.stream("GET", url, params=params) as resp2:
                     resp2.raise_for_status()
                     await self._stream_to_file(
-                        resp2, dest, append=False, chunk_size=chunk_size,
-                        progress_cb=progress_cb, base=0,
+                        resp2,
+                        dest,
+                        append=False,
+                        chunk_size=chunk_size,
+                        progress_cb=progress_cb,
+                        base=0,
                         total=(_content_total_bytes(resp2, 0) or 0),
                     )
                     return
             resp.raise_for_status()
             await self._stream_to_file(
-                resp, dest, append=False, chunk_size=chunk_size,
-                progress_cb=progress_cb, base=0,
+                resp,
+                dest,
+                append=False,
+                chunk_size=chunk_size,
+                progress_cb=progress_cb,
+                base=0,
                 total=(_content_total_bytes(resp, 0) or 0),
             )
 

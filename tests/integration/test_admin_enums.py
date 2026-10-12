@@ -48,6 +48,7 @@ def test_add_returns_partial_and_appears(monkeypatch, tmp_path):
 
 def test_remove_last_enabled_refused(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as client:
+
         async def _setup_and_get_default():
             svc = client.app.state.core_ctx.enum_service  # type: ignore[attr-defined]
             await svc.reconcile_seeds()

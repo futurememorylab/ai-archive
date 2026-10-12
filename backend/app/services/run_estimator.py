@@ -122,9 +122,7 @@ async def estimate_clips(
         # charge. media_resolution=None (estimator caller didn't supply one)
         # passes through and matches the repo's "any resolution" lookup.
         kind_resolution = media_resolution
-        if media_resolution is not None and not resolution_valid_for_kind(
-            media_resolution, kind
-        ):
+        if media_resolution is not None and not resolution_valid_for_kind(media_resolution, kind):
             kind_resolution = "medium"
         if kind != "image":
             ratios = await repo.recent_input_ratios(
@@ -241,9 +239,7 @@ def _dimensions_from_cached_row(row) -> tuple[int | None, int | None]:
     """
     cj = row["canonical_json"] or {}
     provider_media = (cj.get("provider_data") or {}).get("media") or {}
-    return _coerce_dim(provider_media.get("width")), _coerce_dim(
-        provider_media.get("height")
-    )
+    return _coerce_dim(provider_media.get("width")), _coerce_dim(provider_media.get("height"))
 
 
 def _coerce_dim(v) -> int | None:

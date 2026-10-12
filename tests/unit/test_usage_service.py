@@ -4,7 +4,7 @@ DB-only / offline-safe; ``now`` is injected so the month window is
 deterministic (no inline wall clock).
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -17,7 +17,7 @@ from backend.app.services.usage_service import (
     month_start_utc,
 )
 
-NOW = datetime(2026, 6, 15, 10, 30, tzinfo=timezone.utc)
+NOW = datetime(2026, 6, 15, 10, 30, tzinfo=UTC)
 
 
 def _rec(**over) -> RunTelemetryRecord:
@@ -49,8 +49,9 @@ async def _seed(db):
     repo = RunTelemetryRepo()
     # June 2026: priced rows summing to 10.00, plus an un-priced row.
     await repo.insert(db, _rec(occurred_at="2026-06-02T00:00:00+00:00", cost_usd=4.00))
-    await repo.insert(db, _rec(occurred_at="2026-06-10T00:00:00+00:00",
-                               model="gemini-pro", cost_usd=6.00))
+    await repo.insert(
+        db, _rec(occurred_at="2026-06-10T00:00:00+00:00", model="gemini-pro", cost_usd=6.00)
+    )
     await repo.insert(db, _rec(occurred_at="2026-06-12T00:00:00+00:00", cost_usd=None))
     # May 2026: outside the window.
     await repo.insert(db, _rec(occurred_at="2026-05-30T00:00:00+00:00", cost_usd=99.0))
@@ -60,12 +61,12 @@ async def _seed(db):
 
 
 def test_month_start_utc_is_first_of_month_midnight():
-    assert month_start_utc(NOW) == datetime(2026, 6, 1, 0, 0, tzinfo=timezone.utc)
+    assert month_start_utc(NOW) == datetime(2026, 6, 1, 0, 0, tzinfo=UTC)
 
 
 def test_month_start_utc_normalises_naive_to_utc():
     naive = datetime(2026, 6, 15, 10, 30)
-    assert month_start_utc(naive) == datetime(2026, 6, 1, 0, 0, tzinfo=timezone.utc)
+    assert month_start_utc(naive) == datetime(2026, 6, 1, 0, 0, tzinfo=UTC)
 
 
 # ---- current_month window + status ---------------------------------------

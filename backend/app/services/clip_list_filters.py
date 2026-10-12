@@ -46,9 +46,7 @@ def normalize_anno(value: str | None) -> AnnoFilter:
     return value if value in ANNO_VALUES else "any"  # type: ignore[return-value]
 
 
-def is_active(
-    cache: CacheFilter, anno: AnnoFilter, batch: int | list[int] | None = None
-) -> bool:
+def is_active(cache: CacheFilter, anno: AnnoFilter, batch: int | list[int] | None = None) -> bool:
     # `batch` may be a single job id, a list of job ids, or None — a non-empty
     # value of either form means the batch filter is active.
     return cache != "any" or anno != "any" or bool(batch)

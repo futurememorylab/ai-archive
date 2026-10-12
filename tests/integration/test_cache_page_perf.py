@@ -28,6 +28,7 @@ def _setenv(monkeypatch, tmp_path):
 def _make_app(monkeypatch, tmp_path):
     _setenv(monkeypatch, tmp_path)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     return main_mod.app
 
@@ -80,6 +81,4 @@ def test_cache_page_does_not_double_compute_all_keys(tmp_path, monkeypatch):
     assert call_counts["_all_cached_keys"] == 1, (
         f"expected 1 call; got {call_counts['_all_cached_keys']}"
     )
-    assert call_counts["list_orphans"] == 1, (
-        f"expected 1 call; got {call_counts['list_orphans']}"
-    )
+    assert call_counts["list_orphans"] == 1, f"expected 1 call; got {call_counts['list_orphans']}"

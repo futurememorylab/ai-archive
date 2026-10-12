@@ -77,9 +77,7 @@ async def _setup(db, tmp_path, *, kind=None, media_resolution=None, model="gemin
     job_id = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[101], kind=kind)
     if kind == "studio":
         sruns = StudioRunsRepo()
-        rid = await sruns.create_pending(
-            db, prompt_version_id=vid, clip_id=101, model=model
-        )
+        rid = await sruns.create_pending(db, prompt_version_id=vid, clip_id=101, model=model)
         await sruns.attach_job(db, rid, job_id=job_id)
     return job_id, f
 
@@ -336,17 +334,13 @@ async def test_record_only_writes_telemetry_but_no_studio_or_review(db, tmp_path
     assert rows[0][1] is not None
 
     # No review_items written for this clip.
-    cur = await db.execute(
-        "SELECT COUNT(*) FROM review_items WHERE catdv_clip_id = ?", (101,)
-    )
+    cur = await db.execute("SELECT COUNT(*) FROM review_items WHERE catdv_clip_id = ?", (101,))
     assert (await cur.fetchone())[0] == 0
 
     # The studio_run for this job/clip was NOT completed — it stays pending
     # (the finalize path that writes output_json + flips status to 'ok' was
     # skipped entirely).
-    cur = await db.execute(
-        "SELECT status, output_json FROM studio_run WHERE job_id = ?", (job_id,)
-    )
+    cur = await db.execute("SELECT status, output_json FROM studio_run WHERE job_id = ?", (job_id,))
     sr = await cur.fetchone()
     assert sr == ("pending", None)
 

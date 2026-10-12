@@ -14,7 +14,8 @@ def _md5_b64(data: bytes) -> str:
 
 
 def _service(instance_id="alpha"):
-    bucket = MagicMock(); bucket.name = "test-bucket"
+    bucket = MagicMock()
+    bucket.name = "test-bucket"
     s = GcsService.__new__(GcsService)
     s._bucket = bucket
     s._instance_id = instance_id
@@ -46,21 +47,22 @@ def test_gs_uri_namespaces_uploaded_clip():
 
 
 def test_upload_if_absent_uploads_uploaded_clip_to_namespaced_path(tmp_path: Path):
-    local = tmp_path / "f.mov"; local.write_bytes(b"data")
+    local = tmp_path / "f.mov"
+    local.write_bytes(b"data")
     s, bucket = _service(instance_id="alpha")
     bucket.get_blob.return_value = None
-    blob = MagicMock(); bucket.blob.return_value = blob
+    blob = MagicMock()
+    bucket.blob.return_value = blob
     up = UPLOAD_ID_BASE + 3
     uri = s.upload_if_absent(clip_id=up, local_path=local, mime="video/mp4")
     assert uri == f"gs://test-bucket/instances/alpha/uploads/{up}.mov"
-    bucket.blob.assert_called_with(
-        f"instances/alpha/uploads/{up}.mov", chunk_size=8 * 1024 * 1024
-    )
+    bucket.blob.assert_called_with(f"instances/alpha/uploads/{up}.mov", chunk_size=8 * 1024 * 1024)
 
 
 def test_delete_uploaded_clip_targets_namespaced_path():
     s, bucket = _service(instance_id="alpha")
-    blob = MagicMock(); bucket.blob.return_value = blob
+    blob = MagicMock()
+    bucket.blob.return_value = blob
     up = UPLOAD_ID_BASE + 9
     s.delete(clip_id=up)
     bucket.blob.assert_called_with(f"instances/alpha/uploads/{up}.mov")
@@ -138,25 +140,56 @@ def test_delete_calls_blob_delete():
     blob.delete.assert_called_once()
 
 
+def test_delete_treats_missing_blob_as_deleted():
+    """A blob that is already gone is the end state evict wants, so the index
+    row can be pruned. Any other error still propagates (#117)."""
+    from google.api_core.exceptions import NotFound
+
+    s, bucket = _service()
+    bucket.blob.return_value.delete.side_effect = NotFound("no such object")
+    s.delete(clip_id=42)  # does not raise
+
+
+def test_delete_propagates_other_errors():
+    from google.api_core.exceptions import ServiceUnavailable
+
+    s, bucket = _service()
+    bucket.blob.return_value.delete.side_effect = ServiceUnavailable("503")
+    with pytest.raises(ServiceUnavailable):
+        s.delete(clip_id=42)
+
+
+def test_bucket_exists_delegates_to_bucket():
+    s, bucket = _service()
+    bucket.exists.return_value = False
+    assert s.bucket_exists() is False
+
+
 def test_thumb_uri_path():
-    bucket = MagicMock(); bucket.name = "test-bucket"
-    service = GcsService.__new__(GcsService); service._bucket = bucket
+    bucket = MagicMock()
+    bucket.name = "test-bucket"
+    service = GcsService.__new__(GcsService)
+    service._bucket = bucket
     assert service.thumb_uri(7) == "gs://test-bucket/thumbs/7.jpg"
 
 
 def test_download_thumb_returns_false_when_absent(tmp_path: Path):
-    bucket = MagicMock(); bucket.name = "test-bucket"
+    bucket = MagicMock()
+    bucket.name = "test-bucket"
     bucket.get_blob.return_value = None
-    service = GcsService.__new__(GcsService); service._bucket = bucket
+    service = GcsService.__new__(GcsService)
+    service._bucket = bucket
     assert service.download_thumb(7, tmp_path / "7.jpg") is False
 
 
 def test_download_thumb_writes_and_returns_true(tmp_path: Path):
-    bucket = MagicMock(); bucket.name = "test-bucket"
+    bucket = MagicMock()
+    bucket.name = "test-bucket"
     blob = MagicMock()
     blob.download_to_filename.side_effect = lambda p, **k: Path(p).write_bytes(b"\xff\xd8jpg")
     bucket.get_blob.return_value = blob
-    service = GcsService.__new__(GcsService); service._bucket = bucket
+    service = GcsService.__new__(GcsService)
+    service._bucket = bucket
     dest = tmp_path / "7.jpg"
     assert service.download_thumb(7, dest) is True
     assert dest.read_bytes() == b"\xff\xd8jpg"
@@ -164,21 +197,27 @@ def test_download_thumb_writes_and_returns_true(tmp_path: Path):
 
 
 def test_download_thumb_false_on_empty_body(tmp_path: Path):
-    bucket = MagicMock(); bucket.name = "test-bucket"
+    bucket = MagicMock()
+    bucket.name = "test-bucket"
     blob = MagicMock()
     blob.download_to_filename.side_effect = lambda p, **k: Path(p).write_bytes(b"")
     bucket.get_blob.return_value = blob
-    service = GcsService.__new__(GcsService); service._bucket = bucket
+    service = GcsService.__new__(GcsService)
+    service._bucket = bucket
     dest = tmp_path / "7.jpg"
     assert service.download_thumb(7, dest) is False
     assert not dest.exists()
 
 
 def test_upload_thumb_overwrites_unconditionally(tmp_path: Path):
-    local = tmp_path / "7.jpg"; local.write_bytes(b"jpg")
-    bucket = MagicMock(); bucket.name = "test-bucket"
-    blob = MagicMock(); bucket.blob.return_value = blob
-    service = GcsService.__new__(GcsService); service._bucket = bucket
+    local = tmp_path / "7.jpg"
+    local.write_bytes(b"jpg")
+    bucket = MagicMock()
+    bucket.name = "test-bucket"
+    blob = MagicMock()
+    bucket.blob.return_value = blob
+    service = GcsService.__new__(GcsService)
+    service._bucket = bucket
     uri = service.upload_thumb(7, local)
     blob.upload_from_filename.assert_called_once_with(str(local), content_type="image/jpeg")
     assert uri == "gs://test-bucket/thumbs/7.jpg"
@@ -186,17 +225,19 @@ def test_upload_thumb_overwrites_unconditionally(tmp_path: Path):
 
 
 def test_download_thumb_cleans_up_partial_file_on_error(tmp_path: Path):
-    bucket = MagicMock(); bucket.name = "test-bucket"
+    bucket = MagicMock()
+    bucket.name = "test-bucket"
     blob = MagicMock()
     dest = tmp_path / "7.jpg"
 
     def side_effect(p, **k):
-        Path(p).write_bytes(b"partial")   # simulate partial write before error
+        Path(p).write_bytes(b"partial")  # simulate partial write before error
         raise RuntimeError("network error")
 
     blob.download_to_filename.side_effect = side_effect
     bucket.get_blob.return_value = blob
-    service = GcsService.__new__(GcsService); service._bucket = bucket
+    service = GcsService.__new__(GcsService)
+    service._bucket = bucket
 
     with pytest.raises(RuntimeError, match="network error"):
         service.download_thumb(7, dest)

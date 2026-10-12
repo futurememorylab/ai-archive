@@ -10,7 +10,6 @@ something to list.
 import asyncio
 import importlib
 
-import pytest
 from fastapi.testclient import TestClient
 
 
@@ -158,18 +157,36 @@ def test_prompts_tab_flags_partial_pricing(monkeypatch, tmp_path):
             async with aiosqlite.connect(db_path) as conn:
                 repo = RunTelemetryRepo()
                 # One priced run, one un-priced (NULL cost) run.
-                await repo.insert(conn, RunTelemetryRecord(
-                    occurred_at="2026-06-07T12:00:00+00:00", install_id="i", kind="studio",
-                    model="gemini-2.5-flash-lite", status="ok", media_kind="video+audio",
-                    media_duration_secs=60.0, prompt_version_id=vid,
-                    cost_usd=0.20, est_cost_usd_p50=0.15,
-                ))
-                await repo.insert(conn, RunTelemetryRecord(
-                    occurred_at="2026-06-07T12:00:00+00:00", install_id="i", kind="studio",
-                    model="gemini-2.5-flash-lite", status="ok", media_kind="video+audio",
-                    media_duration_secs=60.0, prompt_version_id=vid,
-                    cost_usd=None, est_cost_usd_p50=0.15,
-                ))
+                await repo.insert(
+                    conn,
+                    RunTelemetryRecord(
+                        occurred_at="2026-06-07T12:00:00+00:00",
+                        install_id="i",
+                        kind="studio",
+                        model="gemini-2.5-flash-lite",
+                        status="ok",
+                        media_kind="video+audio",
+                        media_duration_secs=60.0,
+                        prompt_version_id=vid,
+                        cost_usd=0.20,
+                        est_cost_usd_p50=0.15,
+                    ),
+                )
+                await repo.insert(
+                    conn,
+                    RunTelemetryRecord(
+                        occurred_at="2026-06-07T12:00:00+00:00",
+                        install_id="i",
+                        kind="studio",
+                        model="gemini-2.5-flash-lite",
+                        status="ok",
+                        media_kind="video+audio",
+                        media_duration_secs=60.0,
+                        prompt_version_id=vid,
+                        cost_usd=None,
+                        est_cost_usd_p50=0.15,
+                    ),
+                )
 
         asyncio.run(_seed_mixed(tmp_path / "app.db"))
 
@@ -188,7 +205,7 @@ def test_prompts_tab_calibrate_button_passes_media_kind(monkeypatch, tmp_path):
         assert r.status_code == 200
         # Kind lives in a data attribute, and the handler reads $el.
         assert 'data-cal-kind="image"' in r.text
-        assert 'openCalibrate($el)' in r.text
+        assert "openCalibrate($el)" in r.text
         # The old interpolated form must be gone (it broke on apostrophes).
         assert "'image')\">Calibrate" not in r.text
 

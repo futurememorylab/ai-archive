@@ -22,7 +22,7 @@ human decision points; everything else is automated or hands-off.
   moves the issue to Implementation.
 
 The full design and rationale live in
-`docs/superpowers/specs/2026-06-14-github-flow-design.md`; the implementation
+`docs/specs/2026-06-14-github-flow-design.md`; the implementation
 plan in `docs/superpowers/plans/2026-06-14-github-flow.md`.
 
 ## Alternatives

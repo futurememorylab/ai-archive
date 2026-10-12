@@ -18,6 +18,7 @@ def _make_app(monkeypatch, tmp_path):
     monkeypatch.setenv("APP_ENV", "dev")
     monkeypatch.delenv("CATDV_PASSWORD", raising=False)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     return main_mod.app, tmp_path
 
@@ -111,9 +112,7 @@ def test_hx_request_returns_card_partial(ctx):
 def _thumb_service(data_dir):
     """Real ThumbnailService over the thumbs cache dir (no durable store),
     so evict() actually unlinks the local poster."""
-    return ThumbnailService(
-        cache_dir=data_dir / "cache" / "thumbs", archive=MagicMock()
-    )
+    return ThumbnailService(cache_dir=data_dir / "cache" / "thumbs", archive=MagicMock())
 
 
 def test_remove_last_set_membership_gcs_the_upload(ctx):
@@ -158,13 +157,9 @@ def test_remove_from_one_of_two_sets_keeps_upload(ctx):
     clip_id = r.json()["clip_id"]
     first_set = r.json()["set_id"]
     # Add the same clip to a second set.
-    second = client.post(
-        "/api/studio/sets?source=uploaded", json={"name": "second"}
-    ).json()["id"]
+    second = client.post("/api/studio/sets?source=uploaded", json={"name": "second"}).json()["id"]
     assert (
-        client.post(
-            f"/api/studio/sets/{second}/clips", json={"clip_ids": [clip_id]}
-        ).status_code
+        client.post(f"/api/studio/sets/{second}/clips", json={"clip_ids": [clip_id]}).status_code
         == 200
     )
 
@@ -180,6 +175,7 @@ def test_remove_from_one_of_two_sets_keeps_upload(ctx):
 
 # ── ai_store mode: upload also pushes to GCS ─────────────────────────────────
 
+
 def _make_app_ai_store(monkeypatch, tmp_path):
     """Boot the app with media_cache=ai_store; no CatDV credentials so
     live_ctx must be injected manually via install_live_ctx."""
@@ -188,6 +184,7 @@ def _make_app_ai_store(monkeypatch, tmp_path):
     monkeypatch.setenv("MEDIA_CACHE", "ai_store")
     monkeypatch.delenv("CATDV_PASSWORD", raising=False)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     return main_mod.app, tmp_path
 
@@ -242,6 +239,7 @@ def test_upload_in_local_mode_also_pushes_to_ai_store(monkeypatch, tmp_path):
     monkeypatch.delenv("MEDIA_CACHE", raising=False)
     monkeypatch.delenv("CATDV_PASSWORD", raising=False)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     app = main_mod.app
 
@@ -272,6 +270,7 @@ def test_upload_ai_store_push_failure_does_not_break_upload(monkeypatch, tmp_pat
     monkeypatch.delenv("MEDIA_CACHE", raising=False)
     monkeypatch.delenv("CATDV_PASSWORD", raising=False)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     app = main_mod.app
 
@@ -325,6 +324,7 @@ def test_upload_poster_local_mode_no_durable_push(monkeypatch, tmp_path):
     monkeypatch.delenv("MEDIA_CACHE", raising=False)
     monkeypatch.delenv("CATDV_PASSWORD", raising=False)
     from backend.app import main as main_mod
+
     importlib.reload(main_mod)
     app = main_mod.app
 

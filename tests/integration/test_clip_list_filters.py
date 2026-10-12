@@ -306,6 +306,7 @@ async def test_intersection_of_cache_and_anno(db):
 # Batch (job) filter tests
 # ---------------------------------------------------------------------------
 
+
 async def _insert_job(db, *, job_id: int) -> None:
     """Insert a minimal job row (prompt_version_id=1 must already exist)."""
     await db.execute(

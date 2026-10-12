@@ -41,9 +41,7 @@ def _now(value):
 async def test_idle_past_threshold_disconnects():
     client = FakeClient(logged_in=True, last_activity=0.0)
     monitor = FakeMonitor()
-    idle = IdleDisconnector(
-        client=client, monitor=monitor, idle_timeout_s=900, clock=_now(901.0)
-    )
+    idle = IdleDisconnector(client=client, monitor=monitor, idle_timeout_s=900, clock=_now(901.0))
     assert await idle.check_once() is True
     assert client.logout_calls == 1
     assert monitor.probes == 1
@@ -53,9 +51,7 @@ async def test_idle_past_threshold_disconnects():
 async def test_recent_activity_is_noop():
     client = FakeClient(logged_in=True, last_activity=500.0)
     monitor = FakeMonitor()
-    idle = IdleDisconnector(
-        client=client, monitor=monitor, idle_timeout_s=900, clock=_now(900.0)
-    )
+    idle = IdleDisconnector(client=client, monitor=monitor, idle_timeout_s=900, clock=_now(900.0))
     assert await idle.check_once() is False
     assert client.logout_calls == 0
 
@@ -64,8 +60,6 @@ async def test_recent_activity_is_noop():
 async def test_not_logged_in_is_noop():
     client = FakeClient(logged_in=False, last_activity=0.0)
     monitor = FakeMonitor()
-    idle = IdleDisconnector(
-        client=client, monitor=monitor, idle_timeout_s=1, clock=_now(9999.0)
-    )
+    idle = IdleDisconnector(client=client, monitor=monitor, idle_timeout_s=1, clock=_now(9999.0))
     assert await idle.check_once() is False
     assert client.logout_calls == 0

@@ -8,6 +8,7 @@ Two bugs these pin against regressing:
      the active tab (AI tab → media-ai), not a hardcoded media-local that
      silently no-ops on the AI tab.
 """
+
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]

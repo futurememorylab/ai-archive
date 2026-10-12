@@ -68,9 +68,13 @@ async def test_complete_ok_persists_output_and_stats(db):
     rid = await repo.create_pending(db, prompt_version_id=10, clip_id=12041, model="gemini-2.5-pro")
     output = {"scenes": [{"name": "garden", "in_secs": 0, "out_secs": 12.4}]}
     await repo.complete_ok(
-        db, rid,
+        db,
+        rid,
         output_json=output,
-        duration_s=7.4, tokens_in=14820, tokens_out=612, cost_usd=0.0218,
+        duration_s=7.4,
+        tokens_in=14820,
+        tokens_out=612,
+        cost_usd=0.0218,
     )
     run = await repo.get(db, rid)
     assert run.status == "ok"

@@ -28,6 +28,7 @@ def test_nav_and_card_selectors_present():
 
 def test_dropzone_and_placeholder_styles_present():
     from pathlib import Path
+
     css = Path("backend/app/static/app.css").read_text()
     assert ".studio-dropzone" in css
     assert ".thumb-missing" in css

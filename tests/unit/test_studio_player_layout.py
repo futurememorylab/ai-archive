@@ -47,6 +47,5 @@ def test_studio_player_viewer_flexes_not_full_height():
         "transport); it should flex to fill the space above it"
     )
     assert re.search(r"flex:\s*1", body), (
-        ".studio-player .viewer should be flex:1 so it fills the space above "
-        "the transport"
+        ".studio-player .viewer should be flex:1 so it fills the space above the transport"
     )

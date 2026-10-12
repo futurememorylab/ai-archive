@@ -114,9 +114,7 @@ async def usage_pill(request: Request):
         usage = topbar_usage(await ctx.usage_service.current_month(now=datetime.now(UTC)))
     except Exception:  # noqa: BLE001 — the pill must never break the topbar
         usage = None
-    resp = templates.TemplateResponse(
-        request, "pages/_usage_pill_inner.html", {"usage": usage}
-    )
+    resp = templates.TemplateResponse(request, "pages/_usage_pill_inner.html", {"usage": usage})
     resp.headers["Cache-Control"] = "no-store"
     return resp
 
