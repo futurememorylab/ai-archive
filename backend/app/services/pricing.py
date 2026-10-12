@@ -11,6 +11,9 @@ and bump PRICING_VERSION whenever they change.
 
 Rates last verified: 2026-06-07 from
 https://cloud.google.com/vertex-ai/generative-ai/pricing
+(gemini-3.5-flash-lite / 3.6-flash / 3.8-flash added 2026-10-12 from
+https://ai.google.dev/gemini-api/docs/pricing; 3.6/3.8 Flash carry
+introductory rates that double on 2027-01-01.)
 
 NOTE: Gemini 2.5 Pro has tiered pricing (≤200K vs >200K input tokens).
 We use the ≤200K (standard) rate here — the vast majority of annotation
@@ -31,7 +34,7 @@ from backend.app.services.telemetry_capture import TokenUsage
 
 log = logging.getLogger(__name__)
 
-PRICING_VERSION = "2026-06"
+PRICING_VERSION = "2026-10"
 
 
 @dataclass(frozen=True)
@@ -93,21 +96,30 @@ SEED_RATE_CARDS: dict[str, RateCard] = {
         output_per_1m=1.50,
         source_url="https://cloud.google.com/vertex-ai/generative-ai/pricing",
     ),
-    "gemini-3.1-flash-lite-preview": RateCard(
-        # Deprecated preview ID (same rates as GA gemini-3.1-flash-lite);
-        # retained because still in the model catalog.
-        input_text_video_image_per_1m=0.25,
-        input_audio_per_1m=0.50,
-        input_cached_per_1m=0.025,
-        output_per_1m=1.50,
-        source_url="https://cloud.google.com/vertex-ai/generative-ai/pricing",
+    "gemini-3.5-flash-lite": RateCard(
+        input_text_video_image_per_1m=0.30,
+        input_audio_per_1m=0.30,
+        input_cached_per_1m=0.03,
+        output_per_1m=2.50,
+        source_url="https://ai.google.dev/gemini-api/docs/pricing",
     ),
-    "gemini-3.5-flash": RateCard(
-        input_text_video_image_per_1m=1.50,
-        input_audio_per_1m=1.50,
-        input_cached_per_1m=0.15,
-        output_per_1m=9.00,
-        source_url="https://cloud.google.com/vertex-ai/generative-ai/pricing",
+    "gemini-3.6-flash": RateCard(
+        # Introductory rate through 2026-12-31; from 2027-01-01 the list
+        # price is 1.50 input / 0.15 cached / 7.50 output. One rate for all
+        # input modalities.
+        input_text_video_image_per_1m=0.75,
+        input_audio_per_1m=0.75,
+        input_cached_per_1m=0.075,
+        output_per_1m=3.75,
+        source_url="https://ai.google.dev/gemini-api/docs/pricing",
+    ),
+    "gemini-3.8-flash": RateCard(
+        # Same introductory schedule as gemini-3.6-flash.
+        input_text_video_image_per_1m=0.75,
+        input_audio_per_1m=0.75,
+        input_cached_per_1m=0.075,
+        output_per_1m=3.75,
+        source_url="https://ai.google.dev/gemini-api/docs/pricing",
     ),
 }
 

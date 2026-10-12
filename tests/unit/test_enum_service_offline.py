@@ -11,7 +11,7 @@ async def test_enum_service_on_core_ctx_works_offline(tmp_path, monkeypatch):
     try:
         # reconcile ran during build → DB materialised, served offline
         models = await ctx.enum_service.generation_models()
-        assert len(models) == 8
+        assert len(models) == 9
         assert await ctx.enum_service.generation_default() == "gemini-2.5-flash-lite"
     finally:
         await ctx.aclose()

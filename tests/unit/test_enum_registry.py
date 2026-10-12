@@ -8,7 +8,7 @@ def test_generation_model_enum_is_editable_with_one_default():
     defaults = [v for v in spec.values if v.default]
     assert len(defaults) == 1, "exactly one seeded default"
     assert defaults[0].value == "gemini-2.5-flash-lite"
-    assert len(spec.values) == 8
+    assert len(spec.values) == 9
 
 
 def test_toast_level_enum_is_fixed():

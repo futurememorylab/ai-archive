@@ -38,7 +38,7 @@ async def test_reload_populates_active_cache_from_db(db):
 
 
 async def test_edit_rates_version_flows_into_compute_cost(db):
-    from backend.app.services.pricing import compute_cost
+    from backend.app.services.pricing import PRICING_VERSION, compute_cost
     from backend.app.services.telemetry_capture import TokenUsage
 
     svc = _service(db)
@@ -47,7 +47,7 @@ async def test_edit_rates_version_flows_into_compute_cost(db):
 
     usage = TokenUsage(tokens_in=1000)
     _, v0 = compute_cost(usage, "gemini-2.5-flash-lite")
-    assert v0 == "2026-06"  # seed version
+    assert v0 == PRICING_VERSION  # seed version
 
     await svc.edit_rates(
         "gemini-2.5-flash-lite",

@@ -174,7 +174,7 @@ def test_delete_model_removes_from_catalog_and_pricing(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as client:
         # give it a rate card first
         client.post(
-            "/admin/models/gemini-3.5-flash/rates",
+            "/admin/models/gemini-3.6-flash/rates",
             data={
                 "input_text_video_image_per_1m": 0.15,
                 "input_audio_per_1m": 0.25,
@@ -185,18 +185,18 @@ def test_delete_model_removes_from_catalog_and_pricing(monkeypatch, tmp_path):
         )
         r = client.request(
             "DELETE",
-            "/admin/models/gemini-3.5-flash",
+            "/admin/models/gemini-3.6-flash",
             headers={"HX-Request": "true"},
         )
         assert r.status_code == 200
-        assert "gemini-3.5-flash" not in r.text
+        assert "gemini-3.6-flash" not in r.text
 
         body = client.get("/admin/models").text
-        assert "gemini-3.5-flash" not in body
+        assert "gemini-3.6-flash" not in body
 
     from backend.app.services.pricing import rate_cards
 
-    assert "gemini-3.5-flash" not in rate_cards()
+    assert "gemini-3.6-flash" not in rate_cards()
 
 
 def test_set_default_moves_star(monkeypatch, tmp_path):

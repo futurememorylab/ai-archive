@@ -16,8 +16,11 @@ EXPECTED = {
     "gemini-3-flash-preview": (0.50, 1.00, 0.05, 3.00),
     "gemini-3.1-pro-preview": (2.00, 2.00, 0.20, 12.00),
     "gemini-3.1-flash-lite": (0.25, 0.50, 0.025, 1.50),
-    "gemini-3.1-flash-lite-preview": (0.25, 0.50, 0.025, 1.50),
-    "gemini-3.5-flash": (1.50, 1.50, 0.15, 9.00),
+    "gemini-3.5-flash-lite": (0.30, 0.30, 0.03, 2.50),
+    # Introductory rates until 2026-12-31; list price from 2027-01-01 is
+    # (1.50, 1.50, 0.15, 7.50).
+    "gemini-3.6-flash": (0.75, 0.75, 0.075, 3.75),
+    "gemini-3.8-flash": (0.75, 0.75, 0.075, 3.75),
 }
 
 
