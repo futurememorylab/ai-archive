@@ -21,7 +21,7 @@ in place and forbids *new* growth on each:
   ``fmtBytes`` (`static/format.js`).
 
 Each allow-list shrinks as the migration PRs land (see
-`docs/plans/2026-06-09-ui-consolidation-rollout-plan.md`). A coder who trips
+`docs/plans/2026-06-09-ui-consolidation-rollout-plan.md` in git history). A coder who trips
 this is routed to the reuse path by the assert message.
 
 Scope/limits (intentional): only the named families are covered, and only

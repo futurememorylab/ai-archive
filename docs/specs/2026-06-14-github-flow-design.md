@@ -115,7 +115,7 @@ issue vs. both.
   branched off `main`.
 - **One issue → one branch → one PR.** PR body contains `Closes #<n>` so merge
   auto-closes the issue (→ Done).
-- **Spec:** `docs/superpowers/specs/YYYY-MM-DD-<slug>-design.md`.
+- **Spec:** `docs/specs/YYYY-MM-DD-<slug>-design.md`.
   **Plan:** wherever `superpowers:writing-plans` writes it, committed on the
   same branch.
 
@@ -204,7 +204,7 @@ the agent:
    Setup: a Backlog issue #N. Action: invoke `gh-design` for #N. Expected: the
    issue moves to **Design** and gains `phase:design`; a branch
    `issue-<N>-<slug>` exists locally and on the remote; the branch contains a
-   spec under `docs/superpowers/specs/` and a plan file; a comment on the issue
+   spec under `docs/specs/` and a plan file; a comment on the issue
    links the branch/spec/plan. The skill reports "ready to hand off" and does
    **not** start a cloud session.
 

@@ -6,7 +6,7 @@ Two kinds live here:
     keep their Literal type in models/ for static checking.
   * Editable enums (editable=True) — these `values` are the *seed*. The DB
     table `enum_values` stores the user's edits, reconciled against this seed
-    at boot. See docs/superpowers/specs/2026-06-14-centralised-enumeration-design.md.
+    at boot. See docs/specs/2026-06-14-centralised-enumeration-design.md.
 """
 
 from __future__ import annotations

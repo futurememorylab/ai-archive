@@ -185,6 +185,6 @@ In order, with target durations:
   drop an ADR — see
   [`06-coding-standards.md`](./06-coding-standards.md#architecture-decisions-adrs).
 - If the change is part of a multi-PR feature, drop a plan under
-  `docs/plans/YYYY-MM-DD-<slug>.md`.
+  `docs/plans/YYYY-MM-DD-<slug>.md` and delete it once the work merges.
 - Restart with `kill -TERM <pid>` and wait for "Application shutdown
   complete" in the log. Then start the new build.
