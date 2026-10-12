@@ -35,6 +35,45 @@ def _archive_available(request: Request) -> bool:
     return live is not None and live.archive is not None
 
 
+def _nav_source(source: str | None, archive_available: bool) -> str:
+    """Navigator tab: honor an explicit `source` (carried across a prompt
+    switch by the prompt-picker link, so the navigator doesn't snap back to
+    Archive) when valid; otherwise default to Archive when connected, else
+    Uploaded. Archive is never selected while no archive is wired."""
+    if source in ("archive", "uploaded"):
+        nav_source = source
+    else:
+        nav_source = "archive" if archive_available else "uploaded"
+    if nav_source == "archive" and not archive_available:
+        nav_source = "uploaded"
+    return nav_source
+
+
+def _pick_versions(versions: list, version_id: int | None, compare_version_id: int | None):
+    """(active, compare) versions for the studio cards.
+
+    Active (cur): the requested version when it belongs to this prompt, else
+    the draft, else the first. Compare (cmp): the requested version when valid
+    and different from cur (no point comparing a version with itself).
+    """
+    version_ids = {v.id for v in versions}
+    active_version = None
+    if version_id is not None and version_id in version_ids:
+        active_version = next(v for v in versions if v.id == version_id)
+    elif versions:
+        active_version = next((v for v in versions if v.state == "draft"), versions[0])
+
+    compare_version = None
+    if (
+        compare_version_id is not None
+        and compare_version_id in version_ids
+        and active_version is not None
+        and compare_version_id != active_version.id
+    ):
+        compare_version = next(v for v in versions if v.id == compare_version_id)
+    return active_version, compare_version
+
+
 @router.get("/studio", response_class=HTMLResponse)
 async def studio_page(
     request: Request,
@@ -48,19 +87,9 @@ async def studio_page(
     ctx = get_core_ctx(request)
     prompts = await ctx.prompts_repo.list_active(ctx.db)
     archive_available = _archive_available(request)
-    # Tab selection: honor an explicit `source` (carried across a prompt switch
-    # by the prompt-picker link, so the navigator doesn't snap back to Archive)
-    # when valid; otherwise default to Archive when connected, else Uploaded.
-    if source in ("archive", "uploaded"):
-        nav_source = source
-    else:
-        nav_source = "archive" if archive_available else "uploaded"
-    if nav_source == "archive" and not archive_available:
-        nav_source = "uploaded"
+    nav_source = _nav_source(source, archive_available)
     sets = await ctx.studio_sets_repo.list_sets_with_counts(ctx.db, source=nav_source)
-    archive_clip_total = await ctx.studio_sets_repo.clip_total_for_source(
-        ctx.db, source="archive"
-    )
+    archive_clip_total = await ctx.studio_sets_repo.clip_total_for_source(ctx.db, source="archive")
     uploaded_clip_total = await ctx.studio_sets_repo.clip_total_for_source(
         ctx.db, source="uploaded"
     )
@@ -69,38 +98,16 @@ async def studio_page(
     versions: list = []
     if prompt_id is not None:
         try:
-            selected_prompt, versions = await ctx.prompts_repo.get_with_versions(
-                ctx.db, prompt_id
-            )
+            selected_prompt, versions = await ctx.prompts_repo.get_with_versions(ctx.db, prompt_id)
         except LookupError:
             selected_prompt = None
             versions = []
     elif prompts:
         first_id = prompts[0].id
         assert first_id is not None
-        selected_prompt, versions = await ctx.prompts_repo.get_with_versions(
-            ctx.db, first_id
-        )
+        selected_prompt, versions = await ctx.prompts_repo.get_with_versions(ctx.db, first_id)
 
-    version_ids = {v.id for v in versions}
-
-    # Pick the active version (cur).
-    active_version = None
-    if version_id is not None and version_id in version_ids:
-        active_version = next(v for v in versions if v.id == version_id)
-    elif versions:
-        active_version = next((v for v in versions if v.state == "draft"), versions[0])
-
-    # Pick the compare version (cmp). Skip when it equals cur (no point comparing
-    # a version with itself).
-    compare_version = None
-    if (
-        compare_version_id is not None
-        and compare_version_id in version_ids
-        and active_version is not None
-        and compare_version_id != active_version.id
-    ):
-        compare_version = next(v for v in versions if v.id == compare_version_id)
+    active_version, compare_version = _pick_versions(versions, version_id, compare_version_id)
 
     # Find the set that holds the focused clip so the sidebar can
     # auto-expand it on load — otherwise after a prompt switch the player
@@ -169,9 +176,7 @@ async def _studio_set(
 
     uploaded_ids = [c["clip_id"] for c in clips_rows if is_uploaded(c["clip_id"])]
     uploaded_meta = (
-        await ctx.uploaded_clips_repo.get_many(ctx.db, uploaded_ids)
-        if uploaded_ids
-        else {}
+        await ctx.uploaded_clips_repo.get_many(ctx.db, uploaded_ids) if uploaded_ids else {}
     )
 
     enriched = []
@@ -237,9 +242,7 @@ async def _studio_archive_picker(request: Request, set_id: int):
     )
 
 
-async def _build_overlay_row(
-    ctx, clip_id: int, version_id: int, *, cls: str
-) -> dict | None:
+async def _build_overlay_row(ctx, clip_id: int, version_id: int, *, cls: str) -> dict | None:
     """Resolve scenes + label for one version on one clip, sourced from
     review_items (not raw output_json) so the timeline overlay matches
     the Output card."""
@@ -265,11 +268,13 @@ async def _build_overlay_row(
             if it.kind != "marker":
                 continue
             m = _marker_from_review(it)
-            ranges.append({
-                "in_secs": m["in_secs"],
-                "out_secs": m["out_secs"],
-                "name": m["name"],
-            })
+            ranges.append(
+                {
+                    "in_secs": m["in_secs"],
+                    "out_secs": m["out_secs"],
+                    "name": m["name"],
+                }
+            )
     return {
         "key": f"v{v.version_num}",
         "ranges": ranges,
@@ -302,22 +307,40 @@ async def _overlay_rows_from_compare(
     cmp_ranges: list[dict] = []
     for row in model["scenes"]:
         if row["cur"]:
-            cur_ranges.append({
-                "in_secs": row["cur"]["in_secs"], "out_secs": row["cur"]["out_secs"],
-                "name": row["cur"]["name"], "scene_key": row["key"],
-                "status": row["status"],
-            })
+            cur_ranges.append(
+                {
+                    "in_secs": row["cur"]["in_secs"],
+                    "out_secs": row["cur"]["out_secs"],
+                    "name": row["cur"]["name"],
+                    "scene_key": row["key"],
+                    "status": row["status"],
+                }
+            )
         if row["cmp"]:
-            cmp_ranges.append({
-                "in_secs": row["cmp"]["in_secs"], "out_secs": row["cmp"]["out_secs"],
-                "name": row["cmp"]["name"], "scene_key": row["key"],
-                "status": row["status"],
-            })
+            cmp_ranges.append(
+                {
+                    "in_secs": row["cmp"]["in_secs"],
+                    "out_secs": row["cmp"]["out_secs"],
+                    "name": row["cmp"]["name"],
+                    "scene_key": row["key"],
+                    "status": row["status"],
+                }
+            )
     return [
-        {"key": f"v{cur_v.version_num}", "ranges": cur_ranges,
-         "cls": "range-cur", "alpine_list": None, "x_show": None},
-        {"key": f"v{cmp_v.version_num}", "ranges": cmp_ranges,
-         "cls": "range-cmp", "alpine_list": None, "x_show": None},
+        {
+            "key": f"v{cur_v.version_num}",
+            "ranges": cur_ranges,
+            "cls": "range-cur",
+            "alpine_list": None,
+            "x_show": None,
+        },
+        {
+            "key": f"v{cmp_v.version_num}",
+            "ranges": cmp_ranges,
+            "cls": "range-cmp",
+            "alpine_list": None,
+            "x_show": None,
+        },
     ]
 
 
@@ -359,8 +382,11 @@ async def _studio_player(
     rows: list[dict] = []
     if version_id is not None and compare_id is not None:
         rows = await _overlay_rows_from_compare(
-            ctx, clip_id, cur_version_id=version_id,
-            cmp_version_id=compare_id, archive=archive,
+            ctx,
+            clip_id,
+            cur_version_id=version_id,
+            cmp_version_id=compare_id,
+            archive=archive,
         )
     else:
         if version_id is not None:

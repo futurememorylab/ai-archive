@@ -1,0 +1,47 @@
+name: CI
+
+# The PR gate. deploy.yml only runs on pushes to main and v* tags, so without
+# this workflow a PR merges untested. Mirrors the local pre-commit hooks so
+# the gates hold even when a contributor (or an agent session) never ran
+# `pre-commit install`. basedpyright is left out until its baseline is
+# regenerated against the pinned version.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: ruff check
+        run: ruff check .
+      - name: ruff format
+        run: ruff format --check .
+      - name: Import contracts
+        run: lint-imports
+      - name: Structural erosion gate
+        run: python tools/erosion_gate.py --path backend --baseline .erosion-baseline.json --max-cc 30
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Tests
+        run: python -m pytest -n auto -q
