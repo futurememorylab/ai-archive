@@ -34,7 +34,7 @@ async def test_editable_empty_db_falls_back_to_registry_seed(db):
     # No reconcile yet → DB empty → must fall back to seed, never empty.
     vals = await svc.generation_models()
     assert len(vals) == 9
-    assert await svc.generation_default() == "gemini-2.5-flash-lite"
+    assert await svc.generation_default() == "gemini-3.5-flash-lite"
 
 
 @pytest.mark.asyncio
@@ -44,7 +44,7 @@ async def test_reconcile_materialises_seed_then_serves_from_db(db):
     rows = await EnumValuesRepo().all_rows(db, "gemini_generation_model")
     assert len(rows) == 9
     assert all(r.source == "seed" for r in rows)
-    assert await svc.generation_default() == "gemini-2.5-flash-lite"
+    assert await svc.generation_default() == "gemini-3.5-flash-lite"
 
 
 @pytest.mark.asyncio

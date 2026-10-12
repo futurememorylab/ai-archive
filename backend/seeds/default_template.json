@@ -49,5 +49,5 @@
     "decade":     {"kind": "field", "identifier": "pragafilm.dekáda.natočení"},
     "years":      {"kind": "field", "identifier": "pragafilm.rok.natočení"}
   },
-  "model": "gemini-2.5-pro"
+  "model": "gemini-3.8-flash"
 }
