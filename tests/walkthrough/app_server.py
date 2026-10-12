@@ -13,6 +13,7 @@ import contextlib
 import importlib
 import os
 import shutil
+import socket
 import threading
 import time
 from pathlib import Path
@@ -44,11 +45,20 @@ _OFFLINE_ENV = {
 }
 
 
+def free_port() -> int:
+    """An unused localhost port (the OS picks it)."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
 class WalkthroughApp:
-    def __init__(self, data_dir: Path, port: int = 8766) -> None:
+    def __init__(self, data_dir: Path, port: int | None = None) -> None:
+        # No fixed default: parallel pytest workers would collide. The /e2e CLI
+        # (run.py) passes 8766 explicitly so recordings keep a stable URL.
         self.data_dir = Path(data_dir)
-        self.port = port
-        self.base_url = f"http://127.0.0.1:{port}"
+        self.port = port if port is not None else free_port()
+        self.base_url = f"http://127.0.0.1:{self.port}"
         self._server: uvicorn.Server | None = None
         self._thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None

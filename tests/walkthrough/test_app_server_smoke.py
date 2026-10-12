@@ -14,7 +14,7 @@ from tests.walkthrough.app_server import WalkthroughApp
 def app_url(tmp_path):
     if shutil.which("ffmpeg") is None:
         pytest.skip("ffmpeg required to seed the proxy video")
-    app = WalkthroughApp(data_dir=tmp_path, port=8766)
+    app = WalkthroughApp(data_dir=tmp_path)
     app.start()
     try:
         yield app.base_url
