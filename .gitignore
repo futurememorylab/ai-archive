@@ -51,3 +51,4 @@ tests/walkthrough/artifacts/
 
 # Per-machine agent notes (template: docs/onboarding/CLAUDE.local.example.md)
 CLAUDE.local.md
+.claude/scheduled_tasks.lock

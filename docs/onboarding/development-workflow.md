@@ -1,28 +1,26 @@
-# Development workflow — Claude Code + Superpowers
+# Development workflow
 
-This is our standard process for AI-assisted development. AI-assisted work
-produces large diffs quickly. Without a shared workflow that turns into merge
-conflicts, unreviewed code, and lost design intent. Follow this for all
-implementation work.
+How we build with AI coding agents (Claude Code, opencode). Agents produce
+large diffs quickly; without a shared flow that turns into merge conflicts,
+unreviewed code and lost design intent. The agent-facing rules are in
+`AGENTS.md`; this page is the human-facing process.
 
 ## Lifecycle at a glance
 
-The full path of a single PR. A CI failure or a review change request loops
-back into the Superpowers loop; a clean pass squash-merges to `main` and the
-branch is deleted.
+A CI failure or a review change request loops back into the build loop; a
+clean pass squash-merges to `main` and the branch is deleted.
 
 ```mermaid
 flowchart LR
-    M["main<br/>spec + plan.md"] --> B["Cut short-lived<br/>branch from main"]
-    B --> L["Superpowers loop<br/>brainstorm to TDD"]
+    I["Issue on the<br/>AI-Archive Flow board"] --> D["gh-design:<br/>branch + spec + plan"]
+    D --> L["Build loop<br/>tests first"]
     L --> P["Push, open PR"]
     P --> CI{"CI green?"}
     CI -- no --> L
     CI -- yes --> R{"Human<br/>approval?"}
     R -- changes --> L
     R -- approved --> S["Squash-merge<br/>to main"]
-    S --> D["Delete branch<br/>and worktree"]
-    D --> M
+    S --> X["Delete branch"]
 ```
 
 ## Branching model: trunk-based
@@ -35,45 +33,42 @@ flowchart LR
   branch with implementation branches hanging off it is an epic branch in
   disguise — it defers all integration to one merge and re-creates big-bang
   integration. Don't.
-- `main` is protected: no direct pushes. Merge only via PR with green CI and at
-  least one human approval.
-- Branch naming: `feat/<ticket>-<short-desc>`, `fix/<ticket>-<short-desc>`,
-  `chore/<short-desc>`.
+- `main` should be protected: no direct pushes, merge only via PR with green CI
+  and at least one human approval. (Set this in GitHub → Settings → Branches;
+  until then it is convention only.)
+- Branch naming: `<issue>-<short-desc>` for board issues (what `gh-design`
+  creates), `chore/<short-desc>` otherwise. Agent sessions may use their own
+  `claude/...` branch names.
 
-## Specs and plans live on `main`
+## Specs and plans live on the feature branch
 
-- A multi-PR feature starts with a spec and `plan.md` committed to `main` as
-  **its own small PR**.
-- That PR gets a human review. **This review is the spec sign-off gate** —
-  implementation does not start until it merges. Catching a wrong spec here is
-  cheap; catching it at the final implementation PR is not.
-- `plan.md` contains a checklist. Each implementation PR ticks its own boxes.
-  The copy on `main` is the live, visible progress ledger.
-- A planning document is inert — it ships nothing and breaks nothing. Committing
-  an in-progress spec to `main` does not violate "always releasable".
-- If the spec changes mid-build, that is its own small reviewed PR. Design
-  changes stay loud and visible in history.
+- `gh-design` cuts the issue branch `<N>-<slug>` from `main` and commits the
+  spec (`docs/specs/<date>-<slug>-design.md`) and the plan
+  (`docs/plans/<date>-<slug>.md`) there. `gh-handoff` then hands the branch to
+  a cloud session to implement.
+- The PR carries the spec, the plan and the code together, so the reviewer
+  reads intent and diff in one place. For a risky design, open the PR as a
+  draft with only the spec and plan and get a sign-off before building.
+- Every spec ends with **Manual acceptance flows** (see `AGENTS.md`).
+- A plan is scratch for the PR that implements it. Once that PR merges, the
+  code, tests and spec are the record; delete the plan in the same PR or
+  soon after, so later agents don't read it as current truth.
 
-## The per-task loop (Superpowers)
+## The build loop
 
-For each implementation branch:
-
-1. **Brainstorm** — refine intent into a validated mini-spec scoped to this PR.
-2. **Worktree** — `git worktree add` an isolated workspace on a fresh branch cut
-   from the latest `main`.
-3. **Plan** — confirm the slice of `plan.md` this PR delivers.
-4. **Build** — TDD, tests first. Granular commits per micro-task; these get
-   squashed at merge.
-5. **Self-review** — fresh-agent review pass. This is pre-PR hygiene, **not** a
+1. **Agree the design.** For anything non-trivial, start in plan mode and
+   let the agent ask clarifying questions before it writes code.
+2. **Build test-first.** A failing test, then the change. Granular commits
+   are fine; they get squashed at merge.
+3. **Review your own diff.** Run `/code-review` (bugs) and `/simplify`
+   (reuse and cleanup) before asking a human. This is hygiene, not a
    substitute for human review.
-6. **Simplify** — run `/simplify` to review the diff and apply reuse,
-   simplification, and efficiency cleanups. Shrinks the diff before humans
-   look at it.
-7. **Finish** — push, open PR.
+4. **Run the gates locally.** `pre-commit run --all-files` and
+   `pytest -n auto`; CI runs the same checks.
+5. **Push and open the PR.**
 
-Worktrees are per-machine. One developer may run several loops in parallel
-worktrees; this is invisible to the rest of the team. A worktree maps to one
-branch — it is not a shared concept.
+Parallel work in isolated worktrees is fine and invisible to the rest of
+the team; one worktree maps to one branch.
 
 ## Working in parallel (two or more developers)
 
@@ -85,7 +80,7 @@ branch — it is not a shared concept.
 - Resolve conflicts on your branch, re-run tests, then merge. **Never merge a
   branch that has not been rebased onto the current `main`.**
 
-Both branches are cut from the same spec commit and develop in parallel. Each
+Both branches are cut from the same `main` commit and develop in parallel. Each
 branch's granular TDD commits collapse into a single squash-merge commit on
 `main`, after which the branch is deleted. `feat/pr-2` merges second, so it
 rebases onto the latest `main` — picking up PR-1 — before its own merge.
@@ -93,7 +88,7 @@ rebases onto the latest `main` — picking up PR-1 — before its own merge.
 ```mermaid
 gitGraph
    commit id: "init"
-   commit id: "spec + plan.md"
+   commit id: "main"
    branch feat/pr-1
    branch feat/pr-2
    checkout feat/pr-1
@@ -136,21 +131,23 @@ develop on trunk.
 - **Squash-merge every PR.** A branch carries many granular TDD commits; `main`
   gets one commit per PR.
 - The squash commit message: a clear summary plus a reference to the ticket and
-  the `plan.md` step.
+  the plan step.
 - **Delete the branch immediately after merge.** Remove the worktree
   (`git worktree remove`).
 - The next task starts from a fresh worktree off the updated `main`.
 
 ## CI
 
-- CI runs the full test suite on every PR, against the **merge result** — not
-  just the branch tip.
-- Green CI is a required merge gate. A local "tests pass" or a Superpowers clean
-  baseline is a local claim. CI is the team's source of truth.
+- `.github/workflows/ci.yml` runs on every PR and on `main`: ruff check,
+  ruff format, import contracts, the erosion (complexity) gate and the full
+  test suite. basedpyright is still local-only until its baseline is
+  regenerated.
+- Green CI is a required merge gate. A local "tests pass" is a local claim;
+  CI is the team's source of truth.
 
 ## Code review
 
-- The reviewer reads the spec / `plan.md` **first**, then reviews the diff
+- The reviewer reads the spec and plan **first**, then reviews the diff
   against stated intent. Review the intent, not just the lines.
 - AI self-review covers mechanical issues — dead code, missed edge cases, test
   gaps. Humans own architecture, security, and "is this the right thing".
@@ -171,21 +168,21 @@ develop on trunk.
 **Before opening the PR**
 
 - [ ] Branch cut from the current `main`
-- [ ] Scoped to one slice of `plan.md`
+- [ ] Scoped to one issue or one slice of its plan
 - [ ] Tests written and passing locally
-- [ ] Fresh-agent self-review done
-- [ ] `/simplify` run on the diff
+- [ ] `/code-review` and `/simplify` run on the diff
+- [ ] Walkthrough scenario updated if the UI changed
 - [ ] Rebased onto the latest `origin/main`
 
 **Before merging**
 
 - [ ] Green CI
 - [ ] One human approval
-- [ ] `plan.md` checkboxes updated
+- [ ] Plan checkboxes ticked (or the plan deleted)
 - [ ] Feature flag in place if the work is not yet user-ready
 
 **After merging**
 
 - [ ] Squash-merged
 - [ ] Branch deleted
-- [ ] Worktree removed
+- [ ] Worktree removed, if you used one

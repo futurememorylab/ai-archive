@@ -31,7 +31,7 @@ diagnostic dispatch before switching — don't assume the doc string alone.
    ```bash
    BR="${N}-${SLUG}"
    git fetch origin "$BR" || { echo "No remote branch $BR — run gh-design first"; exit 1; }
-   git ls-tree -r --name-only "origin/$BR" -- docs/superpowers/plans \
+   git ls-tree -r --name-only "origin/$BR" -- docs/plans \
      | grep -q . || { echo "No plan committed on $BR — run gh-design first"; exit 1; }
    ```
    If either check fails, stop and tell the user exactly which is missing
@@ -78,8 +78,10 @@ diagnostic dispatch before switching — don't assume the doc string alone.
      }
    }
    ```
-   Prompt (`events[0].data.message.content`) — this is the text live on the
-   routine today; keep it in sync if the routine is ever edited:
+   Prompt (`events[0].data.message.content`). Keep the live routine in sync
+   with this text: as of 2026-10-12 the live copy still names
+   `docs/superpowers/plans/` and `superpowers:subagent-driven-development`
+   and must be updated (`RemoteTrigger update`) to match:
    > You are implementing a pre-written plan. Read the run context `text`
    > field (e.g. `issue=#<N> branch=<branch>`) for the issue number and
    > intended branch.
@@ -88,14 +90,15 @@ diagnostic dispatch before switching — don't assume the doc string alone.
    > `git rev-parse --abbrev-ref HEAD` must equal `<branch>`. If the
    > environment forces a different working branch, note its real name —
    > you'll report it in step 6.
-   > 2) Read the plan under `docs/superpowers/plans/` on that branch. Count
+   > 2) Read the plan under `docs/plans/` on that branch. Count
    > the tasks.
    > 3) After Task 1 lands (committed + tests green), PUSH and immediately
    > open a DRAFT pull request to main. Body MUST contain `Closes #<N>` and
    > a checklist with one box per plan task (`- [x] Task 1: <title>` /
    > `- [ ] Task 2: <title>` ...).
-   > 4) Implement remaining tasks with `superpowers:subagent-driven-development`,
-   > in order. After EACH task: commit (tests green first), push (explicit
+   > 4) Implement remaining tasks in order, test first, delegating
+   > independent tasks to sub-agents (Task tool) where that helps.
+   > After EACH task: commit (tests green first), push (explicit
    > refspec: `git push origin HEAD:<branch>`), then tick that task's box in
    > the PR body. Push after every task, not at the end.
    > 5) When all tasks pass, run the plan's full-suite gate, paste the
@@ -175,9 +178,9 @@ diagnostic dispatch before switching — don't assume the doc string alone.
 - Never fire a run when the preconditions fail — a cloud run against a
   missing plan wastes a session and confuses the board.
 - The routine's `allowed_tools` must include **Bash** (for the `gh` / PR /
-  issue steps) and **Task** (so it can use
-  `subagent-driven-development`) — without Task it falls back to
-  implementing the plan directly.
+  issue steps) and **Task** (so it can
+  delegate tasks to sub-agents) — without Task it implements every task
+  itself.
 - Reuse the single `implement-issue` routine across all issues; do not
   create a routine per issue — routines aren't programmatically deletable.
 - The routine's identity lacks GitHub Projects write scope — board moves
