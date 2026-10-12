@@ -33,7 +33,7 @@ async def test_editable_empty_db_falls_back_to_registry_seed(db):
     svc = _svc(db)
     # No reconcile yet → DB empty → must fall back to seed, never empty.
     vals = await svc.generation_models()
-    assert len(vals) == 8
+    assert len(vals) == 9
     assert await svc.generation_default() == "gemini-2.5-flash-lite"
 
 
@@ -42,7 +42,7 @@ async def test_reconcile_materialises_seed_then_serves_from_db(db):
     svc = _svc(db)
     await svc.reconcile_seeds()
     rows = await EnumValuesRepo().all_rows(db, "gemini_generation_model")
-    assert len(rows) == 8
+    assert len(rows) == 9
     assert all(r.source == "seed" for r in rows)
     assert await svc.generation_default() == "gemini-2.5-flash-lite"
 
@@ -51,11 +51,11 @@ async def test_reconcile_materialises_seed_then_serves_from_db(db):
 async def test_reconcile_does_not_revive_tombstone_or_clobber(db):
     svc = _svc(db)
     await svc.reconcile_seeds()
-    await svc.remove_value("gemini_generation_model", "gemini-3.5-flash")
+    await svc.remove_value("gemini_generation_model", "gemini-3.6-flash")
     await svc.set_default("gemini_generation_model", "gemini-2.5-flash")
     await svc.reconcile_seeds()  # second boot
     live = {v.value for v in await svc.generation_models()}
-    assert "gemini-3.5-flash" not in live  # tombstone honoured
+    assert "gemini-3.6-flash" not in live  # tombstone honoured
     assert await svc.generation_default() == "gemini-2.5-flash"  # edit preserved
 
 

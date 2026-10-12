@@ -18,13 +18,13 @@ def test_new_prompt_dropdown_reflects_catalog_and_default(monkeypatch, tmp_path)
         async def _edit():
             svc = main_mod.app.state.core_ctx.enum_service
             await svc.add_value("gemini_generation_model", "gemini-4.0-pro")
-            await svc.set_enabled("gemini_generation_model", "gemini-3.5-flash", enabled=False)
+            await svc.set_enabled("gemini_generation_model", "gemini-3.6-flash", enabled=False)
 
         client.portal.call(_edit)
 
         html = client.get("/prompts/new").text
         assert "gemini-4.0-pro" in html  # runtime add visible
-        assert "gemini-3.5-flash" not in html  # disabled excluded
+        assert "gemini-3.6-flash" not in html  # disabled excluded
 
 
 def test_orphaned_model_still_shown_in_edit_form(monkeypatch, tmp_path):

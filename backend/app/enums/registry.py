@@ -48,8 +48,9 @@ ENUM_REGISTRY: dict[str, EnumSpec] = {
             _m("gemini-3-flash-preview"),
             _m("gemini-3.1-pro-preview"),
             _m("gemini-3.1-flash-lite"),
-            _m("gemini-3.1-flash-lite-preview"),
-            _m("gemini-3.5-flash"),
+            _m("gemini-3.5-flash-lite"),
+            _m("gemini-3.6-flash"),
+            _m("gemini-3.8-flash"),
         ),
     ),
     "toast_level": EnumSpec(

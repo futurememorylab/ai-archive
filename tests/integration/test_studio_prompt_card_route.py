@@ -128,7 +128,7 @@ def test_model_picker_uses_centralised_enum_not_hardcoded(client):
     r = client.get(f"/studio/_prompt_card?side=cur&prompt_version_id={v2}")
     assert r.status_code == 200
     # A registry model that the hardcoded list never had.
-    assert "gemini-3.5-flash" in r.text
+    assert "gemini-3.6-flash" in r.text
     # The hardcoded entry that was never in the registry must be gone.
     assert "gemini-2.0-pro" not in r.text
 
