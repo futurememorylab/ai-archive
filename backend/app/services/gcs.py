@@ -9,6 +9,7 @@ from pathlib import Path
 
 import google.auth
 import google.auth.transport.requests
+from google.api_core.exceptions import NotFound
 from google.cloud import storage  # type: ignore[import-not-found]
 
 from backend.app.uploaded_ids import is_uploaded
@@ -66,8 +67,16 @@ class GcsService:
         return f"gs://{self._bucket.name}/{blob_name}"
 
     def delete(self, clip_id: int) -> None:
+        """Delete the clip's blob. An already-missing blob counts as deleted;
+        any other error propagates so the caller keeps its index row."""
         blob = self._bucket.blob(self._blob_name(clip_id))
-        blob.delete()
+        try:
+            blob.delete()
+        except NotFound:
+            pass
+
+    def bucket_exists(self) -> bool:
+        return self._bucket.exists()
 
     def thumb_uri(self, clip_id: int) -> str:
         return f"gs://{self._bucket.name}/thumbs/{clip_id}.jpg"

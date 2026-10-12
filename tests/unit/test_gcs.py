@@ -140,6 +140,31 @@ def test_delete_calls_blob_delete():
     blob.delete.assert_called_once()
 
 
+def test_delete_treats_missing_blob_as_deleted():
+    """A blob that is already gone is the end state evict wants, so the index
+    row can be pruned. Any other error still propagates (#117)."""
+    from google.api_core.exceptions import NotFound
+
+    s, bucket = _service()
+    bucket.blob.return_value.delete.side_effect = NotFound("no such object")
+    s.delete(clip_id=42)  # does not raise
+
+
+def test_delete_propagates_other_errors():
+    from google.api_core.exceptions import ServiceUnavailable
+
+    s, bucket = _service()
+    bucket.blob.return_value.delete.side_effect = ServiceUnavailable("503")
+    with pytest.raises(ServiceUnavailable):
+        s.delete(clip_id=42)
+
+
+def test_bucket_exists_delegates_to_bucket():
+    s, bucket = _service()
+    bucket.exists.return_value = False
+    assert s.bucket_exists() is False
+
+
 def test_thumb_uri_path():
     bucket = MagicMock()
     bucket.name = "test-bucket"

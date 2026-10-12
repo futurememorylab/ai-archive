@@ -372,3 +372,27 @@ async def test_who_provider_used(db, tmp_path):
     await actions.evict_local_media(key)
     cur = await db.execute("SELECT who FROM cache_actions_log ORDER BY id DESC LIMIT 1")
     assert (await cur.fetchone())[0] == "system"
+
+
+class _FailingGcs:
+    bucket_name = "b"
+
+    def delete(self, *, clip_id):
+        raise RuntimeError("503 backend unavailable")
+
+
+@pytest.mark.asyncio
+async def test_evict_ai_keeps_index_row_when_gcs_delete_fails(db):
+    """#117: with the real GCS adapter, a failed bucket delete must leave the
+    ai_store_files row (so orphan GC can retry) and report an error."""
+    from backend.app.archive.ai_stores.gcs.adapter import GcsInputStore
+    from backend.app.repositories.ai_store_files import AIStoreFilesRepo
+
+    key = ("catdv", "78")
+    await _seed_ai(db, key, size_bytes=42)
+    store = GcsInputStore(gcs=_FailingGcs(), files_repo=AIStoreFilesRepo(), db_provider=lambda: db)
+    out = await _actions(db, ai_store=store).evict_ai_media(key)
+    assert out.result == "error"
+    assert "503" in out.detail
+    cur = await db.execute("SELECT COUNT(*) FROM ai_store_files WHERE provider_clip_id='78'")
+    assert (await cur.fetchone())[0] == 1
