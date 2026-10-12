@@ -48,3 +48,6 @@ logs/
 
 # Playwright walkthrough recordings (regenerated on demand)
 tests/walkthrough/artifacts/
+
+# Per-machine agent notes (template: docs/onboarding/CLAUDE.local.example.md)
+CLAUDE.local.md
