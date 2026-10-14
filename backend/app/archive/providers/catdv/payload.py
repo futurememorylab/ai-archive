@@ -1,16 +1,29 @@
 """CatDV PUT-body builder. Translates a list of ChangeOps into the minimal
-JSON body CatDV expects (markers, notes, fields)."""
+JSON body CatDV expects (markers, fields), and is the ONE place the #123
+ownership rule is enforced for the CatDV provider.
+
+The app writes only what it owns: markers with ``category == AI_MARKER_CATEGORY``
+and the fields in ``AI_OWNED_FIELDS``. Non-AI markers (human, or legacy app
+markers) pass through byte-identical; the AI marker set is replaced wholesale;
+any field/note target outside ``AI_OWNED_FIELDS`` raises ``FatalProviderError``
+rather than being silently written. See ADR 0127.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Iterable
 from typing import Any
 
+from backend.app.archive.errors import FatalProviderError
 from backend.app.archive.model import (
+    AI_MARKER_CATEGORY,
+    AI_OWNED_FIELDS,
     AddMarkers,
     AppendNote,
     ChangeOp,
+    Marker,
     ReconcileMarkers,
+    ReplaceAIMarkers,
     ReplaceNote,
     SetField,
 )
@@ -18,11 +31,27 @@ from backend.app.archive.providers.catdv.mapping import marker_to_catdv
 
 NOTE_SEPARATOR = "\n\n---\n\n"
 DEFAULT_FPS = 25.0
-# CatDV's built-in note properties live at the top level of the clip JSON,
-# not in the user-defined `fields` map (see mapping.from_catdv_clip, which
-# reads them top-level). A note op targeting one of these must be written
-# top-level so it round-trips; any other target is a user field.
-TOP_LEVEL_NOTE_TARGETS = ("notes", "bigNotes")
+
+# The marker ops that resolve to "replace the AI set with these markers". Only
+# ReplaceAIMarkers is emitted now; AddMarkers / ReconcileMarkers are legacy rows
+# that may still be queued and are routed through the SAME ownership rule.
+_MARKER_OPS = (ReplaceAIMarkers, AddMarkers, ReconcileMarkers)
+
+
+def _require_owned_field(target: str) -> None:
+    """Refuse any write to a field/note target the app does not own.
+
+    This is the guard that makes the ownership rule un-bypassable: a SetField or
+    note op for anything but ``AI_OWNED_FIELDS`` (``pragafilm.popis.materialu``,
+    the decade/year fields, the top-level ``notes`` / ``bigNotes``, …) fails
+    loudly instead of overwriting human data. Legacy queued ops to old targets
+    hit this too, so a stale row can never silently clobber a human field.
+    """
+    if target not in AI_OWNED_FIELDS:
+        raise FatalProviderError(
+            f"refusing to write non-AI-owned target {target!r}: the app owns only "
+            f"{AI_OWNED_FIELDS} and AI-category markers (ADR 0127)"
+        )
 
 
 def build_put_payload(
@@ -33,18 +62,19 @@ def build_put_payload(
     """Build a minimal CatDV PUT body from a list of ChangeOps.
 
     Invariants:
-      - markers array is replaced wholesale by CatDV PUT, so any AddMarkers op
-        must merge with existing markers and dedupe on in.frm.
-      - other arrays/fields not touched by ops do NOT appear in the payload.
-      - AppendNote joins with a separator when prior text exists.
+      - the markers array is replaced wholesale by CatDV PUT, so it is sent as
+        [every live non-AI marker, byte-identical] + [the desired AI set];
+      - only ``AI_OWNED_FIELDS`` may be written; any other target raises;
+      - arrays/fields not touched by ops do NOT appear in the payload;
+      - AppendNote to an owned field joins with a separator when prior text
+        exists, and is idempotent on re-drain.
     """
     payload: dict[str, Any] = {}
 
     ops_list = list(ops)
-    add_ops = [o for o in ops_list if isinstance(o, AddMarkers)]
-    reconcile_ops = [o for o in ops_list if isinstance(o, ReconcileMarkers)]
-    if add_ops or reconcile_ops:
-        payload["markers"] = _merged_markers(current, add_ops, reconcile_ops)
+    marker_ops = [o for o in ops_list if isinstance(o, _MARKER_OPS)]
+    if marker_ops:
+        payload["markers"] = _owned_markers(current, marker_ops)
 
     field_changes: dict[str, Any] = {}
     # Accumulate note text per target across this batch's ops. The SyncEngine
@@ -61,15 +91,14 @@ def build_put_payload(
 
     def _emit_note(target: str, text: str) -> None:
         note_text[target] = text
-        if target in TOP_LEVEL_NOTE_TARGETS:
-            payload[target] = text
-        else:
-            field_changes[target] = text
+        field_changes[target] = text
 
     for op in ops_list:
         if isinstance(op, SetField):
+            _require_owned_field(op.identifier)
             field_changes[op.identifier] = op.value
         elif isinstance(op, AppendNote):
+            _require_owned_field(op.target)
             existing_text = _current_note_text(op.target)
             if existing_text == op.text or existing_text.endswith(NOTE_SEPARATOR + op.text):
                 # Idempotent re-drain: the append already landed (the running
@@ -82,6 +111,7 @@ def build_put_payload(
             else:
                 _emit_note(op.target, op.text)
         elif isinstance(op, ReplaceNote):
+            _require_owned_field(op.target)
             _emit_note(op.target, op.text)
 
     if field_changes:
@@ -89,48 +119,48 @@ def build_put_payload(
     return payload
 
 
-def _merged_markers(
+def _owned_markers(
     current: dict[str, Any],
-    add_ops: list[AddMarkers],
-    reconcile_ops: list[ReconcileMarkers],
+    marker_ops: list[ChangeOp],
 ) -> list[dict[str, Any]]:
-    """The full markers array to PUT after applying the marker ops.
+    """The full markers array to PUT under the ownership rule.
 
-    CatDV replaces the markers array wholesale on PUT, so the result is the
-    final set we send: the live clip's markers with the ops applied.
+    CatDV replaces the markers array wholesale on PUT, so the result is:
+
+        [m for m in live if m.category != AI_MARKER_CATEGORY]   # human: untouched
+      + [marker_to_catdv(d) for d in desired]                   # ours: full replace
+
+    which gives update AND delete of the AI set without per-marker IDs, while
+    every non-AI marker (human, or a legacy app marker) is preserved exactly.
+    A same-frame human/AI collision no longer matters: both stay.
+
+    ReplaceAIMarkers is a *replace*, so when several apply batches for one clip
+    merge into one ChangeSet (oldest-first), the FRESHEST marker op defines the
+    AI set — concatenating them would resurrect markers a later batch deleted.
     """
     fps = _clip_fps(current)
-    working = list(current.get("markers") or [])
-    # AddMarkers (additive publish-forward): our markers win on a same-frm
-    # conflict (anti-mojibake); markers we don't touch are preserved.
-    if add_ops:
-        new_markers: list[dict[str, Any]] = []
-        new_frms: set[int] = set()
-        for op in add_ops:
-            for marker in op.markers:
-                raw = marker_to_catdv(marker, fps)
-                frm = _in_frm(raw)
-                if frm is not None and frm in new_frms:
-                    continue
-                new_markers.append(raw)
-                if frm is not None:
-                    new_frms.add(frm)
-        working = [m for m in working if _in_frm(m) not in new_frms] + new_markers
-    # ReconcileMarkers (switch / Make-live): drop OUR other-version markers
-    # (drop_frm) and re-assert the target's (desired), but KEEP markers we
-    # never authored (pre-existing / human). Frames derive from the clip's
-    # real fps via the Timecode fps=0.0 sentinel.
-    for op in reconcile_ops:
-        desired = [marker_to_catdv(m, fps) for m in op.desired]
-        desired_frm = {_in_frm(m) for m in desired}
-        drop_frm = {round(s * fps) for s in op.drop_secs}
-        working = [
-            m for m in working if _in_frm(m) not in drop_frm and _in_frm(m) not in desired_frm
-        ] + desired
+    live = list(current.get("markers") or [])
+    kept = [m for m in live if _category_of(m) != AI_MARKER_CATEGORY]
+
+    desired_markers = _desired_of(marker_ops[-1])
+    desired = [marker_to_catdv(m, fps) for m in desired_markers]
     # Marker text is sent as-is: _call_json declares charset=utf-8, so CatDV
-    # stores our UTF-8 exactly — there is no per-write mis-encoding left to
-    # pre-empt (confirmed against the live server).
-    return working
+    # stores our UTF-8 exactly; the kept non-AI markers are passed through
+    # unchanged, with no write-side repair.
+    return kept + desired
+
+
+def _desired_of(op: ChangeOp) -> tuple[Marker, ...]:
+    """The marker list a (possibly legacy) marker op wants as the AI set."""
+    if isinstance(op, (ReplaceAIMarkers, ReconcileMarkers)):
+        return op.desired
+    if isinstance(op, AddMarkers):
+        return op.markers
+    return ()
+
+
+def _category_of(marker: dict[str, Any]) -> str | None:
+    return marker.get("category") if isinstance(marker, dict) else None
 
 
 def _clip_fps(current: dict[str, Any]) -> float:
@@ -146,19 +176,9 @@ def _clip_fps(current: dict[str, Any]) -> float:
     return DEFAULT_FPS
 
 
-def _in_frm(marker: dict[str, Any]) -> int | None:
-    in_obj = marker.get("in") if isinstance(marker, dict) else None
-    if isinstance(in_obj, dict):
-        v = in_obj.get("frm")
-        if isinstance(v, int):
-            return v
-    return None
-
-
 def _existing_text(current: dict[str, Any], identifier: str) -> str | None:
-    if identifier in TOP_LEVEL_NOTE_TARGETS:
-        v = current.get(identifier)
-        return v if isinstance(v, str) else None
+    # Owned targets are user-defined fields (never the top-level notes/bigNotes),
+    # so the running note seeds from the clip's `fields` map.
     fields = current.get("fields") or {}
     v = fields.get(identifier)
     return v if isinstance(v, str) else None

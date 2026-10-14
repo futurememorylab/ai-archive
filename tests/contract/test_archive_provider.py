@@ -21,6 +21,7 @@ from typing import Any
 import pytest
 
 from backend.app.archive.model import (
+    AI_OWNED_FIELDS,
     AddMarkers,
     AppendNote,
     ChangeSet,
@@ -164,10 +165,15 @@ async def test_get_clip_round_trip(provider_case: ProviderCase):
 
 @pytest.mark.asyncio
 async def test_set_field_round_trip(provider_case: ProviderCase):
+    # Under the #123 ownership rule a provider writes ONLY the fields it owns,
+    # so the one field that round-trips through apply_changes is the owned one
+    # (AI_OWNED_FIELDS[0]). A write to any other field is rejected; see
+    # test_non_owned_field_write_is_rejected.
     key = provider_case.seed("setfield")
+    owned = AI_OWNED_FIELDS[0]
     cs = ChangeSet(
         clip_key=key,
-        ops=(SetField(identifier="contract.test_field", value="HELLO"),),
+        ops=(SetField(identifier=owned, value="HELLO"),),
     )
     result = await provider_case.provider.apply_changes(cs)
     assert result.status == "ok"
@@ -175,7 +181,7 @@ async def test_set_field_round_trip(provider_case: ProviderCase):
     # payload; the FS adapter persists to the sidecar; both surface through
     # `get_clip().fields`.
     clip = await provider_case.provider.get_clip(key[1])
-    fv = clip.fields.get("contract.test_field")
+    fv = clip.fields.get(owned)
     assert fv is not None
     assert fv.value == "HELLO"
 

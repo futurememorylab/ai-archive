@@ -99,3 +99,47 @@ def test_marker_to_catdv_leaves_short_name_untouched():
     raw = marker_to_catdv(m, fps=25.0)
     assert raw["name"] == "Rodina"
     assert "description" not in raw
+
+
+def test_marker_to_catdv_always_tags_category_ai():
+    """Every marker the app writes is tagged AI; CatDV colours by category, so
+    the app never sends a `color`."""
+    m = Marker(
+        name="A scene",
+        in_=Timecode(secs=1.0, fps=25.0),
+        out=None,
+        category="Interview",
+        color="#ff0000",
+    )
+    raw = marker_to_catdv(m, fps=25.0)
+    assert raw["category"] == "AI"
+    assert "color" not in raw
+
+
+def test_marker_to_catdv_prefixes_gemini_category_into_name():
+    m = Marker(
+        name="Two men talk", in_=Timecode(secs=1.0, fps=25.0), out=None, category="Interview"
+    )
+    raw = marker_to_catdv(m, fps=25.0)
+    assert raw["name"] == "[Interview] Two men talk"
+
+
+def test_marker_to_catdv_no_category_means_no_prefix():
+    m = Marker(name="plain", in_=Timecode(secs=1.0, fps=25.0), out=None, category=None)
+    raw = marker_to_catdv(m, fps=25.0)
+    assert raw["name"] == "plain"
+    assert raw["category"] == "AI"
+
+
+def test_marker_to_catdv_prefix_is_clamped_within_max():
+    from backend.app.archive.providers.catdv.mapping import MARKER_NAME_MAX
+
+    m = Marker(
+        name="z" * (MARKER_NAME_MAX + 50),
+        in_=Timecode(secs=1.0, fps=25.0),
+        out=None,
+        category="Scene",
+    )
+    raw = marker_to_catdv(m, fps=25.0)
+    assert len(raw["name"]) <= MARKER_NAME_MAX
+    assert raw["name"].startswith("[Scene] ")
