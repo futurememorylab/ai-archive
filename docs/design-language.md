@@ -191,6 +191,23 @@ connection-chip in the topbar uses a sibling variant, `.env-pill`, for the
 same look on the live connection indicator — reuse that for connection
 state rather than re-styling a pill.)
 
+### Provenance colours (#123)
+
+On the clip page, every annotation reads as one of three provenance states,
+coloured from existing tokens (no new colours). Use the `status_pill` states
+below for the chip, and the matching token for the timeline band:
+
+| State | Pill | Token / band | Meaning |
+|---|---|---|---|
+| **Human** | `status_pill('Human', 'origin-human')` | `--text-3` (grey) | A CatDV marker/field the app does not own (incl. legacy app markers). Read-only. |
+| **AI · published** | `status_pill('AI · published', 'accent')` | `--accent` (orange) | An app-owned (`category == "AI"`) annotation already written to CatDV. |
+| **AI · draft** | `status_pill('AI · draft', 'info')` | `--info` (blue) | A review item not yet applied. Editable (keep / edit / drag). |
+| **AI · suggestion** | `status_pill('AI · suggestion', 'info')` | `--info` (blue) | A shared field the app never writes — offered with a Copy button, no keep checkbox. |
+
+The published timeline band splits by origin: human bands add
+`.range.origin-human` (grey); AI bands keep the row's orange. The legend reads
+`● Human N · ● AI published N · ● AI draft N`. See ADR 0127.
+
 ### Prompt state chip
 
 `prompt_state_chip(state)` is the single shared chip for a prompt

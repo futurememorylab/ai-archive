@@ -121,13 +121,30 @@ ceiling and per-row backoff; appends are idempotent and accumulate
 (multiple appends to one target don't clobber each other); conflicts
 re-base on the live clip's freshest ETag rather than re-conflicting
 forever; terminal failures flip status + attempts in one atomic SQL.
-Notes/bigNotes write to top-level clip properties, not the user-fields map.
 Clip-version state changes after a write go through one chokepoint
 (`SyncEngine._advance_versions`) that advances every merged sibling, so none
 is left `publishing`.
 *Enforced by:* convention; `repositories/pending_operations.py`,
 `services/sync_engine.py`, crash-recovery in `context.build()`.
 *ADRs:* 0004, 0090, 0091, 0093, 0094, 0097, 0098, 0118.
+
+**9b. The app writes only what it owns.** It owns exactly two things: markers
+with `category == "AI"` (`AI_MARKER_CATEGORY`) and the fields in
+`AI_OWNED_FIELDS` (`pragafilm.popis.ai`). Everything else — human markers,
+legacy app markers (Gemini category, so `!= "AI"`), `popis.materialu`, the
+decade/year fields, top-level `notes`/`bigNotes` — is never modified, deleted
+or overwritten. The rule lives in ONE place per provider, the payload builder
+(`catdv/payload.build_put_payload`, `fs/adapter.apply_changes`): a non-AI
+marker passes through byte-identical, the AI set is replaced wholesale
+(`ReplaceAIMarkers`, freshest op wins), and a field/note op outside
+`AI_OWNED_FIELDS` raises `FatalProviderError` rather than a silent write. The
+write queue emits only owned ops (shared fields become copy-only suggestions);
+snapshots keep each value under its real target and a field is never cleared.
+*Enforced by:* `tests/unit/test_writeback_ownership_guard.py`,
+`tests/unit/test_catdv_payload.py`, `tests/integration/test_fs_adapter.py`,
+`tests/contract/test_archive_provider.py`.
+*ADRs:* 0127 (supersedes 0101's `drop_secs`, and the field-overwrite of
+0090/0097).
 
 **9a. Writes on the shared connection are serialized at the connection.**
 The shared `aiosqlite.Connection` is wrapped in `WriteSerializedConnection`
