@@ -45,6 +45,15 @@ CatDV Server 9.3 release notes, and our own observations in ADR
 Task 1 (a live probe) settles the unverified rows before any behaviour relies
 on them.
 
+> **Probe status (#123, Task 1):** `tools/probe_catdv_writeback.py` is written
+> and unit-tested (`tests/unit/test_probe_catdv_writeback.py` pins the
+> always-`DELETE /session` seat contract), but has **not** been run against a
+> live server from this environment, which has no CatDV access. The two rows
+> above stay **unverified** until a maintainer runs the probe by hand against a
+> scratch clip and pastes its output here. Because clearing is unproven, the
+> implementation never clears a field (see "Description and fields"), and the
+> per-key `fields` merge is instead covered by the fake CatDV in Task 8.
+
 ## The rule
 
 > **The app writes only what it owns. It owns exactly two things: markers
