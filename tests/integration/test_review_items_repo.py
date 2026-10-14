@@ -149,7 +149,7 @@ async def test_list_pending_clips_groups_and_counts(db):
                 annotation_id=annotation_id,
                 catdv_clip_id=42,
                 kind="field",
-                target_identifier="genre",
+                target_identifier="pragafilm.popis.ai",
                 proposed_value="drama",
             ),
         ],
@@ -180,7 +180,7 @@ async def test_list_pending_clips_excludes_applied(db):
                 annotation_id=annotation_id,
                 catdv_clip_id=42,
                 kind="field",
-                target_identifier="genre",
+                target_identifier="pragafilm.popis.ai",
                 proposed_value="drama",
             ),
         ],
@@ -210,12 +210,14 @@ async def test_list_pending_clips_job_filter(db):
                 annotation_id=ann1,
                 catdv_clip_id=1,
                 kind="field",
+                target_identifier="pragafilm.popis.ai",
                 proposed_value="val1",
             ),
             ReviewItem(
                 annotation_id=ann2,
                 catdv_clip_id=2,
                 kind="field",
+                target_identifier="pragafilm.popis.ai",
                 proposed_value="val2",
             ),
         ],
@@ -240,6 +242,7 @@ async def test_count_pending_clips(db):
                 annotation_id=annotation_id,
                 catdv_clip_id=42,
                 kind="field",
+                target_identifier="pragafilm.popis.ai",
                 proposed_value="val",
             ),
         ],
@@ -259,14 +262,32 @@ async def test_count_clips_for_review(db):
     # Clip 1: undecided proposal on its (only/latest) annotation -> counts.
     a1 = await _seed_annotation_for(db, catdv_clip_id=1, catdv_clip_name="c1", job_id=None, vid=vid)
     await repo.bulk_insert(
-        db, [ReviewItem(annotation_id=a1, catdv_clip_id=1, kind="field", proposed_value="x")]
+        db,
+        [
+            ReviewItem(
+                annotation_id=a1,
+                catdv_clip_id=1,
+                kind="field",
+                target_identifier="pragafilm.popis.ai",
+                proposed_value="x",
+            )
+        ],
     )
 
     # Clip 2: only a rejected item -> excluded.
     a2 = await _seed_annotation_for(db, catdv_clip_id=2, catdv_clip_name="c2", job_id=None, vid=vid)
     r2 = (
         await repo.bulk_insert(
-            db, [ReviewItem(annotation_id=a2, catdv_clip_id=2, kind="field", proposed_value="y")]
+            db,
+            [
+                ReviewItem(
+                    annotation_id=a2,
+                    catdv_clip_id=2,
+                    kind="field",
+                    target_identifier="pragafilm.popis.ai",
+                    proposed_value="y",
+                )
+            ],
         )
     )[0]
     await repo.set_decision(db, r2.id, "rejected")
@@ -275,7 +296,16 @@ async def test_count_clips_for_review(db):
     a3 = await _seed_annotation_for(db, catdv_clip_id=3, catdv_clip_name="c3", job_id=None, vid=vid)
     r3 = (
         await repo.bulk_insert(
-            db, [ReviewItem(annotation_id=a3, catdv_clip_id=3, kind="field", proposed_value="z")]
+            db,
+            [
+                ReviewItem(
+                    annotation_id=a3,
+                    catdv_clip_id=3,
+                    kind="field",
+                    target_identifier="pragafilm.popis.ai",
+                    proposed_value="z",
+                )
+            ],
         )
     )[0]
     await repo.mark_applied(db, [r3.id])
@@ -286,7 +316,16 @@ async def test_count_clips_for_review(db):
         db, catdv_clip_id=4, catdv_clip_name="c4", job_id=None, vid=vid
     )
     await repo.bulk_insert(
-        db, [ReviewItem(annotation_id=old4, catdv_clip_id=4, kind="field", proposed_value="old")]
+        db,
+        [
+            ReviewItem(
+                annotation_id=old4,
+                catdv_clip_id=4,
+                kind="field",
+                target_identifier="pragafilm.popis.ai",
+                proposed_value="old",
+            )
+        ],
     )
     await _seed_annotation_for(db, catdv_clip_id=4, catdv_clip_name="c4", job_id=None, vid=vid)
 
@@ -336,7 +375,7 @@ async def test_pending_clips_multi_job_scoping(db):
                 annotation_id=a2,
                 catdv_clip_id=99,
                 kind="field",
-                target_identifier="genre",
+                target_identifier="pragafilm.popis.ai",
                 proposed_value="drama",
             ),
         ],

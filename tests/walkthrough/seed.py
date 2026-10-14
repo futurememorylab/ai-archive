@@ -186,6 +186,21 @@ async def seed_for_review_fixture(db: aiosqlite.Connection) -> int:
     await items.bulk_insert(
         db,
         [
+            # A real pending proposal (a marker) keeps this clip "awaiting
+            # review". The decade field below is a shared (non-owned) field →
+            # a suggestion under #123, which does not by itself keep a clip
+            # pending, so the fixture needs an owned proposal too.
+            ReviewItem(
+                annotation_id=aid,
+                catdv_clip_id=REVIEW_FIXTURE_CLIP_ID,
+                kind="marker",
+                proposed_value={
+                    "name": "Scéna",
+                    "category": "Interview",
+                    "in": {"frm": 0, "secs": 0.0},
+                    "out": {"frm": 50, "secs": 2.0},
+                },
+            ),
             ReviewItem(
                 annotation_id=aid,
                 catdv_clip_id=REVIEW_FIXTURE_CLIP_ID,

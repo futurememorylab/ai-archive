@@ -16,11 +16,12 @@ import aiosqlite
 
 from backend.app.archive.change_set_json import change_op_to_json
 from backend.app.archive.model import (
-    AddMarkers,
+    AI_OWNED_FIELDS,
     AppendNote,
     ChangeOp,
     ClipKey,
     Marker,
+    ReplaceAIMarkers,
     ReplaceNote,
     SetField,
     Timecode,
@@ -120,8 +121,14 @@ class WriteQueue:
         # holds the write lock across this whole window until conn.commit(), so
         # no other writer can split it. See ADR 0126.
         op_ids = await self._pending.insert_many(conn, rows=rows, commit=False)
-        item_ids = [it.id for it in fresh_items if it.id is not None]
-        await self._review_items.mark_applied(conn, item_ids, commit=False)
+        # Mark applied ONLY the items that produced an owned op. A suggestion
+        # (a field/note item outside AI_OWNED_FIELDS) is never written to the
+        # archive (#123), so it stays un-applied — it keeps showing as a
+        # copy-me suggestion and is excluded from the pending-review count.
+        handled_ids = {i for _op, origin in ops_with_origin for i in origin}
+        item_ids = [it.id for it in fresh_items if it.id is not None and it.id in handled_ids]
+        if item_ids:
+            await self._review_items.mark_applied(conn, item_ids, commit=False)
         await conn.commit()
         return op_ids
 
@@ -135,7 +142,15 @@ def _items_to_change_ops(
     *,
     fps: float,
 ) -> list[tuple[ChangeOp, list[int]]]:
-    """Group items into ChangeOps, paired with their originating review_item ids."""
+    """Group items into ChangeOps, paired with their originating review_item ids.
+
+    The app emits only what it owns (#123): one ReplaceAIMarkers op carrying
+    every accepted marker item (the replace set), and writes to AI_OWNED_FIELDS.
+    A field/note item whose target is not owned is a *suggestion* — never
+    enqueued — so a shared field like decade or year is offered for the human to
+    copy, never written. A draft with no marker items emits no marker op, so
+    publishing it never wipes the clip's AI markers.
+    """
     ops: list[tuple[ChangeOp, list[int]]] = []
     marker_payloads: list[Marker] = []
     marker_origin: list[int] = []
@@ -149,6 +164,8 @@ def _items_to_change_ops(
                 marker_payloads.append(m)
                 marker_origin.append(it.id)
         elif it.kind == "field" and it.target_identifier:
+            if it.target_identifier not in AI_OWNED_FIELDS:
+                continue  # suggestion — never written to the archive
             ops.append(
                 (
                     SetField(identifier=it.target_identifier, value=_unwrap(value)),
@@ -156,6 +173,8 @@ def _items_to_change_ops(
                 )
             )
         elif it.kind == "note" and it.target_identifier:
+            if it.target_identifier not in AI_OWNED_FIELDS:
+                continue  # suggestion — never written to the archive
             mode = _note_mode(target_map, it.target_identifier)
             text = str(_unwrap(value))
             if mode == "replace":
@@ -163,7 +182,7 @@ def _items_to_change_ops(
             else:
                 ops.append((AppendNote(target=it.target_identifier, text=text), [it.id]))
     if marker_payloads:
-        ops.insert(0, (AddMarkers(markers=tuple(marker_payloads)), marker_origin))
+        ops.insert(0, (ReplaceAIMarkers(desired=tuple(marker_payloads)), marker_origin))
     return ops
 
 

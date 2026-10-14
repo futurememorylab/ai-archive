@@ -84,7 +84,7 @@ async def _seed_accepted_field(db):
                 studio_run_id=None,
                 catdv_clip_id=1,
                 kind="field",
-                target_identifier="pragafilm.genre",
+                target_identifier="pragafilm.popis.ai",
                 proposed_value="thriller",
             )
         ],
@@ -104,7 +104,7 @@ async def test_publish_creates_publishing_version_and_enqueues(db):
     assert cv.publish_state == "publishing"
     assert cv.version_num == 1
     assert cv.author == "anna@example.com"
-    assert cv.snapshot["fields"]["pragafilm.genre"] == "thriller"
+    assert cv.snapshot["fields"]["pragafilm.popis.ai"] == "thriller"
 
     rows = await PendingOperationsRepo().list_pending_for_clip(
         db, provider_id="catdv", provider_clip_id="1"
@@ -113,7 +113,7 @@ async def test_publish_creates_publishing_version_and_enqueues(db):
     assert all(r["origin_clip_version_id"] == version_id for r in rows)
     # The accepted field change is the only op — no pragafilm.anno_version
     # provenance write (it 500'd CatDV; dropped per the publishing audit).
-    assert any("pragafilm.genre" in r["op_json"] for r in rows), "field op enqueued"
+    assert any("pragafilm.popis.ai" in r["op_json"] for r in rows), "owned field op enqueued"
     assert not any("anno_version" in r["op_json"] for r in rows), "no provenance op"
 
 

@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from backend.app.archive.model import AddMarkers, SetField
+from backend.app.archive.model import ReplaceAIMarkers, SetField
 from backend.app.models.annotation import Annotation, ReviewItem
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.pending_operations import PendingOperationsRepo
@@ -25,6 +25,7 @@ async def _seed(conn):
             "decade": {"kind": "field", "identifier": "pragafilm.dekáda.natočení"},
             "summary": {"kind": "note", "target": "notes", "mode": "append"},
             "ovr": {"kind": "note", "target": "bigNotes", "mode": "replace"},
+            "ai_summary": {"kind": "note", "target": "pragafilm.popis.ai", "mode": "replace"},
         },
         output_schema={},
         model="m",
@@ -86,6 +87,13 @@ async def _seed(conn):
                 target_identifier="bigNotes",
                 proposed_value="replace-text",
             ),
+            ReviewItem(
+                annotation_id=aid,
+                catdv_clip_id=1,
+                kind="note",
+                target_identifier="pragafilm.popis.ai",
+                proposed_value="shrnutí",
+            ),
         ],
     )
     for it in seeded:
@@ -118,14 +126,19 @@ async def test_enqueue_apply_groups_markers_into_single_op(db):
     )
     assert len(op_ids) >= 1
     rows = await PendingOperationsRepo().list_pending(db)
-    marker_rows = [r for r in rows if r["op_kind"] == "AddMarkers"]
+    marker_rows = [r for r in rows if r["op_kind"] == "ReplaceAIMarkers"]
     assert len(marker_rows) == 1
     op = json.loads(marker_rows[0]["op_json"])
-    assert len(op["markers"]) == 2
+    assert len(op["desired"]) == 2
+    # the additive AddMarkers op is no longer emitted
+    assert not any(r["op_kind"] == "AddMarkers" for r in rows)
 
 
 @pytest.mark.asyncio
-async def test_enqueue_apply_emits_set_field_and_note_ops(db):
+async def test_enqueue_apply_emits_only_owned_field_and_note_ops(db):
+    """The app owns only AI markers and pragafilm.popis.ai. Non-owned field /
+    note items (decade, top-level notes, bigNotes) are suggestions — never
+    enqueued — while the owned summary note IS."""
     accepted, version, aid = await _seed(db)
     q = _make_queue()
     await q.enqueue_apply(
@@ -139,14 +152,24 @@ async def test_enqueue_apply_emits_set_field_and_note_ops(db):
     )
     rows = await PendingOperationsRepo().list_pending(db)
     kinds = {r["op_kind"] for r in rows}
-    assert "AddMarkers" in kinds
-    assert "SetField" in kinds
-    assert "AppendNote" in kinds
+    assert "ReplaceAIMarkers" in kinds
+    # the owned summary note (pragafilm.popis.ai, replace mode) is enqueued
     assert "ReplaceNote" in kinds
+    note_targets = {
+        json.loads(r["op_json"]).get("target")
+        for r in rows
+        if r["op_kind"] in ("ReplaceNote", "AppendNote")
+    }
+    assert note_targets == {"pragafilm.popis.ai"}
+    # no non-owned field / note op was enqueued
+    assert "SetField" not in kinds  # decade is a suggestion, not a write
+    assert "AppendNote" not in kinds  # top-level notes is a suggestion
 
 
 @pytest.mark.asyncio
-async def test_enqueue_apply_marks_review_items_applied_atomically(db):
+async def test_enqueue_apply_marks_only_owned_items_applied(db):
+    """Items turned into owned ops are marked applied; suggestion items (never
+    written) stay un-applied so they remain visible as copy-me suggestions."""
     accepted, version, aid = await _seed(db)
     q = _make_queue()
     await q.enqueue_apply(
@@ -160,7 +183,15 @@ async def test_enqueue_apply_marks_review_items_applied_atomically(db):
     )
     items = ReviewItemsRepo()
     after = await items.list_by_clip(db, 1, decision="accepted")
-    assert all(it.applied_at is not None for it in after)
+    applied = {it.target_identifier for it in after if it.applied_at is not None}
+    unapplied = {it.target_identifier for it in after if it.applied_at is None}
+    # markers (target None) and the owned note are applied
+    assert None in applied  # the marker items
+    assert "pragafilm.popis.ai" in applied
+    # the suggestions stay un-applied
+    assert "pragafilm.dekáda.natočení" in unapplied
+    assert "notes" in unapplied
+    assert "bigNotes" in unapplied
 
 
 @pytest.mark.asyncio
@@ -260,7 +291,7 @@ async def test_enqueue_apply_window_serialized_on_the_connection(db):
 
 
 def test_edited_marker_dict_round_trips():
-    """edited_value dict on a marker item → AddMarkers op with the edited fields."""
+    """edited_value dict on a marker item → ReplaceAIMarkers op with the edits."""
     from backend.app.models.prompt import TargetMap
 
     item = ReviewItem(
@@ -283,9 +314,9 @@ def test_edited_marker_dict_round_trips():
 
     assert len(ops_with_origin) == 1
     op, origin_ids = ops_with_origin[0]
-    assert isinstance(op, AddMarkers)
-    assert len(op.markers) == 1
-    m = op.markers[0]
+    assert isinstance(op, ReplaceAIMarkers)
+    assert len(op.desired) == 1
+    m = op.desired[0]
     assert m.name == "Edited"
     assert m.in_.secs == 2.0
     assert m.out is not None and m.out.secs == 5.0
@@ -294,26 +325,64 @@ def test_edited_marker_dict_round_trips():
     assert origin_ids == [1]
 
 
-def test_edited_list_field_round_trips():
-    """edited_value list on a field item → SetField op with the list value."""
+def test_no_marker_items_emits_no_marker_op():
+    """A fields-only draft (e.g. an image prompt) must NOT emit a marker op, so
+    publishing it never wipes the clip's existing AI markers."""
     from backend.app.models.prompt import TargetMap
 
     item = ReviewItem(
+        id=9,
+        annotation_id=1,
+        catdv_clip_id=1,
+        kind="note",
+        target_identifier="pragafilm.popis.ai",
+        proposed_value="summary",
+        decision="accepted",
+    )
+    target_map = TargetMap(
+        root={"s": {"kind": "note", "target": "pragafilm.popis.ai", "mode": "replace"}}
+    )
+    ops_with_origin = _items_to_change_ops([item], target_map, fps=25.0)
+    kinds = {type(op).__name__ for op, _ in ops_with_origin}
+    assert "ReplaceAIMarkers" not in kinds
+    assert kinds == {"ReplaceNote"}
+
+
+def test_owned_field_round_trips_but_non_owned_is_dropped():
+    """A field item targeting the owned field round-trips to a SetField; a field
+    item outside AI_OWNED_FIELDS is a suggestion and produces no op."""
+    from backend.app.models.prompt import TargetMap
+
+    owned = ReviewItem(
         id=2,
         annotation_id=1,
         catdv_clip_id=1,
         kind="field",
-        target_identifier="f.a",
-        proposed_value=["old"],
+        target_identifier="pragafilm.popis.ai",
+        proposed_value="old",
         decision="accepted",
         edited_value=["x", "y"],
     )
-    target_map = TargetMap(root={"decade": {"kind": "field", "identifier": "f.a"}})
-    ops_with_origin = _items_to_change_ops([item], target_map, fps=25.0)
+    suggestion = ReviewItem(
+        id=3,
+        annotation_id=1,
+        catdv_clip_id=1,
+        kind="field",
+        target_identifier="pragafilm.dekáda.natočení",
+        proposed_value="30.léta",
+        decision="accepted",
+    )
+    target_map = TargetMap(
+        root={
+            "a": {"kind": "field", "identifier": "pragafilm.popis.ai"},
+            "b": {"kind": "field", "identifier": "pragafilm.dekáda.natočení"},
+        }
+    )
+    ops_with_origin = _items_to_change_ops([owned, suggestion], target_map, fps=25.0)
 
     assert len(ops_with_origin) == 1
     op, origin_ids = ops_with_origin[0]
     assert isinstance(op, SetField)
-    assert op.identifier == "f.a"
+    assert op.identifier == "pragafilm.popis.ai"
     assert op.value == ["x", "y"]
     assert origin_ids == [2]

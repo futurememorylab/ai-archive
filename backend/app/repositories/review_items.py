@@ -9,6 +9,7 @@ from typing import Literal
 
 import aiosqlite
 
+from backend.app.archive.model import AI_OWNED_FIELDS
 from backend.app.models.annotation import ReviewItem
 
 
@@ -16,13 +17,31 @@ def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
+# A "suggestion" is a field/note item whose target the app does not own (#123):
+# it is never written to the archive, only offered for a human to copy. So it
+# must NOT keep a clip in the pending-review count — a draft with only
+# suggestions left counts as fully applied. Markers (target NULL) and writes to
+# an owned field are real pending work. Built from AI_OWNED_FIELDS (code-only
+# constants, so the inlined list is safe) with a column-prefix so it can be
+# dropped into both aliased (`ri.`) and un-aliased queries.
+_OWNED_FIELDS_SQL = ", ".join("'" + f.replace("'", "''") + "'" for f in AI_OWNED_FIELDS)
+
+
+def _not_suggestion(prefix: str = "") -> str:
+    kind = f"{prefix}kind"
+    tid = f"{prefix}target_identifier"
+    return f"NOT ({kind} IN ('field', 'note') AND COALESCE({tid}, '') NOT IN ({_OWNED_FIELDS_SQL}))"
+
+
 # The "awaiting review" predicate (a WHERE body): clips whose LATEST annotation
-# still has an undecided proposal — applied_at NULL, not rejected, newest
-# annotation only. Single source of truth so the /?anno=for_review filter
-# (clip_list_filters), the topbar count (count_clips_for_review), and the
-# full-render sync context (routes/pages/templates.py) can never drift apart.
+# still has an undecided proposal — applied_at NULL, not rejected, not a
+# suggestion, newest annotation only. Single source of truth so the
+# /?anno=for_review filter (clip_list_filters), the topbar count
+# (count_clips_for_review), and the full-render sync context
+# (routes/pages/templates.py) can never drift apart.
 FOR_REVIEW_WHERE = (
     "applied_at IS NULL AND decision != 'rejected' "
+    f"AND {_not_suggestion()} "
     "AND annotation_id = (SELECT MAX(a.id) FROM annotations a "
     "WHERE a.catdv_clip_id = review_items.catdv_clip_id)"
 )
@@ -233,7 +252,7 @@ class ReviewItemsRepo:
                      ri.annotation_id AS annotation_id
               FROM review_items ri
               JOIN annotations a ON a.id = ri.annotation_id
-              WHERE ri.applied_at IS NULL {job_clause}
+              WHERE ri.applied_at IS NULL AND {_not_suggestion("ri.")} {job_clause}
             )
             SELECT
               p.catdv_clip_id                                    AS catdv_clip_id,
@@ -274,7 +293,8 @@ class ReviewItemsRepo:
             SELECT ri.catdv_clip_id AS clip_id, MAX(a.created_at) AS created_at
             FROM review_items ri
             JOIN annotations a ON a.id = ri.annotation_id
-            WHERE ri.applied_at IS NULL AND a.job_id IN ({placeholders})
+            WHERE ri.applied_at IS NULL AND {_not_suggestion("ri.")}
+              AND a.job_id IN ({placeholders})
             GROUP BY ri.catdv_clip_id
             ORDER BY created_at DESC, ri.catdv_clip_id DESC
             """,
@@ -295,7 +315,7 @@ class ReviewItemsRepo:
             SELECT COUNT(DISTINCT ri.catdv_clip_id)
             FROM review_items ri
             JOIN annotations a ON a.id = ri.annotation_id
-            WHERE ri.applied_at IS NULL {job_clause}
+            WHERE ri.applied_at IS NULL AND {_not_suggestion("ri.")} {job_clause}
             """,
             tuple(params),
         )
