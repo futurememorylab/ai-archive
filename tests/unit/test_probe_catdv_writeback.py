@@ -33,7 +33,7 @@ class FakeHttp:
         class _Resp:
             status_code = 200
 
-            def json(self_inner):
+            def json(self):
                 return {"status": "OK", "data": data}
 
         return _Resp()

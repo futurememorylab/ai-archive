@@ -70,10 +70,15 @@ def _snapshot_from_rows(rows):
             fields[ident] = value
         elif kind == "note":
             text = str(value)
+            # Keep each note under its REAL target: only notes/bigNotes are
+            # CatDV's top-level note properties; every other target (e.g. the
+            # summary pragafilm.popis.ai) is a user field, not the human notes.
             if ident == "bigNotes":
                 big = text
-            else:
+            elif ident == "notes":
                 notes = text
+            elif ident:
+                fields[ident] = text
     return (
         {"markers": markers, "fields": fields, "notes": notes, "bigNotes": big},
         model,

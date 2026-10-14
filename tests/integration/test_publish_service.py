@@ -129,7 +129,7 @@ async def test_reactivate_enqueues_snapshot_and_creates_no_new_version(db):
         ClipVersion(
             catdv_clip_id=1,
             version_num=1,
-            snapshot={"markers": [], "fields": {"pragafilm.genre": "drama"}, "notes": None},
+            snapshot={"markers": [], "fields": {"pragafilm.popis.ai": "drama"}, "notes": None},
             origin="publish",
             publish_state="superseded",
         ),
@@ -139,7 +139,7 @@ async def test_reactivate_enqueues_snapshot_and_creates_no_new_version(db):
         ClipVersion(
             catdv_clip_id=1,
             version_num=2,
-            snapshot={"markers": [], "fields": {"pragafilm.genre": "thriller"}, "notes": None},
+            snapshot={"markers": [], "fields": {"pragafilm.popis.ai": "thriller"}, "notes": None},
             origin="publish",
             publish_state="live",
         ),
@@ -154,16 +154,17 @@ async def test_reactivate_enqueues_snapshot_and_creates_no_new_version(db):
         db, provider_id="catdv", provider_clip_id="1"
     )
     assert any(
-        r["origin_clip_version_id"] == v1 and "pragafilm.genre" in r["op_json"] for r in rows
+        r["origin_clip_version_id"] == v1 and "pragafilm.popis.ai" in r["op_json"] for r in rows
     ), "v1's snapshot re-enqueued under its own version id"
 
 
 @pytest.mark.asyncio
-async def test_reactivate_reconciles_markers_drops_later_versions(db):
-    """Switching to v1 emits a ReconcileMarkers asserting v1's markers and
-    dropping the markers only later versions added — no new version row."""
+async def test_reactivate_replaces_ai_markers_with_target_set(db):
+    """Switching to v1 emits a ReplaceAIMarkers asserting v1's markers as the
+    AI set (so a later AI marker is dropped by the payload rule) — no new
+    version row, and drop_secs is gone."""
     from backend.app.archive.change_set_json import change_op_from_json
-    from backend.app.archive.model import ReconcileMarkers
+    from backend.app.archive.model import ReplaceAIMarkers
     from backend.app.models.annotation import ClipVersion
 
     repo = ClipVersionsRepo()
@@ -199,14 +200,13 @@ async def test_reactivate_reconciles_markers_drops_later_versions(db):
     rows = await PendingOperationsRepo().list_pending_for_clip(
         db, provider_id="catdv", provider_clip_id="1"
     )
-    recon = [
+    repl = [
         o
         for o in (change_op_from_json(r["op_json"]) for r in rows)
-        if isinstance(o, ReconcileMarkers)
+        if isinstance(o, ReplaceAIMarkers)
     ]
-    assert len(recon) == 1
-    assert {m.name for m in recon[0].desired} == {"A"}
-    assert set(recon[0].drop_secs) == {8.0}  # B (added in v2) is dropped
+    assert len(repl) == 1
+    assert {m.name for m in repl[0].desired} == {"A"}  # the AI set becomes exactly v1's
 
 
 @pytest.mark.asyncio
