@@ -96,18 +96,21 @@ async def run_probe(client: CatdvClient, clip_id: int) -> ProbeResult:
     """
     result = ProbeResult(clip_id=clip_id)
     await client.login()  # POST /session — takes the seat
+    original_markers: list[dict[str, Any]] | None = None
+    original_probe_value: Any = ""
     try:
         original = await _get_clip(client, clip_id)
         original_markers = list(original.get("markers") or [])
         original_fields = dict(original.get("fields") or {})
+        original_probe_value = original_fields.get(PROBE_FIELD, "")
         human_before = _human_markers(original_markers)
         result.record(
             f"clip {clip_id}: {len(original_markers)} markers "
             f"({len(human_before)} non-AI), {len(original_fields)} fields"
         )
 
-        # Fact: a supplied `markers` array replaces the whole list, and a human
-        # marker survives when our AI marker is PUT next to it.
+        # Fact: a supplied `markers` array replaces the whole list, a human
+        # marker survives next to our AI marker, and category "AI" round-trips.
         ai_marker = {
             "name": "[probe] writeback probe marker",
             "category": AI_MARKER_CATEGORY,
@@ -117,6 +120,16 @@ async def run_probe(client: CatdvClient, clip_id: int) -> ProbeResult:
         await client.put_clip(clip_id, {"markers": human_before + [ai_marker]})
         after_markers = (await _get_clip(client, clip_id)).get("markers") or []
         human_after = _human_markers(after_markers)
+        ai_after = [m for m in after_markers if m.get("name") == ai_marker["name"]]
+        replaced = len(after_markers) == len(human_before) + 1
+        result.record(
+            f"markers: sent {len(human_before) + 1}, GET returns {len(after_markers)} "
+            f"({'REPLACE' if replaced else 'NOT a plain replace'})"
+        )
+        result.record(
+            "markers: AI marker read back with category "
+            f"{[m.get('category') for m in ai_after]!r} (want ['AI'])"
+        )
         if human_after == human_before:
             result.record("markers: human markers are byte-identical after an AI-marker PUT")
         else:
@@ -130,6 +143,7 @@ async def run_probe(client: CatdvClient, clip_id: int) -> ProbeResult:
         after_fields = (await _get_clip(client, clip_id)).get("fields") or {}
         other_before = {k: v for k, v in original_fields.items() if k != PROBE_FIELD}
         other_after = {k: v for k, v in after_fields.items() if k != PROBE_FIELD}
+        result.record(f"fields: {PROBE_FIELD!r} read back as {after_fields.get(PROBE_FIELD)!r}")
         if other_after == other_before:
             result.record(
                 f"fields: the other keys are untouched after writing only {PROBE_FIELD!r} "
@@ -147,16 +161,20 @@ async def run_probe(client: CatdvClient, clip_id: int) -> ProbeResult:
         result.record(
             f'clear: after PUT {PROBE_FIELD!r}="", GET returns {cleared.get(PROBE_FIELD)!r}'
         )
-
-        # Restore the clip to exactly what we found.
-        await client.put_clip(
-            clip_id,
-            {"markers": original_markers, "fields": original_fields},
-        )
-        result.restored = True
-        result.record("restore: original markers and fields written back")
     finally:
-        await client.logout()  # DELETE /session — releases the seat, always
+        try:
+            # Restore ONLY what the probe touched: the markers array and the one
+            # owned field. Re-PUTting every human field from its GET shape could
+            # itself alter human data, so the other fields are never written.
+            if original_markers is not None:
+                await client.put_clip(
+                    clip_id,
+                    {"markers": original_markers, "fields": {PROBE_FIELD: original_probe_value}},
+                )
+                result.restored = True
+                result.record("restore: original markers and probe field written back")
+        finally:
+            await client.logout()  # DELETE /session — releases the seat, always
     return result
 
 

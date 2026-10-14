@@ -33,26 +33,34 @@ CatDV Server 9.3 release notes, and our own observations in ADR
 | Fact | Status |
 |---|---|
 | `PUT /clips/{id}` is a partial update: only the supplied properties change | documented |
-| A supplied `markers` array replaces the clip's whole marker list | observed (ADR 0101), not documented |
+| A supplied `markers` array replaces the clip's whole marker list | **verified live** (probe, 2026-10-14) |
 | Markers have no ID, and there is no per-marker endpoint | documented (the Marker object has no id) |
 | A marker is `{name, category, in, out?, description, fields}`. `category` is a user-defined string configured under *Event Marker Categories* | documented |
-| The admin's "AI" marker type travels as `"category": "AI"` | inferred (the only candidate property) |
+| The admin's "AI" marker type travels as `"category": "AI"` | **verified live**: it reads back exactly `"AI"` |
 | A user field is written as `fields: {"pragafilm.popis.ai": "…"}`; the value overwrites and there is no append | documented / inferred |
-| Supplying some `fields` keys leaves the other keys untouched | inferred, **unverified** |
-| Clearing a field (sending `""` or `null`) | **unverified** |
+| Supplying some `fields` keys leaves the other keys untouched | **verified live** (all 24 other fields unchanged) |
+| Clearing a field (sending `""` or `null`) | **verified live**: `""` removes the field (GET omits it) |
 | A `color` property on markers | undocumented, so stop sending it |
 
 Task 1 (a live probe) settles the unverified rows before any behaviour relies
 on them.
 
-> **Probe status (#123, Task 1):** `tools/probe_catdv_writeback.py` is written
-> and unit-tested (`tests/unit/test_probe_catdv_writeback.py` pins the
-> always-`DELETE /session` seat contract), but has **not** been run against a
-> live server from this environment, which has no CatDV access. The two rows
-> above stay **unverified** until a maintainer runs the probe by hand against a
-> scratch clip and pastes its output here. Because clearing is unproven, the
-> implementation never clears a field (see "Description and fields"), and the
-> per-key `fields` merge is instead covered by the fake CatDV in Task 8.
+> **Probe run (2026-10-14, scratch clip 913922, restored afterwards):**
+>
+> ```
+> - clip 913922: 1 markers (1 non-AI), 25 fields
+> - markers: sent 2, GET returns 2 (REPLACE)
+> - markers: AI marker read back with category ['AI'] (want ['AI'])
+> - markers: human markers are byte-identical after an AI-marker PUT
+> - fields: 'pragafilm.popis.ai' read back as 'probe-writeback-ai-value'
+> - fields: the other keys are untouched after writing only 'pragafilm.popis.ai' (per-key merge CONFIRMED)
+> - clear: after PUT 'pragafilm.popis.ai'="", GET returns None
+> - restore: original markers and probe field written back
+> ```
+>
+> Clearing is now known to be safe. The implementation still never clears
+> `pragafilm.popis.ai` when a new version has no summary; clearing it is a
+> follow-up.
 
 ## The rule
 
