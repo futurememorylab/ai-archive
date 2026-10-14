@@ -10,6 +10,7 @@ from backend.app.archive.errors import ProviderError
 from backend.app.deps import get_core_ctx, get_live_ctx
 from backend.app.routes.pages.clips import query_clip_page
 from backend.app.routes.pages.templates import templates
+from backend.app.services.active_catalog import active_catalog_id
 from backend.app.services.clip_list_filters import normalize_anno, normalize_cache
 from backend.app.ui.view_models import batch_view
 
@@ -102,7 +103,7 @@ async def batches_picker(
     used by the calibration picker, which auto-filters to the prompt's
     media_kind. Omitted by the Batches / Studio pickers (unchanged)."""
     ctx = get_live_ctx(request)
-    catalog_id = str(ctx.settings.catdv_catalog_id)
+    catalog_id = active_catalog_id(request, ctx.settings)
     host_local = getattr(getattr(ctx, "proxy_resolver", None), "is_host_local", False)
     try:
         rows, total, _ = await query_clip_page(
