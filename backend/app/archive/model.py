@@ -24,6 +24,21 @@ AI_MARKER_CATEGORY = "AI"
 AI_OWNED_FIELDS: tuple[str, ...] = ("pragafilm.popis.ai",)
 
 
+def ai_marker_name(category: str | None, name: str) -> str:
+    """Display name for an app-authored (AI) marker.
+
+    A Gemini category becomes a ``"[Category] "`` prefix, applied at write time
+    so it survives the marker's own category being set to AI_MARKER_CATEGORY on
+    write. Both providers produce this shape; the provenance view model strips
+    the prefix back into a category chip for display. With no category the bare
+    name is returned unchanged.
+    """
+    base = name or ""
+    if category:
+        return f"[{category}] {base}".rstrip()
+    return base
+
+
 @dataclass(frozen=True)
 class Timecode:
     secs: float

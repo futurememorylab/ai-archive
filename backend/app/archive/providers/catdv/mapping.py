@@ -14,6 +14,7 @@ from backend.app.archive.model import (
     Marker,
     MediaRef,
     Timecode,
+    ai_marker_name,
 )
 from backend.app.timecode import secs_to_smpte
 
@@ -116,9 +117,7 @@ def marker_to_catdv(marker: Marker, fps: float) -> dict[str, Any]:
     strips the prefix back into a category chip for display. ``color`` is no
     longer sent: CatDV colours markers by category.
     """
-    prefixed = marker.name or ""
-    if marker.category:
-        prefixed = f"[{marker.category}] {prefixed}".rstrip()
+    prefixed = ai_marker_name(marker.category, marker.name)
     name, description = _clamp_marker_name(prefixed, marker.description)
     out: dict[str, Any] = {
         "name": name,

@@ -22,12 +22,12 @@ import pytest
 
 from backend.app.archive.model import (
     AI_OWNED_FIELDS,
-    AddMarkers,
     AppendNote,
     ChangeSet,
     ClipKey,
     ClipQuery,
     Marker,
+    ReplaceAIMarkers,
     SetField,
     Timecode,
 )
@@ -187,15 +187,15 @@ async def test_set_field_round_trip(provider_case: ProviderCase):
 
 
 @pytest.mark.asyncio
-async def test_add_markers_is_additive(provider_case: ProviderCase):
+async def test_replace_ai_markers_adds_to_empty_clip(provider_case: ProviderCase):
     key = provider_case.seed("markers")
     initial = await provider_case.provider.get_clip(key[1])
     n_before = len(initial.markers)
     cs = ChangeSet(
         clip_key=key,
         ops=(
-            AddMarkers(
-                markers=(Marker(name="addM", in_=Timecode(secs=0.5, fps=25.0), out=None),),
+            ReplaceAIMarkers(
+                desired=(Marker(name="addM", in_=Timecode(secs=0.5, fps=25.0), out=None),),
             ),
         ),
     )
@@ -203,19 +203,63 @@ async def test_add_markers_is_additive(provider_case: ProviderCase):
     assert result.status == "ok"
     after = await provider_case.provider.get_clip(key[1])
     assert len(after.markers) == n_before + 1
-    assert any(m.name == "addM" for m in after.markers)
+    assert any(m.name == "addM" and m.category == "AI" for m in after.markers)
+
+
+@pytest.mark.asyncio
+async def test_replace_ai_markers_is_wholesale(provider_case: ProviderCase):
+    """On every adapter, ReplaceAIMarkers replaces the AI set wholesale rather
+    than accumulating: publishing again with a different marker leaves only the
+    newest AI marker. (Preserving a pre-existing non-AI marker needs
+    provider-specific seeding; it is covered in each adapter's own tests.)"""
+    key = provider_case.seed("prov")
+    await provider_case.provider.apply_changes(
+        ChangeSet(
+            clip_key=key,
+            ops=(
+                ReplaceAIMarkers(
+                    desired=(Marker(name="a", in_=Timecode(secs=1.0, fps=25.0), out=None),)
+                ),
+            ),
+        )
+    )
+    await provider_case.provider.apply_changes(
+        ChangeSet(
+            clip_key=key,
+            ops=(
+                ReplaceAIMarkers(
+                    desired=(Marker(name="b", in_=Timecode(secs=2.0, fps=25.0), out=None),)
+                ),
+            ),
+        )
+    )
+    after = await provider_case.provider.get_clip(key[1])
+    ai_names = sorted(m.name for m in after.markers if m.category == "AI")
+    assert ai_names == ["b"]
+
+
+@pytest.mark.asyncio
+async def test_non_owned_field_write_is_rejected(provider_case: ProviderCase):
+    """Both adapters refuse to write a field the app does not own."""
+    from backend.app.archive.errors import FatalProviderError
+
+    key = provider_case.seed("guard")
+    with pytest.raises(FatalProviderError):
+        await provider_case.provider.apply_changes(
+            ChangeSet(
+                clip_key=key, ops=(SetField(identifier="pragafilm.dekáda.natočení", value="x"),)
+            )
+        )
 
 
 @pytest.mark.asyncio
 async def test_append_note_commutative(provider_case: ProviderCase):
-    # CatDV stores notes under `fields.notes` on the wire but
-    # `from_catdv_clip` only surfaces top-level `notes`/`bigNotes`; the
-    # in-process FakeCatdv doesn't reflect the PUT back to the top-level
-    # so two AppendNote ops cannot be observed as concatenated through
-    # the canonical shape. The behaviour is exercised end-to-end in
-    # `test_offline_cycle_e2e.py` against the real PUT payload; the FS
-    # adapter — whose `notes` are first-class — covers the canonical
-    # commutativity contract here.
+    # CatDV stores notes under `fields.<id>` on the wire but the in-process
+    # FakeCatdv doesn't reflect the PUT back into a readable canonical note, so
+    # two AppendNote ops cannot be observed as concatenated through the
+    # canonical shape for CatDV. The FS adapter — whose notes are first-class —
+    # covers the canonical commutativity contract here, against the one owned
+    # note target (#123).
     if provider_case.name == "catdv":
         pytest.skip("CatDV note round-trip requires a real CatDV server")
     key = provider_case.seed("notes")
@@ -223,12 +267,12 @@ async def test_append_note_commutative(provider_case: ProviderCase):
         result = await provider_case.provider.apply_changes(
             ChangeSet(
                 clip_key=key,
-                ops=(AppendNote(target="notes", text=text),),
+                ops=(AppendNote(target=AI_OWNED_FIELDS[0], text=text),),
             )
         )
         assert result.status == "ok"
     clip = await provider_case.provider.get_clip(key[1])
-    note = clip.notes.get("notes", "")
+    note = clip.notes.get(AI_OWNED_FIELDS[0], "")
     assert "first" in note and "second" in note
     assert note.index("first") < note.index("second")
 

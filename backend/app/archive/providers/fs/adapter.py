@@ -33,6 +33,8 @@ from typing import Any
 
 from backend.app.archive.errors import FatalProviderError
 from backend.app.archive.model import (
+    AI_MARKER_CATEGORY,
+    AI_OWNED_FIELDS,
     AddMarkers,
     AppendNote,
     CanonicalClip,
@@ -45,9 +47,12 @@ from backend.app.archive.model import (
     FieldValue,
     Marker,
     MediaRef,
+    ReconcileMarkers,
+    ReplaceAIMarkers,
     ReplaceNote,
     SetField,
     WriteResult,
+    ai_marker_name,
 )
 from backend.app.archive.provider import ProviderCapabilities, ProviderHealth
 from backend.app.archive.providers.fs import fields as fields_loader
@@ -300,19 +305,37 @@ class FilesystemArchiveProvider:
         fields_dict: dict[str, FieldValue] = dict(fields)
         notes_dict: dict[str, str] = dict(notes)
 
+        # The ownership rule (#123, ADR 0127) holds for the sidecar too: the app
+        # owns only AI-category markers and AI_OWNED_FIELDS. Marker ops replace
+        # the AI set wholesale (freshest op wins) while every non-AI marker is
+        # kept byte-identical; a field/note op outside AI_OWNED_FIELDS raises
+        # FatalProviderError instead of overwriting human sidecar data.
+        marker_ops = [
+            op
+            for op in change_set.ops
+            if isinstance(op, (ReplaceAIMarkers, AddMarkers, ReconcileMarkers))
+        ]
+        if marker_ops:
+            kept = [m for m in markers_list if m.category != AI_MARKER_CATEGORY]
+            desired = [_to_ai_marker(d) for d in _desired_markers(marker_ops[-1])]
+            markers_list = kept + desired
+
         for op in change_set.ops:
-            if isinstance(op, AddMarkers):
-                markers_list.extend(op.markers)
-            elif isinstance(op, SetField):
+            if isinstance(op, (ReplaceAIMarkers, AddMarkers, ReconcileMarkers)):
+                continue  # handled above
+            if isinstance(op, SetField):
+                _require_owned_fs_target(op.identifier)
                 fields_dict[op.identifier] = FieldValue(
                     identifier=op.identifier,
                     value=op.value,
                     is_multi=isinstance(op.value, list),
                 )
             elif isinstance(op, AppendNote):
+                _require_owned_fs_target(op.target)
                 existing = notes_dict.get(op.target, "")
                 notes_dict[op.target] = existing + ("\n" if existing else "") + op.text
             elif isinstance(op, ReplaceNote):
+                _require_owned_fs_target(op.target)
                 notes_dict[op.target] = op.text
             else:  # pragma: no cover — exhaustive ChangeOp union
                 raise FatalProviderError(f"unknown ChangeOp: {type(op).__name__}")
@@ -356,6 +379,35 @@ class FilesystemArchiveProvider:
 
 
 # --- module helpers -------------------------------------------------------
+
+
+def _require_owned_fs_target(target: str) -> None:
+    """Refuse any sidecar field/note write the app does not own (#123)."""
+    if target not in AI_OWNED_FIELDS:
+        raise FatalProviderError(
+            f"fs adapter: refusing to write non-AI-owned target {target!r}; the app "
+            f"owns only {AI_OWNED_FIELDS} and AI-category markers (ADR 0127)"
+        )
+
+
+def _desired_markers(op: AddMarkers | ReconcileMarkers | ReplaceAIMarkers) -> tuple[Marker, ...]:
+    """The marker list a (possibly legacy) marker op wants as the AI set."""
+    if isinstance(op, (ReplaceAIMarkers, ReconcileMarkers)):
+        return op.desired
+    return op.markers  # AddMarkers
+
+
+def _to_ai_marker(m: Marker) -> Marker:
+    """An app-authored sidecar marker: tagged AI, with the Gemini category folded
+    into the name prefix (matching the CatDV write), and no color."""
+    return Marker(
+        name=ai_marker_name(m.category, m.name),
+        in_=m.in_,
+        out=m.out,
+        description=m.description,
+        category=AI_MARKER_CATEGORY,
+        color=None,
+    )
 
 
 def _etag_for_bytes(data: bytes) -> str | None:

@@ -15,6 +15,7 @@ from backend.app.archive.model import (
     ChangeSet,
     ClipQuery,
     Marker,
+    ReplaceAIMarkers,
     ReplaceNote,
     SetField,
     Timecode,
@@ -184,17 +185,71 @@ async def test_apply_changes_set_field_round_trips_to_sidecar(tmp_path: Path):
     p = FilesystemArchiveProvider(fs_root=tmp_path)
     cs = ChangeSet(
         clip_key=("fs", "c/v"),
-        ops=(SetField(identifier="x", value="42"),),
+        ops=(SetField(identifier="pragafilm.popis.ai", value="42"),),
     )
     result = await p.apply_changes(cs)
     assert result.status == "ok"
     assert result.new_etag is not None
     sidecar = json.loads((cat / "v.annot.json").read_text())
-    assert sidecar["fields"]["x"]["value"] == "42"
+    assert sidecar["fields"]["pragafilm.popis.ai"]["value"] == "42"
 
 
 @pytest.mark.asyncio
-async def test_apply_changes_add_markers_is_additive(tmp_path: Path):
+async def test_apply_changes_replace_ai_markers_keeps_non_ai(tmp_path: Path):
+    """#123: a ReplaceAIMarkers keeps every non-AI (human / legacy) sidecar
+    marker byte-identical and replaces the AI set; the new marker is tagged AI,
+    with its Gemini category folded into the name prefix."""
+    cat = tmp_path / "c"
+    cat.mkdir()
+    (cat / "v.mov").write_bytes(b"")
+    (cat / "v.annot.json").write_text(
+        json.dumps(
+            {
+                "markers": [
+                    {"name": "human", "in": {"secs": 0.0, "frm": 0, "fps": 25.0}, "out": None},
+                    {
+                        "name": "[Old] stale",
+                        "category": "AI",
+                        "in": {"secs": 0.5, "frm": 12, "fps": 25.0},
+                        "out": None,
+                    },
+                ],
+                "fields": {},
+                "notes": {},
+                "provider_data": {},
+            }
+        )
+    )
+    p = FilesystemArchiveProvider(fs_root=tmp_path)
+    cs = ChangeSet(
+        clip_key=("fs", "c/v"),
+        ops=(
+            ReplaceAIMarkers(
+                desired=(
+                    Marker(
+                        name="scéna",
+                        in_=Timecode(secs=1.0, fps=25.0),
+                        out=None,
+                        category="Interview",
+                    ),
+                )
+            ),
+        ),
+    )
+    result = await p.apply_changes(cs)
+    assert result.status == "ok"
+    clip = await p.get_clip("c/v")
+    names = sorted(m.name for m in clip.markers)
+    # human kept; the stale AI marker replaced by the new one (prefixed + AI).
+    assert names == ["[Interview] scéna", "human"]
+    new = next(m for m in clip.markers if m.name == "[Interview] scéna")
+    assert new.category == "AI"
+    human = next(m for m in clip.markers if m.name == "human")
+    assert human.category is None  # untouched
+
+
+@pytest.mark.asyncio
+async def test_apply_changes_legacy_add_markers_routes_through_ai_rule(tmp_path: Path):
     cat = tmp_path / "c"
     cat.mkdir()
     (cat / "v.mov").write_bytes(b"")
@@ -218,8 +273,25 @@ async def test_apply_changes_add_markers_is_additive(tmp_path: Path):
     result = await p.apply_changes(cs)
     assert result.status == "ok"
     clip = await p.get_clip("c/v")
+    # "first" has no category → non-AI → kept; m2 becomes the AI set.
     names = sorted(m.name for m in clip.markers)
     assert names == ["first", "m2"]
+    assert next(m for m in clip.markers if m.name == "m2").category == "AI"
+
+
+@pytest.mark.asyncio
+async def test_apply_changes_rejects_non_owned_field_and_note(tmp_path: Path):
+    cat = tmp_path / "c"
+    cat.mkdir()
+    (cat / "v.mov").write_bytes(b"")
+    p = FilesystemArchiveProvider(fs_root=tmp_path)
+    for op in (
+        SetField(identifier="pragafilm.dekáda.natočení", value="30.léta"),
+        AppendNote(target="notes", text="x"),
+        ReplaceNote(target="bigNotes", text="x"),
+    ):
+        with pytest.raises(FatalProviderError):
+            await p.apply_changes(ChangeSet(clip_key=("fs", "c/v"), ops=(op,)))
 
 
 @pytest.mark.asyncio
@@ -232,11 +304,11 @@ async def test_apply_changes_append_note_concatenates(tmp_path: Path):
         await p.apply_changes(
             ChangeSet(
                 clip_key=("fs", "c/v"),
-                ops=(AppendNote(target="notes", text=text),),
+                ops=(AppendNote(target="pragafilm.popis.ai", text=text),),
             )
         )
     clip = await p.get_clip("c/v")
-    assert clip.notes["notes"] == "alpha\nbeta"
+    assert clip.notes["pragafilm.popis.ai"] == "alpha\nbeta"
 
 
 @pytest.mark.asyncio
@@ -248,17 +320,17 @@ async def test_apply_changes_replace_note_overwrites(tmp_path: Path):
     await p.apply_changes(
         ChangeSet(
             clip_key=("fs", "c/v"),
-            ops=(AppendNote(target="notes", text="alpha"),),
+            ops=(AppendNote(target="pragafilm.popis.ai", text="alpha"),),
         )
     )
     await p.apply_changes(
         ChangeSet(
             clip_key=("fs", "c/v"),
-            ops=(ReplaceNote(target="notes", text="OMEGA"),),
+            ops=(ReplaceNote(target="pragafilm.popis.ai", text="OMEGA"),),
         )
     )
     clip = await p.get_clip("c/v")
-    assert clip.notes["notes"] == "OMEGA"
+    assert clip.notes["pragafilm.popis.ai"] == "OMEGA"
 
 
 @pytest.mark.asyncio
@@ -271,7 +343,7 @@ async def test_apply_changes_stale_etag_returns_conflict(tmp_path: Path):
     r1 = await p.apply_changes(
         ChangeSet(
             clip_key=("fs", "c/v"),
-            ops=(SetField(identifier="x", value=1),),
+            ops=(SetField(identifier="pragafilm.popis.ai", value=1),),
         )
     )
     real_etag = r1.new_etag
@@ -280,7 +352,7 @@ async def test_apply_changes_stale_etag_returns_conflict(tmp_path: Path):
     r2 = await p.apply_changes(
         ChangeSet(
             clip_key=("fs", "c/v"),
-            ops=(SetField(identifier="x", value=2),),
+            ops=(SetField(identifier="pragafilm.popis.ai", value=2),),
             expected_etag="deadbeef",
         )
     )
@@ -290,7 +362,7 @@ async def test_apply_changes_stale_etag_returns_conflict(tmp_path: Path):
 
     # Sidecar untouched.
     sidecar = json.loads((cat / "v.annot.json").read_text())
-    assert sidecar["fields"]["x"]["value"] == 1
+    assert sidecar["fields"]["pragafilm.popis.ai"]["value"] == 1
 
 
 @pytest.mark.asyncio
@@ -314,12 +386,12 @@ async def test_apply_changes_etag_changes_after_write(tmp_path: Path):
     (cat / "v.mov").write_bytes(b"")
     p = FilesystemArchiveProvider(fs_root=tmp_path)
     r1 = await p.apply_changes(
-        ChangeSet(clip_key=("fs", "c/v"), ops=(SetField(identifier="a", value=1),))
+        ChangeSet(clip_key=("fs", "c/v"), ops=(SetField(identifier="pragafilm.popis.ai", value=1),))
     )
     r2 = await p.apply_changes(
         ChangeSet(
             clip_key=("fs", "c/v"),
-            ops=(SetField(identifier="a", value=2),),
+            ops=(SetField(identifier="pragafilm.popis.ai", value=2),),
             expected_etag=r1.new_etag,
         )
     )
