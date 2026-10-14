@@ -13,6 +13,7 @@ import tempfile
 import webbrowser
 from pathlib import Path
 
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
 from tests.walkthrough.app_server import WalkthroughApp
@@ -21,6 +22,24 @@ from tests.walkthrough.harness import Walkthrough
 from tests.walkthrough.scenarios import get_scenario, load_scenarios
 
 ARTIFACTS = Path(__file__).parent / "artifacts"
+
+
+def _launch_chromium(pw, *, headless: bool):
+    """Launch Chromium, falling back to a pre-installed executable.
+
+    CI installs the exact Playwright-pinned build and the default launch works.
+    Some managed/cloud environments ship a DIFFERENT Chromium build under
+    PLAYWRIGHT_BROWSERS_PATH than the pinned one, so the default launch 404s on
+    the expected path; there we point `executable_path` at whatever chromium
+    build is actually present (newest wins). Never downloads a browser."""
+    try:
+        return pw.chromium.launch(headless=headless)
+    except PlaywrightError:
+        root = Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH", "") or "/opt/pw-browsers")
+        candidates = sorted(root.glob("chromium-*/chrome-linux/chrome"), reverse=True)
+        if not candidates:
+            raise
+        return pw.chromium.launch(headless=headless, executable_path=str(candidates[0]))
 
 
 def run_scenarios(slugs: list[str], *, record: bool, port: int = 8766) -> list[dict]:
@@ -34,7 +53,7 @@ def run_scenarios(slugs: list[str], *, record: bool, port: int = 8766) -> list[d
         app.start()
         try:
             with sync_playwright() as pw:
-                browser = pw.chromium.launch(headless=not record)
+                browser = _launch_chromium(pw, headless=not record)
                 for mod in scenarios:
                     video = str(ARTIFACTS / f"{mod.SLUG}.webm") if record else None
                     page = browser.new_page(viewport={"width": 1280, "height": 800})

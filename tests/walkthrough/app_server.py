@@ -69,6 +69,7 @@ class WalkthroughApp:
         self._app = None
         self._thumb: Path | None = None
         self._runner = None
+        self._sync = None
 
     def start(self) -> None:
         for k, v in _OFFLINE_ENV.items():
@@ -193,6 +194,24 @@ class WalkthroughApp:
         assert self._loop is not None
         asyncio.run_coroutine_threadsafe(self._runner.start(), self._loop).result(timeout=5)
 
+        # A real SyncEngine so "Accept & apply" actually drains the write queue
+        # against the FakeArchive (which applies the #123 ownership rule),
+        # turning the published bands orange without a reload. install_live_ctx
+        # stubs sync_engine with a MagicMock; replace it with a live one on the
+        # server's own loop so the apply route's notify() drains for real.
+        from backend.app.services.sync_engine import SyncEngine
+
+        self._sync = SyncEngine(
+            provider=live.archive,
+            pending_ops_repo=core.pending_ops_repo,
+            write_log_repo=core.write_log_repo,
+            connection_monitor=live.connection_monitor,
+            db_provider=lambda: core.db,
+            tick_interval_s=0.05,
+        )
+        live.sync_engine = self._sync
+        asyncio.run_coroutine_threadsafe(self._sync.start(), self._loop).result(timeout=5)
+
     def _wait_until_started(self, timeout: float = 30.0) -> None:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -203,6 +222,9 @@ class WalkthroughApp:
         raise RuntimeError("walkthrough app failed to start within timeout")
 
     def stop(self) -> None:
+        if self._sync is not None and self._loop is not None:
+            with contextlib.suppress(Exception):
+                asyncio.run_coroutine_threadsafe(self._sync.stop(), self._loop).result(timeout=5)
         if self._runner is not None and self._loop is not None:
             with contextlib.suppress(Exception):
                 asyncio.run_coroutine_threadsafe(self._runner.stop(), self._loop).result(timeout=5)
