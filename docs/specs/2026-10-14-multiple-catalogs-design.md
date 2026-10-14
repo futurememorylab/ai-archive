@@ -22,9 +22,15 @@ What the user decided (brainstorm, 2026-10-14):
 
 Assumptions (stated, not asked):
 
-- CatDV clip IDs are globally unique across catalogs, so clip detail / Studio /
-  writeback routes keyed by clip ID keep working regardless of the active
+- **Verified (live probe 2026-10-14):** CatDV clip IDs are server-wide, not
+  per catalog. The two catalogs' clip ID sets don't overlap (881507: 888700…,
+  913722: 913813…), and `GET /clips/{id}` with no catalog parameter returns the
+  right clip with its own `catalogID`. Writeback (`GET` + `PUT
+  /catdv/api/9/clips/{id}`) therefore needs no catalog and is unchanged; clip
+  detail / Studio / drafts keyed by clip ID work regardless of the active
   catalog. Only *list* surfaces are catalog-scoped.
+- The same media added to two catalogs is two distinct clips (different IDs) —
+  annotated and written back independently. No cross-catalog dedup.
 - CatDV field definitions are server-wide, not per catalog — no change there.
 
 Live probe (2026-10-14) of `GET /catdv/api/9/catalogs`: envelope
