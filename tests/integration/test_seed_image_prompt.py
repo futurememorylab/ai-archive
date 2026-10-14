@@ -25,7 +25,9 @@ async def test_image_seed_creates_image_prompt_without_markers(tmp_path: Path):
         assert version is not None
         tm = version.target_map.model_dump(exclude_unset=True)
         assert all(entry.get("kind") != "markers" for entry in tm.values())
-        assert tm["summary_cz"]["target"] == "pragafilm.popis.materialu"
+        # #123: the summary now replaces the AI-owned field, not the human materiál.
+        assert tm["summary_cz"]["target"] == "pragafilm.popis.ai"
+        assert tm["summary_cz"]["mode"] == "replace"
         assert tm["decade"]["identifier"] == "pragafilm.dekáda.natočení"
         assert tm["years"]["identifier"] == "pragafilm.rok.natočení"
 
