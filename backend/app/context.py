@@ -50,8 +50,8 @@ from backend.app.repositories.ai_store_files import AIStoreFilesRepo
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.app_meta import AppMetaRepo, get_or_create_install_id
 from backend.app.repositories.cache_actions_log import CacheActionsLogRepo
-from backend.app.repositories.clip_cache import ClipCacheRepo
 from backend.app.repositories.catalogs import CatalogsRepo
+from backend.app.repositories.clip_cache import ClipCacheRepo
 from backend.app.repositories.clip_list_cache import ClipListCacheRepo
 from backend.app.repositories.clip_versions import ClipVersionsRepo
 from backend.app.repositories.enum_values import EnumValuesRepo

@@ -40,6 +40,13 @@ class _Mon:
 
 def test_is_live_online():
     assert is_live_online(None) is False
-    assert is_live_online(SimpleNamespace(connection_monitor=_Mon(ConnectionState.online, forced=True))) is False
-    assert is_live_online(SimpleNamespace(connection_monitor=_Mon(ConnectionState.offline))) is False
+    assert (
+        is_live_online(
+            SimpleNamespace(connection_monitor=_Mon(ConnectionState.online, forced=True))
+        )
+        is False
+    )
+    assert (
+        is_live_online(SimpleNamespace(connection_monitor=_Mon(ConnectionState.offline))) is False
+    )
     assert is_live_online(SimpleNamespace(connection_monitor=_Mon(ConnectionState.online))) is True

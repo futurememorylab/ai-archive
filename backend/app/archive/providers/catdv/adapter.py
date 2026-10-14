@@ -17,8 +17,8 @@ from backend.app.archive.errors import (
     RetryableError,
 )
 from backend.app.archive.model import (
-    CatalogInfo,
     CanonicalClip,
+    CatalogInfo,
     ChangeSet,
     ClipPage,
     ClipQuery,
@@ -260,7 +260,9 @@ class CatdvArchiveAdapter:
         except CatdvError as exc:
             raise FatalProviderError(str(exc)) from exc
         return [
-            CatalogInfo(str(r["ID"]), str(r.get("name") or f"Catalog #{r['ID']}"), bool(r.get("readOnly")))
+            CatalogInfo(
+                str(r["ID"]), str(r.get("name") or f"Catalog #{r['ID']}"), bool(r.get("readOnly"))
+            )
             for r in rows
             if r.get("ID") is not None
         ]

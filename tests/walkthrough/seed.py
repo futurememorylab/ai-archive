@@ -279,7 +279,9 @@ async def build_seed_db(
         # refresh is attempted) + each extra catalog's cached clip page.
         if catalogs:
             await CatalogsRepo().replace_all(
-                conn, provider_id="catdv", catalogs=list(catalogs),
+                conn,
+                provider_id="catdv",
+                catalogs=list(catalogs),
                 fetched_at=datetime.now(UTC).isoformat(),
             )
         for other_id, other_clips in (other_catalog_clips or {}).items():

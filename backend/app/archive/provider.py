@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from typing import Literal, Protocol, runtime_checkable
 
 from backend.app.archive.model import (
-    CatalogInfo,
     CanonicalClip,
+    CatalogInfo,
     ChangeSet,
     ClipPage,
     ClipQuery,

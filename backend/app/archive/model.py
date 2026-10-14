@@ -184,7 +184,6 @@ class FieldDef:
     picklist_values: tuple[str, ...] | None = None
     provider_data: dict[str, Any] = field(default_factory=dict)
 
-
     def __post_init__(self) -> None:
         if isinstance(self.picklist_values, list):
             object.__setattr__(self, "picklist_values", tuple(self.picklist_values))

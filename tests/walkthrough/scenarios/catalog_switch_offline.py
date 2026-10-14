@@ -45,9 +45,15 @@ def run(wt):
     wt.step("Open the catalog menu", open_picker)
     wt.step(
         "Both catalogs are still listed from the local cache",
-        lambda p: (expect_option(p, CATALOG_ID, current=True), expect_option(p, SECOND_CATALOG_ID, current=False)),
+        lambda p: (
+            expect_option(p, CATALOG_ID, current=True),
+            expect_option(p, SECOND_CATALOG_ID, current=False),
+        ),
     )
-    wt.step("Switch to 'vyber pro AI'", lambda p: (p.keyboard.press("Escape"), switch_to(p, SECOND_CATALOG_ID)))
+    wt.step(
+        "Switch to 'vyber pro AI'",
+        lambda p: (p.keyboard.press("Escape"), switch_to(p, SECOND_CATALOG_ID)),
+    )
     wt.step("The topbar shows the new catalog", lambda p: expect_active_catalog(p, "vyber pro AI"))
     wt.step(
         "Its cached clips are listed",

@@ -204,8 +204,10 @@ class FakeArchive:
         # catalog None = no catalog filter (unit tests); unmapped clips belong
         # to the default catalog.
         pool = [
-            c for c in self._clips
-            if catalog is None or self._clip_catalogs.get(c.key[1], self._default_catalog) == str(catalog)
+            c
+            for c in self._clips
+            if catalog is None
+            or self._clip_catalogs.get(c.key[1], self._default_catalog) == str(catalog)
         ]
         needle = (query.text or "").strip().casefold()
         matches = [c for c in pool if needle in c.name.casefold()] if needle else pool

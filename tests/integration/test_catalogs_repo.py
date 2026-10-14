@@ -12,7 +12,9 @@ B = CatalogInfo("913722", "vyber pro AI", True)
 @pytest.mark.asyncio
 async def test_replace_all_then_list_round_trip(db):
     repo = CatalogsRepo()
-    await repo.replace_all(db, provider_id="catdv", catalogs=[B, A], fetched_at="2026-10-14T10:00:00+00:00")
+    await repo.replace_all(
+        db, provider_id="catdv", catalogs=[B, A], fetched_at="2026-10-14T10:00:00+00:00"
+    )
     assert await repo.list(db, provider_id="catdv") == [A, B]
     assert await repo.fetched_at(db, provider_id="catdv") == "2026-10-14T10:00:00+00:00"
 

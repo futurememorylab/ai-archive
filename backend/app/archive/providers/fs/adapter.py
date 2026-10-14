@@ -33,10 +33,10 @@ from typing import Any
 
 from backend.app.archive.errors import FatalProviderError
 from backend.app.archive.model import (
-    CatalogInfo,
     AddMarkers,
     AppendNote,
     CanonicalClip,
+    CatalogInfo,
     ChangeSet,
     ClipPage,
     ClipQuery,

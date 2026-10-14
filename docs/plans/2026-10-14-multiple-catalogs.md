@@ -8,7 +8,7 @@
 
 **Tech Stack:** FastAPI, aiosqlite, Jinja2 + HTMX + Alpine (`popover()`), pytest, Playwright walkthroughs.
 
-**Spec:** `docs/superpowers/specs/2026-10-14-multiple-catalogs-design.md`
+**Spec:** `docs/specs/2026-10-14-multiple-catalogs-design.md`
 
 ## Global Constraints
 

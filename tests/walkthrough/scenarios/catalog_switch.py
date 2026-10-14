@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from tests.walkthrough.fakes import CATALOG_ID, CLIP_NAME, SECOND_CATALOG_CLIP_NAMES, SECOND_CATALOG_ID
+from tests.walkthrough.fakes import (
+    CATALOG_ID,
+    CLIP_NAME,
+    SECOND_CATALOG_CLIP_NAMES,
+    SECOND_CATALOG_ID,
+)
 from tests.walkthrough.scenarios._catalog_support import (
     expect_active_catalog,
     expect_breadcrumb,
@@ -22,7 +27,9 @@ DESCRIPTION = (
 
 def run(wt):
     wt.step("Start in the default catalog", lambda p: expect_clip_visible(p, CLIP_NAME))
-    wt.step("Choose 'vyber pro AI' from the catalog menu", lambda p: switch_to(p, SECOND_CATALOG_ID))
+    wt.step(
+        "Choose 'vyber pro AI' from the catalog menu", lambda p: switch_to(p, SECOND_CATALOG_ID)
+    )
     wt.step("The topbar shows the new catalog", lambda p: expect_active_catalog(p, "vyber pro AI"))
     wt.step(
         "The breadcrumb names the new catalog",

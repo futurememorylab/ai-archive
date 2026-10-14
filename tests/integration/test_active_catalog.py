@@ -85,7 +85,9 @@ async def test_stale_rows_served_offline(db):
 @pytest.mark.asyncio
 async def test_refresh_failure_serves_stale(db):
     await _seed(db, [A, B], timedelta(hours=2))
-    got = await list_catalogs(_core(db), _live(_Archive(exc=ProviderError("boom"))), "881507", now=NOW)
+    got = await list_catalogs(
+        _core(db), _live(_Archive(exc=ProviderError("boom"))), "881507", now=NOW
+    )
     assert got == [A, B]
 
 
