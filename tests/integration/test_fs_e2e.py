@@ -57,7 +57,7 @@ async def test_fs_e2e_setfield_applies_to_sidecar(db, tmp_path: Path):
         target_map={
             "decade": {
                 "kind": "field",
-                "identifier": "pragafilm.dekáda.natočení",
+                "identifier": "pragafilm.popis.ai",
             }
         },
         output_schema={},
@@ -83,7 +83,7 @@ async def test_fs_e2e_setfield_applies_to_sidecar(db, tmp_path: Path):
                 annotation_id=aid,
                 catdv_clip_id=0,
                 kind="field",
-                target_identifier="pragafilm.dekáda.natočení",
+                target_identifier="pragafilm.popis.ai",
                 proposed_value="30.léta",
             )
         ],
@@ -123,7 +123,7 @@ async def test_fs_e2e_setfield_applies_to_sidecar(db, tmp_path: Path):
     sidecar = cat / "clip001.annot.json"
     assert sidecar.exists()
     doc = json.loads(sidecar.read_text())
-    assert doc["fields"]["pragafilm.dekáda.natočení"]["value"] == "30.léta"
+    assert doc["fields"]["pragafilm.popis.ai"]["value"] == "30.léta"
 
     cur = await db.execute("SELECT COUNT(*) FROM pending_operations WHERE status='applied'")
     assert (await cur.fetchone())[0] == 1

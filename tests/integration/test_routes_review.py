@@ -169,12 +169,11 @@ def test_apply_clip_enqueues_and_drains_via_sync_engine(monkeypatch, tmp_path):
         assert cs is not None
         assert cs.clip_key == ("catdv", "1")
         op_types = {type(o).__name__ for o in cs.ops}
-        assert "AddMarkers" in op_types
-        assert any(
-            isinstance(o, SetField)
-            and o.identifier == "pragafilm.dekáda.natočení"
-            and o.value == "30.léta"
-            for o in cs.ops
+        assert "ReplaceAIMarkers" in op_types
+        # The decade field is a shared (non-owned) field → a suggestion, never
+        # written. No SetField for it is enqueued (#123).
+        assert not any(
+            isinstance(o, SetField) and o.identifier == "pragafilm.dekáda.natočení" for o in cs.ops
         )
 
 
@@ -275,7 +274,10 @@ def test_apply_batch_defaults_all_kinds(monkeypatch, tmp_path):
         _run(_seed(ctx))
         r = client.post("/api/review/apply-batch", json={"clip_ids": [1]})
         assert r.status_code == 200
-        assert r.json()["queued"] >= 2
+        # The seed has a marker + a decade field. The decade field is a shared
+        # (non-owned) field → a suggestion, never enqueued; only the owned
+        # marker op is queued (#123).
+        assert r.json()["queued"] >= 1
 
 
 def test_apply_batch_does_not_flush_preaccepted_other_kinds(monkeypatch, tmp_path):
@@ -633,9 +635,11 @@ def test_clips_list_shows_draft_columns(monkeypatch, tmp_path):
         assert "Type" in r.text
         assert "Batch" in r.text
         assert "Drafts" in r.text
-        # Clip 1 has 1 marker draft and 1 field draft → label "1m · 1f".
+        # Clip 1 has 1 marker draft; the decade field draft is a shared
+        # (non-owned) field → a suggestion, excluded from the pending draft
+        # counts (#123), so only the marker count shows.
         assert "1m" in r.text
-        assert "1f" in r.text
+        assert "1f" not in r.text
         # Clip kind (video, since no filePath in provider_data) must appear.
         assert "video" in r.text
 

@@ -16,6 +16,7 @@ from backend.app.archive.model import (
     ChangeSet,
     Marker,
     ReconcileMarkers,
+    ReplaceAIMarkers,
     ReplaceNote,
     SetField,
     Timecode,
@@ -58,6 +59,11 @@ def _marker_from_dict(d: dict[str, Any]) -> Marker:
 
 
 def change_op_to_dict(op: ChangeOp) -> dict[str, Any]:
+    if isinstance(op, ReplaceAIMarkers):
+        return {
+            "kind": "ReplaceAIMarkers",
+            "desired": [_marker_to_dict(m) for m in op.desired],
+        }
     if isinstance(op, AddMarkers):
         return {
             "kind": "AddMarkers",
@@ -80,6 +86,8 @@ def change_op_to_dict(op: ChangeOp) -> dict[str, Any]:
 
 def change_op_from_dict(d: dict[str, Any]) -> ChangeOp:
     k = d.get("kind")
+    if k == "ReplaceAIMarkers":
+        return ReplaceAIMarkers(desired=tuple(_marker_from_dict(m) for m in d["desired"]))
     if k == "AddMarkers":
         return AddMarkers(markers=tuple(_marker_from_dict(m) for m in d["markers"]))
     if k == "SetField":

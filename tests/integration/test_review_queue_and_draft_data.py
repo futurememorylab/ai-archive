@@ -66,6 +66,50 @@ def test_pending_clip_ids_for_jobs(monkeypatch, tmp_path):
         assert asyncio.run(ReviewItemsRepo().pending_clip_ids_for_jobs(ctx.db, [])) == []
 
 
+async def _seed_suggestion_only(ctx):
+    """A clip whose only un-applied item is a suggestion (a non-owned field)."""
+    prompts = PromptsRepo()
+    _, vid = await prompts.create_with_initial_version(
+        ctx.db,
+        name="P2",
+        description=None,
+        body="b",
+        target_map={"d": {"kind": "field", "identifier": "pragafilm.dekáda.natočení"}},
+        output_schema={},
+        model="m",
+    )
+    jobs = JobsRepo()
+    jid = await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[201], run_group="rg-2")
+    cur = await ctx.db.execute(
+        "INSERT INTO annotations (catdv_clip_id, catdv_clip_name, prompt_version_id, job_id, "
+        " model, prompt_used, raw_response, structured_output, clip_snapshot, created_at) "
+        "VALUES (201, 'C201', ?, ?, 'm', 'p', '{}', '{}', '{}', '2026-06-03T00:00:00')",
+        (vid, jid),
+    )
+    ann = cur.lastrowid
+    await ctx.db.execute(
+        "INSERT INTO review_items (annotation_id, studio_run_id, catdv_clip_id, kind, "
+        " target_identifier, proposed_value, edited_value, decision, applied_at) "
+        "VALUES (?, NULL, 201, 'field', 'pragafilm.dekáda.natočení', '\"30.léta\"', "
+        "NULL, 'pending', NULL)",
+        (ann,),
+    )
+    await ctx.db.commit()
+    return jid
+
+
+def test_suggestion_only_clip_is_not_pending(monkeypatch, tmp_path):
+    """A draft whose only remaining un-applied item is a suggestion counts as
+    fully applied: it is excluded from the review/pending counts (#123)."""
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.core_ctx
+        jid = asyncio.run(_seed_suggestion_only(ctx))
+        repo = ReviewItemsRepo()
+        assert asyncio.run(repo.pending_clip_ids_for_jobs(ctx.db, [jid])) == []
+        assert asyncio.run(repo.count_pending_clips(ctx.db, job_id=jid)) == 0
+        assert asyncio.run(repo.count_clips_for_review(ctx.db)) == 0
+
+
 def test_review_queue_route(monkeypatch, tmp_path):
     with _make_client(monkeypatch, tmp_path) as client:
         jid = asyncio.run(_seed(client.app.state.core_ctx))

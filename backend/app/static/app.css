@@ -1323,6 +1323,28 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
   border-right: 2px solid var(--info);
 }
 
+/* ─── Provenance (#123): human vs AI, using existing tokens only ──────────
+   A human (non-AI) marker on the published band reads grey (--text-3), so it
+   is visibly distinct from the orange AI-published bands. */
+.detail .timeline .ranges.range-cur .range.origin-human {
+  background: color-mix(in oklab, var(--text-3) 35%, transparent);
+  border-left-color: var(--text-3);
+  border-right-color: var(--text-3);
+}
+/* Provenance pills. `info` (blue) for AI drafts/suggestions; `origin-human`
+   (grey) for human annotations. `accent` (orange = AI published) already exists. */
+.pill.info { color: var(--info); border-color: color-mix(in oklab, var(--info) 35%, transparent); }
+.pill.info .led { background: var(--info); box-shadow: 0 0 6px var(--info); }
+.pill.origin-human { color: var(--text-3);
+  border-color: color-mix(in oklab, var(--text-3) 35%, transparent); }
+.pill.origin-human .led { background: var(--text-3); }
+.provenance-legend .legend-human { color: var(--text-3); }
+.provenance-legend .legend-ai { color: var(--accent); }
+.provenance-legend .legend-draft { color: var(--info); }
+/* Suggestion rows (shared fields the app never writes): a soft note under the
+   value, visually quieter than a real review row. */
+.ri-suggestion .ri-suggestion-note { font-size: 10.5px; margin: 2px 0 0; }
+
 /* ─── Run status line ────────────────────────────────────────────────── */
 .anno-status {
   padding: 8px 10px;

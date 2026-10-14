@@ -7,12 +7,14 @@ from datetime import datetime
 from typing import Any
 
 from backend.app.archive.model import (
+    AI_MARKER_CATEGORY,
     CanonicalClip,
     FieldDef,
     FieldValue,
     Marker,
     MediaRef,
     Timecode,
+    ai_marker_name,
 )
 from backend.app.timecode import secs_to_smpte
 
@@ -105,19 +107,27 @@ def _clamp_marker_name(name: str | None, description: str | None) -> tuple[str, 
 
 
 def marker_to_catdv(marker: Marker, fps: float) -> dict[str, Any]:
-    name, description = _clamp_marker_name(marker.name, marker.description)
+    """Translate an app-authored marker into CatDV's shape (#123, ADR 0127).
+
+    Every marker the app writes is OWNED, so it is always tagged
+    ``category == AI_MARKER_CATEGORY``. Gemini's own category (e.g. "Interview")
+    becomes a name PREFIX — ``"[Interview] Two men talk"`` — applied before the
+    MARKER_NAME_MAX clamp so the prefix is counted in the length budget and the
+    full original is preserved in the description on overflow. The view model
+    strips the prefix back into a category chip for display. ``color`` is no
+    longer sent: CatDV colours markers by category.
+    """
+    prefixed = ai_marker_name(marker.category, marker.name)
+    name, description = _clamp_marker_name(prefixed, marker.description)
     out: dict[str, Any] = {
         "name": name,
         "in": _timecode_to_catdv(marker.in_, fps),
+        "category": AI_MARKER_CATEGORY,
     }
     if marker.out is not None:
         out["out"] = _timecode_to_catdv(marker.out, fps)
     if description is not None:
         out["description"] = description
-    if marker.category is not None:
-        out["category"] = marker.category
-    if marker.color is not None:
-        out["color"] = marker.color
     return out
 
 

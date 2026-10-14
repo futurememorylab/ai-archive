@@ -24,11 +24,18 @@ from typing import Any
 
 import aiosqlite
 
-from backend.app.archive.model import ChangeOp, Marker, ReconcileMarkers, ReplaceNote, SetField
+from backend.app.archive.model import (
+    AI_OWNED_FIELDS,
+    ChangeOp,
+    Marker,
+    ReplaceAIMarkers,
+    SetField,
+)
 from backend.app.models.annotation import ClipVersion
 from backend.app.models.prompt import TargetMap
 from backend.app.services.write_queue import (
     _marker_from_review_value,
+    ai_marker_values,
     etag_from_snapshot,
     fps_from_snapshot,
 )
@@ -63,8 +70,9 @@ class PublishService:
         author: str | None,
         origin: str = "publish",
     ) -> int | None:
-        accepted = await self._review_items.list_by_clip(conn, clip_id, decision="accepted")
-        accepted = [it for it in accepted if it.annotation_id is not None and it.applied_at is None]
+        all_accepted = await self._review_items.list_by_clip(conn, clip_id, decision="accepted")
+        all_accepted = [it for it in all_accepted if it.annotation_id is not None]
+        accepted = [it for it in all_accepted if it.applied_at is None]
         if not accepted:
             return None
 
@@ -74,7 +82,9 @@ class PublishService:
 
         parent = await self._versions.live_for_clip(conn, clip_id)
         base = dict(parent.snapshot) if parent is not None else await self._load_live(conn, clip_id)
-        snapshot = _materialize(base, accepted, fps=fps)
+        snapshot = _materialize(
+            base, accepted, fps=fps, ai_markers=ai_marker_values(all_accepted, annotation.id)
+        )
 
         num = await self._versions.next_version_num(conn, clip_id)
         version_id = await self._versions.insert(
@@ -98,7 +108,9 @@ class PublishService:
         await self._wq.enqueue_apply_for_clip(
             conn,
             clip_id=clip_id,
-            accepted=accepted,
+            # All accepted items: the queue skips already-applied ones but needs
+            # them to build the full AI marker set (#123 review fix 2).
+            accepted=all_accepted,
             target_map=version.target_map,
             expected_etag=etag_from_snapshot(annotation.clip_snapshot),
             annotation_id=annotation.id,
@@ -150,16 +162,24 @@ class PublishService:
 def _switch_ops(target: ClipVersion, versions: list[ClipVersion]) -> list[ChangeOp]:
     """Ops that switch a clip to `target`'s snapshot (the 'Make live' path).
 
-    Markers are reconciled, not merely added: we re-assert the target's markers
-    and drop the markers WE authored in other versions, while preserving markers
-    we never authored (handled in build_put_payload). drop_secs is the union of
-    every version's marker in-seconds minus the target's, so only our own
-    later/other additions are removed. Fields/notes overwrite to the target's
-    values and are not cleared when absent (never destroy a foreign value).
+    Under the #123 ownership rule, publish and Make live are the same operation:
+    emit ReplaceAIMarkers with the target version's markers, which the payload
+    builder turns into "the AI set becomes exactly these; every non-AI (human /
+    legacy) marker is kept". A later version's extra AI markers are dropped
+    without tracking drop_secs across versions — ownership is category-based, not
+    frame-based.
+
+    Only AI_OWNED_FIELDS are written. The target's other snapshot values
+    (popis.materialu, decade/year, top-level notes/bigNotes) are never emitted,
+    so Make live never overwrites a human field. A field is never cleared: a key
+    absent from the snapshot simply isn't written.
+
+    `versions` is unused now (it fed the old drop_secs computation) but kept in
+    the signature for callers.
     """
+    _ = versions
     snap = target.snapshot
     desired: list[Marker] = []
-    target_secs: set[float] = set()
     for m in snap.get("markers") or []:
         if isinstance(m, dict):
             # fps=0.0 sentinel: the frame is derived from the clip's REAL fps in
@@ -167,44 +187,44 @@ def _switch_ops(target: ClipVersion, versions: list[ClipVersion]) -> list[Change
             mm = _marker_from_review_value(m, 0.0)
             if mm is not None:
                 desired.append(mm)
-                s = (m.get("in") or {}).get("secs")
-                if isinstance(s, (int, float)):
-                    target_secs.add(float(s))
 
-    ours_all: set[float] = set()
-    for v in versions:
-        for m in v.snapshot.get("markers") or []:
-            if isinstance(m, dict):
-                s = (m.get("in") or {}).get("secs")
-                if isinstance(s, (int, float)):
-                    ours_all.add(float(s))
-    drop_secs = tuple(sorted(ours_all - target_secs))
-
-    ops: list[ChangeOp] = []
-    # Always emit when there is something to assert OR drop, so switching to a
-    # marker-less version still strips our later additions.
-    if desired or drop_secs:
-        ops.append(ReconcileMarkers(desired=tuple(desired), drop_secs=drop_secs))
+    # Always re-assert the AI set to the target's markers (an empty set clears
+    # our markers while keeping human ones), so switching is deterministic.
+    ops: list[ChangeOp] = [ReplaceAIMarkers(desired=tuple(desired))]
     for ident, val in (snap.get("fields") or {}).items():
-        ops.append(SetField(identifier=ident, value=val))
-    if snap.get("notes"):
-        ops.append(ReplaceNote(target="notes", text=str(snap["notes"])))
-    if snap.get("bigNotes"):
-        ops.append(ReplaceNote(target="bigNotes", text=str(snap["bigNotes"])))
+        if ident in AI_OWNED_FIELDS:
+            ops.append(SetField(identifier=ident, value=val))
     return ops
 
 
-def _materialize(base: dict[str, Any], accepted: list, *, fps: float) -> dict[str, Any]:
-    """Lay accepted items on top of the base snapshot: markers add, fields set,
-    notes/bigNotes set. Mirrors the op semantics in WriteQueue._items_to_change_ops."""
+def _materialize(
+    base: dict[str, Any],
+    accepted: list,
+    *,
+    fps: float,
+    ai_markers: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Lay accepted items on top of the base snapshot: fields set, notes kept
+    under their REAL target. Mirrors WriteQueue._items_to_change_ops.
+
+    Markers mirror ReplaceAIMarkers: when this publish carries marker items the
+    snapshot's markers BECOME `ai_markers` (the full AI set CatDV receives);
+    otherwise no marker op is sent and the parent's markers carry over.
+
+    Only `notes` and `bigNotes` are CatDV's top-level note properties; every
+    other note target (e.g. the summary `pragafilm.popis.ai`) is a user field
+    and is stored under `fields[target]`, not collapsed into the top-level
+    `notes`. Collapsing it was the bug that wrote the AI summary into the human
+    `notes` on Make live / Restore (spec Problem §bug)."""
     markers = list(base.get("markers") or [])
     fields = dict(base.get("fields") or {})
     notes = base.get("notes")
     big_notes = base.get("bigNotes")
+    new_markers = []
     for it in accepted:
         value = it.edited_value if it.edited_value is not None else it.proposed_value
         if it.kind == "marker" and isinstance(value, dict):
-            markers.append(value)
+            new_markers.append(value)
         elif it.kind == "field" and it.target_identifier:
             fields[it.target_identifier] = (
                 value.get("value") if isinstance(value, dict) and "value" in value else value
@@ -217,8 +237,12 @@ def _materialize(base: dict[str, Any], accepted: list, *, fps: float) -> dict[st
             )
             if it.target_identifier == "bigNotes":
                 big_notes = text
-            else:
+            elif it.target_identifier == "notes":
                 notes = text
+            else:
+                fields[it.target_identifier] = text
+    if new_markers:
+        markers = list(ai_markers) if ai_markers else new_markers
     return {"markers": markers, "fields": fields, "notes": notes, "bigNotes": big_notes}
 
 

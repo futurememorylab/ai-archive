@@ -234,3 +234,54 @@ def test_clip_detail_kind_video():
         fetched_at=datetime.now(UTC),
     )
     assert clip_detail(clip)["clip"]["kind"] == "video"
+
+
+# --- #123 provenance ------------------------------------------------------
+
+
+def test_clip_detail_ai_marker_origin_and_prefix_stripped():
+    """A published AI marker (category 'AI', name '[Category] text') shows
+    origin 'ai', its Gemini category peeled back out of the name prefix, and
+    the bare name."""
+    markers = (
+        Marker(
+            name="[Interview] Two men talk",
+            in_=Timecode(secs=4.0, fps=25.0),
+            out=None,
+            category="AI",
+        ),
+    )
+    d = clip_detail(_canonical(markers=markers))
+    m0 = d["clip"]["markers"][0]
+    assert m0["origin"] == "ai"
+    assert m0["category"] == "Interview"
+    assert m0["name"] == "Two men talk"
+
+
+def test_clip_detail_human_marker_origin_untouched():
+    markers = (
+        Marker(
+            name="Žena u řeky",
+            in_=Timecode(secs=4.0, fps=25.0),
+            out=None,
+            category="Exteriér",
+        ),
+    )
+    d = clip_detail(_canonical(markers=markers))
+    m0 = d["clip"]["markers"][0]
+    assert m0["origin"] == "human"
+    assert m0["category"] == "Exteriér"
+    assert m0["name"] == "Žena u řeky"
+
+
+def test_clip_detail_field_origin_by_ownership():
+    fields = {
+        "pragafilm.popis.ai": FieldValue(identifier="pragafilm.popis.ai", value="shrnutí"),
+        "pragafilm.popis.materialu": FieldValue(
+            identifier="pragafilm.popis.materialu", value="human"
+        ),
+    }
+    d = clip_detail(_canonical(fields=fields))
+    by_ident = {f["identifier"]: f for f in d["clip"]["fields"]}
+    assert by_ident["pragafilm.popis.ai"]["origin"] == "ai"
+    assert by_ident["pragafilm.popis.materialu"]["origin"] == "human"

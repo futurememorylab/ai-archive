@@ -36,7 +36,10 @@ async def test_failed_serialise_leaves_sidecar_unchanged(tmp_path: Path, monkeyp
     p = FilesystemArchiveProvider(fs_root=tmp_path)
     with pytest.raises(RuntimeError):
         await p.apply_changes(
-            ChangeSet(clip_key=("fs", "c/v"), ops=(SetField(identifier="x", value="NEW"),))
+            ChangeSet(
+                clip_key=("fs", "c/v"),
+                ops=(SetField(identifier="pragafilm.popis.ai", value="NEW"),),
+            )
         )
 
     # Original sidecar bytes intact.
@@ -62,7 +65,10 @@ async def test_failed_os_replace_cleans_up_tmp(tmp_path: Path, monkeypatch):
     p = FilesystemArchiveProvider(fs_root=tmp_path)
     with pytest.raises(OSError):
         await p.apply_changes(
-            ChangeSet(clip_key=("fs", "c/v"), ops=(SetField(identifier="x", value="NEW"),))
+            ChangeSet(
+                clip_key=("fs", "c/v"),
+                ops=(SetField(identifier="pragafilm.popis.ai", value="NEW"),),
+            )
         )
 
     leftover = [
@@ -83,7 +89,9 @@ async def test_write_creates_parent_directory(tmp_path: Path):
     (cat / "v.mov").write_bytes(b"")
     p = FilesystemArchiveProvider(fs_root=tmp_path)
     result = await p.apply_changes(
-        ChangeSet(clip_key=("fs", "fresh/v"), ops=(SetField(identifier="k", value=1),))
+        ChangeSet(
+            clip_key=("fs", "fresh/v"), ops=(SetField(identifier="pragafilm.popis.ai", value=1),)
+        )
     )
     assert result.status == "ok"
     assert (cat / "v.annot.json").exists()

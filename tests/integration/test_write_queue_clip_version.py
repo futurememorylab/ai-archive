@@ -49,7 +49,7 @@ async def test_enqueue_carries_clip_version_id_and_extra_ops(db):
                 studio_run_id=None,
                 catdv_clip_id=1,
                 kind="field",
-                target_identifier="pragafilm.genre",
+                target_identifier="pragafilm.popis.ai",
                 proposed_value="thriller",
             )
         ],
@@ -69,7 +69,7 @@ async def test_enqueue_carries_clip_version_id_and_extra_ops(db):
         clip_version_id=42,
         extra_ops=[SetField(identifier="pragafilm.anno_version", value="#1 · you")],
     )
-    assert len(op_ids) == 2  # the field op + the provenance op
+    assert len(op_ids) == 2  # the owned field op + the appended extra op
     rows = await PendingOperationsRepo().list_pending_for_clip(
         db, provider_id="catdv", provider_clip_id="1"
     )

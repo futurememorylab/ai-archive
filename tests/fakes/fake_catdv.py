@@ -93,7 +93,19 @@ class FakeCatdv:
             body = await request.json()
             self.put_log.append((clip_id, body))
             existing = self.clips.get(clip_id, {})
-            existing.update(body)
+            # Mirror the real CatDV PUT semantics the app relies on (#123): a
+            # supplied `markers` array (and every other top-level property)
+            # replaces that property wholesale, but `fields` MERGES per key —
+            # keys absent from the body keep their current value. A plain
+            # dict.update would replace the whole `fields` map and wrongly drop
+            # the human fields the app never touched.
+            for key, value in body.items():
+                if key == "fields" and isinstance(value, dict):
+                    merged = dict(existing.get("fields") or {})
+                    merged.update(value)
+                    existing["fields"] = merged
+                else:
+                    existing[key] = value
             self.clips[clip_id] = existing
             return self._envelope("OK", data={"ID": clip_id, "modifyDate": "2026-05-18"})
 

@@ -5,16 +5,37 @@ Keeps templates logic-free: no `.provider_data["foo"]["bar"]` chains in HTML.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import ftfy
 
-from backend.app.archive.model import CanonicalClip, FieldValue, Marker
+from backend.app.archive.model import (
+    AI_MARKER_CATEGORY,
+    AI_OWNED_FIELDS,
+    CanonicalClip,
+    FieldValue,
+    Marker,
+)
 from backend.app.media_kind import is_image_path
 
 _YEAR_FIELD = "pragafilm.rok.natočení"
 _DECADE_FIELD = "pragafilm.dekáda.natočení"
 _PRAGAFILM_PREFIX = "pragafilm."
+
+# An app-authored marker name carries its Gemini category as a "[Category] "
+# prefix (see model.ai_marker_name). On display we peel it back into a category
+# chip. The regex is deliberately strict: a leading [..] with a following space.
+_AI_NAME_PREFIX = re.compile(r"^\[([^\]]+)\]\s(.*)$", re.DOTALL)
+
+
+def _split_ai_prefix(name: str) -> tuple[str | None, str]:
+    """Return (category, name) peeled from an AI marker's "[Category] name"
+    display name. Without a prefix: (None, name)."""
+    m = _AI_NAME_PREFIX.match(name or "")
+    if m:
+        return m.group(1), m.group(2)
+    return None, name or ""
 
 
 def _fix(s: str | None) -> str | None:
@@ -77,6 +98,25 @@ def clip_summary(
 
 
 def _marker_view(m: Marker) -> dict[str, Any]:
+    """A published marker for the clip page (#123 provenance).
+
+    `origin` is "ai" when the marker is app-owned (`category == "AI"`), else
+    "human". For an AI marker the Gemini category is peeled back out of the
+    "[Category] name" display name into `category`, and the bare name shown;
+    human markers keep their stored name/category untouched.
+    """
+    is_ai = m.category == AI_MARKER_CATEGORY
+    if is_ai:
+        cat, bare = _split_ai_prefix(m.name or "")
+        return {
+            "name": _fix(bare),
+            "in_secs": m.in_.secs,
+            "out_secs": m.out.secs if m.out is not None else None,
+            "description": _fix(m.description),
+            "category": cat,
+            "color": m.color,
+            "origin": "ai",
+        }
     return {
         "name": _fix(m.name),
         "in_secs": m.in_.secs,
@@ -84,6 +124,7 @@ def _marker_view(m: Marker) -> dict[str, Any]:
         "description": _fix(m.description),
         "category": m.category,
         "color": m.color,
+        "origin": "human",
     }
 
 
@@ -99,6 +140,8 @@ def _field_view(fv: FieldValue) -> dict[str, Any]:
         "identifier": fv.identifier,
         "name": fv.identifier.split(".")[-1],
         "value": value_str,
+        # The app owns pragafilm.popis.ai; every other field is human.
+        "origin": "ai" if fv.identifier in AI_OWNED_FIELDS else "human",
     }
 
 
@@ -295,6 +338,9 @@ def draft_review_arrays(draft: dict) -> dict:
         return "accepted" if decision == "accepted" else "proposed"
 
     def _marker(m: dict) -> dict:
+        # A draft marker is always app-owned (markers are AI). Its Gemini
+        # category is the raw proposed one; no "[Category]" prefix yet (that is
+        # applied only on write), so no peeling here.
         return {
             "item_id": m["item_id"],
             "status": _status(m.get("decision")),
@@ -304,22 +350,34 @@ def draft_review_arrays(draft: dict) -> dict:
             "in_secs": m["in_secs"],
             "out_secs": m.get("out_secs"),
             "color": m.get("color"),
+            "origin": "ai_draft",
         }
 
     def _field(f: dict) -> dict:
+        ident = f.get("identifier") or ""
+        # A field/note item the app does NOT own is a suggestion: it is never
+        # written to the archive, only offered for a human to copy (#123).
+        suggestion = ident not in AI_OWNED_FIELDS
         return {
             "item_id": f["item_id"],
             "status": _status(f.get("decision")),
-            "identifier": f.get("identifier") or "",
+            "identifier": ident,
             "value": f.get("value", ""),
             "multi": bool(f.get("multi")),
+            "origin": "ai_suggestion" if suggestion else "ai_draft",
+            "suggestion": suggestion,
         }
 
     def _note(n: dict) -> dict:
+        ident = n.get("identifier") or ""
+        suggestion = ident not in AI_OWNED_FIELDS
         return {
             "item_id": n["item_id"],
             "status": _status(n.get("decision")),
             "text": n.get("text") or "",
+            "identifier": ident,
+            "origin": "ai_suggestion" if suggestion else "ai_draft",
+            "suggestion": suggestion,
         }
 
     for src_key, out_key, shape in (

@@ -1,13 +1,22 @@
-"""Walkthrough scenario: review and edit an AI annotation, then publish."""
+"""Walkthrough scenario: review an AI draft and publish it, watching provenance.
+
+Exercises the #123 writeback redesign end to end: the draft proposals read as
+AI · draft, a shared field (decade) reads as an AI · suggestion with a Copy
+button and no keep checkbox, and after Accept & apply the published panel shows
+the new marker as AI · published (orange) while the human and legacy markers
+survive untouched (grey).
+"""
 
 from __future__ import annotations
 
 SLUG = "review-edit-annotation"
 TOPIC = "Clip page"
-TITLE = "Review and edit an AI annotation"
+TITLE = "Review an AI draft and publish it"
 DESCRIPTION = (
-    "An operator opens a clip with a pending AI draft, plays the proxy, reviews "
-    "the suggested decade field, corrects it, and publishes the accepted draft."
+    "An operator opens a clip with a pending AI draft, sees the proposals badged "
+    "AI · draft and the shared decade field offered as a copy-only suggestion, "
+    "then publishes — the new marker turns orange (AI · published) while the "
+    "human and legacy markers stay grey and untouched."
 )
 
 
@@ -24,49 +33,82 @@ def run(wt):
         "Switch to the draft view",
         lambda p: p.locator('button[data-scope="draft"]').click(),
     )
-    # The draft opens on the Description tab (renamed from "Markers"): it shows a
-    # read-only Summary echo of the notes first, then each proposal badged as a
-    # "Shot" (single timestamp) or "Scene" (in + out). Visiting it documents the
-    # relabelled tab and the Shot/Scene badges.
+    # The Description tab lists the AI proposals, each badged AI · draft (blue).
     wt.step(
-        "Review the Shot/Scene proposals in the Description tab",
+        "Open the Description tab",
         lambda p: p.locator("#draft-aside").get_by_role("button", name="Description").click(),
     )
-    # From here on every locator is scoped to the draft panel (#draft-aside),
-    # the Alpine-driven review surface rendered by _anno_draft.html. The draft
-    # panel has its own tabs / edit / save controls (distinct from the
-    # published _anno_panels.html); scoping avoids matching the hidden
-    # published panel's same-named elements.
+    wt.step(
+        "See the proposal badged AI · draft",
+        lambda p: (
+            p.locator("#draft-aside").get_by_text("AI · draft").first.wait_for(state="visible")
+        ),
+    )
     wt.step(
         "Open the Fields tab",
         lambda p: p.locator("#draft-aside").get_by_role("button", name="Fields").click(),
     )
-    # The field card is a plain .ri-card (marker cards carry .ri-marker and live
-    # on the hidden Description tab, so exclude them); :visible pins us to the
-    # field actually on screen under the Fields tab.
+    # The decade field is a SHARED field the app does not own → a suggestion:
+    # AI · suggestion, a Copy button, and no keep checkbox / edit pencil.
     wt.step(
-        "Edit the proposed Decade field",
+        "See the decade field as an AI · suggestion",
         lambda p: (
-            p.locator("#draft-aside .ri-card:not(.ri-marker):visible")
-            .first.get_by_role("button", name="Edit")
-            .click()
+            p.locator("#draft-aside").get_by_text("AI · suggestion").first.wait_for(state="visible")
         ),
     )
     wt.step(
-        "Correct the value to 40.léta",
-        lambda p: p.locator("#draft-aside .ri-card.editing:not(.ri-marker) input.txt").first.fill(
-            "40.léta"
-        ),
-    )
-    wt.step(
-        "Save the corrected value",
-        lambda p: (
-            p.locator("#draft-aside .ri-card.editing:not(.ri-marker)")
-            .first.get_by_role("button", name="Save")
-            .click()
+        "The suggestion offers a Copy button (not a write)",
+        lambda p: p.locator("#draft-aside .ri-suggestion [data-copy]").first.wait_for(
+            state="visible"
         ),
     )
     wt.step(
         "Accept & apply (publish) the draft",
         lambda p: p.locator('[data-test="apply-draft"]').click(),
+    )
+    # After the write-queue drains (SyncEngine → the fake applies the ownership
+    # rule), the published panel refreshes without a reload.
+    wt.step(
+        "Switch to the published view",
+        lambda p: p.locator('button[data-scope="published"]').click(),
+    )
+    wt.step(
+        "Open the published Description tab",
+        lambda p: p.locator("#published-panels").get_by_role("tab", name="Description").click(),
+    )
+    wt.step(
+        "The published marker now reads AI · published",
+        lambda p: (
+            p.locator("#published-panels")
+            .get_by_text("AI · published")
+            .first.wait_for(state="visible", timeout=15000)
+        ),
+    )
+    wt.step(
+        "The human marker survived the publish",
+        lambda p: (
+            p.locator("#published-panels")
+            .get_by_text("Opening titles")
+            .first.wait_for(state="visible")
+        ),
+    )
+    wt.step(
+        "The legacy marker survived the publish",
+        lambda p: (
+            p.locator("#published-panels").get_by_text("Interview").first.wait_for(state="visible")
+        ),
+    )
+    # The timeline splits by provenance: a human band carries .origin-human
+    # (grey) and the published AI band does not (orange).
+    wt.step(
+        "A human band is grey on the timeline",
+        lambda p: p.locator(".timeline .ranges.range-cur .range.origin-human").first.wait_for(
+            state="visible"
+        ),
+    )
+    wt.step(
+        "An AI band is orange on the timeline",
+        lambda p: p.locator(".timeline .ranges.range-cur .range:not(.origin-human)").first.wait_for(
+            state="visible"
+        ),
     )

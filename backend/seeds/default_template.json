@@ -45,7 +45,7 @@
   },
   "target_map": {
     "scenes":     {"kind": "markers"},
-    "summary_cz": {"kind": "note",  "target": "pragafilm.popis.materialu", "mode": "append"},
+    "summary_cz": {"kind": "note",  "target": "pragafilm.popis.ai", "mode": "replace"},
     "decade":     {"kind": "field", "identifier": "pragafilm.dekáda.natočení"},
     "years":      {"kind": "field", "identifier": "pragafilm.rok.natočení"}
   },

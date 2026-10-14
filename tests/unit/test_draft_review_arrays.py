@@ -160,6 +160,50 @@ def test_synced_count_counts_only_server_confirmed_applied_items():
     assert a["markers"] == []  # applied items are excluded from the panel
 
 
+def test_markers_carry_ai_draft_origin():
+    a = draft_review_arrays(_draft())
+    assert all(m["origin"] == "ai_draft" for m in a["markers"])
+
+
+def test_non_owned_field_is_flagged_suggestion():
+    # "x.y" is not in AI_OWNED_FIELDS → a suggestion (copy-me, never written).
+    a = draft_review_arrays(_draft())
+    f = a["fields"][0]
+    assert f["suggestion"] is True
+    assert f["origin"] == "ai_suggestion"
+
+
+def test_owned_note_is_not_a_suggestion():
+    draft = {
+        "has_draft": True,
+        "markers": [],
+        "fields": [],
+        "note_items": [
+            {
+                "item_id": 30,
+                "decision": "accepted",
+                "identifier": "pragafilm.popis.ai",
+                "text": "shrnutí",
+                "kind": "note",
+                "applied_at": None,
+            },
+            {
+                "item_id": 31,
+                "decision": "pending",
+                "identifier": "pragafilm.popis.materialu",
+                "text": "human-ish",
+                "kind": "note",
+                "applied_at": None,
+            },
+        ],
+    }
+    a = draft_review_arrays(draft)
+    owned = next(n for n in a["notes"] if n["item_id"] == 30)
+    sugg = next(n for n in a["notes"] if n["item_id"] == 31)
+    assert owned["suggestion"] is False and owned["origin"] == "ai_draft"
+    assert sugg["suggestion"] is True and sugg["origin"] == "ai_suggestion"
+
+
 def test_no_draft_returns_empty_arrays():
     assert draft_review_arrays({"has_draft": False}) == {
         "markers": [],

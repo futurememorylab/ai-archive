@@ -100,12 +100,16 @@ async def _seed_prompt_and_annotations(db, clip_ids: list[int]):
         items = await items_repo.bulk_insert(
             db,
             [
+                # The app writes only what it owns (#123): the summary note to
+                # pragafilm.popis.ai. A decade/year field write would now be a
+                # suggestion, never enqueued, so the end-to-end drain uses the
+                # one owned target instead.
                 ReviewItem(
                     annotation_id=aid,
                     catdv_clip_id=clip_id,
-                    kind="field",
-                    target_identifier="pragafilm.dekáda.natočení",
-                    proposed_value="30.léta",
+                    kind="note",
+                    target_identifier="pragafilm.popis.ai",
+                    proposed_value="Shrnutí klipu",
                 )
             ],
         )

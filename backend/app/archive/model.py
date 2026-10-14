@@ -13,6 +13,31 @@ ProviderId = str
 ProviderClipId = str
 ClipKey = tuple[ProviderId, ProviderClipId]
 
+# Ownership (#123, ADR 0127): the app writes ONLY what it owns, and it owns
+# exactly two things — markers whose category is AI_MARKER_CATEGORY, and the
+# fields in AI_OWNED_FIELDS. Everything else in the archive is human (or a
+# legacy app marker treated as human) and is never modified, deleted or
+# overwritten. The ownership rule is enforced in each provider's payload
+# builder, not scattered across callers; these constants are the single source
+# of truth so a template, a guard test and the payload builder can never drift.
+AI_MARKER_CATEGORY = "AI"
+AI_OWNED_FIELDS: tuple[str, ...] = ("pragafilm.popis.ai",)
+
+
+def ai_marker_name(category: str | None, name: str) -> str:
+    """Display name for an app-authored (AI) marker.
+
+    A Gemini category becomes a ``"[Category] "`` prefix, applied at write time
+    so it survives the marker's own category being set to AI_MARKER_CATEGORY on
+    write. Both providers produce this shape; the provenance view model strips
+    the prefix back into a category chip for display. With no category the bare
+    name is returned unchanged.
+    """
+    base = name or ""
+    if category:
+        return f"[{category}] {base}".rstrip()
+    return base
+
 
 @dataclass(frozen=True)
 class Timecode:
@@ -100,6 +125,32 @@ class ReconcileMarkers:
 
 
 @dataclass(frozen=True)
+class ReplaceAIMarkers:
+    """Replace the clip's AI-owned marker set with `desired` (#123, ADR 0127).
+
+    The single marker op the app EMITS. It supersedes both AddMarkers (which
+    was additive and clobbered a human marker on the same frame) and
+    ReconcileMarkers (whose `drop_secs` logic is gone). The payload builder
+    applies the ownership rule:
+
+        result = [m for m in live if m.category != AI_MARKER_CATEGORY]   # human: untouched
+               + [to_catdv(d, category=AI_MARKER_CATEGORY) for d in desired]  # ours: full replace
+
+    which gives update AND delete without per-marker IDs, and makes publish and
+    'Make live' the same operation. A same-frame human/AI collision no longer
+    matters: both stay. `desired` is every accepted marker item of the draft; a
+    draft with no marker items emits NO ReplaceAIMarkers op, so it never wipes
+    the AI set.
+    """
+
+    desired: tuple[Marker, ...]
+
+    def __post_init__(self) -> None:
+        if isinstance(self.desired, list):
+            object.__setattr__(self, "desired", tuple(self.desired))
+
+
+@dataclass(frozen=True)
 class SetField:
     identifier: str
     value: Any
@@ -117,7 +168,11 @@ class ReplaceNote:
     text: str
 
 
-ChangeOp = AddMarkers | ReconcileMarkers | SetField | AppendNote | ReplaceNote
+# AddMarkers and ReconcileMarkers are LEGACY: nothing emits them any more, but
+# they stay in the union so rows already queued before #123 still deserialize
+# and drain (through the same ownership guard). They are removed in a follow-up
+# once no deployment has them queued.
+ChangeOp = ReplaceAIMarkers | AddMarkers | ReconcileMarkers | SetField | AppendNote | ReplaceNote
 
 
 @dataclass(frozen=True)

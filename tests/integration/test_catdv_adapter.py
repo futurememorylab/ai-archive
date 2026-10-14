@@ -95,12 +95,12 @@ async def test_apply_changes_setfield_writes_minimal_payload():
             adapter = CatdvArchiveAdapter(client=client)
             cs = ChangeSet(
                 clip_key=("catdv", "8"),
-                ops=[SetField(identifier="pragafilm.barva", value="true")],
+                ops=[SetField(identifier="pragafilm.popis.ai", value="true")],
             )
             result = await adapter.apply_changes(cs)
         assert result.status == "ok"
         _, body = fake.put_log[0]
-        assert body == {"fields": {"pragafilm.barva": "true"}}
+        assert body == {"fields": {"pragafilm.popis.ai": "true"}}
 
 
 @pytest.mark.asyncio
@@ -145,7 +145,7 @@ async def test_apply_changes_returns_ok_with_new_etag_on_success():
             adapter = CatdvArchiveAdapter(client=client)
             cs = ChangeSet(
                 clip_key=("catdv", "11"),
-                ops=[SetField(identifier="x", value=1)],
+                ops=[SetField(identifier="pragafilm.popis.ai", value="x")],
             )
             result = await adapter.apply_changes(cs)
     assert result.status == "ok"
@@ -194,7 +194,7 @@ async def test_apply_changes_proceeds_when_expected_etag_is_none():
             adapter = CatdvArchiveAdapter(client=client)
             cs = ChangeSet(
                 clip_key=("catdv", "13"),
-                ops=[SetField(identifier="x", value=1)],
+                ops=[SetField(identifier="pragafilm.popis.ai", value="x")],
                 expected_etag=None,
             )
             result = await adapter.apply_changes(cs)

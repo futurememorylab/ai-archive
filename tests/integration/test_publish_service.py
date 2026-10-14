@@ -84,7 +84,7 @@ async def _seed_accepted_field(db):
                 studio_run_id=None,
                 catdv_clip_id=1,
                 kind="field",
-                target_identifier="pragafilm.genre",
+                target_identifier="pragafilm.popis.ai",
                 proposed_value="thriller",
             )
         ],
@@ -104,7 +104,7 @@ async def test_publish_creates_publishing_version_and_enqueues(db):
     assert cv.publish_state == "publishing"
     assert cv.version_num == 1
     assert cv.author == "anna@example.com"
-    assert cv.snapshot["fields"]["pragafilm.genre"] == "thriller"
+    assert cv.snapshot["fields"]["pragafilm.popis.ai"] == "thriller"
 
     rows = await PendingOperationsRepo().list_pending_for_clip(
         db, provider_id="catdv", provider_clip_id="1"
@@ -113,7 +113,7 @@ async def test_publish_creates_publishing_version_and_enqueues(db):
     assert all(r["origin_clip_version_id"] == version_id for r in rows)
     # The accepted field change is the only op — no pragafilm.anno_version
     # provenance write (it 500'd CatDV; dropped per the publishing audit).
-    assert any("pragafilm.genre" in r["op_json"] for r in rows), "field op enqueued"
+    assert any("pragafilm.popis.ai" in r["op_json"] for r in rows), "owned field op enqueued"
     assert not any("anno_version" in r["op_json"] for r in rows), "no provenance op"
 
 
@@ -129,7 +129,7 @@ async def test_reactivate_enqueues_snapshot_and_creates_no_new_version(db):
         ClipVersion(
             catdv_clip_id=1,
             version_num=1,
-            snapshot={"markers": [], "fields": {"pragafilm.genre": "drama"}, "notes": None},
+            snapshot={"markers": [], "fields": {"pragafilm.popis.ai": "drama"}, "notes": None},
             origin="publish",
             publish_state="superseded",
         ),
@@ -139,7 +139,7 @@ async def test_reactivate_enqueues_snapshot_and_creates_no_new_version(db):
         ClipVersion(
             catdv_clip_id=1,
             version_num=2,
-            snapshot={"markers": [], "fields": {"pragafilm.genre": "thriller"}, "notes": None},
+            snapshot={"markers": [], "fields": {"pragafilm.popis.ai": "thriller"}, "notes": None},
             origin="publish",
             publish_state="live",
         ),
@@ -154,16 +154,17 @@ async def test_reactivate_enqueues_snapshot_and_creates_no_new_version(db):
         db, provider_id="catdv", provider_clip_id="1"
     )
     assert any(
-        r["origin_clip_version_id"] == v1 and "pragafilm.genre" in r["op_json"] for r in rows
+        r["origin_clip_version_id"] == v1 and "pragafilm.popis.ai" in r["op_json"] for r in rows
     ), "v1's snapshot re-enqueued under its own version id"
 
 
 @pytest.mark.asyncio
-async def test_reactivate_reconciles_markers_drops_later_versions(db):
-    """Switching to v1 emits a ReconcileMarkers asserting v1's markers and
-    dropping the markers only later versions added — no new version row."""
+async def test_reactivate_replaces_ai_markers_with_target_set(db):
+    """Switching to v1 emits a ReplaceAIMarkers asserting v1's markers as the
+    AI set (so a later AI marker is dropped by the payload rule) — no new
+    version row, and drop_secs is gone."""
     from backend.app.archive.change_set_json import change_op_from_json
-    from backend.app.archive.model import ReconcileMarkers
+    from backend.app.archive.model import ReplaceAIMarkers
     from backend.app.models.annotation import ClipVersion
 
     repo = ClipVersionsRepo()
@@ -199,17 +200,138 @@ async def test_reactivate_reconciles_markers_drops_later_versions(db):
     rows = await PendingOperationsRepo().list_pending_for_clip(
         db, provider_id="catdv", provider_clip_id="1"
     )
-    recon = [
+    repl = [
         o
         for o in (change_op_from_json(r["op_json"]) for r in rows)
-        if isinstance(o, ReconcileMarkers)
+        if isinstance(o, ReplaceAIMarkers)
     ]
-    assert len(recon) == 1
-    assert {m.name for m in recon[0].desired} == {"A"}
-    assert set(recon[0].drop_secs) == {8.0}  # B (added in v2) is dropped
+    assert len(repl) == 1
+    assert {m.name for m in repl[0].desired} == {"A"}  # the AI set becomes exactly v1's
 
 
 @pytest.mark.asyncio
 async def test_publish_noop_when_nothing_accepted(db):
     svc = _svc()
     assert await svc.publish(db, clip_id=999, author=None) is None
+
+
+# --- #123 review fixes: the AI marker set is ONE rule for CatDV + snapshot ---
+
+
+async def _seed_annotation(db, vid) -> int:
+    return await AnnotationsRepo().insert(
+        db,
+        Annotation(
+            catdv_clip_id=1,
+            catdv_clip_name="Clip_1",
+            prompt_version_id=vid,
+            job_id=None,
+            model="gemini-2.5-flash",
+            prompt_used="p",
+            raw_response={},
+            structured_output=None,
+            clip_snapshot={"modifyDate": "2026-06-17T00:00:00Z", "fps": 25.0},
+        ),
+    )
+
+
+async def _accept_marker(db, aid, name, secs):
+    [item] = await ReviewItemsRepo().bulk_insert(
+        db,
+        [
+            ReviewItem(
+                annotation_id=aid,
+                studio_run_id=None,
+                catdv_clip_id=1,
+                kind="marker",
+                target_identifier=None,
+                proposed_value={"name": name, "in": {"secs": secs}},
+            )
+        ],
+    )
+    await ReviewItemsRepo().set_decision(db, item.id, "accepted")
+
+
+async def _last_replace_ai_markers(db):
+    from backend.app.archive.change_set_json import change_op_from_json
+    from backend.app.archive.model import ReplaceAIMarkers
+
+    rows = await PendingOperationsRepo().list_pending_for_clip(
+        db, provider_id="catdv", provider_clip_id="1"
+    )
+    ops = [change_op_from_json(r["op_json"]) for r in rows]
+    return [o for o in ops if isinstance(o, ReplaceAIMarkers)][-1]
+
+
+@pytest.mark.asyncio
+async def test_rerun_publish_snapshot_holds_only_the_new_ai_set(db):
+    """Fix 1: a re-run (new annotation) replaces the AI set in CatDV, so the
+    version snapshot must hold ONLY the new markers — never parent + new, or
+    Make live on it would resurrect the old AI markers."""
+    vid = await _seed_prompt_version(db)
+    svc = _svc()
+    a1 = await _seed_annotation(db, vid)
+    await _accept_marker(db, a1, "old", 1.0)
+    v1 = await svc.publish(db, clip_id=1, author=None)
+    await ClipVersionsRepo().mark_live(db, v1)
+
+    a2 = await _seed_annotation(db, vid)
+    await _accept_marker(db, a2, "new", 2.0)
+    v2 = await svc.publish(db, clip_id=1, author=None)
+
+    snap = (await ClipVersionsRepo().get(db, v2)).snapshot
+    assert [m["name"] for m in snap["markers"]] == ["new"]
+    op = await _last_replace_ai_markers(db)
+    assert [m.name for m in op.desired] == ["new"]
+
+
+@pytest.mark.asyncio
+async def test_partial_second_apply_keeps_markers_from_first_apply(db):
+    """Fix 2: applying a draft in two steps must not drop the markers applied
+    in the first step — the AI set is every accepted marker of the annotation."""
+    vid = await _seed_prompt_version(db)
+    svc = _svc()
+    aid = await _seed_annotation(db, vid)
+    await _accept_marker(db, aid, "a", 1.0)
+    v1 = await svc.publish(db, clip_id=1, author=None)
+    await ClipVersionsRepo().mark_live(db, v1)
+
+    await _accept_marker(db, aid, "b", 2.0)
+    v2 = await svc.publish(db, clip_id=1, author=None)
+
+    op = await _last_replace_ai_markers(db)
+    assert sorted(m.name for m in op.desired) == ["a", "b"]
+    snap = (await ClipVersionsRepo().get(db, v2)).snapshot
+    assert sorted(m["name"] for m in snap["markers"]) == ["a", "b"]
+
+
+@pytest.mark.asyncio
+async def test_fields_only_publish_keeps_parent_markers_in_snapshot(db):
+    """A draft with no marker items emits no marker op, so CatDV keeps its AI
+    markers — and the snapshot must keep the parent's markers to match."""
+    vid = await _seed_prompt_version(db)
+    svc = _svc()
+    aid = await _seed_annotation(db, vid)
+    await _accept_marker(db, aid, "a", 1.0)
+    v1 = await svc.publish(db, clip_id=1, author=None)
+    await ClipVersionsRepo().mark_live(db, v1)
+
+    a2 = await _seed_annotation(db, vid)
+    [item] = await ReviewItemsRepo().bulk_insert(
+        db,
+        [
+            ReviewItem(
+                annotation_id=a2,
+                studio_run_id=None,
+                catdv_clip_id=1,
+                kind="field",
+                target_identifier="pragafilm.popis.ai",
+                proposed_value="summary",
+            )
+        ],
+    )
+    await ReviewItemsRepo().set_decision(db, item.id, "accepted")
+    v2 = await svc.publish(db, clip_id=1, author=None)
+
+    snap = (await ClipVersionsRepo().get(db, v2)).snapshot
+    assert [m["name"] for m in snap["markers"]] == ["a"]

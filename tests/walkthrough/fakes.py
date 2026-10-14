@@ -103,11 +103,15 @@ def build_clip(video_path: Path, duration_secs: float = 8.0, fps: float = 25.0) 
                 out=None,
                 description="Wide establishing shot",
             ),
+            # A LEGACY app marker (#123): written before the redesign, so it
+            # carries a Gemini category (not "AI"). It is treated as human —
+            # kept and never touched on a publish.
             Marker(
                 name="Interview",
                 in_=Timecode(secs=4.0, fps=fps, frm=100),
                 out=Timecode(secs=5.5, fps=fps, frm=138),
                 description="Talking-head interview",
+                category="Rozhovor",
             ),
             Marker(
                 name="Closing shot",
@@ -223,12 +227,81 @@ class FakeArchive:
         raise ProviderError(f"clip not found: {clip_id_str}")
 
     async def apply_changes(self, change_set):
-        # MVP: record the attempt. The durable write-queue rows are the real
-        # receipt for "publish happened"; no upstream write is performed.
+        # Record the attempt AND apply the #123 ownership rule to the in-memory
+        # clip, so the post-publish refresh (/clips/{id}/published + the player
+        # island) shows the AI set as published (orange) while human/legacy
+        # markers survive — the walkthrough asserts exactly that.
         self.applied.append(change_set)
         from backend.app.archive.model import WriteResult
 
+        self._apply_ownership(change_set)
         return WriteResult(status="ok", upstream_response={}, new_etag="fake-etag")
+
+    def _apply_ownership(self, change_set) -> None:
+        from dataclasses import replace
+
+        from backend.app.archive.model import (
+            AI_MARKER_CATEGORY,
+            AI_OWNED_FIELDS,
+            AddMarkers,
+            AppendNote,
+            Marker,
+            ReconcileMarkers,
+            ReplaceAIMarkers,
+            ReplaceNote,
+            SetField,
+            ai_marker_name,
+        )
+
+        cid = change_set.clip_key[1]
+        idx = next((i for i, c in enumerate(self._clips) if c.key[1] == cid), None)
+        if idx is None:
+            return
+        clip = self._clips[idx]
+        markers = list(clip.markers)
+        fields = dict(clip.fields)
+
+        marker_ops = [
+            o
+            for o in change_set.ops
+            if isinstance(o, (ReplaceAIMarkers, AddMarkers, ReconcileMarkers))
+        ]
+        if marker_ops:
+            kept = [m for m in markers if m.category != AI_MARKER_CATEGORY]
+            last = marker_ops[-1]
+            desired = (
+                last.desired
+                if isinstance(last, (ReplaceAIMarkers, ReconcileMarkers))
+                else last.markers
+            )
+            ai = [
+                Marker(
+                    name=ai_marker_name(d.category, d.name),
+                    in_=d.in_,
+                    out=d.out,
+                    description=d.description,
+                    category=AI_MARKER_CATEGORY,
+                    color=None,
+                )
+                for d in desired
+            ]
+            markers = kept + ai
+
+        for op in change_set.ops:
+            if isinstance(op, SetField) and op.identifier in AI_OWNED_FIELDS:
+                fields[op.identifier] = FieldValue(identifier=op.identifier, value=op.value)
+            elif isinstance(op, ReplaceNote) and op.target in AI_OWNED_FIELDS:
+                fields[op.target] = FieldValue(identifier=op.target, value=op.text)
+            elif isinstance(op, AppendNote) and op.target in AI_OWNED_FIELDS:
+                prev = fields.get(op.target)
+                prior = prev.value if prev is not None else ""
+                text = (str(prior) + "\n\n---\n\n" + op.text) if prior else op.text
+                fields[op.target] = FieldValue(identifier=op.target, value=text)
+
+        self._clips = tuple(
+            replace(clip, markers=tuple(markers), fields=fields) if i == idx else c
+            for i, c in enumerate(self._clips)
+        )
 
 
 class LocalFileResolver:
