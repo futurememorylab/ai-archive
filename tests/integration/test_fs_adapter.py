@@ -11,6 +11,7 @@ from backend.app.archive.errors import FatalProviderError
 from backend.app.archive.model import (
     AddMarkers,
     AppendNote,
+    CatalogInfo,
     ChangeSet,
     ClipQuery,
     Marker,
@@ -55,7 +56,8 @@ async def test_list_catalogs_excludes_hidden_and_dotarchive(tmp_path: Path):
     root = _make_tmp_archive(tmp_path)
     p = FilesystemArchiveProvider(fs_root=root)
     catalogs = await p.list_catalogs()
-    assert [c["id"] for c in catalogs] == ["cat_a", "cat_b"]
+    assert [c.id for c in catalogs] == ["cat_a", "cat_b"]
+    assert catalogs[0] == CatalogInfo("cat_a", "cat_a", False)
 
 
 @pytest.mark.asyncio

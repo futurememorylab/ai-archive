@@ -17,6 +17,7 @@ from backend.app.archive.errors import (
     RetryableError,
 )
 from backend.app.archive.model import (
+    CatalogInfo,
     CanonicalClip,
     ChangeSet,
     ClipPage,
@@ -244,6 +245,25 @@ class CatdvArchiveAdapter:
         defs = [field_def_from_catdv(r) for r in rows]
         await self._write_field_defs_through(defs)
         return defs
+
+    # --- catalogs -----------------------------------------------------
+
+    async def list_catalogs(self) -> list[CatalogInfo]:
+        # Uncached here: the caller (services/active_catalog) owns the DB
+        # cache + online gate for the catalog list.
+        try:
+            rows = await self._client.list_catalogs()
+        except CatdvAuthError as exc:
+            raise AuthError(str(exc)) from exc
+        except CatdvBusyError as exc:
+            raise RetryableError(str(exc)) from exc
+        except CatdvError as exc:
+            raise FatalProviderError(str(exc)) from exc
+        return [
+            CatalogInfo(str(r["ID"]), str(r.get("name") or f"Catalog #{r['ID']}"), bool(r.get("readOnly")))
+            for r in rows
+            if r.get("ID") is not None
+        ]
 
     # --- write API ----------------------------------------------------
 

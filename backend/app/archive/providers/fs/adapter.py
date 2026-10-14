@@ -33,6 +33,7 @@ from typing import Any
 
 from backend.app.archive.errors import FatalProviderError
 from backend.app.archive.model import (
+    CatalogInfo,
     AddMarkers,
     AppendNote,
     CanonicalClip,
@@ -177,16 +178,16 @@ class FilesystemArchiveProvider:
 
     # --- catalogs ---------------------------------------------------------
 
-    async def list_catalogs(self) -> list[dict[str, str]]:
+    async def list_catalogs(self) -> list[CatalogInfo]:
         if not self._root.is_dir():
             return []
-        out: list[dict[str, str]] = []
+        out: list[CatalogInfo] = []
         for child in sorted(self._root.iterdir()):
             if not child.is_dir():
                 continue
             if child.name.startswith("."):
                 continue
-            out.append({"id": child.name, "name": child.name})
+            out.append(CatalogInfo(child.name, child.name))
         return out
 
     # --- list / get -------------------------------------------------------
