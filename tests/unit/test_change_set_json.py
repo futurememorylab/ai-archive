@@ -14,6 +14,7 @@ from backend.app.archive.model import (
     ChangeSet,
     Marker,
     ReconcileMarkers,
+    ReplaceAIMarkers,
     ReplaceNote,
     SetField,
     Timecode,
@@ -94,3 +95,46 @@ def test_reconcile_markers_round_trips():
     back = change_op_from_json(change_op_to_json(op))
     assert back == op
     assert isinstance(back, ReconcileMarkers)
+
+
+def test_replace_ai_markers_round_trips():
+    op = ReplaceAIMarkers(
+        desired=(
+            Marker(
+                name="[Interview] Two men talk",
+                in_=Timecode(secs=4.0, fps=0.0),
+                out=None,
+                description="d",
+                category="AI",
+            ),
+        )
+    )
+    back = change_op_from_json(change_op_to_json(op))
+    assert back == op
+    assert isinstance(back, ReplaceAIMarkers)
+
+
+def test_replace_ai_markers_empty_desired_round_trips():
+    # A fields-only draft emits ReplaceAIMarkers with no markers only when it
+    # has marker items; but the op itself must still serialise with an empty
+    # desired list without error.
+    op = ReplaceAIMarkers(desired=())
+    back = change_op_from_json(change_op_to_json(op))
+    assert back == op
+
+
+def test_legacy_add_and_reconcile_markers_still_deserialize():
+    # Rows already queued before this change must still drain: the two legacy
+    # ops keep deserialising from their on-the-wire JSON.
+    add_json = (
+        '{"kind": "AddMarkers", "markers": [{"name": "legacy", '
+        '"in_": {"secs": 1.0, "fps": 25.0, "frm": 25, "txt": null}, '
+        '"out": null, "description": null, "category": "Scene", "color": null}]}'
+    )
+    reconcile_json = '{"kind": "ReconcileMarkers", "desired": [], "drop_secs": [1.0, 2.0]}'
+    add = change_op_from_json(add_json)
+    reconcile = change_op_from_json(reconcile_json)
+    assert isinstance(add, AddMarkers)
+    assert add.markers[0].name == "legacy"
+    assert isinstance(reconcile, ReconcileMarkers)
+    assert reconcile.drop_secs == (1.0, 2.0)
