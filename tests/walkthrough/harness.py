@@ -15,7 +15,7 @@ def step_overlay_html(n: int, label: str) -> str:
     """Pure builder for the on-screen step badge (also the doc narration)."""
     safe = html.escape(label)
     return (
-        '<div style="position:fixed;top:16px;left:16px;z-index:2147483647;'
+        '<div style="position:fixed;bottom:64px;left:72px;z-index:2147483647;'
         "font:600 18px/1.3 system-ui,sans-serif;color:#fff;background:rgba(20,20,28,.86);"
         'padding:10px 16px;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,.4)">'
         f'<span style="color:#7dd3fc">Step {n}</span> — {safe}'
