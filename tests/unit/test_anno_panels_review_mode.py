@@ -75,3 +75,126 @@ def test_studio_read_only_has_no_player_only_method_refs():
 def test_studio_read_only_markers_still_seek():
     html = _render(review_mode=False)
     assert "seek(0.0)" in html, "marker must remain click-to-seek in studio"
+
+
+# --- #123 provenance UI ---------------------------------------------------
+
+from backend.app.ui.view_models import draft_review_arrays  # noqa: E402
+
+
+def _render_panels(panels, *, review_mode=True):
+    return templates.env.get_template("pages/_anno_panels.html").render(
+        panels=panels,
+        scope="published",
+        clip={"fps": 25.0, "kind": "video"},
+        show_history=False,
+        review_mode=review_mode,
+    )
+
+
+def test_published_marker_shows_origin_pill():
+    panels = {
+        "markers": [
+            {
+                "name": "Two men talk",
+                "in_secs": 4.0,
+                "out_secs": 6.0,
+                "category": "Interview",
+                "description": None,
+                "origin": "ai",
+            },
+            {
+                "name": "Žena",
+                "in_secs": 8.0,
+                "out_secs": None,
+                "category": "Exteriér",
+                "description": None,
+                "origin": "human",
+            },
+        ],
+        "fields": [],
+        "notes": None,
+        "big_notes": None,
+        "note_items": [],
+        "fps": 25.0,
+    }
+    html = _render_panels(panels, review_mode=False)
+    assert "AI · published" in html
+    assert "Human" in html
+
+
+def test_draft_marker_shows_ai_draft_pill():
+    panels = {
+        "markers": [
+            {
+                "name": "Scene",
+                "in_secs": 1.0,
+                "out_secs": 2.0,
+                "category": "X",
+                "description": None,
+                "origin": "ai_draft",
+                "item_id": 5,
+                "decision": "pending",
+            },
+        ],
+        "fields": [],
+        "notes": None,
+        "big_notes": None,
+        "note_items": [],
+        "fps": 25.0,
+    }
+    html = _render_panels(panels)
+    assert "AI · draft" in html
+
+
+def test_suggestion_field_has_copy_button_and_no_keep():
+    # A non-owned field flows through draft_review_arrays as a suggestion.
+    draft = {
+        "has_draft": True,
+        "markers": [],
+        "fields": [
+            {
+                "item_id": 7,
+                "decision": "pending",
+                "identifier": "pragafilm.dekáda.natočení",
+                "value": "30.léta",
+                "multi": False,
+                "kind": "field",
+                "applied_at": None,
+            },
+        ],
+        "note_items": [],
+    }
+    arrays = draft_review_arrays(draft)
+    panels = {
+        "markers": [],
+        "fields": arrays["fields"],
+        "notes": None,
+        "big_notes": None,
+        "note_items": [],
+        "fps": 25.0,
+    }
+    html = _render_panels(panels)
+    assert "AI · suggestion" in html
+    assert "Suggestion — not written to CatDV." in html
+    assert 'data-copy="30.léta"' in html
+    # the suggestion row offers no keep checkbox
+    assert 'data-item-id="7"' in html
+    assert "ri-suggestion" in html
+
+
+def test_published_field_carries_origin_pill():
+    panels = {
+        "markers": [],
+        "fields": [
+            {"identifier": "pragafilm.popis.ai", "value": "shrnutí", "origin": "ai"},
+            {"identifier": "pragafilm.popis.materialu", "value": "human", "origin": "human"},
+        ],
+        "notes": None,
+        "big_notes": None,
+        "note_items": [],
+        "fps": 25.0,
+    }
+    html = _render_panels(panels, review_mode=False)
+    assert "AI · published" in html  # the popis.ai field
+    assert "Human" in html

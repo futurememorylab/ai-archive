@@ -19,6 +19,19 @@
 {% set has_notes = panels.notes or panels.big_notes or panels.note_items %}
 {% set _is_image = clip is defined and clip is not none and clip.kind == 'image' %}
 {% set _show_note_items = panels.note_items %}
+{# Provenance pill (#123): map a view-model `origin` to a (label, pill-state).
+   States are the shared pill classes in app.css — grey for human, orange
+   (accent) for published AI, blue (info) for AI drafts/suggestions. #}
+{% set _ORIGIN_PILL = {
+  'human': ('Human', 'origin-human'),
+  'ai': ('AI · published', 'accent'),
+  'ai_draft': ('AI · draft', 'info'),
+  'ai_suggestion': ('AI · suggestion', 'info'),
+} %}
+{% macro origin_pill(origin) -%}
+  {%- set lp = _ORIGIN_PILL.get(origin) -%}
+  {%- if lp %}{{ ui.status_pill(lp[0], lp[1]) }}{% endif -%}
+{%- endmacro %}
 <div class="anno-tabs" role="tablist">
   {% if not _is_image %}
   <button type="button" class="anno-tab" role="tab"
@@ -61,7 +74,11 @@
     <h4 class="anno-summary-label">Summary</h4>
     {% if _show_note_items %}
       {% for n in panels.note_items %}
-        <p class="note">{{ n.text }}</p>
+        <div class="anno-summary-block">
+          {% if n.origin is defined %}{{ origin_pill(n.origin) }}{% endif %}
+          {% if n.identifier %}<span class="ident mono">{{ n.identifier }}</span>{% endif %}
+          <p class="note">{{ n.text }}</p>
+        </div>
       {% else %}
         <p class="muted">No summary.</p>
       {% endfor %}
@@ -80,6 +97,7 @@
       <header>
         <span class="kind marker-kind">{{ 'Scene' if m.out_secs is not none else 'Shot' }}</span>
         {% if m.category %}<span class="cat">{{ m.category }}</span>{% endif %}
+        {% if m.origin is defined %}{{ origin_pill(m.origin) }}{% endif %}
         <span class="tc mono">
           {{ smpte(m.in_secs, panels.fps or clip.fps) }}{% if m.out_secs is not none %} – {{ smpte(m.out_secs, panels.fps or clip.fps) }}{% endif %}
         </span>
@@ -141,7 +159,20 @@
 
 <div class="anno-section" role="tabpanel" x-show="tab === 'fields'" x-cloak>
   {% for f in panels.fields %}
-    {% if f.item_id is defined and f.item_id is not none and review_mode %}
+    {% if f.suggestion is defined and f.suggestion %}
+      {# A shared (non-owned) field: a suggestion, never written to CatDV (#123).
+         No keep checkbox — just the value and a Copy button to paste by hand. #}
+      <div class="ri-row ri-suggestion" data-item-id="{{ f.item_id }}">
+        <div class="ri-readonly">
+          {{ origin_pill(f.origin) }}
+          <span class="ident mono">{{ f.identifier }}</span>
+          <span class="ri-text">{{ f.value }}</span>
+          <button type="button" class="btn sm ghost" data-copy="{{ f.value }}"
+                  title="Copy the value to paste into CatDV by hand">Copy</button>
+        </div>
+        <p class="ri-suggestion-note muted">Suggestion — not written to CatDV.</p>
+      </div>
+    {% elif f.item_id is defined and f.item_id is not none and review_mode %}
       <div class="ri-row" data-item-id="{{ f.item_id }}"
            :class="{ editing: editingItemId === {{ f.item_id }} }">
         <div class="ri-readonly">
@@ -149,6 +180,7 @@
             <input type="checkbox" class="ri-accept" data-item-id="{{ f.item_id }}"
                    {% if f.decision != 'rejected' %}checked{% endif %}> keep
           </label>
+          {% if f.origin is defined %}{{ origin_pill(f.origin) }}{% endif %}
           <span class="ident mono">{{ f.identifier }}</span>
           <span class="ri-text">{{ f.value }}</span>
           <button type="button" class="btn sm ghost"
@@ -162,6 +194,7 @@
       </div>
     {% else %}
       <div class="field-row">
+        {% if f.origin is defined %}{{ origin_pill(f.origin) }}{% endif %}
         <span class="ident mono">{{ f.identifier }}</span>
         <span class="arrow">→</span>
         <span class="val">{{ f.value }}</span>
@@ -176,7 +209,18 @@
 <div class="anno-section" role="tabpanel" x-show="tab === 'notes'" x-cloak>
   {% if _show_note_items %}
     {% for n in panels.note_items %}
-      {% if review_mode %}
+      {% if n.suggestion is defined and n.suggestion and review_mode %}
+      {# A note to a non-owned target: a suggestion, never written (#123). #}
+      <div class="ri-row ri-note-row ri-suggestion" data-item-id="{{ n.item_id }}">
+        <div class="ri-readonly">
+          {{ origin_pill(n.origin) }}
+          <span class="ri-text">{{ n.text }}</span>
+          <button type="button" class="btn sm ghost" data-copy="{{ n.text }}"
+                  title="Copy the text to paste into CatDV by hand">Copy</button>
+        </div>
+        <p class="ri-suggestion-note muted">Suggestion — not written to CatDV.</p>
+      </div>
+      {% elif review_mode %}
       <div class="ri-row ri-note-row" data-item-id="{{ n.item_id }}"
            :class="{ editing: editingItemId === {{ n.item_id }} }">
         <div class="ri-readonly">
@@ -184,6 +228,7 @@
             <input type="checkbox" class="ri-accept" data-item-id="{{ n.item_id }}"
                    {% if n.decision != 'rejected' %}checked{% endif %}> keep
           </label>
+          {% if n.origin is defined %}{{ origin_pill(n.origin) }}{% endif %}
           <span class="ri-text">{{ n.text }}</span>
           <button type="button" class="btn sm ghost"
                   @click="editingItemId = (editingItemId === {{ n.item_id }} ? null : {{ n.item_id }})"

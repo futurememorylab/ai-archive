@@ -22,6 +22,31 @@ function reviewMixin(clipId) {
       if (this.appliedCount > 0) this._checkSyncOnce();
       // Wire delegated Restore / Restore-and-publish handlers on the history panel.
       this._initRestoreDelegation();
+      // Wire the suggestion Copy buttons (shared fields the app never writes;
+      // #123). Delegated so it also covers rows swapped in by _refreshPublished.
+      this._initCopyButtons();
+    },
+    // ── suggestion Copy buttons ──────────────────────────────────
+    // A suggestion row (a shared field the app does not own) offers a Copy
+    // button instead of a keep checkbox, so a human can paste the value into
+    // CatDV by hand. Delegated on document; the page reloads on navigation so
+    // the listener never accumulates across clips.
+    _initCopyButtons() {
+      document.addEventListener("click", (ev) => {
+        const btn = ev.target.closest("[data-copy]");
+        if (!btn) return;
+        ev.preventDefault();
+        const text = btn.dataset.copy || "";
+        const toast = window.Alpine?.store?.("toast");
+        if (!navigator.clipboard) {
+          toast?.push("Clipboard unavailable — copy by hand.", { level: "error" });
+          return;
+        }
+        navigator.clipboard.writeText(text).then(
+          () => toast?.push("Copied — paste it into CatDV.", { level: "success" }),
+          () => toast?.push("Copy failed — copy by hand.", { level: "error" }),
+        );
+      });
     },
     // ── counts ────────────────────────────────────────────────────
     _allDraft() { return [...this.draftMarkers, ...this.draftFields, ...this.draftNotes]; },

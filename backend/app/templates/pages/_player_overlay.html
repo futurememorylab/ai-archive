@@ -52,8 +52,11 @@
          moves them to orange without a page reload. The static server loop can
          only reflect page-load state, so it's skipped for this band. #}
       <template x-for="(m, idx) in {{ row.x_for }}" :key="idx">
+        {# Split the published band by provenance (#123): a human marker
+           (origin 'human') gets the grey .origin-human class; AI markers keep
+           the row's orange. #}
         <div class="range"
-             :class="{ active: isMarkerActive(m) }"
+             :class="{ active: isMarkerActive(m), 'origin-human': m.origin === 'human' }"
              :style="(() => { if (!duration) return ''; const _l = (m.in_secs / duration) * 100; const _w = (((m.out_secs != null ? m.out_secs : m.in_secs + 1) - m.in_secs) / duration) * 100; return `left:${_l}%; width:${_w}%`; })()"
              :title="m.name"></div>
       </template>
