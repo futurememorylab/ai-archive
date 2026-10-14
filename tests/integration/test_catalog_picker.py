@@ -90,3 +90,8 @@ def test_layout_has_picker_container(client):
     assert r.status_code == 200, r.text
     assert 'id="catalog-picker"' in r.text
     assert 'hx-get="/ui/catalog-picker"' in r.text
+
+
+def test_post_non_ascii_digit_400(client):
+    r = client.post("/api/catalog/active", data={"catalog_id": "²"}, follow_redirects=False)
+    assert r.status_code == 400

@@ -32,10 +32,16 @@ class CatalogsRepo:
         catalogs: list[CatalogInfo],
         fetched_at: str,
     ) -> None:
-        await conn.execute("DELETE FROM catalogs WHERE provider_id = ?", (provider_id,))
-        await conn.executemany(
-            "INSERT INTO catalogs (provider_id, catalog_id, name, read_only, fetched_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            [(provider_id, c.id, c.name, int(c.read_only), fetched_at) for c in catalogs],
-        )
+        # Rollback on failure: the DELETE opens the transaction (and, on the
+        # app's WriteSerializedConnection, the write lock) — never leave it open.
+        try:
+            await conn.execute("DELETE FROM catalogs WHERE provider_id = ?", (provider_id,))
+            await conn.executemany(
+                "INSERT INTO catalogs (provider_id, catalog_id, name, read_only, fetched_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                [(provider_id, c.id, c.name, int(c.read_only), fetched_at) for c in catalogs],
+            )
+        except Exception:
+            await conn.rollback()
+            raise
         await conn.commit()

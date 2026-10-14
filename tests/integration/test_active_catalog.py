@@ -107,3 +107,20 @@ async def test_catalog_name_lookup_and_fallback(db):
     await _seed(db, [A, B], timedelta(minutes=1))
     assert await catalog_name(_core(db), "913722") == "vyber pro AI"
     assert await catalog_name(_core(db), "42") == "Catalog #42"
+
+
+@pytest.mark.asyncio
+async def test_empty_refresh_keeps_cached_list(db):
+    await _seed(db, [A, B], timedelta(hours=2))
+    got = await list_catalogs(_core(db), _live(_Archive(result=[])), "881507", now=NOW)
+    assert got == [A, B]
+    assert await CatalogsRepo().list(db, provider_id="catdv") == [A, B]
+
+
+@pytest.mark.asyncio
+async def test_failed_refresh_backs_off_for_a_ttl(db):
+    await _seed(db, [A, B], timedelta(hours=2))
+    failing = _Archive(exc=ProviderError("boom"))
+    await list_catalogs(_core(db), _live(failing), "881507", now=NOW)
+    await list_catalogs(_core(db), _live(failing), "881507", now=NOW + timedelta(minutes=5))
+    assert failing.calls == 1

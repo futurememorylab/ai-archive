@@ -35,3 +35,15 @@ async def test_list_is_scoped_by_provider(db):
     repo = CatalogsRepo()
     await repo.replace_all(db, provider_id="fs", catalogs=[A], fetched_at="t1")
     assert await repo.list(db, provider_id="catdv") == []
+
+
+@pytest.mark.asyncio
+async def test_failed_replace_rolls_back(db):
+    import sqlite3
+
+    repo = CatalogsRepo()
+    await repo.replace_all(db, provider_id="catdv", catalogs=[A, B], fetched_at="t1")
+    with pytest.raises(sqlite3.IntegrityError):
+        await repo.replace_all(db, provider_id="catdv", catalogs=[A, A], fetched_at="t2")
+    assert not db.in_transaction
+    assert await repo.list(db, provider_id="catdv") == [A, B]

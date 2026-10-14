@@ -12,7 +12,8 @@ SETTINGS = SimpleNamespace(catdv_catalog_id=881507)
 
 
 def _req(cookie: str | None) -> Request:
-    headers = [] if cookie is None else [(b"cookie", f"{COOKIE}={cookie}".encode())]
+    # latin-1: how Starlette decodes header bytes, so "\u00b2" arrives as "²".
+    headers = [] if cookie is None else [(b"cookie", f"{COOKIE}={cookie}".encode("latin-1"))]
     return Request({"type": "http", "headers": headers})
 
 
@@ -24,7 +25,7 @@ def test_missing_cookie_defaults():
     assert active_catalog_id(_req(None), SETTINGS) == "881507"
 
 
-@pytest.mark.parametrize("junk", ["abc", "", "12x", "-1"])
+@pytest.mark.parametrize("junk", ["abc", "", "12x", "-1", "\u00b2", "9" * 500])
 def test_non_numeric_cookie_defaults(junk):
     assert active_catalog_id(_req(junk), SETTINGS) == "881507"
 

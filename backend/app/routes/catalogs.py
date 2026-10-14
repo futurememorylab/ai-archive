@@ -11,7 +11,12 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from backend.app.deps import get_core_ctx
 from backend.app.routes.pages.templates import templates
-from backend.app.services.active_catalog import COOKIE, active_catalog_id, list_catalogs
+from backend.app.services.active_catalog import (
+    COOKIE,
+    active_catalog_id,
+    is_catalog_id,
+    list_catalogs,
+)
 
 router = APIRouter(tags=["catalogs"])
 
@@ -38,7 +43,7 @@ async def set_active_catalog(request: Request, catalog_id: str = Form("")):
     core = get_core_ctx(request)
     active_id = active_catalog_id(request, core.settings)
     known = {c.id for c in await list_catalogs(core, request.app.state.live_ctx, active_id)}
-    if not catalog_id.isdigit() or catalog_id not in known:
+    if not is_catalog_id(catalog_id) or catalog_id not in known:
         raise HTTPException(400, f"Unknown catalog: {catalog_id or '(empty)'}")
     resp = RedirectResponse("/", status_code=303)
     resp.set_cookie(COOKIE, catalog_id, max_age=_ONE_YEAR, httponly=True, samesite="lax", path="/")
