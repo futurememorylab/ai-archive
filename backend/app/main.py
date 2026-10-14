@@ -23,6 +23,7 @@ from backend.app.routes.cache import api_router as cache_api_router
 from backend.app.routes.cache import page_router as cache_page_router
 from backend.app.routes.cache import ui_router as cache_ui_router
 from backend.app.routes.catdv import router as catdv_router
+from backend.app.routes.catalogs import router as catalogs_router
 from backend.app.routes.connection import router as connection_router
 from backend.app.routes.enums import router as enums_router
 from backend.app.routes.events import router as events_router
@@ -141,6 +142,7 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(studio_router)
     app.include_router(sync_router)
     app.include_router(ui_router)
+    app.include_router(catalogs_router)
     app.include_router(vpn_router)
     app.include_router(cache_api_router)
     app.include_router(cache_page_router)

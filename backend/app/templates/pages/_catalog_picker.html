@@ -1,0 +1,11 @@
+{# Topbar catalog picker (#124). Loaded lazily into #catalog-picker by
+   layout.html; each item posts catalog_id to /api/catalog/active. #}
+{% import "components/_ui.html" as ui %}
+{% call ui.menu(label=active_name, trigger_attrs='data-test="catalog-picker-trigger" title="Active catalog"') %}
+  {{ ui.menu_header("Catalog") }}
+  {% for c in catalogs %}
+    {{ ui.menu_item(c.name, post="/api/catalog/active", current=(c.id == active_id),
+                    meta=("read-only" if c.read_only else none), desc="#" ~ c.id,
+                    attrs='name="catalog_id" value="' ~ c.id ~ '" data-test="catalog-option-' ~ c.id ~ '"') }}
+  {% endfor %}
+{% endcall %}
