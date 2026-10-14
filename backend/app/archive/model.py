@@ -187,3 +187,10 @@ class FieldDef:
     def __post_init__(self) -> None:
         if isinstance(self.picklist_values, list):
             object.__setattr__(self, "picklist_values", tuple(self.picklist_values))
+
+
+@dataclass(frozen=True)
+class CatalogInfo:
+    id: str
+    name: str
+    read_only: bool = False

@@ -23,12 +23,16 @@ import uvicorn
 from tests.walkthrough import seed
 from tests.walkthrough.fakes import (
     CATALOG_ID,
+    CATALOGS,
+    SECOND_CATALOG_ID,
     FakeAIStore,
     FakeArchive,
     LocalFileResolver,
     StubThumbnailService,
     build_clips,
+    build_second_catalog_clips,
     gemini_fake,
+    monitor_fake,
 )
 
 _OFFLINE_ENV = {
@@ -88,6 +92,7 @@ class WalkthroughApp:
         video = seed.make_proxy_video(self.data_dir / "proxy_101.mp4")
         self._thumb = seed.make_thumbnail(self.data_dir / "thumb.jpg", video)
         clips = build_clips(video)
+        second_clips = build_second_catalog_clips(video)
 
         # Seed a standalone template DB on its own connection, then connect a
         # COPY of it for the run: seeding and the live run use separate database
@@ -98,7 +103,15 @@ class WalkthroughApp:
         # seeded into clip_list_cache so the annotation-status filters resolve.
         seed_template = self.data_dir / "seed_template.db"
         run_db = self.data_dir / "app.db"
-        asyncio.run(seed.build_seed_db(seed_template, clips=clips, catalog_id=CATALOG_ID))
+        asyncio.run(
+            seed.build_seed_db(
+                seed_template,
+                clips=clips,
+                catalog_id=CATALOG_ID,
+                catalogs=CATALOGS,
+                other_catalog_clips={SECOND_CATALOG_ID: second_clips},
+            )
+        )
         shutil.copyfile(seed_template, run_db)
 
         config = uvicorn.Config(self._app, host="127.0.0.1", port=self.port, log_level="warning")
@@ -127,7 +140,12 @@ class WalkthroughApp:
         # the annotator's fast path skips the local-proxy resolve + upload.
         live = install_live_ctx(
             self._app,
-            archive=FakeArchive(clips),
+            archive=FakeArchive(
+                clips + second_clips,
+                catalogs=CATALOGS,
+                clip_catalogs={c.key[1]: SECOND_CATALOG_ID for c in second_clips},
+            ),
+            connection_monitor=monitor_fake(),
             proxy_resolver=resolver,
             thumbnail_service=StubThumbnailService(self._thumb),
             ai_store=FakeAIStore(),

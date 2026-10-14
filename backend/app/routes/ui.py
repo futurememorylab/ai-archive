@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse
 
 from backend.app.deps import get_core_ctx
 from backend.app.routes.pages.templates import templates, topbar_usage
+from backend.app.services.active_catalog import active_catalog_id
 
 router = APIRouter(prefix="/ui", tags=["ui"])
 
@@ -61,7 +62,7 @@ async def workspace_switcher(request: Request, ws_id: int | None = None):
                 "workspaces": [],
                 "active_ws_id": None,
                 "active_ws": None,
-                "catalog_id": str(ctx.settings.catdv_catalog_id),
+                "catalog_id": active_catalog_id(request, ctx.settings),
             },
         )
     workspaces = await live.workspace_manager.list_workspaces()
@@ -73,7 +74,7 @@ async def workspace_switcher(request: Request, ws_id: int | None = None):
             "workspaces": workspaces,
             "active_ws_id": ws_id,
             "active_ws": active,
-            "catalog_id": str(ctx.settings.catdv_catalog_id),
+            "catalog_id": active_catalog_id(request, ctx.settings),
         },
     )
 

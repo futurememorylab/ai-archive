@@ -55,3 +55,11 @@ def test_record_mode_records_at_the_viewport_size():
     page.screencast.start.assert_called_once_with(
         path="/tmp/x.webm", size={"width": 1280, "height": 800}
     )
+
+
+def test_overlay_is_anchored_to_the_bottom():
+    # The topbar (catalog picker, status pills) and the dropdown menus that open
+    # from it live at the top of the page (#124); the step badge must not cover
+    # them in the recorded videos, so it is anchored to the bottom-left.
+    style = step_overlay_html(1, "x")
+    assert "bottom:" in style and "top:" not in style

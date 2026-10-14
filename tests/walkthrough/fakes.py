@@ -15,6 +15,7 @@ from pathlib import Path
 from backend.app.archive.errors import ProviderError
 from backend.app.archive.model import (
     CanonicalClip,
+    CatalogInfo,
     ClipPage,
     FieldValue,
     Marker,
@@ -151,6 +152,21 @@ def _list_clip(
     )
 
 
+# Multiple catalogs (#124): the default catalog holds every clip above; a
+# second catalog holds two clips of its own so switching visibly changes the list.
+SECOND_CATALOG_ID = "913722"
+CATALOGS = (
+    CatalogInfo(CATALOG_ID, "AI katalog"),
+    CatalogInfo(SECOND_CATALOG_ID, "vyber pro AI"),
+)
+SECOND_CATALOG_CLIP_NAMES = ("ARNOLD Bogdan Sis 02", "BENES Jana 01")
+_SECOND_CATALOG_CLIPS = ((201, SECOND_CATALOG_CLIP_NAMES[0]), (202, SECOND_CATALOG_CLIP_NAMES[1]))
+
+
+def build_second_catalog_clips(video_path: Path) -> tuple[CanonicalClip, ...]:
+    return tuple(_list_clip(i, n, video_path) for i, n in _SECOND_CATALOG_CLIPS)
+
+
 def build_clips(video_path: Path) -> tuple[CanonicalClip, ...]:
     """The full in-memory catalog: the canonical clip 101 + the search extras."""
     return (build_clip(video_path), *(_list_clip(i, n, video_path) for i, n in _EXTRA_CLIPS))
@@ -165,17 +181,36 @@ class FakeArchive:
     Accepts a single clip or a sequence. Records apply_changes.
     """
 
-    def __init__(self, clips: CanonicalClip | tuple[CanonicalClip, ...]) -> None:
+    def __init__(
+        self,
+        clips: CanonicalClip | tuple[CanonicalClip, ...],
+        *,
+        catalogs: tuple[CatalogInfo, ...] = (),
+        clip_catalogs: dict[str, str] | None = None,
+        default_catalog: str = CATALOG_ID,
+    ) -> None:
         self._clips: tuple[CanonicalClip, ...] = (
             (clips,) if isinstance(clips, CanonicalClip) else tuple(clips)
         )
+        self._catalogs = catalogs
+        self._clip_catalogs = clip_catalogs or {}
+        self._default_catalog = default_catalog
         self.applied: list = []
 
+    async def list_catalogs(self) -> list[CatalogInfo]:
+        return list(self._catalogs)
+
     async def list_clips(self, catalog, query):
+        # catalog None = no catalog filter (unit tests); unmapped clips belong
+        # to the default catalog.
+        pool = [
+            c
+            for c in self._clips
+            if catalog is None
+            or self._clip_catalogs.get(c.key[1], self._default_catalog) == str(catalog)
+        ]
         needle = (query.text or "").strip().casefold()
-        matches = (
-            [c for c in self._clips if needle in c.name.casefold()] if needle else list(self._clips)
-        )
+        matches = [c for c in pool if needle in c.name.casefold()] if needle else pool
         page = matches[query.offset : query.offset + query.limit]
         return ClipPage(
             items=tuple(page), total=len(matches), offset=query.offset, limit=query.limit
@@ -306,3 +341,36 @@ _GEMINI = FakeGemini()
 def gemini_fake() -> FakeGemini:
     """The FakeGemini the walkthrough app injects — shared with scenarios."""
     return _GEMINI
+
+
+class ToggleMonitor:
+    """Connection-monitor stand-in a scenario can flip offline/online (#124).
+
+    Same surface as tests/_helpers/live_ctx._OnlineMonitor. The real UI
+    Disconnect needs a real CatDV client, so the offline scenario flips this
+    directly from the Playwright thread (like gemini_fake().hold())."""
+
+    is_forced = False
+    _forced_offline = False
+
+    def __init__(self) -> None:
+        from backend.app.services.connection_monitor import ConnectionState
+
+        self._online, self._offline = ConnectionState.online, ConnectionState.offline
+        self._state = self._online
+
+    def current_state(self):
+        return self._state
+
+    def set_online(self, online: bool) -> None:
+        self._state = self._online if online else self._offline
+
+    async def probe_once(self) -> None:
+        return None
+
+
+_MONITOR = ToggleMonitor()
+
+
+def monitor_fake() -> ToggleMonitor:
+    return _MONITOR

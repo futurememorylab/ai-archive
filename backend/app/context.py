@@ -50,6 +50,7 @@ from backend.app.repositories.ai_store_files import AIStoreFilesRepo
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.app_meta import AppMetaRepo, get_or_create_install_id
 from backend.app.repositories.cache_actions_log import CacheActionsLogRepo
+from backend.app.repositories.catalogs import CatalogsRepo
 from backend.app.repositories.clip_cache import ClipCacheRepo
 from backend.app.repositories.clip_list_cache import ClipListCacheRepo
 from backend.app.repositories.clip_versions import ClipVersionsRepo
@@ -111,6 +112,7 @@ class CoreCtx:
     ai_store_files_repo: AIStoreFilesRepo = field(default_factory=AIStoreFilesRepo)
     clip_cache_repo: ClipCacheRepo = field(default_factory=ClipCacheRepo)
     clip_list_cache_repo: ClipListCacheRepo = field(default_factory=ClipListCacheRepo)
+    catalogs_repo: CatalogsRepo = field(default_factory=CatalogsRepo)
     poster_cache_repo: PosterCacheRepo = field(default_factory=PosterCacheRepo)
     field_def_cache_repo: FieldDefCacheRepo = field(default_factory=FieldDefCacheRepo)
     pending_ops_repo: PendingOperationsRepo = field(default_factory=PendingOperationsRepo)
@@ -340,6 +342,10 @@ class LiveCtx:
     @property
     def clip_list_cache_repo(self) -> ClipListCacheRepo:
         return self.core.clip_list_cache_repo
+
+    @property
+    def catalogs_repo(self) -> CatalogsRepo:
+        return self.core.catalogs_repo
 
     @property
     def poster_cache_repo(self) -> PosterCacheRepo:

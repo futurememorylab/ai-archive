@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Request
 from backend.app.archive.errors import ProviderError
 from backend.app.archive.model import ClipQuery
 from backend.app.deps import get_live_ctx
+from backend.app.services.active_catalog import active_catalog_id
 
 router = APIRouter(prefix="/api/catdv", tags=["catdv"])
 
@@ -15,7 +16,7 @@ async def list_clips(request: Request, q: str | None = None, offset: int = 0, li
     ctx = get_live_ctx(request)
     try:
         page = await ctx.archive.list_clips(
-            str(ctx.settings.catdv_catalog_id),
+            active_catalog_id(request, ctx.settings),
             ClipQuery(text=q, offset=offset, limit=limit),
         )
     except ProviderError as exc:

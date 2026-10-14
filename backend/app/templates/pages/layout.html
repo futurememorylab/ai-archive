@@ -49,6 +49,7 @@
   <div class="app">
     <header class="topbar">
       <a class="brand" href="/"><span class="brand-dot"></span> CatDV Annotator</a>
+      <div id="catalog-picker" data-test="catalog-picker" hx-get="/ui/catalog-picker" hx-trigger="load" hx-swap="innerHTML"></div>
       {% block crumb %}{% endblock %}
       <span class="grow"></span>
       {% block topbar_pills %}{% include "pages/_topbar_pills.html" %}{% endblock %}

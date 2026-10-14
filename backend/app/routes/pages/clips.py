@@ -14,6 +14,7 @@ from backend.app.media_kind import is_image_path
 from backend.app.repositories.jobs import TRANSIENT_STATUSES
 from backend.app.repositories.live_sessions import LiveSessionsRepo
 from backend.app.routes.pages.templates import templates
+from backend.app.services.active_catalog import active_catalog_id, catalog_name
 from backend.app.services.clip_list_filters import (
     is_active as filters_active,
 )
@@ -263,7 +264,7 @@ async def clips_list(
 ):
     ctx = get_live_ctx(request)
 
-    catalog_id = str(ctx.settings.catdv_catalog_id)
+    catalog_id = active_catalog_id(request, ctx.settings)
     cache_f = normalize_cache(cache)
     anno_f = normalize_anno(anno)
     # `batch` arrives as a comma-separated query string of job ids: the
@@ -334,8 +335,8 @@ async def clips_list(
         "filters_active": filters_active(effective_cache_f, anno_f, batch_ids),
         "host_local_proxies": host_local_proxies,
         "catalog": {
-            "id": ctx.settings.catdv_catalog_id,
-            "name": "AI katalog",
+            "id": catalog_id,
+            "name": await catalog_name(ctx.core, catalog_id),
         },
         "clips": clip_rows,
         "prev_offset": prev_offset,

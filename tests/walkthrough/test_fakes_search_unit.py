@@ -67,3 +67,27 @@ async def test_get_clip_finds_each_catalog_member(archive: FakeArchive):
     for clip in full.items:
         got = await archive.get_clip(clip.key[1])
         assert got.key == clip.key
+
+
+async def test_fake_archive_filters_by_catalog(tmp_path: Path):
+    from tests.walkthrough.fakes import (
+        CATALOG_ID,
+        CATALOGS,
+        SECOND_CATALOG_CLIP_NAMES,
+        SECOND_CATALOG_ID,
+        build_second_catalog_clips,
+    )
+
+    video = _video(tmp_path)
+    second = build_second_catalog_clips(video)
+    archive = FakeArchive(
+        build_clips(video) + second,
+        catalogs=CATALOGS,
+        clip_catalogs={c.key[1]: SECOND_CATALOG_ID for c in second},
+    )
+    in_second = await archive.list_clips(SECOND_CATALOG_ID, ClipQuery())
+    assert {c.name for c in in_second.items} == set(SECOND_CATALOG_CLIP_NAMES)
+    in_default = await archive.list_clips(CATALOG_ID, ClipQuery())
+    assert CLIP_NAME in {c.name for c in in_default.items}
+    assert not set(SECOND_CATALOG_CLIP_NAMES) & {c.name for c in in_default.items}
+    assert [c.id for c in await archive.list_catalogs()] == [CATALOG_ID, SECOND_CATALOG_ID]

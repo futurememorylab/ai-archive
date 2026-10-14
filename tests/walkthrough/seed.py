@@ -14,6 +14,7 @@ from backend.app.db import open_db
 from backend.app.migrations_runner import apply_migrations
 from backend.app.models.annotation import Annotation, ReviewItem
 from backend.app.repositories.annotations import AnnotationsRepo
+from backend.app.repositories.catalogs import CatalogsRepo
 from backend.app.repositories.clip_list_cache import ClipListCacheRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
@@ -251,6 +252,8 @@ async def build_seed_db(
     *,
     clips: tuple[CanonicalClip, ...] | None = None,
     catalog_id: str | None = None,
+    catalogs: tuple = (),
+    other_catalog_clips: dict[str, tuple[CanonicalClip, ...]] | None = None,
 ) -> int:
     """Build a standalone, fully-migrated + seeded SQLite DB at `db_path`.
 
@@ -272,6 +275,17 @@ async def build_seed_db(
         await seed_production_prompt(conn)
         if clips is not None and catalog_id is not None:
             await seed_clip_list_cache(conn, clips, catalog_id)
+        # Multiple catalogs (#124): the picker's cached list (fresh, so no
+        # refresh is attempted) + each extra catalog's cached clip page.
+        if catalogs:
+            await CatalogsRepo().replace_all(
+                conn,
+                provider_id="catdv",
+                catalogs=list(catalogs),
+                fetched_at=datetime.now(UTC).isoformat(),
+            )
+        for other_id, other_clips in (other_catalog_clips or {}).items():
+            await seed_clip_list_cache(conn, other_clips, other_id)
         await conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         await conn.commit()
         return aid

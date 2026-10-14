@@ -16,6 +16,8 @@ Query inventory (no filters, no batch, all bounded by page size):
      (count_actionable + count_clips_for_review) for the topbar chip/pill. These
      replaced a per-render *synchronous* sqlite3 connection that was invisible to
      this guard; constant, not per-row. See finding #10.
+  6. catalog_name — 1 read of the cached `catalogs` list for the breadcrumb
+     name of the active catalog (#124); constant.
   ─────────────────────────────────────────────────────────────────────────
   None grow with clip count (page capped at limit=10, well inside one 400-key
   chunk). The equality-across-N test pins that O(1) property directly.
@@ -207,17 +209,17 @@ def _count_render(monkeypatch, tmp_path, n: int) -> int:
 
 @pytest.mark.parametrize("n_clips", [10, 100, 1000])
 def test_clips_list_query_count_bounded(monkeypatch, tmp_path, n_clips):
-    """GET / issues ≤ 14 SQL statements at every clip-count (N=10/100/1000).
+    """GET / issues ≤ 15 SQL statements at every clip-count (N=10/100/1000).
 
     The page is limited to 10 rows (limit=10), well inside a single
     chunked_in_clause batch.  Actual count at the time of writing: 12.
-    Bound is set to 14 (actual + 2 headroom) so a single per-row DB call
+    Bound is set to 15 (actual + 2 headroom) so a single per-row DB call
     (adds 10 statements for a 10-row page) trips the assertion.
     """
     count = _count_render(monkeypatch, tmp_path, n_clips)
 
-    assert count <= 14, (
-        f"[n={n_clips}] query count {count} > 14; "
+    assert count <= 15, (
+        f"[n={n_clips}] query count {count} > 15; "
         "an N+1 may have been introduced in the clips-list render. "
         "See ADR 0046."
     )
