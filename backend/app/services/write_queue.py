@@ -8,6 +8,7 @@ grouping logic that previously lived in `routes/review.py`.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -96,7 +97,12 @@ class WriteQueue:
         """
         provider_id, provider_clip_id = clip_key
         fresh_items = [it for it in items if it.applied_at is None and it.id is not None]
-        ops_with_origin = _items_to_change_ops(fresh_items, target_map, fps=fps)
+        ops_with_origin = _items_to_change_ops(
+            fresh_items,
+            target_map,
+            fps=fps,
+            ai_marker_set=ai_marker_values(items, annotation_id),
+        )
         for op in extra_ops or []:
             ops_with_origin.append((op, []))
         if not ops_with_origin:
@@ -136,11 +142,38 @@ class WriteQueue:
 # --- ops grouping (moved out of routes/review.py) -------------------------
 
 
+def ai_marker_values(items: list[ReviewItem], annotation_id: int | None) -> list[dict[str, Any]]:
+    """The clip's AI marker set for a publish: every accepted marker item of
+    `annotation_id` (applied or not), as review values, deduplicated.
+
+    One rule for both the CatDV write (ReplaceAIMarkers) and the version
+    snapshot, so they can't diverge. Dedup by value covers Restore, which
+    re-inserts a version's markers under the same annotation as fresh items.
+    ponytail: restoring a sibling partial-apply version of the SAME annotation
+    still unions its markers; anchor restored items to their own generation if
+    that ever matters.
+    """
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for it in items:
+        if it.kind != "marker" or it.decision != "accepted" or it.annotation_id != annotation_id:
+            continue
+        value = it.edited_value if it.edited_value is not None else it.proposed_value
+        if not isinstance(value, dict):
+            continue
+        key = json.dumps(value, sort_keys=True, default=str)
+        if key not in seen:
+            seen.add(key)
+            out.append(value)
+    return out
+
+
 def _items_to_change_ops(
     items: list[ReviewItem],
     target_map: TargetMap,
     *,
     fps: float,
+    ai_marker_set: list[dict[str, Any]] | None = None,
 ) -> list[tuple[ChangeOp, list[int]]]:
     """Group items into ChangeOps, paired with their originating review_item ids.
 
@@ -182,7 +215,14 @@ def _items_to_change_ops(
             else:
                 ops.append((AppendNote(target=it.target_identifier, text=text), [it.id]))
     if marker_payloads:
-        ops.insert(0, (ReplaceAIMarkers(desired=tuple(marker_payloads)), marker_origin))
+        # The replace set is the whole AI set (every accepted marker of the
+        # annotation), not just this batch — a second partial apply must not
+        # drop the markers the first apply wrote.
+        if ai_marker_set:
+            desired = [m for v in ai_marker_set if (m := _marker_from_review_value(v, fps))]
+        else:
+            desired = marker_payloads
+        ops.insert(0, (ReplaceAIMarkers(desired=tuple(desired)), marker_origin))
     return ops
 
 

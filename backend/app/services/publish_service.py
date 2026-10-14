@@ -35,6 +35,7 @@ from backend.app.models.annotation import ClipVersion
 from backend.app.models.prompt import TargetMap
 from backend.app.services.write_queue import (
     _marker_from_review_value,
+    ai_marker_values,
     etag_from_snapshot,
     fps_from_snapshot,
 )
@@ -69,8 +70,9 @@ class PublishService:
         author: str | None,
         origin: str = "publish",
     ) -> int | None:
-        accepted = await self._review_items.list_by_clip(conn, clip_id, decision="accepted")
-        accepted = [it for it in accepted if it.annotation_id is not None and it.applied_at is None]
+        all_accepted = await self._review_items.list_by_clip(conn, clip_id, decision="accepted")
+        all_accepted = [it for it in all_accepted if it.annotation_id is not None]
+        accepted = [it for it in all_accepted if it.applied_at is None]
         if not accepted:
             return None
 
@@ -80,7 +82,9 @@ class PublishService:
 
         parent = await self._versions.live_for_clip(conn, clip_id)
         base = dict(parent.snapshot) if parent is not None else await self._load_live(conn, clip_id)
-        snapshot = _materialize(base, accepted, fps=fps)
+        snapshot = _materialize(
+            base, accepted, fps=fps, ai_markers=ai_marker_values(all_accepted, annotation.id)
+        )
 
         num = await self._versions.next_version_num(conn, clip_id)
         version_id = await self._versions.insert(
@@ -104,7 +108,9 @@ class PublishService:
         await self._wq.enqueue_apply_for_clip(
             conn,
             clip_id=clip_id,
-            accepted=accepted,
+            # All accepted items: the queue skips already-applied ones but needs
+            # them to build the full AI marker set (#123 review fix 2).
+            accepted=all_accepted,
             target_map=version.target_map,
             expected_etag=etag_from_snapshot(annotation.clip_snapshot),
             annotation_id=annotation.id,
@@ -191,9 +197,19 @@ def _switch_ops(target: ClipVersion, versions: list[ClipVersion]) -> list[Change
     return ops
 
 
-def _materialize(base: dict[str, Any], accepted: list, *, fps: float) -> dict[str, Any]:
-    """Lay accepted items on top of the base snapshot: markers add, fields set,
-    notes kept under their REAL target. Mirrors WriteQueue._items_to_change_ops.
+def _materialize(
+    base: dict[str, Any],
+    accepted: list,
+    *,
+    fps: float,
+    ai_markers: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Lay accepted items on top of the base snapshot: fields set, notes kept
+    under their REAL target. Mirrors WriteQueue._items_to_change_ops.
+
+    Markers mirror ReplaceAIMarkers: when this publish carries marker items the
+    snapshot's markers BECOME `ai_markers` (the full AI set CatDV receives);
+    otherwise no marker op is sent and the parent's markers carry over.
 
     Only `notes` and `bigNotes` are CatDV's top-level note properties; every
     other note target (e.g. the summary `pragafilm.popis.ai`) is a user field
@@ -204,10 +220,11 @@ def _materialize(base: dict[str, Any], accepted: list, *, fps: float) -> dict[st
     fields = dict(base.get("fields") or {})
     notes = base.get("notes")
     big_notes = base.get("bigNotes")
+    new_markers = []
     for it in accepted:
         value = it.edited_value if it.edited_value is not None else it.proposed_value
         if it.kind == "marker" and isinstance(value, dict):
-            markers.append(value)
+            new_markers.append(value)
         elif it.kind == "field" and it.target_identifier:
             fields[it.target_identifier] = (
                 value.get("value") if isinstance(value, dict) and "value" in value else value
@@ -224,6 +241,8 @@ def _materialize(base: dict[str, Any], accepted: list, *, fps: float) -> dict[st
                 notes = text
             else:
                 fields[it.target_identifier] = text
+    if new_markers:
+        markers = list(ai_markers) if ai_markers else new_markers
     return {"markers": markers, "fields": fields, "notes": notes, "bigNotes": big_notes}
 
 
