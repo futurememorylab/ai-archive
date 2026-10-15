@@ -67,7 +67,32 @@
 
 {% if not _is_image %}
 <div class="anno-section" role="tabpanel" x-show="tab === 'markers'" x-cloak>
-  {% if has_notes %}
+  {% if panels.descriptions is defined %}
+  {# Published clip: human (popis.materialu) and AI (popis.ai) descriptions in
+     one place, as a Human / AI toggle. Only non-empty ones are passed in. #}
+  {% if panels.descriptions %}
+  <div class="anno-summary" x-data="{ desc: '{{ panels.descriptions[0].key }}' }">
+    {% if panels.descriptions|length > 1 %}
+    <div class="anno-tabs" role="tablist">
+      {% for d in panels.descriptions %}
+      <button type="button" class="anno-tab" role="tab"
+              :class="{ active: desc === '{{ d.key }}' }"
+              :aria-selected="desc === '{{ d.key }}'"
+              @click.stop="desc = '{{ d.key }}'">{{ d.label }}</button>
+      {% endfor %}
+    </div>
+    {% else %}
+    <h4 class="anno-summary-label">Description</h4>
+    {% endif %}
+    {% for d in panels.descriptions %}
+    <div class="anno-summary-block" x-show="desc === '{{ d.key }}'">
+      {{ origin_pill(d.origin) }}
+      <p class="note">{{ d.text }}</p>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% elif has_notes %}
   {# Read-only echo of the Notes tab, shown first in Description. The editable
      copy (keep / edit) stays in the Notes tab to avoid duplicate item controls. #}
   <div class="anno-summary">
