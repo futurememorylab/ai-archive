@@ -96,3 +96,24 @@ async def test_replay_carries_error_and_annotation_id(db):
         "error": "boom",
     }
     assert by_item[items[1].id]["status"] == "review_ready"
+
+
+# --- bounded stream lifetime ------------------------------------------------
+# An idle stream only noticed a gone client when the next event arrived, so
+# every page view pinned a Cloud Run request slot for the full 300s timeout:
+# old revisions drained for minutes after a deploy and a saturated instance
+# made Cloud Run start a second one (split-brain SQLite). Streams now end
+# after max_age_s; EventSource reconnects on its own.
+
+
+@pytest.mark.asyncio
+async def test_event_generator_ends_idle_stream_after_max_age():
+    bus = EventBus()
+    gen = _event_generator(bus, topic="jobs", max_age_s=0.05)
+    received = await asyncio.wait_for(_drain(gen), timeout=1)
+    assert received == []
+    assert "jobs" not in bus._subs  # unsubscribed on exit
+
+
+async def _drain(gen):
+    return [chunk async for chunk in gen]
