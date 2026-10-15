@@ -305,6 +305,7 @@ class CatdvClient:
 
         expected_total: int | None = None
         stalled = 0
+        relogins = 0  # consecutive re-logins without a media response
         while True:
             existing = dest.stat().st_size if dest.exists() else 0  # sync-io-ok: pre-existing
             if expected_total is not None and existing >= expected_total:
@@ -315,9 +316,27 @@ class CatdvClient:
             try:
                 async with self.http.stream("GET", url, headers=headers, timeout=timeout) as resp:
                     if resp.status_code == 401 or _is_auth_envelope(resp):
+                        # Only an AUTH reply is cured by logging in, and only
+                        # once: anything else used to re-login forever,
+                        # hammering CatDV (clip 913866, 2026-10-15).
+                        if resp.status_code != 401:
+                            await resp.aread()
+                            env = _envelope_or_raise(resp)
+                            if not env.requires_reauth:
+                                raise CatdvError(
+                                    f"CatDV refused the proxy for clip {clip_id}: "
+                                    f"{env.error_message or env.status}"
+                                )
+                        if relogins >= 1:
+                            raise CatdvError(
+                                f"CatDV still rejects the session for clip {clip_id} "
+                                "after logging in again"
+                            )
                         await self.login()
+                        relogins += 1
                         relogged = True
                     else:
+                        relogins = 0
                         resp.raise_for_status()
                         total = _content_total_bytes(resp, existing)
                         if total is not None:

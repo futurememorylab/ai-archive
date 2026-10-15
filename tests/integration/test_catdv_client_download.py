@@ -67,3 +67,29 @@ async def test_download_proxy_raises_when_link_makes_no_progress(tmp_path: Path)
             with pytest.raises(httpx.HTTPError):
                 await client.download_proxy(clip_id=7, dest=out)
         assert out.stat().st_size < len(blob)  # never claimed completion
+
+
+# 2026-10-15: CatDV answered the media request with a JSON envelope that a
+# fresh login didn't cure; download_proxy treated every JSON reply as "log in
+# again" without counting it and hit CatDV ~6x/s for minutes (clip 913866).
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["ERROR", "AUTH"])
+async def test_download_proxy_gives_up_on_persistent_json_envelope(tmp_path: Path, status):
+    import asyncio
+
+    from backend.app.services.catdv_client import CatdvError
+
+    with running_fake_catdv() as (base_url, fake):
+        fake.proxies[7] = b"A" * 1024
+        fake.media_envelope[7] = status
+        out = tmp_path / "proxy.mov"
+        client = CatdvClient(base_url=base_url, username="klientAI", password="secret")
+        async with client:
+            await client.login()
+            with pytest.raises(CatdvError) as exc:
+                await asyncio.wait_for(client.download_proxy(clip_id=7, dest=out), timeout=5)
+        if status == "ERROR":
+            assert "No proxy for clip" in str(exc.value)
+        assert not out.exists() or out.stat().st_size == 0

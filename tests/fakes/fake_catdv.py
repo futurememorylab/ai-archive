@@ -32,6 +32,9 @@ class FakeCatdv:
         # so a client must resume across several requests to assemble the file.
         # 0 simulates a dead link (zero progress per attempt).
         self.media_chunk_cap: int | None = None
+        # clip_id -> envelope status ("ERROR"/"AUTH") get_media answers with
+        # (HTTP 200 + JSON, like CatDV) even for a valid session.
+        self.media_envelope: dict[int, str] = {}
         self.force_auth_until: float = 0.0
         self.put_log: list[tuple[int, dict]] = []
         self.logout_count: int = 0
@@ -138,6 +141,9 @@ class FakeCatdv:
         async def get_media(clip_id: int, request: Request):
             if request.cookies.get("JSESSIONID") != "fake-session":
                 return Response(status_code=401)
+            if clip_id in self.media_envelope:
+                status = self.media_envelope[clip_id]
+                return self._envelope(status, msg="No proxy for clip")
             blob = self.proxies.get(clip_id)
             if blob is None:
                 return Response(status_code=404)
