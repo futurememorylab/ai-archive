@@ -51,14 +51,26 @@ async def test_mark_error_stores_message(db):
 
 
 @pytest.mark.asyncio
-async def test_cancel_blocks_downloading(db):
+async def test_cancel_succeeds_for_downloading(db):
+    # A download stalled on the tunnel used to be uncancellable (2026-10-15,
+    # clip 913866 sat at 0 MB); the worker aborts it when the row flips.
     repo = PrefetchQueueRepo()
     rid = await repo.enqueue(db, key=("catdv", "1"), who="request")
     await repo.claim_next(db)
     out = await repo.mark_cancelled(db, rid)
-    assert out is False, "cancel must reject downloading rows"
+    assert out is True
     row = await repo.get(db, rid)
-    assert row["status"] == "downloading"
+    assert row["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_cancel_rejects_terminal(db):
+    repo = PrefetchQueueRepo()
+    rid = await repo.enqueue(db, key=("catdv", "1"), who="request")
+    await repo.claim_next(db)
+    await repo.mark_done(db, rid, bytes_downloaded=1)
+    assert await repo.mark_cancelled(db, rid) is False
+    assert (await repo.get(db, rid))["status"] == "done"
 
 
 @pytest.mark.asyncio

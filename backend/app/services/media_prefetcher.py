@@ -76,6 +76,10 @@ class MediaPrefetcher:
         self._tick_interval_s = tick_interval_s
         self._stop_evt: asyncio.Event = asyncio.Event()
         self._task: asyncio.Task | None = None
+        # (row id, download task) of the in-flight download, and the row a
+        # user asked to cancel -- tells a user abort apart from stop().
+        self._current: tuple[int, asyncio.Task] | None = None
+        self._cancel_rid: int | None = None
 
     # --- lifecycle ---------------------------------------------------
 
@@ -127,6 +131,16 @@ class MediaPrefetcher:
                     pass
             # If we processed a row, loop immediately to drain.
 
+    def cancel(self, rid: int) -> bool:
+        """Abort the in-flight download of row ``rid``. The caller has
+        already marked the row cancelled. Returns False if ``rid`` isn't
+        the row being downloaded right now."""
+        if self._current is None or self._current[0] != rid:
+            return False
+        self._cancel_rid = rid
+        self._current[1].cancel()
+        return True
+
     # --- single tick -------------------------------------------------
 
     async def tick_once(self) -> int | None:
@@ -151,12 +165,22 @@ class MediaPrefetcher:
             )
             return clip_id_int if clip_id_str.isdigit() else 0
 
+        tracker = ProgressTracker(self._queue, conn=db, rid=rid)
+        download = asyncio.create_task(
+            self._backend.ensure_cached(clip_id_int, progress_cb=tracker)
+        )
+        self._current = (rid, download)
         try:
-            tracker = ProgressTracker(self._queue, conn=db, rid=rid)
-            await self._backend.ensure_cached(clip_id_int, progress_cb=tracker)
+            await download
             # Final flush: record the true on-disk size (covers clips that
             # finished inside one throttle window, so Recent never shows 0).
             await self._queue.mark_done(db, rid, bytes_downloaded=tracker.last_downloaded)
+        except asyncio.CancelledError:
+            if self._cancel_rid != rid:
+                raise  # the worker is stopping, not a user cancel
+            # ponytail: the partial file stays in the cache dir; a later
+            # request for the clip resumes from it (Range download).
+            log.info("prefetch cancelled for clip %s", clip_id_int)
         except Exception as exc:  # noqa: BLE001
             # humanise(), not str(exc): a stalled-tunnel ReadTimeout has an
             # empty str(), which left the toast + sync drawer blank. exc_info
@@ -164,4 +188,7 @@ class MediaPrefetcher:
             msg = humanise(exc)
             log.warning("prefetch failed for clip %s: %s", clip_id_int, msg, exc_info=True)
             await self._queue.mark_error(db, rid, msg)
+        finally:
+            self._current = None
+            self._cancel_rid = None
         return clip_id_int

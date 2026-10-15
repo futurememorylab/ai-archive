@@ -190,3 +190,42 @@ async def test_tick_records_progress_and_final_size(db):
     assert row["status"] == "done"
     assert row["bytes_downloaded"] == 27_000_000  # final flush
     assert row["bytes_total"] == 27_000_000
+
+
+@pytest.mark.asyncio
+async def test_cancel_aborts_in_flight_download(db):
+    """Cancelling the row being downloaded aborts the transfer, leaves the
+    row `cancelled` (not error/done) and frees the worker for the next row."""
+    from backend.app.services.media_prefetcher import MediaPrefetcher
+
+    repo = PrefetchQueueRepo()
+    rid = await repo.enqueue(db, key=("catdv", "1"), who="request")
+    await repo.enqueue(db, key=("catdv", "2"), who="request")
+    started = asyncio.Event()
+
+    class _StallingBackend(_FakeBackend):
+        async def ensure_cached(self, clip_id: int, progress_cb=None) -> None:
+            started.set()
+            await super().ensure_cached(clip_id, progress_cb)
+
+    backend = _StallingBackend(sleep_s=30)  # a stalled tunnel download
+    pf = MediaPrefetcher(queue_repo=repo, backend=backend, db_provider=lambda: db)
+
+    tick = asyncio.create_task(pf.tick_once())
+    await asyncio.wait_for(started.wait(), timeout=2)
+    assert await repo.mark_cancelled(db, rid) is True
+    assert pf.cancel(rid) is True
+    assert await asyncio.wait_for(tick, timeout=2) == 1
+
+    assert (await repo.get(db, rid))["status"] == "cancelled"
+    backend._sleep_s = 0
+    assert await pf.tick_once() == 2
+
+
+@pytest.mark.asyncio
+async def test_cancel_ignores_other_rows(db):
+    from backend.app.services.media_prefetcher import MediaPrefetcher
+
+    repo = PrefetchQueueRepo()
+    pf = MediaPrefetcher(queue_repo=repo, backend=_FakeBackend(), db_provider=lambda: db)
+    assert pf.cancel(123) is False
