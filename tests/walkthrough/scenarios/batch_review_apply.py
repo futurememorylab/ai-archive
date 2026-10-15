@@ -9,8 +9,6 @@ fix the leftover suggestion kept the batch in "Awaiting review" forever.
 
 from __future__ import annotations
 
-import time
-
 from playwright.sync_api import expect
 
 from tests.walkthrough.fakes import BATCH_REVIEW_CLIP_NAME
@@ -30,7 +28,9 @@ DESCRIPTION = (
     "An operator annotates a clip, opens the Batches page where the run waits "
     "for review, clicks Review, publishes the draft, and returns to see the "
     "batch settle to Applied, even though the draft's shared decade field is "
-    "only a copy-me suggestion that is never written."
+    "only a copy-me suggestion that is never written. While waiting for each "
+    "status the test reloads the Batches page every half second, so the video "
+    "jumps and repeats moments; that is the test polling, not the app retrying."
 )
 
 
@@ -49,7 +49,7 @@ def run(wt):
     wt.step("Open the Batches page", open_batches)
     wt.step(
         "The finished batch waits for review",
-        lambda p: _expect_status_eventually(p, "Awaiting review"),
+        lambda p: _expect_status(p, "Awaiting review"),
     )
     wt.step(
         "Click Review on the batch",
@@ -63,10 +63,24 @@ def run(wt):
         "Accept & apply (publish) the draft",
         lambda p: p.locator('[data-test="apply-draft"]').click(),
     )
+    # Wait on the clip page until the write-back has landed (the published
+    # panel refreshes itself), so the Batches page is opened once, settled.
+    wt.step(
+        "Switch to the published view",
+        lambda p: p.locator('button[data-scope="published"]').click(),
+    )
+    wt.step(
+        "The AI marker is published to the archive",
+        lambda p: (
+            p.locator("#published-panels")
+            .get_by_text("AI · published")
+            .first.wait_for(state="visible", timeout=15000)
+        ),
+    )
     wt.step("Back to the Batches page", open_batches)
     wt.step(
         "The batch reads Applied, not Awaiting review",
-        lambda p: _expect_status_eventually(p, "Applied"),
+        lambda p: _expect_status(p, "Applied"),
     )
 
 
@@ -75,16 +89,7 @@ def _newest_row(p):
     return p.locator("table.batch-tbl tr.batch-row").first
 
 
-def _expect_status_eventually(p, label: str, timeout: float = 15.0) -> None:
-    """The table only live-refreshes while a batch runs, so re-open the page
-    until the newest row's status pill reads `label` (the write-back drains in
-    the background between "Syncing" and "Applied")."""
-    deadline = time.monotonic() + timeout
-    pill = _newest_row(p).locator(".pill")
-    while True:
-        text = pill.inner_text().strip()
-        if text == label or time.monotonic() > deadline:
-            break
-        time.sleep(0.5)
-        p.reload()
-    expect(pill).to_have_text(label)
+def _expect_status(p, label: str) -> None:
+    """The newest row's status pill reads `label`. The table live-refreshes on
+    job events, so this waits for the run to finish without reloading."""
+    expect(_newest_row(p).locator(".pill")).to_have_text(label, timeout=15000)
