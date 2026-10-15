@@ -28,12 +28,14 @@ def test_both_descriptions_render_as_toggle():
     assert "Lidský popis" in html and "AI popis" in html
     assert "desc = 'human'" in html and "desc = 'ai'" in html
     assert "desc: 'human'" in html  # first non-empty one is selected
+    assert 'class="pill' not in html  # the tab name already says Human / AI
 
 
 def test_single_description_has_no_toggle():
     html = _render([{"key": "ai", "label": "AI", "origin": "ai", "text": "AI popis"}])
     assert "AI popis" in html
     assert "desc = 'ai'" not in html
+    assert "AI description" in html
 
 
 def test_no_descriptions_no_summary():

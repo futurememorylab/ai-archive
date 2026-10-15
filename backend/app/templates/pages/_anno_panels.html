@@ -82,11 +82,11 @@
       {% endfor %}
     </div>
     {% else %}
-    <h4 class="anno-summary-label">Description</h4>
+    {# No tabs: the label carries the origin instead. #}
+    <h4 class="anno-summary-label">{{ panels.descriptions[0].label }} description</h4>
     {% endif %}
     {% for d in panels.descriptions %}
     <div class="anno-summary-block" x-show="desc === '{{ d.key }}'">
-      {{ origin_pill(d.origin) }}
       <p class="note">{{ d.text }}</p>
     </div>
     {% endfor %}
