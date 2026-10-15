@@ -1287,6 +1287,10 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
   background: var(--info);
   color: #0b1722;
 }
+.anno-scope .new-dot {
+  display: inline-block; width: 7px; height: 7px; margin-left: 6px;
+  border-radius: 50%; background: var(--info); vertical-align: middle;
+}
 
 /* ─── Draft pane recolor ─────────────────────────────────────────────── */
 /* Re-scope --accent to blue so every shared partial inside the draft

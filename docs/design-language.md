@@ -200,7 +200,7 @@ below for the chip, and the matching token for the timeline band:
 | State | Pill | Token / band | Meaning |
 |---|---|---|---|
 | **Human** | `status_pill('Human', 'origin-human')` | `--text-3` (grey) | A CatDV marker/field the app does not own (incl. legacy app markers). Read-only. |
-| **AI · published** | `status_pill('AI · published', 'accent')` | `--accent` (orange) | An app-owned (`category == "AI"`) annotation already written to CatDV. |
+| **AI** | `status_pill('AI', 'accent')` | `--accent` (orange) | An app-owned (`category == "AI"`) annotation already written to CatDV. |
 | **AI · draft** | `status_pill('AI · draft', 'info')` | `--info` (blue) | A review item not yet applied. Editable (keep / edit / drag). |
 | **AI · suggestion** | `status_pill('AI · suggestion', 'info')` | `--info` (blue) | A shared field the app never writes — offered with a Copy button, no keep checkbox. |
 

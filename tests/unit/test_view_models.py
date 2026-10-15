@@ -285,3 +285,22 @@ def test_clip_detail_field_origin_by_ownership():
     by_ident = {f["identifier"]: f for f in d["clip"]["fields"]}
     assert by_ident["pragafilm.popis.ai"]["origin"] == "ai"
     assert by_ident["pragafilm.popis.materialu"]["origin"] == "human"
+
+
+def test_clip_detail_descriptions_human_and_ai_skip_empty():
+    fields = {
+        "pragafilm.popis.materialu": FieldValue(
+            identifier="pragafilm.popis.materialu", value="Lidský popis"
+        ),
+        "pragafilm.popis.ai": FieldValue(identifier="pragafilm.popis.ai", value="AI popis"),
+    }
+    vm = clip_detail(_canonical(fields=fields))
+    assert vm["clip"]["descriptions"] == [
+        {"key": "human", "label": "Human", "origin": "human", "text": "Lidský popis"},
+        {"key": "ai", "label": "AI", "origin": "ai", "text": "AI popis"},
+    ]
+
+    only_ai = {"pragafilm.popis.ai": FieldValue(identifier="pragafilm.popis.ai", value="AI popis")}
+    keys = [d["key"] for d in clip_detail(_canonical(fields=only_ai))["clip"]["descriptions"]]
+    assert keys == ["ai"]
+    assert clip_detail(_canonical())["clip"]["descriptions"] == []

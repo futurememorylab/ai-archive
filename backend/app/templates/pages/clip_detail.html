@@ -190,6 +190,9 @@
                   :aria-selected="scope === 'draft'"
                   @click="scope = 'draft'">
             Draft
+            {# iOS-style "new" dot: un-applied draft items are waiting for review. #}
+            <span class="new-dot" data-test="draft-dot" aria-label="Draft awaiting review"
+                  x-show="totalCount() > 0 && scope !== 'draft'" x-cloak></span>
           </button>
         </div>
         <span class="grow"></span>

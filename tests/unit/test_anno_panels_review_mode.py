@@ -119,7 +119,7 @@ def test_published_marker_shows_origin_pill():
         "fps": 25.0,
     }
     html = _render_panels(panels, review_mode=False)
-    assert "AI · published" in html
+    assert ">AI</span>" in html
     assert "Human" in html
 
 
@@ -196,5 +196,5 @@ def test_published_field_carries_origin_pill():
         "fps": 25.0,
     }
     html = _render_panels(panels, review_mode=False)
-    assert "AI · published" in html  # the popis.ai field
+    assert ">AI</span>" in html  # the popis.ai field
     assert "Human" in html

@@ -165,6 +165,23 @@ def _media_kind(provider_data: dict[str, Any]) -> str:
     return "image" if is_image_path(media.get("filePath")) else "video"
 
 
+# Description tab toggle: human first, then AI; empty ones are skipped.
+_DESCRIPTION_FIELDS = (
+    ("human", "Human", "pragafilm.popis.materialu"),
+    ("ai", "AI", "pragafilm.popis.ai"),
+)
+
+
+def _descriptions(fields_view: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_ident = {f["identifier"]: f for f in fields_view}
+    out = []
+    for key, label, ident in _DESCRIPTION_FIELDS:
+        f = by_ident.get(ident)
+        if f and f["value"].strip():
+            out.append({"key": key, "label": label, "origin": f["origin"], "text": f["value"]})
+    return out
+
+
 def clip_detail(
     clip: CanonicalClip,
     cache_status: Any | None = None,
@@ -187,6 +204,7 @@ def clip_detail(
             "media_url": f"/api/media/{clip_id}",
             "markers": [_marker_view(m) for m in sorted(clip.markers, key=lambda m: m.in_.secs)],
             "fields": fields_view,
+            "descriptions": _descriptions(fields_view),
             "notes": _fix(clip.provider_data.get("notes")) or None,
             "big_notes": _fix(clip.provider_data.get("bigNotes")) or None,
             "cache": cache_status_view(cache_status) if cache_status else None,
