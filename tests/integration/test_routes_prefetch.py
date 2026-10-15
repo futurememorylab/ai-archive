@@ -54,3 +54,16 @@ def test_cancel_queued_row(client):
     r = client.post(f"/api/cache/prefetch/{rid}/cancel")
     assert r.status_code == 200
     assert r.json()["cancelled"] is True
+
+
+def test_cancel_downloading_row_and_queue_offers_cancel(client):
+    rid = client.post("/api/cache/prefetch", json={"clip_keys": [["catdv", "98"]]}).json()["ids"][0]
+    ctx = client.app.state.core_ctx
+    client.portal.call(ctx.prefetch_queue_repo.claim_next, ctx.db)  # -> downloading
+
+    html = client.get("/ui/cache/queue").text
+    assert f"/api/cache/prefetch/{rid}/cancel" in html
+
+    r = client.post(f"/api/cache/prefetch/{rid}/cancel")
+    assert r.status_code == 200
+    assert client.post(f"/api/cache/prefetch/{rid}/cancel").status_code == 409

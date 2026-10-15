@@ -245,12 +245,14 @@ class PrefetchQueueRepo:
         await conn.commit()
 
     async def mark_cancelled(self, conn: aiosqlite.Connection, rid: int) -> bool:
-        """Cancel a queued/error row. Returns False (without mutating)
-        if the row is `downloading` or already terminal."""
+        """Cancel a queued/downloading/error row. Returns False (without
+        mutating) if the row is already done/cancelled. Flipping a
+        `downloading` row only marks it; the caller aborts the in-flight
+        transfer via ``MediaPrefetcher.cancel``."""
         cur = await conn.execute(
             "UPDATE prefetch_queue "
             "   SET status='cancelled', finished_at=? "
-            " WHERE id=? AND status IN ('queued', 'error')",
+            " WHERE id=? AND status IN ('queued', 'downloading', 'error')",
             (_now_iso(), rid),
         )
         await conn.commit()

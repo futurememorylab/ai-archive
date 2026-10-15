@@ -123,10 +123,11 @@ async def prefetch_cancel(request: Request, rid: int) -> dict[str, Any]:
     ctx = get_core_ctx(request)
     ok = await ctx.prefetch_queue_repo.mark_cancelled(ctx.db, rid)
     if not ok:
-        raise HTTPException(
-            409,
-            "row is not cancellable (downloading or already terminal)",
-        )
+        raise HTTPException(409, "row is not cancellable (already finished)")
+    # A `downloading` row also needs its in-flight transfer aborted.
+    prefetcher = getattr(request.app.state.live_ctx, "media_prefetcher", None)
+    if prefetcher is not None:
+        prefetcher.cancel(rid)
     return {"cancelled": True}
 
 

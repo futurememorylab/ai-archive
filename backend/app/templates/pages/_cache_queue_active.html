@@ -48,7 +48,7 @@
               {% endif %}
             </td>
             <td class="row-actions">
-              {% if r.status == "queued" %}
+              {% if r.status in ("queued", "downloading") %}
                 <button type="button" class="btn sm"
                         hx-post="/api/cache/prefetch/{{ r.id }}/cancel"
                         hx-target="#prefetch-panel"
