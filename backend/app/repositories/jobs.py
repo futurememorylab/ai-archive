@@ -7,6 +7,7 @@ import aiosqlite
 
 from backend.app.models.job import ItemStatus, Job, JobItem, JobStatus
 from backend.app.repositories._batch import chunked_in_clause
+from backend.app.repositories.review_items import for_review_where
 
 
 def _now_iso() -> str:
@@ -392,7 +393,7 @@ class JobsRepo:
     # below issues a single grouped query — never a per-batch loop — so the
     # /batches read path stays O(1) in batch count (ADR 0046).
 
-    _BATCHES_SQL = """
+    _BATCHES_SQL = f"""
         WITH batch AS (
           SELECT
             COALESCE(j.run_group, 'job:' || j.id)               AS batch_key,
@@ -429,13 +430,13 @@ class JobsRepo:
             MIN(ri.catdv_clip_id) AS first_pending_clip_id
           FROM jobs j
           JOIN annotations a ON a.job_id = j.id
+          -- The shared "awaiting review" predicate (latest annotation only, not
+          -- rejected, not a suggestion) — the same one behind the topbar count
+          -- and the for_review filter, so a batch can't stay "Awaiting review"
+          -- on items nobody can act on (#123 suggestions stay un-applied).
           JOIN review_items ri ON ri.annotation_id = a.id
-            AND ri.applied_at IS NULL AND ri.decision != 'rejected'
+            AND {for_review_where("ri")}
           WHERE COALESCE(j.kind, '') != 'studio'
-            -- only the clip's LATEST annotation is its current draft; a clip
-            -- re-annotated in a newer batch isn't "awaiting" on this older one.
-            AND a.id = (SELECT MAX(a2.id) FROM annotations a2
-                        WHERE a2.catdv_clip_id = ri.catdv_clip_id)
           GROUP BY batch_key
         ),
         syncing AS (

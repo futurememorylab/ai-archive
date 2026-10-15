@@ -59,6 +59,11 @@ ANNOTATE_SAFE_NAMES = (
     "Studio interview (unedited)",  # clip 106
 )
 
+# A clip only the batch-review-apply scenario annotates, reviews and publishes,
+# so its batch row's status is not perturbed by the other job scenarios.
+BATCH_REVIEW_CLIP_ID = 107
+BATCH_REVIEW_CLIP_NAME = "Harbour cranes, reel 3"
+
 # (clip_id, name) for every extra clip. 101 is the canonical clip (build_clip)
 # and is added separately; none of these names contain SEARCH_TERM by accident.
 _EXTRA_CLIPS = (
@@ -67,6 +72,7 @@ _EXTRA_CLIPS = (
     (104, SEARCH_NONMATCH_NAME),
     (105, ANNOTATE_SAFE_NAMES[0]),
     (106, ANNOTATE_SAFE_NAMES[1]),
+    (BATCH_REVIEW_CLIP_ID, BATCH_REVIEW_CLIP_NAME),
     (REVIEW_FIXTURE_CLIP_ID, REVIEW_FIXTURE_CLIP_NAME),
 )
 # A catalog clip that is never annotated — used by the "not annotated" filter
@@ -402,7 +408,13 @@ class FakeGemini:
         self._entered.set()
         # No-op when the gate is already set (default); blocks while held.
         self._gate.wait(timeout=_HOLD_TIMEOUT_SECS)
-        return {"text": json.dumps({"decade": PUBLISHED_DECADE}), "raw": {}}
+        # A shared-field suggestion (decade) plus one AI marker, so a run makes a
+        # draft with both an owned write and a copy-only suggestion (#123).
+        payload = {
+            "decade": PUBLISHED_DECADE,
+            "scenes": [{"name": "Harbour wide", "in": {"secs": 0.0}, "out": {"secs": 2.0}}],
+        }
+        return {"text": json.dumps(payload), "raw": {}}
 
 
 # Process-wide singleton: app_server injects THIS instance into the LiveCtx, and

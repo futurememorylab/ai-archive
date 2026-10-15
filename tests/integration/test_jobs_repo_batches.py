@@ -243,3 +243,88 @@ async def test_clip_status_by_jobs_is_one_query(db):
         m = await jobs.clip_status_by_jobs(db, [j1, j2])
     assert m == {101: "applied", 102: "pending", 201: "pending"}
     assert await jobs.clip_status_by_jobs(db, []) == {}
+
+
+async def _review_item(db, *, ann_id, clip_id, kind, target, decision, applied):
+    await db.execute(
+        "INSERT INTO review_items "
+        "(annotation_id, studio_run_id, catdv_clip_id, kind, target_identifier, "
+        " proposed_value, edited_value, decision, applied_at) "
+        "VALUES (?, NULL, ?, ?, ?, '{}', NULL, ?, ?)",
+        (ann_id, clip_id, kind, target, decision, "2026-06-02T01:00:00" if applied else None),
+    )
+    await db.commit()
+
+
+async def _annotation(db, *, job_id, clip_id, prompt_version_id) -> int:
+    cur = await db.execute(
+        "INSERT INTO annotations "
+        "(catdv_clip_id, catdv_clip_name, prompt_version_id, job_id, model, "
+        " prompt_used, raw_response, structured_output, clip_snapshot, created_at) "
+        "VALUES (?, ?, ?, ?, 'm', 'p', '{}', '{}', '{}', '2026-06-02T00:00:00')",
+        (clip_id, f"Clip_{clip_id}", prompt_version_id, job_id),
+    )
+    await db.commit()
+    return cur.lastrowid
+
+
+@pytest.mark.asyncio
+async def test_list_batches_applied_draft_with_suggestions_is_not_awaiting(db):
+    # Regression (#123 writeback redesign): applying a draft leaves its
+    # suggestions (field/note items targeting a field the app does not own)
+    # with applied_at NULL by design. They must not keep the batch in
+    # "Awaiting review" once the owned items are applied.
+    _, vid = await _seed_version(db)
+    jobs = JobsRepo()
+    jid = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[101])
+    its = await jobs.list_items(db, jid)
+    await jobs.update_item_status(db, its[0].id, "review_ready")
+    ann = await _annotation(db, job_id=jid, clip_id=101, prompt_version_id=vid)
+    await _review_item(
+        db, ann_id=ann, clip_id=101, kind="marker", target=None, decision="accepted", applied=True
+    )
+    await _review_item(
+        db,
+        ann_id=ann,
+        clip_id=101,
+        kind="field",
+        target="decade",
+        decision="accepted",
+        applied=False,
+    )
+    await _review_item(
+        db,
+        ann_id=ann,
+        clip_id=101,
+        kind="note",
+        target="notes",
+        decision="pending",
+        applied=False,
+    )
+
+    rows = await jobs.list_batches(db, limit=50)
+    assert rows[0]["awaiting_clips"] == 0
+    assert rows[0]["first_pending_clip_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_list_batches_unapplied_owned_field_is_still_awaiting(db):
+    # The suggestion exclusion must not swallow a real pending write to an
+    # app-owned field.
+    from backend.app.archive.model import AI_OWNED_FIELDS
+
+    _, vid = await _seed_version(db)
+    jobs = JobsRepo()
+    jid = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[101])
+    ann = await _annotation(db, job_id=jid, clip_id=101, prompt_version_id=vid)
+    await _review_item(
+        db,
+        ann_id=ann,
+        clip_id=101,
+        kind="field",
+        target=AI_OWNED_FIELDS[0],
+        decision="pending",
+        applied=False,
+    )
+    rows = await jobs.list_batches(db, limit=50)
+    assert rows[0]["awaiting_clips"] == 1

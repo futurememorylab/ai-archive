@@ -37,14 +37,23 @@ def _not_suggestion(prefix: str = "") -> str:
 # still has an undecided proposal — applied_at NULL, not rejected, not a
 # suggestion, newest annotation only. Single source of truth so the
 # /?anno=for_review filter (clip_list_filters), the topbar count
-# (count_clips_for_review), and the full-render sync context
-# (routes/pages/templates.py) can never drift apart.
-FOR_REVIEW_WHERE = (
-    "applied_at IS NULL AND decision != 'rejected' "
-    f"AND {_not_suggestion()} "
-    "AND annotation_id = (SELECT MAX(a.id) FROM annotations a "
-    "WHERE a.catdv_clip_id = review_items.catdv_clip_id)"
-)
+# (count_clips_for_review), the full-render sync context
+# (routes/pages/templates.py), the Batches "Awaiting review" status
+# (JobsRepo.list_batches) and the batch review walk (pending_clip_ids_for_jobs)
+# can never drift apart. Guarded by tests/integration/test_awaiting_review_single_source.py.
+def for_review_where(alias: str = "") -> str:
+    """FOR_REVIEW_WHERE for a `review_items` table referenced as `alias`."""
+    col = f"{alias}." if alias else ""
+    table = alias or "review_items"
+    return (
+        f"{col}applied_at IS NULL AND {col}decision != 'rejected' "
+        f"AND {_not_suggestion(col)} "
+        f"AND {col}annotation_id = (SELECT MAX(a_latest.id) FROM annotations a_latest "
+        f"WHERE a_latest.catdv_clip_id = {table}.catdv_clip_id)"
+    )
+
+
+FOR_REVIEW_WHERE = for_review_where()
 
 
 def _json_default(obj):
@@ -293,7 +302,7 @@ class ReviewItemsRepo:
             SELECT ri.catdv_clip_id AS clip_id, MAX(a.created_at) AS created_at
             FROM review_items ri
             JOIN annotations a ON a.id = ri.annotation_id
-            WHERE ri.applied_at IS NULL AND {_not_suggestion("ri.")}
+            WHERE {for_review_where("ri")}
               AND a.job_id IN ({placeholders})
             GROUP BY ri.catdv_clip_id
             ORDER BY created_at DESC, ri.catdv_clip_id DESC
