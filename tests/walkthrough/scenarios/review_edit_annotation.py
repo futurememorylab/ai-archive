@@ -29,6 +29,11 @@ def run(wt):
         "Play the proxy to spot-check",
         lambda p: p.locator('[data-test="player-play"]').click(),
     )
+    # A pending draft is flagged by a blue dot on the Draft button.
+    wt.step(
+        "See the blue dot on the Draft button",
+        lambda p: p.locator('[data-test="draft-dot"]').wait_for(state="visible"),
+    )
     wt.step(
         "Switch to the draft view",
         lambda p: p.locator('button[data-scope="draft"]').click(),
@@ -71,6 +76,10 @@ def run(wt):
     wt.step(
         "Switch to the published view",
         lambda p: p.locator('button[data-scope="published"]').click(),
+    )
+    wt.step(
+        "The Draft dot is gone once nothing is left to review",
+        lambda p: p.locator('[data-test="draft-dot"]').wait_for(state="hidden", timeout=15000),
     )
     wt.step(
         "Open the published Description tab",
