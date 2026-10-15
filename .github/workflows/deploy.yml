@@ -79,7 +79,7 @@ jobs:
             --service-account=catdv-annotator@${PROJECT_ID}.iam.gserviceaccount.com \
             --no-allow-unauthenticated \
             --iap \
-            --min-instances=0 --max-instances=1 --no-cpu-throttling \
+            --min-instances=0 --max-instances=1 --min=0 --max=1 --no-cpu-throttling \
             --memory=2Gi --cpu=1 \
             --env-vars-file=deploy/staging.env.yaml \
             --set-secrets="CATDV_PASSWORD=catdv-password:latest,WG_PRIVATE_KEY=wg-private-key:latest"
@@ -113,8 +113,10 @@ jobs:
           fi
       - name: Deploy
         # max-instances=1 is correctness, not cost: one CatDV seat, one
-        # Litestream writer, one in-process write queue. Never raise it;
-        # never traffic-split. min-instances=0 (scale-to-zero) IS cost: the
+        # Litestream writer, one in-process write queue, one WireGuard peer
+        # identity. Never raise it; never traffic-split. --max=1 also caps
+        # the SERVICE across revisions (--max-instances is per revision);
+        # two live instances fight over the VPN tunnel (2026-10-15). min-instances=0 (scale-to-zero) IS cost: the
         # instance releases the seat + VPN on SIGTERM and stops when idle.
         # Keep --no-cpu-throttling so Litestream + background loops run
         # between requests and the teardown gets CPU. See ADR 0077.
@@ -125,7 +127,7 @@ jobs:
             --service-account=catdv-annotator@${PROJECT_ID}.iam.gserviceaccount.com \
             --no-allow-unauthenticated \
             --iap \
-            --min-instances=0 --max-instances=1 --no-cpu-throttling \
+            --min-instances=0 --max-instances=1 --min=0 --max=1 --no-cpu-throttling \
             --memory=2Gi --cpu=1 \
             --env-vars-file=deploy/cloudrun.env.yaml \
             --set-secrets="CATDV_PASSWORD=catdv-password:latest,GEMINI_API_KEY=gemini-api-key:latest,WG_PRIVATE_KEY=wg-private-key:latest"

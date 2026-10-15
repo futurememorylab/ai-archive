@@ -53,7 +53,7 @@ gcloud run deploy "$SERVICE" \
   --image "${IMAGE}:${TAG}" \
   --service-account "$RUNTIME_SA" \
   --no-allow-unauthenticated \
-  --min-instances=0 --max-instances=1 --no-cpu-throttling \
+  --min-instances=0 --max-instances=1 --min=0 --max=1 --no-cpu-throttling \
   --memory=2Gi --cpu=1 \
   --env-vars-file=deploy/staging.env.yaml \
   --set-secrets="CATDV_PASSWORD=catdv-password:latest,WG_PRIVATE_KEY=wg-private-key:latest"
