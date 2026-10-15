@@ -109,7 +109,7 @@
       <h2>Batches page</h2>
       <article class="card" id="video-batch-review-apply">
         <h3>Review a batch and see it applied</h3>
-        <p>An operator annotates a clip, opens the Batches page where the run waits for review, clicks Review, publishes the draft, and returns to see the batch settle to Applied, even though the draft&#x27;s shared decade field is only a copy-me suggestion that is never written.</p>
+        <p>An operator annotates a clip, opens the Batches page where the run waits for review, clicks Review, publishes the draft, and returns to see the batch settle to Applied, even though the draft&#x27;s shared decade field is only a copy-me suggestion that is never written. While waiting for each status the test reloads the Batches page every half second, so the video jumps and repeats moments; that is the test polling, not the app retrying.</p>
         <video controls preload="metadata" src="batch-review-apply.webm"></video>
       </article>
       <article class="card" id="video-cancel-running-batch">
