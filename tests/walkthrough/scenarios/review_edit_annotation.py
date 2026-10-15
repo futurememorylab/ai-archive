@@ -3,7 +3,7 @@
 Exercises the #123 writeback redesign end to end: the draft proposals read as
 AI · draft, a shared field (decade) reads as an AI · suggestion with a Copy
 button and no keep checkbox, and after Accept & apply the published panel shows
-the new marker as AI · published (orange) while the human and legacy markers
+the new marker as AI (orange pill) (orange) while the human and legacy markers
 survive untouched (grey).
 """
 
@@ -15,7 +15,7 @@ TITLE = "Review an AI draft and publish it"
 DESCRIPTION = (
     "An operator opens a clip with a pending AI draft, sees the proposals badged "
     "AI · draft and the shared decade field offered as a copy-only suggestion, "
-    "then publishes — the new marker turns orange (AI · published) while the "
+    "then publishes — the new marker turns orange (AI (orange pill)) while the "
     "human and legacy markers stay grey and untouched."
 )
 
@@ -77,10 +77,10 @@ def run(wt):
         lambda p: p.locator("#published-panels").get_by_role("tab", name="Description").click(),
     )
     wt.step(
-        "The published marker now reads AI · published",
+        "The published marker now reads AI",
         lambda p: (
             p.locator("#published-panels")
-            .get_by_text("AI · published")
+            .locator(".pill.accent", has_text="AI")
             .first.wait_for(state="visible", timeout=15000)
         ),
     )

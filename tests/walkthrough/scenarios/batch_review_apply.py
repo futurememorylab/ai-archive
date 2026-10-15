@@ -73,7 +73,7 @@ def run(wt):
         "The AI marker is published to the archive",
         lambda p: (
             p.locator("#published-panels")
-            .get_by_text("AI · published")
+            .locator(".pill.accent", has_text="AI")
             .first.wait_for(state="visible", timeout=15000)
         ),
     )
