@@ -48,7 +48,11 @@ from backend.app.models.telemetry import TelemetryCtx
 from backend.app.repositories import app_meta as app_meta_repo
 from backend.app.repositories.ai_store_files import AIStoreFilesRepo
 from backend.app.repositories.annotations import AnnotationsRepo
-from backend.app.repositories.app_meta import AppMetaRepo, get_or_create_install_id
+from backend.app.repositories.app_meta import (
+    AppMetaRepo,
+    CatdvSessionStore,
+    get_or_create_install_id,
+)
 from backend.app.repositories.cache_actions_log import CacheActionsLogRepo
 from backend.app.repositories.catalogs import CatalogsRepo
 from backend.app.repositories.clip_cache import ClipCacheRepo
@@ -621,6 +625,7 @@ async def _build_archive_subsystem(
             base_url=settings.catdv_base_url,
             username=settings.catdv_username or "",
             password=settings.catdv_password or "",
+            session_store=CatdvSessionStore(lambda: core.db),
         )
         await catdv.__aenter__()
         if connect_mode == "auto":

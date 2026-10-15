@@ -6,6 +6,7 @@ auto-connect preference). Repos are leaves: no service imports here.
 """
 
 import uuid
+from collections.abc import Callable
 
 import aiosqlite
 
@@ -75,3 +76,24 @@ async def set_vpn_desired(conn: aiosqlite.Connection, value: str) -> None:
         (_VPN_DESIRED_KEY, value),
     )
     await conn.commit()
+
+
+_CATDV_SESSION_KEY = "catdv_session_id"
+
+
+class CatdvSessionStore:
+    """The CatDV JSESSIONID, kept in app_meta (replicated by Litestream) so a
+    replacement instance adopts the seat instead of spending a new one."""
+
+    def __init__(self, db_provider: Callable[[], aiosqlite.Connection]) -> None:
+        self._db = db_provider
+        self._repo = AppMetaRepo()
+
+    async def get(self) -> str | None:
+        return await self._repo.get(self._db(), _CATDV_SESSION_KEY)
+
+    async def set(self, sid: str) -> None:
+        await self._repo.set(self._db(), _CATDV_SESSION_KEY, sid)
+
+    async def clear(self) -> None:
+        await self._repo.delete(self._db(), _CATDV_SESSION_KEY)
