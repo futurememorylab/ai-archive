@@ -9,7 +9,7 @@ import re
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Protocol, Self
 
 import httpx
 from pydantic import ValidationError
@@ -28,6 +28,16 @@ _QUERY_ALLOWLIST = re.compile(r"[^\w\s\-.]", re.UNICODE)
 # SIGTERM grace with onetun teardown (2s) and Litestream's final WAL sync,
 # so keep it tight — a dead tunnel must not starve the sync. See ADR 0077.
 LOGOUT_TIMEOUT_S = 2.0
+SESSION_COOKIE = "JSESSIONID"
+
+
+class SessionStore(Protocol):
+    """Where the client remembers its CatDV session across processes."""
+
+    async def get(self) -> str | None: ...
+    async def set(self, sid: str) -> None: ...
+    async def clear(self) -> None: ...
+
 
 # Proxy media is the one large transfer we pull over the cloud WireGuard/onetun
 # tunnel, whose tiny MTU (1000) makes a single sustained stream stall or get cut
@@ -119,7 +129,13 @@ class CatdvClient:
     """
 
     def __init__(
-        self, base_url: str, username: str, password: str, timeout_secs: float = 60.0
+        self,
+        base_url: str,
+        username: str,
+        password: str,
+        timeout_secs: float = 60.0,
+        *,
+        session_store: "SessionStore | None" = None,
     ) -> None:
         self._base = base_url.rstrip("/")
         self._username = username
@@ -129,6 +145,7 @@ class CatdvClient:
         self._timeout = timeout_secs
         self._logged_in = False
         self._last_activity: float = 0.0
+        self._session_store = session_store
 
     async def __aenter__(self) -> Self:
         self._client = httpx.AsyncClient(timeout=self._timeout)
@@ -161,6 +178,8 @@ class CatdvClient:
 
     async def login(self) -> None:
         async with self._login_lock:
+            if not self._logged_in and await self._adopt_stored_session():
+                return
             resp = await self.http.post(
                 f"{self._base}/catdv/api/9/session",
                 json={"username": self._username, "password": self._password},
@@ -172,6 +191,34 @@ class CatdvClient:
                 raise CatdvAuthError(env.error_message or "login rejected")
             self._logged_in = True
             self._last_activity = time.monotonic()
+            if self._session_store is not None:
+                sid = self.http.cookies.get(SESSION_COOKIE)
+                if sid:
+                    await self._session_store.set(sid)
+
+    async def _adopt_stored_session(self) -> bool:
+        """Reuse the JSESSIONID a previous process left behind.
+
+        A Cloud Run instance being replaced often can't reach CatDV to log
+        out (the new instance is taking over the shared WireGuard tunnel),
+        so its seat stays held until CatDV's idle timeout. Adopting that
+        session spends no new seat. Returns False if there's nothing to
+        adopt or CatDV no longer accepts it.
+        """
+        if self._session_store is None:
+            return False
+        sid = await self._session_store.get()
+        if not sid:
+            return False
+        self.http.cookies.set(SESSION_COOKIE, sid)
+        try:
+            await self._call_json("GET", "/catdv/api/9/fields", reauth=False, track_activity=False)
+        except (CatdvAuthError, CatdvError, CatdvBusyError, httpx.HTTPError):
+            self.http.cookies.clear()
+            return False
+        self._logged_in = True
+        self._last_activity = time.monotonic()
+        return True
 
     async def logout(self) -> None:
         """Best-effort DELETE /session so we don't orphan a server-side slot.
@@ -183,6 +230,8 @@ class CatdvClient:
             return
         try:
             await self.http.delete(f"{self._base}/catdv/api/9/session", timeout=LOGOUT_TIMEOUT_S)
+            if self._session_store is not None:
+                await self._session_store.clear()
         except Exception:
             logging.getLogger(__name__).warning(
                 "CatDV logout (DELETE /session) failed; the license seat may "
