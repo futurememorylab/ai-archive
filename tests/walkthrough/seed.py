@@ -227,8 +227,11 @@ async def seed_production_prompt(db: aiosqlite.Connection) -> int:
         db,
         name=PRODUCTION_PROMPT_NAME,
         description="Production prompt for the bulk-annotate / cancel walkthroughs.",
-        body="Identify the decade depicted in this clip.",
-        target_map={"decade": {"kind": "field", "identifier": DECADE_IDENT}},
+        body="Identify the decade and the scenes in this clip.",
+        target_map={
+            "decade": {"kind": "field", "identifier": DECADE_IDENT},
+            "scenes": {"kind": "markers"},
+        },
         output_schema={},
         model="gemini-2.5-pro",
         media_kind="video",
