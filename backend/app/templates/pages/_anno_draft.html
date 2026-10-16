@@ -22,16 +22,6 @@
   <p class="muted" style="padding:14px">No proposals to review.</p>
 </template>
 
-<div class="edit-hint" x-show="totalCount() > 0">
-  <span class="eh-ico">✎</span>
-  <span>Review each proposal below. Click the <b>✎</b> pencil to edit one —
-    there you can change it, <b>Delete</b> it (<b>Undo</b> or <b>Restore</b>
-    brings it back), and on a marker drag the highlighted bar's edges on the
-    <b>timeline</b> to set in/out — then <b>Save</b> (or <b>Cancel</b> to
-    revert). <b>Accept &amp; apply all</b> (beside the Draft switch) writes
-    everything still listed to CatDV. The <b>‹ ›</b> arrows move between clips in the review set.</span>
-</div>
-
 <div class="anno-tabs" role="tablist" x-show="totalCount() > 0 || deletedTotal() > 0">
   <button type="button" class="anno-tab" :class="{ active: tab === 'markers' }" @click="tab = 'markers'">Description <span class="count" x-text="draftMarkers.length"></span></button>
   <button type="button" class="anno-tab" :class="{ active: tab === 'fields' }" @click="tab = 'fields'">Fields <span class="count" x-text="draftFields.length"></span></button>

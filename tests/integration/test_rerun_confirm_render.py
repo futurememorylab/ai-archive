@@ -4,9 +4,10 @@ When a clip has an unpublished draft (publish_status.state == 'draft'),
 GET /clips/{id} must render:
 - data-rerun-confirm="true" attribute on the page
 - the confirm copy: "replaces your current unpublished draft"
-- the copy: "restorable"
+- "last published #N stays restorable" only when a version is live
 
-When there is NO unpublished draft, the page must NOT require confirmation:
+When there is nothing left to overwrite (no draft, or every proposal applied
+or deleted), the page must NOT require confirmation:
 - data-rerun-confirm="false" (or absent / not "true")
 """
 
@@ -126,7 +127,8 @@ def test_rerun_confirm_present_when_draft(monkeypatch, tmp_path):
         assert "replaces your current unpublished draft" in r.text, (
             "Expected confirm copy about replacing unpublished draft"
         )
-        assert "restorable" in r.text, "Expected 'restorable' in confirm copy"
+        # Nothing is published yet, so the copy promises no restorable version.
+        assert "restorable" not in r.text
 
 
 def test_rerun_confirm_absent_when_no_draft(monkeypatch, tmp_path):
@@ -142,3 +144,52 @@ def test_rerun_confirm_absent_when_no_draft(monkeypatch, tmp_path):
         assert 'data-rerun-confirm="true"' not in r.text, (
             "Expected no re-run confirm when there is no unpublished draft"
         )
+
+
+def _mark_all_items(ctx, clip_id: int, *, decision: str, applied: bool) -> None:
+    async def _do() -> None:
+        await ctx.db.execute(
+            "UPDATE review_items SET decision = ?, applied_at = ? WHERE catdv_clip_id = ?",
+            (decision, "2026-06-17T00:01:00" if applied else None, clip_id),
+        )
+        await ctx.db.commit()
+
+    asyncio.run(_do())
+
+
+def test_rerun_confirm_absent_once_draft_applied(monkeypatch, tmp_path):
+    """The latest annotation still exists after Accept & apply, but nothing is
+    left to overwrite, so re-running must not warn."""
+    clip_id = 12041
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.core_ctx
+        _seed_unapplied_draft(ctx, clip_id)
+        _mark_all_items(ctx, clip_id, decision="accepted", applied=True)
+        install_live_ctx(client.app, archive=FakeArchive(_canonical(clip_id)))
+
+        r = client.get(f"/clips/{clip_id}")
+        assert r.status_code == 200
+        assert 'data-rerun-confirm="true"' not in r.text
+
+
+def test_rerun_confirm_absent_when_draft_all_deleted(monkeypatch, tmp_path):
+    clip_id = 12041
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.core_ctx
+        _seed_unapplied_draft(ctx, clip_id)
+        _mark_all_items(ctx, clip_id, decision="rejected", applied=False)
+        install_live_ctx(client.app, archive=FakeArchive(_canonical(clip_id)))
+
+        r = client.get(f"/clips/{clip_id}")
+        assert r.status_code == 200
+        assert 'data-rerun-confirm="true"' not in r.text
+
+
+def test_rerun_confirm_follows_live_draft_count():
+    # The page doesn't reload after Accept & apply or a fresh run, so the gate
+    # must read the live Alpine count, not only the server-rendered flag.
+    from pathlib import Path
+
+    js = Path("backend/app/static/clipAnnotate.js").read_text()
+    gate = js.split("_needsRerunConfirm()", 1)[1].split("},", 1)[0]
+    assert "applicableCount()" in gate

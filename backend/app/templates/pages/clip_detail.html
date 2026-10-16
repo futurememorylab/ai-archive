@@ -11,8 +11,16 @@
     gate in the header. -#}
 {% set can_play = mode == "online" or (clip.cache and (clip.cache.media_local.present or clip.cache.media_ai.present)) %}
 <script>localStorage.setItem("catdv:lastClipId", "{{ clip.id }}");</script>
+{#- Re-running replaces the open draft, so it warns only while proposals that
+    Accept & apply would write are still listed (suggestions, applied and
+    deleted items don't count). Alpine keeps the flag live after an apply or a
+    fresh run; the server value covers first paint. -#}
+{% set open_draft = draft_arrays.markers|length
+     + draft_arrays.fields|rejectattr('suggestion')|list|length
+     + draft_arrays.notes|rejectattr('suggestion')|list|length %}
 <div class="detail"
-     data-rerun-confirm="{{ 'true' if publish_status.state == 'draft' else 'false' }}"
+     data-rerun-confirm="{{ 'true' if open_draft else 'false' }}"
+     :data-rerun-confirm="applicableCount() > 0 ? 'true' : 'false'"
      :class="{ 'is-draft': scope === 'draft', 'has-published-markers': markers.length > 0, 'live-active': liveSession.state !== 'idle' }"
      x-data='Object.assign(
        player({{ clip.fps }}, {{ clip.duration_secs }}, {{ clip.markers|tojson }}, {{ draft_arrays.markers|tojson }}),
@@ -246,19 +254,16 @@
     </div>
   </aside>
 
-  {# ── Re-run confirm dialog (only when an unpublished draft exists) ──────── #}
-  {% if publish_status.state == 'draft' %}
+  {# ── Re-run confirm dialog (opened only while the draft has proposals) ──── #}
   {% call ui.modal('rerunConfirmOpen', label='Re-run annotation?', card_cls='sm') %}
     <div class="modal-body">
-      <p>This replaces your current unpublished draft — last published
-        {% if publish_status.version_num %}#{{ publish_status.version_num }}{% else %}version{% endif %}
-        stays restorable.</p>
+      <p>This replaces your current unpublished draft{% if publish_status.version_num %} — last published
+        #{{ publish_status.version_num }} stays restorable{% endif %}.</p>
     </div>
     <div class="modal-actions">
       <button type="button" class="btn ghost" @click="rerunConfirmOpen = false">Cancel</button>
       <button type="button" class="btn primary" @click="confirmRerun()">Re-run</button>
     </div>
   {% endcall %}
-  {% endif %}
 </div>
 {% endblock %}

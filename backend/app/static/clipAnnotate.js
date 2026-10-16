@@ -260,13 +260,11 @@ function clipAnnotate(clipId, clipKind) {
       }
     },
 
-    // Check the server-rendered flag on the .detail container to decide whether
-    // a re-run needs a confirm (only when an unpublished draft exists).
+    // A re-run replaces the open draft, so confirm only while it still lists
+    // proposals Accept & apply would write (reviewMixin's live count; the page
+    // doesn't reload after an apply or a fresh run).
     _needsRerunConfirm() {
-      const el = this.$el && this.$el.closest
-        ? this.$el.closest("[data-rerun-confirm]")
-        : null;
-      return el ? el.dataset.rerunConfirm === "true" : false;
+      return typeof this.applicableCount === "function" && this.applicableCount() > 0;
     },
 
     async pick(prompt) {
