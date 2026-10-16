@@ -219,7 +219,6 @@ def test_apply_clip_returns_partial_for_hx_caller(monkeypatch, tmp_path):
         assert "text/html" in r.headers["content-type"]
         # The draft aside is the Alpine card panel — check structural markers.
         assert "review-bar" in r.text
-        assert "acceptApplyAll" in r.text
         # Sanity: it is the draft-aside partial, not a JSON dump.
         assert "{" + '"queued"' not in r.text
 
@@ -606,6 +605,29 @@ def test_clip_detail_review_action_bar_has_prev(monkeypatch, tmp_path):
         assert "navClip(1)" in r.text  # › Next clip
         # Single consolidated bulk action: accept all visible proposals + apply.
         assert "acceptApplyAll()" in r.text
+
+
+def test_accept_apply_sits_in_pinned_header_next_to_scope_switch(monkeypatch, tmp_path):
+    """Accept & apply lives in the non-scrolling .anno-head beside the
+    Published/Draft switch (so it stays put while the annotation list
+    scrolls), shows only on the Draft scope with something to apply, and the
+    Draft dot uses the same "something to apply" count. Suggestions (shared
+    fields the app never writes, #123) don't count, or the dot would linger
+    after an apply."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.core_ctx
+        _run(_seed(ctx))
+        install_live_ctx(client.app, archive=_FakeArchive([_make_canonical_clip(1)]))
+        r = client.get("/clips/1")
+        assert r.status_code == 200
+        head = r.text.split('class="anno-head"', 1)[1].split('class="anno-body"', 1)[0]
+        assert 'data-test="apply-draft"' in head
+        assert "acceptApplyAll()" in head
+        assert "scope === 'draft' && applicableCount() > 0" in head
+        assert "applicableCount() > 0 && scope !== 'draft'" in head  # draft dot
+        body = r.text.split('class="anno-body"', 1)[1]
+        assert 'data-test="apply-draft"' not in body
 
 
 def test_clip_detail_no_draft_no_action_bar(monkeypatch, tmp_path):

@@ -190,11 +190,17 @@
                   :aria-selected="scope === 'draft'"
                   @click="scope = 'draft'">
             Draft
-            {# iOS-style "new" dot: un-applied draft items are waiting for review. #}
+            {# iOS-style "new" dot: the draft has something Accept & apply would write. #}
             <span class="new-dot" data-test="draft-dot" aria-label="Draft awaiting review"
-                  x-show="totalCount() > 0 && scope !== 'draft'" x-cloak></span>
+                  x-show="applicableCount() > 0 && scope !== 'draft'" x-cloak></span>
           </button>
         </div>
+        {# Beside the switch in the pinned header, so it stays reachable while
+           the annotation list scrolls. #}
+        <button type="button" class="btn good sm" data-test="apply-draft"
+                x-show="scope === 'draft' && applicableCount() > 0" x-cloak
+                @click="acceptApplyAll()"
+                x-text="'✓ Accept &amp; apply all (' + applicableCount() + ')'"></button>
         <span class="grow"></span>
         <div id="version-panel" class="version-panel">
           {% include "pages/_version_panel.html" %}

@@ -9,6 +9,8 @@ survive untouched (grey).
 
 from __future__ import annotations
 
+from playwright.sync_api import expect
+
 SLUG = "review-edit-annotation"
 TOPIC = "Clip page"
 TITLE = "Review an AI draft and publish it"
@@ -34,9 +36,18 @@ def run(wt):
         "See the blue dot on the Draft button",
         lambda p: p.locator('[data-test="draft-dot"]').wait_for(state="visible"),
     )
+    # Accept & apply sits beside the Published/Draft switch, but only on Draft.
+    wt.step(
+        "No Accept & apply button on the published view",
+        lambda p: p.locator('[data-test="apply-draft"]').wait_for(state="hidden"),
+    )
     wt.step(
         "Switch to the draft view",
         lambda p: p.locator('button[data-scope="draft"]').click(),
+    )
+    wt.step(
+        "Accept & apply appears next to the Draft switch",
+        lambda p: p.locator('.anno-head [data-test="apply-draft"]').wait_for(state="visible"),
     )
     # The Description tab lists the AI proposals, each badged AI · draft (blue).
     wt.step(
@@ -68,6 +79,13 @@ def run(wt):
         ),
     )
     wt.step(
+        "Scroll the proposals; Accept & apply stays in view",
+        lambda p: (
+            p.locator(".anno-body").evaluate("el => el.scrollTo(0, el.scrollHeight)"),
+            expect(p.locator('[data-test="apply-draft"]')).to_be_in_viewport(),
+        ),
+    )
+    wt.step(
         "Accept & apply (publish) the draft",
         lambda p: p.locator('[data-test="apply-draft"]').click(),
     )
@@ -78,7 +96,7 @@ def run(wt):
         lambda p: p.locator('button[data-scope="published"]').click(),
     )
     wt.step(
-        "The Draft dot is gone once nothing is left to review",
+        "The Draft dot is gone once nothing is left to apply",
         lambda p: p.locator('[data-test="draft-dot"]').wait_for(state="hidden", timeout=15000),
     )
     wt.step(
