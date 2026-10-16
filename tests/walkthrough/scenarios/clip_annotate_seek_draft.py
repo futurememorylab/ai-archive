@@ -53,9 +53,11 @@ def _annotate(p) -> None:
     p.unroute(MEDIA_GLOB)  # the run caches the proxy: media is servable from now on
     p.get_by_role("button", name="Annotate").click()
     p.locator(".popover-panel .menu-item").filter(has_text=PRODUCTION_PROMPT_NAME).first.click()
-    rerun = p.get_by_role("button", name="Re-run")
-    if rerun.is_visible():  # a previous run left a draft on this clip
-        rerun.click()
+    # Earlier scenarios (bulk annotate) may have left a draft on this clip; the
+    # server renders that into data-rerun-confirm, so branch on it, not on a
+    # dialog that may not have painted yet.
+    if p.locator(".detail").get_attribute("data-rerun-confirm") == "true":
+        p.get_by_role("button", name="Re-run").click()
     expect_toast(p, "Annotation complete.")
 
 
