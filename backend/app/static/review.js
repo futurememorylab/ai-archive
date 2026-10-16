@@ -51,6 +51,10 @@ function reviewMixin(clipId) {
     // ── counts ────────────────────────────────────────────────────
     _allDraft() { return [...this.draftMarkers, ...this.draftFields, ...this.draftNotes]; },
     totalCount() { return this._allDraft().length; },
+    // What Accept & apply would actually write: suggestions (shared fields the
+    // app never writes, #123) stay listed for copying but don't count, so the
+    // Draft dot and the apply button clear once the real proposals are applied.
+    applicableCount() { return this._allDraft().filter(it => !it.suggestion).length; },
     // ── queue / walk ─────────────────────────────────────────────
     _qIdx() { return this.reviewQueue.indexOf(clipId); },
     reviewPos() { const i = this._qIdx(); return i >= 0 ? (i + 1) : 1; },
