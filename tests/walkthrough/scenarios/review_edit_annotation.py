@@ -4,7 +4,8 @@ Exercises the #123 writeback redesign end to end: the draft proposals read as
 AI · draft, a shared field (decade) reads as an AI · suggestion with a Copy
 button and no keep checkbox, and after Accept & apply the published panel shows
 the new marker as AI (orange pill) (orange) while the human and legacy markers
-survive untouched (grey).
+survive untouched (grey). The draft carries no how-to box, and the re-run
+warning is armed only while proposals are still open.
 """
 
 from __future__ import annotations
@@ -48,6 +49,15 @@ def run(wt):
     wt.step(
         "Accept & apply appears next to the Draft switch",
         lambda p: p.locator('.anno-head [data-test="apply-draft"]').wait_for(state="visible"),
+    )
+    wt.step(
+        "No how-to box above the proposals",
+        lambda p: expect(p.locator("#draft-aside .edit-hint")).to_have_count(0),
+    )
+    # Re-running now would replace these open proposals, so Annotate would warn.
+    wt.step(
+        "Re-running would warn while proposals are open",
+        lambda p: expect(p.locator(".detail")).to_have_attribute("data-rerun-confirm", "true"),
     )
     # The Description tab lists the AI proposals, each badged AI · draft (blue).
     wt.step(
@@ -98,6 +108,10 @@ def run(wt):
     wt.step(
         "The Draft dot is gone once nothing is left to apply",
         lambda p: p.locator('[data-test="draft-dot"]').wait_for(state="hidden", timeout=15000),
+    )
+    wt.step(
+        "Re-running no longer warns: nothing is left to overwrite",
+        lambda p: expect(p.locator(".detail")).to_have_attribute("data-rerun-confirm", "false"),
     )
     wt.step(
         "Open the published Description tab",

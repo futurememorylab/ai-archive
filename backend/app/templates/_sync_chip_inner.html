@@ -1,6 +1,5 @@
-{# Inner content of the topbar sync indicator: a pill that is ALWAYS visible
-   (so the write-back queue status is glanceable at all times) + a dropdown
-   panel reusing the sync drawer. Swapped into the stable #sync-chip container —
+{# Inner content of the topbar sync indicator: a pill shown only while writes
+   are publishing or failed + a dropdown panel reusing the sync drawer. Swapped into the stable #sync-chip container —
    which owns x-data="popover()", so `open` survives the swaps done by the 10s
    heartbeat and by retry/discard. Mirrors _connection_chip_inner.html. #}
 {# `sync_counts` (NOT `counts`): the chip renders on every page via the topbar,
@@ -9,21 +8,18 @@
 {%- set loaded = sync_counts is defined and sync_counts -%}
 {%- set queued = sync_counts.queued if loaded else 0 -%}
 {%- set problems = sync_counts.problems if loaded else 0 -%}
+{#- Only while there's something to act on: publishing or failed writes.
+    Idle ("synced") and not-yet-loaded render nothing, so the topbar stays
+    quiet; the stable #sync-chip container remains as the swap target. -#}
+{%- if loaded and (queued or problems) %}
 <button type="button"
         class="btn ghost sm sync-chip-trigger{% if problems %} has-problems{% endif %}"
         @click="toggle()" :class="open && 'open'"
         title="Write-backs to CatDV — click for details">
-  {%- if not loaded -%}
-  {# Counts not fetched yet (initial topbar paint, before #sync-chip's
-     hx-trigger="load" returns). Show a neutral placeholder — NOT a premature
-     "✓ Synced", which flickered to "↑ N" the instant the real counts arrived. #}
-  <span class="sync-chip-loading" aria-hidden="true">⋯</span>
-  {%- elif problems -%}
+  {%- if problems -%}
   <span class="sync-chip-problems">⚠ Failed {{ problems }}</span>{% if queued %}<span class="sync-chip-queued">↑ Publishing… {{ queued }}</span>{% endif %}
-  {%- elif queued -%}
-  <span class="sync-chip-queued">↑ Publishing… {{ queued }}</span>
   {%- else -%}
-  <span class="sync-chip-ok">✓ Synced</span>
+  <span class="sync-chip-queued">↑ Publishing… {{ queued }}</span>
   {%- endif -%}
   <span class="htmx-indicator" aria-hidden="true">↻</span>
 </button>
@@ -32,6 +28,7 @@
      @click.outside="close()" @keydown.escape.window="close()">
   {% include "sync_drawer.html" %}
 </div>
+{%- endif %}
 {# Heartbeat ONLY while there's something to track (queued / problem writes), so
    the chip catches the queue draining without a navigation. When everything is
    synced the chip is idle and does NOT poll — a perpetual 10s background fetch

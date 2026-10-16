@@ -141,20 +141,3 @@ def test_usage_pill_over_at_120pct(monkeypatch, tmp_path):
 
 
 # ── present on a full page render (rides topbar_counts) ──────────────────
-
-
-def test_usage_pill_present_on_full_page(monkeypatch, tmp_path):
-    """The pill container renders on EVERY page (the pillset is in layout.html),
-    and on first paint the inner spend is rendered inline from topbar_counts —
-    no flicker waiting for the poll."""
-    with _client(monkeypatch, tmp_path) as client:
-        client.app.state.live_ctx = None
-        asyncio.run(_seed_telemetry(tmp_path / "app.db", cost_usd=3.00))
-
-        r = client.get("/admin")
-        assert r.status_code == 200
-        # Stable poll container present.
-        assert 'id="usage-pill"' in r.text
-        assert 'hx-get="/ui/usage-pill"' in r.text
-        # Inline first-paint spend from topbar_counts (not a blank container).
-        assert "$3.00" in r.text

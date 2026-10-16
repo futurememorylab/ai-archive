@@ -630,6 +630,21 @@ def test_accept_apply_sits_in_pinned_header_next_to_scope_switch(monkeypatch, tm
         assert 'data-test="apply-draft"' not in body
 
 
+def test_draft_panel_has_no_how_to_hint(monkeypatch, tmp_path):
+    """The how-to box above fresh proposals was noise; the pencil, Accept &
+    apply and ‹ › arrows speak for themselves."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.core_ctx
+        _run(_seed(ctx))
+        install_live_ctx(client.app, archive=_FakeArchive([_make_canonical_clip(1)]))
+        r = client.get("/clips/1?review=1")
+        assert r.status_code == 200
+        assert "review-bar" in r.text  # the draft panel did render
+        assert "edit-hint" not in r.text
+        assert "Review each proposal" not in r.text
+
+
 def test_clip_detail_no_draft_no_action_bar(monkeypatch, tmp_path):
     """A clip with NO review items must not render the review action bar at all."""
     app = _make_app(monkeypatch, tmp_path)
