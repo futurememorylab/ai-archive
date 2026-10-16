@@ -13,15 +13,19 @@ def test_embedded_chip_ignores_page_level_rows_and_counts():
     html = tmpl.render(
         rows=[{"name": "cache entry", "size": 1}],
         counts={"unrelated": 7},
+        sync_counts={"queued": 1, "problems": 0},  # chip shown → drawer rendered
         request=None,
     )
     assert "No pending writes" in html  # drawer empty, not grouping page rows
     assert "cache entry" not in html  # page rows ignored
-    # No sync_counts yet (initial topbar paint) → neutral loading placeholder,
-    # NOT a premature "✓ Synced" that would flicker once real counts load.
-    assert "sync-chip-loading" in html
-    assert "sync-chip-ok" not in html
     assert "has-problems" not in html
+
+
+def test_chip_renders_nothing_before_counts_load():
+    # No sync_counts yet (initial topbar paint) → nothing; the chip appears only
+    # once the counts show publishing or failed writes.
+    html = templates.get_template("_sync_chip.html").render(request=None)
+    assert "sync-chip-trigger" not in html
 
 
 def test_drawer_renders_real_rows_under_sync_rows():

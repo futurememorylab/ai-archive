@@ -22,7 +22,7 @@
          draftFields: {{ draft_arrays.fields|tojson }}, draftNotes: {{ draft_arrays.notes|tojson }},
          draftDeleted: {{ draft_arrays.deleted|tojson }}, appliedCount: {{ draft_arrays.applied_count }},
          syncedCount: {{ draft_arrays.synced_count }},
-         canPlay: {{ 'true' if can_play else 'false' }},
+         canPlay: {{ 'true' if can_play else 'false' }}, moreOpen: false,
          liveSession: liveSession({{ clip.id }}, { inactivityS: {{ gemini_live_inactivity_s|default(60) }} })
        }
      )'
@@ -47,32 +47,36 @@
       <div class="detail-hdr-row">
         <span class="clip-title">{{ clip.name }}</span>
         <span class="meta mono">{{ clip.format or "" }}</span>
+        <span class="grow"></span>
+        {#- Same online-or-cached gate as the player's `can_play` (set at the
+            top of this block) — don't gate on media_local alone or the button
+            vanishes in cloud where media lives only in GCS. -#}
+        {% set media_ready = can_play %}
         <span class="cache-actions">
-          {% include "pages/_cache_actions.html" %}
-          {#- Same online-or-cached gate as the player's `can_play` (set at the
-              top of this block) — don't gate on media_local alone or the button
-              vanishes in cloud where media lives only in GCS. -#}
-          {% set media_ready = can_play %}
           {% if media_ready %}
             {% include "pages/_annotate_dropdown.html" %}
           {% endif %}
-          {% if media_ready and clip.duration_secs %}
-            <button type="button" class="btn good"
-                    @click="liveSession.start()">
-              {#- Gemini four-pointed "spark" mark. currentColor + the .btn
-                  flex gap handle colour/spacing — no extra CSS needed. -#}
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"
-                   aria-hidden="true" focusable="false">
-                <path d="M12 0c.5 6.26 5.74 11.5 12 12-6.26.5-11.5 5.74-12 12-.5-6.26-5.74-11.5-12-12C6.26 11.5 11.5 6.26 12 0z"/>
-              </svg>
-              Live</button>
-          {% endif %}
-        </span>
-        <span class="grow"></span>
-        <span class="tc-readout mono">
-          <span class="cur" x-text="tc(current)">00:00:00:00</span>
-          <span class="slash">/</span>
-          <span class="end" x-text="tc(duration)">{{ duration_smpte }}</span>
+          {#- ⋯ overflow: the cache control (Cache / Purge, self-swapping) and
+              Live. Hosted on the page's `moreOpen` flag (no own x-data) so it
+              doesn't shadow clipAnnotate's `open`. -#}
+          <div class="popover clip-more" data-test="clip-more">
+            <button type="button" class="btn ghost icon" :class="moreOpen && 'open'"
+                    @click="moreOpen = !moreOpen" title="More actions" aria-label="More actions">⋯</button>
+            <div class="popover-panel menu align-right clip-more-panel" x-show="moreOpen" x-cloak
+                 @click.outside="moreOpen = false" @keydown.escape.window="moreOpen = false">
+              <div class="clip-more-cache">{% include "pages/_cache_actions.html" %}</div>
+              {% if media_ready and clip.duration_secs %}
+                {%- set spark -%}
+                {#- Gemini four-pointed "spark" mark. -#}
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"
+                     aria-hidden="true" focusable="false">
+                  <path d="M12 0c.5 6.26 5.74 11.5 12 12-6.26.5-11.5 5.74-12 12-.5-6.26-5.74-11.5-12-12C6.26 11.5 11.5 6.26 12 0z"/>
+                </svg>
+                {%- endset -%}
+                {{ ui.menu_item('Live', action='moreOpen = false; liveSession.start()', icon=spark) }}
+              {% endif %}
+            </div>
+          </div>
         </span>
       </div>
     </template>

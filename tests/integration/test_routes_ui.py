@@ -184,14 +184,15 @@ def test_sync_drawer_groups_ops_by_clip(monkeypatch, tmp_path: Path):
     assert "/api/sync/clip/catdv/5/discard" in r.text
 
 
-def test_sync_chip_always_visible_when_empty(monkeypatch, tmp_path: Path):
+def test_sync_chip_hidden_when_nothing_to_sync(monkeypatch, tmp_path: Path):
+    """Idle (everything synced) → no chip at all; the topbar only shows it while
+    writes are publishing or failed."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         r = client.get("/ui/sync-chip")
     assert r.status_code == 200
-    assert "sync-chip-trigger" in r.text  # always visible (queue status)
-    assert "sync-chip-ok" in r.text  # idle "Synced" state
-    assert "has-problems" not in r.text  # nothing wrong
+    assert "sync-chip-trigger" not in r.text
+    assert "Synced" not in r.text
     # Idle (nothing queued/problematic) → NO background poll. A perpetual 10s
     # heartbeat bought nothing and spammed the log; it re-arms only when there's
     # something to track (see test_sync_chip_shows_queued_and_problem_counts).

@@ -1,6 +1,8 @@
 {# Default right-side pillset for the topbar: batch progress (transient),
-   calibration indicator, "N to review", sync chip, connection chip, and the
-   user menu. #}
+   calibration indicator, sync chip (only while publishing or failed),
+   connection chip, and the user menu. The spend and "N to review" pills were
+   dropped to declutter the bar: spend lives in Admin → Gemini models, the
+   review queue in the clips list's "Awaiting review" filter. #}
 <span class="pillset">
   {# jobsIndicator() scope wraps both the batch-progress indicator and the
      calibration pill so they share one polling instance. #}
@@ -23,16 +25,6 @@
               title="Cancel calibration sweep">✕</button>
     </span>
   </span>
-  {# Always-present current-month spend pill. Stable container so the spend +
-     ok/warn/over colour refresh in place (poll every 60s) instead of going
-     stale until a full reload. Mirrors the #review-pill / #sync-chip pattern. #}
-  <span id="usage-pill" hx-get="/ui/usage-pill" hx-trigger="load, every 60s"
-        hx-target="#usage-pill" hx-swap="innerHTML">{% include "pages/_usage_pill_inner.html" %}</span>
-  {# Stable container so the "N to review" count refreshes in place (poll +
-     after draft-changing actions) instead of going stale until a full reload.
-     Mirrors the #sync-chip pattern. #}
-  <span id="review-pill" hx-get="/ui/review-pill" hx-trigger="load, every 15s"
-        hx-target="#review-pill" hx-swap="innerHTML">{% include "pages/_review_pill_inner.html" %}</span>
   {% include "_sync_chip.html" %}
   {% include "_connection_chip.html" %}
   {# Email, env badge, and the env-appropriate session action (Log out on

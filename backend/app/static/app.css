@@ -503,9 +503,6 @@ a { color: inherit; text-decoration: none; }
 }
 .detail-hdr .clip-title { font-weight: 600; font-size: 13px; }
 .detail-hdr .meta { color: var(--text-3); font-size: 11px; }
-.detail-hdr .tc-readout { font-size: 14px; color: var(--accent); font-weight: 600; }
-.detail-hdr .tc-readout .slash { color: var(--text-3); margin: 0 6px; font-weight: 400; }
-.detail-hdr .tc-readout .end { color: var(--text-2); font-weight: 400; }
 
 /* ─── player ──────────────────────────────────────────────────────── */
 .player-wrap {
@@ -879,6 +876,10 @@ a { color: inherit; text-decoration: none; }
 }
 /* ─── cache actions on detail header ─────────────────────────────────── */
 .cache-actions { display: inline-flex; align-items: center; gap: 0.5rem; margin-left: 0.75rem; }
+/* Clip header ⋯ overflow: the cache control (badge + Cache/Purge) on its own
+   row above the Live item. */
+.clip-more-panel { min-width: 220px; }
+.clip-more-cache { display: flex; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
 
 
 /* ─── prefetch panel ────────────────────────────────────────────────── */
@@ -2426,8 +2427,6 @@ body.studio-resizing {
   border-color: color-mix(in oklab, var(--bad) 45%, transparent); color: var(--bad);
 }
 .sync-chip-problems { color: var(--bad); font-weight: 600; }
-.sync-chip-ok { color: var(--text-3); }
-.sync-chip-loading { color: var(--text-3); letter-spacing: 0.1em; }
 /* Hide the request spinner: the chip swaps its own content on refresh, so a
    flashing ↻ on every poll/load read as a flicker. Mirrors .conn-pill .conn-spin. */
 .sync-chip-trigger .htmx-indicator { display: none; }

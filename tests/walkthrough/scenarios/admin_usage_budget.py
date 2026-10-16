@@ -1,12 +1,12 @@
-"""Walkthrough scenario: the merged spend overview + always-present spend pill (#30).
+"""Walkthrough scenario: the merged spend overview (#30).
 
-The topbar carries an always-present "spend this month" pill (`#usage-pill`) on
-every page. The standalone "Usage" tab was merged INTO the Admin console's
+The topbar spend pill was removed (2026-10-16 declutter); spend lives here. The
+standalone "Usage" tab was merged INTO the Admin console's
 "Gemini models" tab: it HTMX-swaps in `_admin_models_table.html`, which now
 shows current-month spend vs the monthly budget (a soft cap — it colours the
 indicator and warns on launch, but never blocks a run), per-model spend as table
-columns, a by-day breakdown, and a budget editor. This scenario proves the
-topbar pill is present and the merged tab + budget editor render.
+columns, a by-day breakdown, and a budget editor. This scenario proves
+the merged tab + budget editor render.
 """
 
 from __future__ import annotations
@@ -19,8 +19,7 @@ SLUG = "admin-usage-budget"
 TOPIC = "Admin console"
 TITLE = "View spend and set a monthly budget (Gemini models tab)"
 DESCRIPTION = (
-    "An admin sees the always-present spend pill in the topbar, opens the "
-    "Admin console, switches to the 'Gemini models' tab, and sees current-month "
+    "An admin opens the Admin console, switches to the 'Gemini models' tab, and sees current-month "
     "spend vs the monthly budget (a soft cap) with per-model spend columns / a "
     "by-day breakdown and a budget editor."
 )
@@ -34,11 +33,6 @@ def _origin(p) -> str:
 def _open_admin(p) -> None:
     p.goto(f"{_origin(p)}/admin")
     expect(p.locator(".admin-page")).to_be_visible()
-
-
-def _topbar_usage_pill_present(p) -> None:
-    # The spend pill renders on every page (it lives in the topbar pillset).
-    expect(p.locator("#usage-pill")).to_be_visible()
 
 
 def _open_models_tab(p) -> None:
@@ -58,10 +52,6 @@ def _budget_editor_present(p) -> None:
 
 
 def run(wt):
-    wt.step(
-        "The always-present spend pill is in the topbar",
-        _topbar_usage_pill_present,
-    )
     wt.step(
         "Open the Admin console",
         _open_admin,
