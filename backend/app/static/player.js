@@ -219,6 +219,7 @@ document.addEventListener("alpine:init", () => {
     _requestPlay() {
       const v = this.$refs.video;
       if (!v || !this.canPlay) return;   // offline + uncached: nothing to play
+      this._recoverMedia(v);
       if (v.readyState < 3) this.buffering = true;
       v.play().catch(() => { this.buffering = false; });
     },
@@ -250,6 +251,17 @@ document.addEventListener("alpine:init", () => {
       v.currentTime = next;
     },
 
+    // A <video> whose source failed to load (the proxy wasn't cached yet, so
+    // /api/media 404'd, or an expired signed URL) stays in that error state:
+    // later currentTime writes and play() calls are silently ignored and make
+    // no new request. That is why a draft marker clicked right after an
+    // annotation run (which is what caches the clip) didn't seek until a
+    // reload. Re-run resource selection so the next seek/play fetches again;
+    // load() resets the position, so callers set currentTime after this.
+    _recoverMedia(v) {
+      if (v.error || v.networkState === v.NETWORK_NO_SOURCE) v.load();
+    },
+
     // Move the playhead to `secs` and (by default) start playing. Pass
     // { play: false } to position without playing — e.g. entering marker
     // edit mode jumps to the in-point so you can scrub, but must not play.
@@ -259,6 +271,7 @@ document.addEventListener("alpine:init", () => {
       this.followSuspended = false;
       const v = this.$refs.video;
       if (!v) return;
+      this._recoverMedia(v);
       const clamped = Math.max(0, Math.min(secs, v.duration || this.duration || secs));
       v.currentTime = clamped;
       if (play && this.canPlay) v.play().catch(() => {});
