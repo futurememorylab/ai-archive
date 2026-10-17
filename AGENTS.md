@@ -24,13 +24,16 @@ Start with `docs/onboarding/README.md` and `docs/ARCHITECTURE.md`.
 .venv/bin/python -m pytest -n auto -q            # full suite, once before committing
 ruff check . && ruff format --check .            # lint + format (CI-gated)
 lint-imports                                     # layer contracts (CI-gated)
-python tools/erosion_gate.py --path backend --baseline .erosion-baseline.json --max-cc 30
+python tools/erosion_gate.py --path backend --baseline .erosion-baseline.json --max-cc 30 --base-ref origin/main
 pre-commit install                               # run the same gates on every commit
 ```
 
 CI (`.github/workflows/ci.yml`) runs lint, format, import contracts, the
-erosion gate and the full test suite on every PR. Make them pass locally
-first.
+erosion gate, docstring and duplicate-code checks and the full test suite
+on every PR. Make them pass locally first. The baselines only go down: a
+function you change may not get more complex, and when your PR lowers
+erosion or max CC the gate asks you to `--write-baseline` and commit the
+lower values. Raising a baseline is Peter's call (ADR 0129).
 
 ## CatDV license seat (the one rule that bites)
 

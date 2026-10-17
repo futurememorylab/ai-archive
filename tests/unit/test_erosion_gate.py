@@ -16,6 +16,7 @@ from tools.erosion_gate import (
     erosion_stats,
     evaluate,
     mass,
+    touched_regressions,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -134,3 +135,120 @@ def test_exit_2_on_missing_path(tmp_path: Path):
         cwd=str(REPO_ROOT),
     )
     assert proc.returncode == 2
+
+
+# --- Tightening ratchets (ADR 0129, quality-gates hardening spec section C) ---
+
+
+def _git(cwd: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
+
+
+def _branchy(name: str, branches: int) -> str:
+    return (
+        f"def {name}(x):\n"
+        + "".join(f"    if x == {i}:\n        return {i}\n" for i in range(branches))
+        + "    return 0\n"
+    )
+
+
+def test_stale_baseline_fails_with_rebaseline_hint():
+    failures = evaluate(
+        0.420, 25, baseline=0.430, tolerance=0.005, max_cc_cap=30, stale_slack=0.003
+    )
+    assert len(failures) == 1
+    assert "stale" in failures[0]
+    assert "--write-baseline" in failures[0]
+
+
+def test_small_improvement_within_stale_slack_passes():
+    assert (
+        evaluate(0.428, 25, baseline=0.430, tolerance=0.005, max_cc_cap=30, stale_slack=0.003) == []
+    )
+
+
+def test_max_cc_above_baseline_fails():
+    failures = evaluate(
+        0.430, 27, baseline=0.430, tolerance=0.005, max_cc_cap=30, baseline_max_cc=26
+    )
+    assert failures == ["max function CC 27 exceeds baseline max_cc 26"]
+
+
+def test_max_cc_below_baseline_is_stale():
+    failures = evaluate(
+        0.430, 25, baseline=0.430, tolerance=0.005, max_cc_cap=30, baseline_max_cc=26
+    )
+    assert len(failures) == 1
+    assert "stale" in failures[0]
+
+
+def test_touched_regressions_names_function_and_both_ccs():
+    before = callables_in_source(_branchy("f", 3) + _branchy("g", 2), "m.py")
+    after = callables_in_source(_branchy("f", 5) + _branchy("g", 1), "m.py")
+    msgs = touched_regressions(before, after)
+    assert len(msgs) == 1
+    assert "m.py::f CC rose 4 -> 6" in msgs[0]
+
+
+def test_touched_regressions_ignore_new_functions():
+    before = callables_in_source(_branchy("f", 3), "m.py")
+    after = callables_in_source(_branchy("f", 3) + _branchy("h", 20), "m.py")
+    assert touched_regressions(before, after) == []
+
+
+def test_touched_function_rule_against_merge_base(tmp_path: Path):
+    repo = tmp_path / "repo"
+    pkg = repo / "pkg"
+    pkg.mkdir(parents=True)
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "t@example.com")
+    _git(repo, "config", "user.name", "t")
+    (pkg / "m.py").write_text(_branchy("f", 3))
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "base")
+    _git(repo, "checkout", "-qb", "feature")
+    (pkg / "m.py").write_text(_branchy("f", 6))
+    _git(repo, "commit", "-qam", "more branches")
+
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "--path", "pkg", "--base-ref", "main"],
+        capture_output=True,
+        text=True,
+        cwd=str(repo),
+    )
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "pkg/m.py::f CC rose 4 -> 7" in proc.stderr
+
+
+def test_unknown_base_ref_fails_loudly(tmp_path: Path):
+    repo = tmp_path / "repo"
+    (repo / "pkg").mkdir(parents=True)
+    _git(repo, "init", "-q")
+    (repo / "pkg" / "m.py").write_text("def f():\n    return 1\n")
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "--path", "pkg", "--base-ref", "nope"],
+        capture_output=True,
+        text=True,
+        cwd=str(repo),
+    )
+    assert proc.returncode == 2
+
+
+def test_write_baseline_refuses_to_raise(tmp_path: Path):
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    (pkg / "m.py").write_text(_branchy("f", 12))
+    out = tmp_path / "baseline.json"
+    out.write_text(json.dumps({"erosion": 0.1, "max_cc": 5}))
+    cmd = [sys.executable, str(SCRIPT), "--path", str(pkg), "--baseline", str(out)]
+
+    proc = subprocess.run([*cmd, "--write-baseline"], capture_output=True, text=True)
+    assert proc.returncode == 1
+    assert "refusing to raise" in proc.stderr
+    assert json.loads(out.read_text()) == {"erosion": 0.1, "max_cc": 5}
+
+    proc = subprocess.run(
+        [*cmd, "--write-baseline", "--allow-raise"], capture_output=True, text=True
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(out.read_text())["max_cc"] == 13
