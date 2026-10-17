@@ -3,7 +3,7 @@
 The top bar no longer shows the spend pill, the "N to review" pill or an idle
 "✓ Synced" chip. The clip header drops its duplicate timecode readout and puts
 its actions on the right: Annotate, plus a ⋯ menu holding the cache control
-(Cache / Purge) and Live.
+(Cache / Delete) and Live.
 """
 
 from __future__ import annotations

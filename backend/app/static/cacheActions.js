@@ -106,12 +106,12 @@ document.addEventListener('alpine:init', () => {
 
     async purge() {
       if (this.busy) return;
-      if (!confirm(`Purge the cached ${this.kind} for this clip?`)) return;
+      if (!confirm(`Delete the cached ${this.kind} for this clip?`)) return;
       // Clear BOTH media layers so the clip is genuinely uncached. In local
       // dev a clip can sit in the local proxy cache AND the AI store at once
       // (annotation uploads to GCS even in local mode), so evicting only one
       // leaves the other behind and the clip still counts as cached.
-      await this._evict(['media-local', 'media-ai'], 'Purging…', 'Cache purged.', 'Purge');
+      await this._evict(['media-local', 'media-ai'], 'Deleting…', 'Cache deleted.', 'Delete');
     },
 
     async _evict(layers, busyLabel, okMsg, verb) {

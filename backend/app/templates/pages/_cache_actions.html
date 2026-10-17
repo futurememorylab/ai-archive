@@ -1,8 +1,8 @@
 {# Per-clip cache control: the Cache section of the clip header's ⋯ menu
-   (status row + one Cache or Purge row, styled as ui.menu_item rows).
+   (status row + one Cache or Delete row, styled as ui.menu_item rows).
 
    Rendered inline on the clip detail page and re-fetched standalone via
-   GET /ui/cache-actions/{clip_id} after a cache/purge lands (the
+   GET /ui/cache-actions/{clip_id} after a cache/delete lands (the
    cacheActions Alpine component swaps this whole node).
 
    Expects:
@@ -12,15 +12,15 @@
      media_cache        — Jinja global: "local" | "ai_store"
 
    Which media layer is authoritative depends on media_cache: in cloud
-   ("ai_store") the clip's bytes live in the GCS ai-store, so Cache/Purge
+   ("ai_store") the clip's bytes live in the GCS ai-store, so Cache/Delete
    act on media_ai; in local dev they act on the downloaded proxy
    (media_local). The unused layer's controls are never shown.
 #}
 {%- import "components/_ui.html" as ui -%}
 {%- set label = "image" if clip.kind == "image" else "video" -%}
 {%- set c = clip.cache -%}
-{#- The one layer Cache/Purge acts on (see above); in local mode a leftover
-    AI-store copy still counts, since Purge clears both. -#}
+{#- The one layer Cache/Delete acts on (see above); in local mode a leftover
+    AI-store copy still counts, since Delete clears both. -#}
 {%- if media_cache == 'ai_store' -%}
   {%- set layer = c.media_ai if c else none -%}
 {%- else -%}
@@ -46,7 +46,7 @@
   <div x-show="!busy" x-cloak>
     {%- if media_cache == 'ai_store' or not host_local_proxies -%}
       {% if cached %}
-        {{ ui.menu_item('Purge cache', action='purge()', icon=bin, danger=True) }}
+        {{ ui.menu_item('Delete cache', action='purge()', icon=bin, danger=True) }}
       {% elif mode == "online" %}
         {{ ui.menu_item('Cache ' ~ label, action='cacheNow()', icon=dl) }}
       {% endif %}

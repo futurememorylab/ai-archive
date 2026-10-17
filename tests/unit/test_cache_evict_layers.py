@@ -4,7 +4,7 @@ Two bugs these pin against regressing:
   1. The clip-page "clear cache" must remove BOTH media layers (local + AI),
      not just the local proxy — otherwise an AI-store copy lingers and the
      clip is still treated as cached.
-  2. The cache-management page "Purge selected" must evict the layer matching
+  2. The cache-management page "Delete selected" must evict the layer matching
      the active tab (AI tab → media-ai), not a hardcoded media-local that
      silently no-ops on the AI tab.
 """

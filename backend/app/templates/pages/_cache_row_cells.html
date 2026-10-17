@@ -7,11 +7,11 @@
 </td>
 {# Row actions live in a kebab menu (shared ui.menu + popover) rather than
    inline buttons — two text buttons overflowed the narrow column and the
-   second ("Purge") was clipped to an unclickable "…". #}
+   second ("Delete") was clipped to an unclickable "…". #}
 {% set _key = "[['" ~ row.clip_pid ~ "','" ~ row.clip_cid ~ "']]" %}
 <td class="row-actions col-actions" onclick="event.stopPropagation()">
   {% call ui.menu(label='⋯', variant='ghost', size='sm', align='right') %}
     {{ ui.menu_item('Re-fetch', action='close(); bulkPrefetch(' ~ _key ~ ')') }}
-    {{ ui.menu_item('Purge', danger=True, action='close(); bulkEvict(' ~ _key ~ ')') }}
+    {{ ui.menu_item('Delete', danger=True, action='close(); bulkEvict(' ~ _key ~ ')') }}
   {% endcall %}
 </td>
