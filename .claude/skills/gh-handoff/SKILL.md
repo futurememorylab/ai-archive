@@ -42,7 +42,7 @@ diagnostic dispatch before switching — don't assume the doc string alone.
 1. **Reuse the existing `implement-issue` routine.** `RemoteTrigger` action
    `list` → find the entry with `name == "implement-issue"` and capture its
    `trigger_id`. Don't hardcode it — resolve by name every time, since it
-   can be recreated. As of 2026-08-19 its live config is:
+   can be recreated. As of 2026-10-17 (re-checked with `get_trigger`) its live config is:
    - `environment_id: env_011CUK5wJZB5zuqK2n9asWVV`
    - `session_context.model: claude-opus-4-8[1m]`
    - `session_context.allowed_tools: ["Bash","Read","Write","Edit","Glob","Grep","WebFetch","WebSearch","Task"]`
@@ -79,9 +79,7 @@ diagnostic dispatch before switching — don't assume the doc string alone.
    }
    ```
    Prompt (`events[0].data.message.content`). Keep the live routine in sync
-   with this text: as of 2026-10-12 the live copy still names
-   `docs/superpowers/plans/` and `superpowers:subagent-driven-development`
-   and must be updated (`RemoteTrigger update`) to match:
+   with this text; as of 2026-10-17 the live copy matches it:
    > You are implementing a pre-written plan. Read the run context `text`
    > field (e.g. `issue=#<N> branch=<branch>`) for the issue number and
    > intended branch.
