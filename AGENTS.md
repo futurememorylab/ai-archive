@@ -25,11 +25,13 @@ Start with `docs/onboarding/README.md` and `docs/ARCHITECTURE.md`.
 ruff check . && ruff format --check .            # lint + format (CI-gated)
 lint-imports                                     # layer contracts (CI-gated)
 python tools/erosion_gate.py --path backend --baseline .erosion-baseline.json --max-cc 30 --base-ref origin/main
+python tools/frontend_size_gate.py               # static/*.js: files <= 500 lines, functions <= 80
 pre-commit install                               # run the same gates on every commit
 ```
 
 CI (`.github/workflows/ci.yml`) runs lint, format, import contracts, the
-erosion gate, docstring and duplicate-code checks and the full test suite
+erosion gate, the frontend size gate, docstring and duplicate-code checks
+and the full test suite
 on every PR. Make them pass locally first. The baselines only go down: a
 function you change may not get more complex, and when your PR lowers
 erosion or max CC the gate asks you to `--write-baseline` and commit the

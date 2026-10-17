@@ -1,0 +1,12 @@
+{
+  "files": {
+    "backend/app/static/studio.js": 575,
+    "backend/app/static/studioStore.js": 514
+  },
+  "functions": {
+    "backend/app/static/clipAnnotate.js::clipAnnotate": 83,
+    "backend/app/static/player.js::addEventListener(alpine:init)": 91,
+    "backend/app/static/studio.js::addEventListener(alpine:init)": 94,
+    "backend/app/static/studioStore.js::addEventListener(alpine:init)": 96
+  }
+}

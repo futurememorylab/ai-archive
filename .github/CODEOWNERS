@@ -8,6 +8,10 @@
 /.erosion-baseline.json @peterhora
 /tools/erosion_gate.py @peterhora
 
+# Frontend size ratchet
+/.frontend-size-baseline.json @peterhora
+/tools/frontend_size_gate.py @peterhora
+
 # Type-check baseline
 /.basedpyright/baseline.json @peterhora
 

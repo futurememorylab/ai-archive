@@ -355,9 +355,9 @@ suite (`-n auto`) once before commit.
 ## Quality gates
 
 **28. Gates only tighten, and only a human loosens them.** The files that
-define the quality gates (baselines, the erosion gate, `.importlinter`,
-pre-commit and CI config, the guard tests, this page, `AGENTS.md`,
-`pyproject.toml`) are owned by a human in `.github/CODEOWNERS`. A PR that
+define the quality gates (baselines, the erosion and frontend size gates,
+`.importlinter`, pre-commit and CI config, the guard tests, this page,
+`AGENTS.md`, `pyproject.toml`) are owned by a human in `.github/CODEOWNERS`. A PR that
 improves a measured value lowers its baseline in the same PR; raising a
 baseline or threshold is a reviewed human decision, never part of a
 feature PR.

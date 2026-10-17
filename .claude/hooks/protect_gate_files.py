@@ -2,9 +2,10 @@
 """PreToolUse hook: block agent edits to human-owned gate files (ADR 0129).
 
 The protected set is every path pattern in `.github/CODEOWNERS`, so there is
-one source of truth. The one exception is `.erosion-baseline.json` when the
-edit only lowers its values: the erosion gate asks for exactly that after an
-improvement. Exit code 2 blocks the tool call and shows stderr to the agent.
+one source of truth. The one exception is a ratchet baseline (erosion,
+frontend size) when the edit only lowers its values or drops entries below a
+top-level key: the gates ask for exactly that after an improvement. Exit
+code 2 blocks the tool call and shows stderr to the agent.
 
 This guards Edit / Write / MultiEdit / NotebookEdit only. CODEOWNERS review
 on `main` is the backstop for anything else (a shell `sed`, for example).
@@ -19,7 +20,7 @@ import re
 import sys
 from pathlib import Path
 
-LOWER_ONLY = ".erosion-baseline.json"
+LOWER_ONLY = {".erosion-baseline.json", ".frontend-size-baseline.json"}
 
 
 def codeowners_patterns(root: Path) -> list[str]:
@@ -79,7 +80,7 @@ def _new_content(tool: str, tool_input: dict, current: str) -> str | None:
 
 
 def only_lowers_baseline(tool: str, tool_input: dict, path: Path) -> bool:
-    """True when an edit to the erosion baseline keeps its keys and lowers or keeps values."""
+    """True when an edit to a baseline keeps its top-level keys and raises no value."""
     try:
         current = path.read_text(encoding="utf-8")
         before = json.loads(current)
@@ -91,8 +92,17 @@ def only_lowers_baseline(tool: str, tool_input: dict, path: Path) -> bool:
         return False
     if set(before) != set(after):
         return False
+    return all(_not_higher(before[k], after[k]) for k in before)
+
+
+def _not_higher(before: object, after: object) -> bool:
+    """Every number in `after` exists in `before` and is not higher (entries may go)."""
+    if isinstance(before, dict):
+        return isinstance(after, dict) and all(
+            k in before and _not_higher(before[k], v) for k, v in after.items()
+        )
     try:
-        return all(float(after[k]) <= float(before[k]) for k in before)
+        return float(after) <= float(before)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return False
 
@@ -120,7 +130,7 @@ def main() -> int:
 
     if not owned(rel, codeowners_patterns(root)):
         return 0
-    if rel == LOWER_ONLY and only_lowers_baseline(tool, tool_input, root / rel):
+    if rel in LOWER_ONLY and only_lowers_baseline(tool, tool_input, root / rel):
         return 0
 
     print(
