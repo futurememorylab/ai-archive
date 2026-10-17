@@ -1,7 +1,8 @@
-{# Per-clip cache control: badge + Cache / Purge / Evict buttons.
+{# Per-clip cache control: the Cache section of the clip header's ⋯ menu
+   (status row + one Cache or Delete row, styled as ui.menu_item rows).
 
    Rendered inline on the clip detail page and re-fetched standalone via
-   GET /ui/cache-actions/{clip_id} after a cache/purge lands (the
+   GET /ui/cache-actions/{clip_id} after a cache/delete lands (the
    cacheActions Alpine component swaps this whole node).
 
    Expects:
@@ -11,37 +12,44 @@
      media_cache        — Jinja global: "local" | "ai_store"
 
    Which media layer is authoritative depends on media_cache: in cloud
-   ("ai_store") the clip's bytes live in the GCS ai-store, so Cache/Purge
+   ("ai_store") the clip's bytes live in the GCS ai-store, so Cache/Delete
    act on media_ai; in local dev they act on the downloaded proxy
    (media_local). The unused layer's controls are never shown.
 #}
-<span class="cache-ctl" id="cache-ctl-{{ clip.id }}"
-      x-data="cacheActions({ id: {{ clip.id }}, kind: '{{ clip.kind }}' })"
-      @clip-cache-refresh.window="if ($event.detail.id === id) onAnnotateCached()">
-  <span class="cache-badge-host">
-    {% with cache = clip.cache %}{% include "pages/_cache_badge.html" %}{% endwith %}
-  </span>
-  <span class="ca-running" x-show="busy" x-cloak>
+{%- import "components/_ui.html" as ui -%}
+{%- set label = "image" if clip.kind == "image" else "video" -%}
+{%- set c = clip.cache -%}
+{#- The one layer Cache/Delete acts on (see above); in local mode a leftover
+    AI-store copy still counts, since Delete clears both. -#}
+{%- if media_cache == 'ai_store' -%}
+  {%- set layer = c.media_ai if c else none -%}
+{%- else -%}
+  {%- set layer = (c.media_local if c and c.media_local.present else (c.media_ai if c else none)) -%}
+{%- endif -%}
+{%- set cached = layer is not none and layer.present -%}
+{%- set dl -%}<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v8M4.5 6.5 8 10l3.5-3.5M3 13h10"/></svg>{%- endset -%}
+{%- set bin -%}<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4"/></svg>{%- endset -%}
+<div class="cache-ctl" id="cache-ctl-{{ clip.id }}"
+     x-data="cacheActions({ id: {{ clip.id }}, kind: '{{ clip.kind }}' })"
+     @clip-cache-refresh.window="if ($event.detail.id === id) onAnnotateCached()">
+  {{ ui.menu_header('Cache') }}
+  {#- Status row: same shape as the action rows, but not clickable. -#}
+  <div class="menu-item menu-status" data-test="cache-status">
+    <span class="cache-dot{% if cached %} on{% endif %}" aria-hidden="true"></span>
+    <span class="menu-lbl">{% if cached %}{{ label|capitalize }} cached{% else %}Not cached{% endif %}</span>
+    {% if cached and layer.size_mb %}<span class="menu-meta">{{ layer.size_mb }} MB</span>{% endif %}
+  </div>
+  <div class="menu-item menu-status" x-show="busy" x-cloak>
     <span class="ca-spinner ca-spinner-inline" aria-hidden="true"></span>
-    <span class="muted" x-text="busyLabel">Working…</span>
-  </span>
-  <span x-show="!busy" x-cloak>
-    {% set label = "image" if clip.kind == "image" else "video" %}
-    {% if media_cache == 'ai_store' %}
-      {% if clip.cache and clip.cache.media_ai.present %}
-        <button type="button" class="btn danger" @click="purge()">Purge cache</button>
+    <span class="menu-lbl" x-text="busyLabel">Working…</span>
+  </div>
+  <div x-show="!busy" x-cloak>
+    {%- if media_cache == 'ai_store' or not host_local_proxies -%}
+      {% if cached %}
+        {{ ui.menu_item('Delete cache', action='purge()', icon=bin, danger=True) }}
       {% elif mode == "online" %}
-        <button type="button" class="btn" @click="cacheNow()">⬇ Cache {{ label }}</button>
+        {{ ui.menu_item('Cache ' ~ label, action='cacheNow()', icon=dl) }}
       {% endif %}
-    {% elif not host_local_proxies %}
-      {#- A clip can be in the local proxy cache AND the AI store at once, so
-          offer a single Purge whenever either is present — and purge() clears
-          both, so an AI-only leftover is still removable here. -#}
-      {% if clip.cache and (clip.cache.media_local.present or clip.cache.media_ai.present) %}
-        <button type="button" class="btn danger" @click="purge()">Purge cache</button>
-      {% elif mode == "online" %}
-        <button type="button" class="btn" @click="cacheNow()">⬇ Cache {{ label }}</button>
-      {% endif %}
-    {% endif %}
-  </span>
-</span>
+    {%- endif -%}
+  </div>
+</div>

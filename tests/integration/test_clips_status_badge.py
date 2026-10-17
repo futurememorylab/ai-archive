@@ -1,7 +1,7 @@
 """Clips-list unified publish-status badge — render + N+1 guard.
 
 Covers:
-1. A clip with a live clip_version shows 'In CatDV' (version in the tooltip).
+1. A clip with a live clip_version shows 'In archive' (version in the tooltip).
 2. A clip with only a pending draft (review_items, no version) shows 'To review'.
 3. A clip with no version and no draft shows no badge (no pill).
 4. The batched status derivation is O(1) in clip count: the same number of
@@ -167,7 +167,7 @@ async def _seed_pending_op(ctx, clip_id: int, status: str) -> None:
 
 
 def test_live_badge_rendered(monkeypatch, tmp_path):
-    """A clip with a live version shows 'In CatDV', the version in the tooltip
+    """A clip with a live version shows 'In archive', the version in the tooltip
     (docs/specs/2026-10-17-batches-redesign-design.md: no Live/Draft jargon)."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
@@ -179,8 +179,8 @@ def test_live_badge_rendered(monkeypatch, tmp_path):
         install_live_ctx(app, archive=_FakeArchive([_canonical(clip_id)]))
         r = client.get("/")
         assert r.status_code == 200
-        assert ">In CatDV<" in r.text, f"Expected 'In CatDV' in response; got:\n{r.text[:3000]}"
-        assert 'title="Version 1 is in CatDV"' in r.text
+        assert ">In archive<" in r.text, f"Expected 'In archive' in response; got:\n{r.text[:3000]}"
+        assert 'title="Version 1 is in the archive"' in r.text
         assert ">Annotation</th>" in r.text
 
 
@@ -196,7 +196,7 @@ def test_live_badge_version_num(monkeypatch, tmp_path):
         install_live_ctx(app, archive=_FakeArchive([_canonical(clip_id)]))
         r = client.get("/")
         assert r.status_code == 200
-        assert 'title="Version 3 is in CatDV"' in r.text
+        assert 'title="Version 3 is in the archive"' in r.text
 
 
 def test_draft_badge_rendered(monkeypatch, tmp_path):
@@ -234,11 +234,11 @@ def test_failed_write_shows_failed_not_stale_version_state(monkeypatch, tmp_path
         r = client.get("/")
         assert r.status_code == 200
         assert ">Couldn&#39;t save<" in r.text
-        assert "Saving to CatDV" not in r.text
+        assert "Saving to archive" not in r.text
 
 
 def test_pending_write_shows_publishing(monkeypatch, tmp_path):
-    """A clip with an in-flight write shows 'Saving to CatDV…' from the queue."""
+    """A clip with an in-flight write shows 'Saving to archive…' from the queue."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         ctx = client.app.state.core_ctx
@@ -248,7 +248,7 @@ def test_pending_write_shows_publishing(monkeypatch, tmp_path):
         install_live_ctx(app, archive=_FakeArchive([_canonical(clip_id)]))
         r = client.get("/")
         assert r.status_code == 200
-        assert "Saving to CatDV…" in r.text
+        assert "Saving to archive…" in r.text
 
 
 def test_no_badge_for_clean_clip(monkeypatch, tmp_path):
@@ -262,7 +262,7 @@ def test_no_badge_for_clean_clip(monkeypatch, tmp_path):
         # No Live vN pill and no Draft pill for a clean clip.
         # "Draft" appears in other page chrome (column header "Drafts", JS "applyDrafts"),
         # so we check for the pill markup specifically.
-        assert ">In CatDV<" not in r.text
+        assert ">In archive<" not in r.text
         assert ">To review<" not in r.text  # pill label, not surrounding chrome
         assert 'title="Not annotated"' in r.text
         assert 'data-review="1"' not in r.text

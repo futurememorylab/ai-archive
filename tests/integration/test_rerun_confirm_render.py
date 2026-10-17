@@ -3,8 +3,8 @@
 When a clip has an unpublished draft (publish_status.state == 'draft'),
 GET /clips/{id} must render:
 - data-rerun-confirm="true" attribute on the page
-- the confirm copy: "replaces your current unpublished draft"
-- "last published #N stays restorable" only when a version is live
+- the confirm copy: "replaces your current draft"
+- no version talk ("restorable"): versions are not shown in the UI
 
 When there is nothing left to overwrite (no draft, or every proposal applied
 or deleted), the page must NOT require confirmation:
@@ -124,7 +124,7 @@ def test_rerun_confirm_present_when_draft(monkeypatch, tmp_path):
             "Expected data-rerun-confirm=\"true\" when publish_status.state == 'draft'"
         )
         # The confirm copy must be present
-        assert "replaces your current unpublished draft" in r.text, (
+        assert "replaces your current draft" in r.text, (
             "Expected confirm copy about replacing unpublished draft"
         )
         # Nothing is published yet, so the copy promises no restorable version.

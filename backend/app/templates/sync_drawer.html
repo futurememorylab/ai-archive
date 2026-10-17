@@ -48,7 +48,7 @@
           <td>{{ changes | join(", ") }}</td>
           <td>{{ ui.status_pill(STATUS_LABEL.get(cl.status, cl.status), STATUS_STATE.get(cl.status, "")) }}</td>
           <td class="last-error">
-            {%- if cl.status == "conflict" -%}Changed in CatDV after you reviewed it.
+            {%- if cl.status == "conflict" -%}Changed in archive after you reviewed it.
             {%- elif cl.err -%}{{ cl.err }}{%- endif -%}
           </td>
           <td class="sync-actions">

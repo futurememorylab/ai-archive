@@ -1,5 +1,5 @@
 """Cloud (ai_store) cache UI: the badge hides the unused local-media layer,
-and the per-clip cache controls show Cache/Purge against the ai_store layer
+and the per-clip cache controls show Cache/Delete against the ai_store layer
 (not the local proxy layer). Mirrors the monkeypatched-settings + seed
 pattern in test_routes_cache.py.
 """
@@ -115,8 +115,20 @@ def test_cache_actions_ai_cached_shows_purge_not_cache(monkeypatch, tmp_path: Pa
         _seed_clip(client, key=("catdv", "13"), ai_size=2048)
         r = client.get("/ui/cache-actions/13?kind=video")
     assert r.status_code == 200
-    assert "Purge cache" in r.text
+    assert "Delete cache" in r.text
     assert "Cache video" not in r.text
+
+
+def test_cache_actions_local_mode_purges_an_ai_only_leftover(monkeypatch, tmp_path: Path):
+    # Local dev: the proxy is already evicted but an AI-store copy remains.
+    # Delete clears both layers, so the leftover must still be deletable.
+    app = _make_app(monkeypatch, tmp_path, media_cache="local")
+    with TestClient(app) as client:
+        _seed_clip(client, key=("catdv", "15"), ai_size=2048)
+        r = client.get("/ui/cache-actions/15?kind=video")
+    assert r.status_code == 200
+    assert "Delete cache" in r.text
+    assert "Video cached" in r.text
 
 
 def test_cache_actions_ai_absent_shows_cache_not_purge(monkeypatch, tmp_path: Path):
@@ -126,7 +138,7 @@ def test_cache_actions_ai_absent_shows_cache_not_purge(monkeypatch, tmp_path: Pa
         r = client.get("/ui/cache-actions/14?kind=video")
     assert r.status_code == 200
     assert "Cache video" in r.text
-    assert "Purge cache" not in r.text
+    assert "Delete cache" not in r.text
 
 
 # ── "Local" filter option is removed everywhere in ai_store (cloud) mode ──

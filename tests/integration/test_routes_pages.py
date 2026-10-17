@@ -160,6 +160,17 @@ def test_clip_detail_renders(monkeypatch, tmp_path):
         assert "/api/media/12041" in r.text
 
 
+def test_clip_detail_calls_the_live_view_in_archive(monkeypatch, tmp_path):
+    """The live annotation tab and legend say "In archive", not "Published"."""
+    with _make_client(monkeypatch, tmp_path) as client:
+        install_live_ctx(client.app, archive=FakeArchive((_canonical(),)))
+        r = client.get("/clips/12041")
+        tab = r.text.split('data-scope="published"', 1)[1].split("</button>", 1)[0]
+        assert "In archive" in tab
+        assert "Published" not in r.text
+        assert "AI in archive" in r.text
+
+
 def test_clip_detail_shows_annotation_cost(monkeypatch, tmp_path):
     """The published-annotation panel shows the originating run's actual cost."""
     import asyncio

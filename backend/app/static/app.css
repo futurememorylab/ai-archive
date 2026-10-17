@@ -880,10 +880,15 @@ a { color: inherit; text-decoration: none; }
 }
 /* ─── cache actions on detail header ─────────────────────────────────── */
 .cache-actions { display: inline-flex; align-items: center; gap: 0.5rem; margin-left: 0.75rem; }
-/* Clip header ⋯ overflow: the cache control (badge + Cache/Purge) on its own
-   row above the Live item. */
+/* Clip header ⋯ overflow: a Cache section (status row + Cache/Purge row) and
+   Live, all .menu-item rows. The status row keeps the row shape but isn't a
+   control. The dot sits in the icon column so labels line up. */
 .clip-more-panel { min-width: 220px; }
-.clip-more-cache { display: flex; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.menu-item.menu-status { cursor: default; }
+.menu-item.menu-status:hover { background: none; color: var(--text-2); }
+.cache-dot { width: 14px; display: inline-flex; justify-content: center; }
+.cache-dot::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--text-4); }
+.cache-dot.on::before { background: var(--good); }
 
 
 /* ─── prefetch panel ────────────────────────────────────────────────── */
@@ -2106,25 +2111,6 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 .menu-item.danger { color: var(--bad); }
 .menu-item.danger:hover { background: color-mix(in oklab, var(--bad) 12%, transparent); }
 .menu-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-
-/* Version history dropdown (clip detail) — each version is a clean vertical
-   block rather than one wrapping line, so the rows don't render "crooked". */
-.version-panel { display: inline-flex; align-items: center; gap: 8px; }
-/* Give the expanded Versions panel room: wider than the default menu so the
-   #N + pill + diff line and the Make live / Edit as draft actions sit on one
-   line. Scoped to this menu via its wrapper; capped by .popover-panel max-width. */
-[data-history-menu] .popover-panel { min-width: 320px; }
-.vp-pill { display: inline-flex; }
-.cv-row { display: flex; flex-direction: column; gap: 4px; padding: 8px 6px; }
-.cv-row + .cv-row { border-top: 1px solid var(--line); }
-.cv-row.is-live { background: var(--accent-2); border-radius: var(--r-1); }
-.cv-head { display: flex; align-items: center; gap: 8px; }
-.cv-num { font-weight: 600; color: var(--text); font-size: 12px; }
-.cv-meta, .cv-diff { color: var(--text-3); font-size: 11px; }
-.cv-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 2px; }
-/* Keep each action on one line (no mid-text wrap), so the two buttons stay the
-   same height and sit straight; if both don't fit, a whole button wraps. */
-.cv-actions .btn { white-space: nowrap; }
 
 .menu-lbl { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .menu-desc {

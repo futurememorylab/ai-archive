@@ -206,7 +206,7 @@ below for the chip, and the matching token for the timeline band:
 
 The published timeline band splits by origin: human bands add
 `.range.origin-human` (grey); AI bands keep the row's orange. The legend reads
-`● Human N · ● AI published N · ● AI draft N`. See ADR 0127.
+`● Human N · ● AI in archive N · ● AI draft N`. See ADR 0127.
 
 ### Prompt state chip
 

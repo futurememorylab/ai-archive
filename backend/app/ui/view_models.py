@@ -251,18 +251,18 @@ def _batch_headline(c: dict[str, int], running: bool) -> tuple[str, str, str]:
     if c["awaiting"]:
         return "attention", f"{_plural(c['awaiting'], 'clip')} to review", "info"
     if c["problems"]:
-        return "attention", f"{c['problems']} couldn't save to CatDV", "bad"
+        return "attention", f"{c['problems']} couldn't save to archive", "bad"
     if c["failed"]:
         return "attention", f"{c['failed']} failed", "bad"
     if c["syncing"]:
-        return "done", f"Saving {c['syncing']} to CatDV…", "accent"
+        return "done", f"Saving {c['syncing']} to archive…", "accent"
     if c["cancelled"] and not c["completed"]:
         return "done", "Stopped", ""
-    return "done", "All reviewed", "ok"
+    return "done", "All in archive", "ok"
 
 
 _SEGMENT_LABELS = {
-    "reviewed": "reviewed",
+    "reviewed": "in archive",
     "review": "to review",
     "saving": "saving",
     "problem": "couldn't save",
@@ -380,10 +380,10 @@ def _clip_status(r: dict) -> tuple[int, str, str]:
     if status == "pending":
         return 3, "Waiting", ""
     if r["sync"] == "saving":
-        return 4, "Saving to CatDV…", "accent"
+        return 4, "Saving to archive…", "accent"
     if status == "cancelled":
         return 6, "Stopped", ""
-    return 5, "Reviewed", "ok"
+    return 5, "In archive", "ok"
 
 
 def batch_clip_list(rows: list[dict], *, limit: int = 50) -> tuple[list[dict], int]:

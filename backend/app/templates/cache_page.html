@@ -8,7 +8,7 @@
 <div class="page cache-page" x-data="cacheSel()">
 
   <div class="page-hdr">
-    <span class="meta">inspector · queue · purge</span>
+    <span class="meta">inspector · queue · delete</span>
     <span class="grow"></span>
     <button class="btn ghost" type="button" onclick="location.reload()">Refresh</button>
   </div>
@@ -61,7 +61,7 @@
       <div class="m-value">{{ orphan_count }}</div>
       <div class="m-sub">{{ orphan_bytes | bytes_human }}</div>
       <div class="m-foot">
-        <a class="link-danger" href="/cache?orphans=1">Show &amp; purge →</a>
+        <a class="link-danger" href="/cache?orphans=1">Show &amp; delete →</a>
       </div>
     </div>
 
@@ -117,7 +117,7 @@
     </span>
     <span class="grow"></span>
     <button type="button" class="btn sm" @click="bulkPrefetch()">Re-fetch</button>
-    <button type="button" class="btn sm danger" @click="bulkEvict()">Purge selected</button>
+    <button type="button" class="btn sm danger" @click="bulkEvict()">Delete selected</button>
     {# Clear-selection affordance: a plain ✕ at the far right, replacing the
        old "Clear" text button which read like another bulk action. #}
     <button type="button" class="btn ghost icon sm bulk-clear" @click="clearSel()"
@@ -161,7 +161,7 @@
           cache === 'ai'    ? { layers: ['media-ai'],    what: 'AI-store media' } :
           cache === 'local' ? { layers: ['media-local'], what: 'local media' } :
                               { layers: ['media-local', 'media-ai', 'metadata'], what: 'all cache layers' };
-        if (!confirm(`Purge ${plan.what} for ${keys.length} clip(s)?`)) return;
+        if (!confirm(`Delete ${plan.what} for ${keys.length} clip(s)?`)) return;
         const r = await fetch('/api/cache/bulk-evict', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

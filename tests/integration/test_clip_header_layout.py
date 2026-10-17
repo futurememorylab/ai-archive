@@ -5,7 +5,7 @@ idle "✓ Synced" chip; the sync chip only shows while writes are publishing or
 failed, so the Sync drawer stays reachable when it matters. The clip header
 drops its duplicate timecode readout (the player HUD and transport keep one)
 and puts its actions on the right: an Annotate button plus a ⋯ menu holding
-the cache control (Cache / Purge) and Live.
+the cache control (Cache / Delete) and Live.
 """
 
 from fastapi.testclient import TestClient
@@ -40,5 +40,20 @@ def test_clip_header_actions_on_the_right_with_overflow_menu(monkeypatch, tmp_pa
     assert "cache-ctl" not in left
     assert 'data-test="clip-more"' in right
     more = right.split('data-test="clip-more"', 1)[1]
-    assert "cache-ctl" in more  # Cache / Purge lives in the ⋯ menu
+    assert "cache-ctl" in more  # Cache / Delete lives in the ⋯ menu
     assert "liveSession.start()" in more  # Live too
+
+
+def test_overflow_menu_rows_share_the_menu_style(monkeypatch, tmp_path):
+    """The ⋯ menu reads as one list: a Cache section (status row + Cache/Purge
+    rows) and Live below a separator, all menu rows, not page buttons."""
+    html = _page(monkeypatch, tmp_path)
+    more = html.split('data-test="clip-more"', 1)[1].split('class="live-bar"', 1)[0]
+    cache = more.split('class="cache-ctl', 1)[1].split('class="menu-sep"', 1)[0]
+    assert '<div class="menu-header">Cache</div>' in cache
+    assert 'data-test="cache-status"' in cache
+    assert "Not cached" in cache
+    assert 'class="menu-item" @click="cacheNow()"' in cache
+    assert 'class="btn' not in cache
+    live = more.split('class="menu-sep"', 1)[1]
+    assert "liveSession.start()" in live

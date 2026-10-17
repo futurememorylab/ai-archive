@@ -1,9 +1,8 @@
-"""Render test for the clip-detail History dropdown + publish-status headline pill.
+"""Clip detail no longer shows a LIVE pill or a version History dropdown.
 
-Seeds a clip with a live ClipVersion and asserts the rendered HTML contains:
-- data-history-menu (the history dropdown anchor element)
-- data-publish-status attribute (the headline pill wrapper)
-- 'Live v' text (confirming the live-version label is rendered)
+Versions still exist in the database (every apply records one), but the
+annotation panel doesn't surface them: "In archive" and "Draft" are the only
+states a user sees.
 """
 
 import asyncio
@@ -65,19 +64,17 @@ def _make_client(monkeypatch, tmp_path):
     return TestClient(main_mod.app)
 
 
-def test_clip_detail_shows_history_menu_and_publish_status(monkeypatch, tmp_path):
-    """A clip with a live ClipVersion renders the history dropdown and headline pill."""
+def test_clip_detail_with_a_live_version_shows_no_live_pill_or_history(monkeypatch, tmp_path):
     clip_id = 12041
     with _make_client(monkeypatch, tmp_path) as client:
         ctx = client.app.state.core_ctx
 
         async def _seed() -> None:
-            repo = ctx.clip_versions_repo
-            await repo.insert(
+            await ctx.clip_versions_repo.insert(
                 ctx.db,
                 ClipVersion(
                     catdv_clip_id=clip_id,
-                    version_num=1,
+                    version_num=3,
                     snapshot={},
                     publish_state="live",
                     origin="publish",
@@ -91,112 +88,8 @@ def test_clip_detail_shows_history_menu_and_publish_status(monkeypatch, tmp_path
 
         r = client.get(f"/clips/{clip_id}")
         assert r.status_code == 200
-        # History dropdown anchor element must be present.
-        assert "data-history-menu" in r.text
-        # Headline publish-status wrapper must carry data-publish-status.
-        assert "data-publish-status" in r.text
-        # The live version label must appear somewhere in the rendered HTML.
-        assert "Live v" in r.text
-
-
-def test_clip_detail_no_versions_shows_no_live_pill(monkeypatch, tmp_path):
-    """A clip with no versions renders the history menu but no 'Live v' label."""
-    clip_id = 12041
-    with _make_client(monkeypatch, tmp_path) as client:
-        install_live_ctx(client.app, archive=FakeArchive(_canonical(clip_id)))
-
-        r = client.get(f"/clips/{clip_id}")
-        assert r.status_code == 200
-        # History dropdown must still be present (empty state).
-        assert "data-history-menu" in r.text
-        # No live version = no 'Live v' text.
+        assert "data-history-menu" not in r.text
+        assert "data-publish-status" not in r.text
         assert "Live v" not in r.text
-
-
-def test_clip_history_diff_summary_rendered(monkeypatch, tmp_path):
-    """A version with a diff dict renders a compact summary line in the history row."""
-    clip_id = 12042
-    with _make_client(monkeypatch, tmp_path) as client:
-        ctx = client.app.state.core_ctx
-
-        async def _seed() -> None:
-            repo = ctx.clip_versions_repo
-            # v1: no diff (backfilled baseline)
-            await repo.insert(
-                ctx.db,
-                ClipVersion(
-                    catdv_clip_id=clip_id,
-                    version_num=1,
-                    snapshot={},
-                    diff=None,
-                    publish_state="superseded",
-                    origin="publish",
-                    model=None,
-                    author=None,
-                ),
-            )
-            # v2: has a diff with markers, changed field, and notes
-            await repo.insert(
-                ctx.db,
-                ClipVersion(
-                    catdv_clip_id=clip_id,
-                    version_num=2,
-                    snapshot={},
-                    diff={
-                        "markers_added": 2,
-                        "fields_changed": {"pragafilm.genre": "thriller"},
-                        "notes_changed": True,
-                        "big_notes_changed": False,
-                    },
-                    publish_state="live",
-                    origin="publish",
-                    model=None,
-                    author="editor@example.com",
-                ),
-            )
-
-        asyncio.run(_seed())
-        install_live_ctx(client.app, archive=FakeArchive(_canonical(clip_id)))
-
-        r = client.get(f"/clips/{clip_id}")
-        assert r.status_code == 200
-
-        # v2's diff summary must contain the marker count, field short-name, and notes indicator.
-        assert "+2 markers" in r.text, "Expected '+2 markers' in diff summary"
-        assert "genre" in r.text, "Expected 'genre' (short field name) in diff summary"
-        assert "notes" in r.text, "Expected 'notes' indicator in diff summary"
-
-        # big_notes_changed=False must NOT produce 'bigNotes' in the summary.
-        assert "bigNotes" not in r.text, "Did not expect 'bigNotes' when big_notes_changed is False"
-
-
-def test_clip_history_null_diff_renders_without_error(monkeypatch, tmp_path):
-    """A version with diff=None renders without error and without a diff summary line."""
-    clip_id = 12043
-    with _make_client(monkeypatch, tmp_path) as client:
-        ctx = client.app.state.core_ctx
-
-        async def _seed() -> None:
-            repo = ctx.clip_versions_repo
-            await repo.insert(
-                ctx.db,
-                ClipVersion(
-                    catdv_clip_id=clip_id,
-                    version_num=1,
-                    snapshot={},
-                    diff=None,
-                    publish_state="live",
-                    origin="publish",
-                    model=None,
-                    author=None,
-                ),
-            )
-
-        asyncio.run(_seed())
-        install_live_ctx(client.app, archive=FakeArchive(_canonical(clip_id)))
-
-        r = client.get(f"/clips/{clip_id}")
-        assert r.status_code == 200
-        assert "data-history-menu" in r.text
-        # No diff summary data-attribute or marker summary should appear.
-        assert "data-diff-summary" not in r.text
+        assert "stays restorable" not in r.text
+        assert client.get(f"/clips/{clip_id}/version-panel").status_code == 404
