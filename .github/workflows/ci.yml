@@ -19,8 +19,14 @@ concurrency:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    env:
+      # On a PR the ratchets compare against the merge-base with the target
+      # branch; on a push to main there is nothing to compare with.
+      BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # the ratchets need the merge-base
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -33,9 +39,12 @@ jobs:
       - name: Import contracts
         run: lint-imports
       - name: Structural erosion gate
-        run: python tools/erosion_gate.py --path backend --baseline .erosion-baseline.json --max-cc 30
+        run: python tools/erosion_gate.py --path backend --baseline .erosion-baseline.json --max-cc 30 ${BASE_REF:+--base-ref "$BASE_REF"}
       - name: Type check (basedpyright, baselined)
         run: basedpyright backend tests
+      - name: Type baseline may only shrink
+        if: env.BASE_REF != ''
+        run: python tools/type_baseline_gate.py --base-ref "$BASE_REF"
       - name: Docstring coverage (interrogate)
         run: interrogate -c pyproject.toml
       - name: Duplicate code (pylint)
