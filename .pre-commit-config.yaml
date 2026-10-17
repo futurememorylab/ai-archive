@@ -42,6 +42,13 @@ repos:
         pass_filenames: false
         always_run: true
 
+      - id: frontend-size-gate
+        name: frontend size gate (static/*.js ratchet)
+        entry: .venv/bin/python tools/frontend_size_gate.py
+        language: system
+        pass_filenames: false
+        files: ^(backend/app/static/.*\.js|\.frontend-size-baseline\.json)$
+
       - id: duplicate-code
         name: pylint duplicate-code
         entry: .venv/bin/pylint backend --disable=all --enable=duplicate-code --min-similarity-lines=14

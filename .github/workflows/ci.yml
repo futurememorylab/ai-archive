@@ -40,6 +40,8 @@ jobs:
         run: lint-imports
       - name: Structural erosion gate
         run: python tools/erosion_gate.py --path backend --baseline .erosion-baseline.json --max-cc 30 ${BASE_REF:+--base-ref "$BASE_REF"}
+      - name: Frontend size gate (static/*.js)
+        run: python tools/frontend_size_gate.py
       - name: Type check (basedpyright, baselined)
         run: basedpyright backend tests
       - name: Type baseline may only shrink

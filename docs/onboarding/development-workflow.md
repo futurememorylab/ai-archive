@@ -153,7 +153,11 @@ develop on trunk.
   function changed since the merge-base got more complex, and when erosion
   or max CC fell without the baseline being lowered (run `--write-baseline`
   and commit). `tools/type_baseline_gate.py` fails when the basedpyright
-  baseline grew. Raising any baseline is Peter's call (ADR 0129).
+  baseline grew. `tools/frontend_size_gate.py` caps `static/*.js` at 500
+  lines per file and 80 lines per function (a function's own lines; nested
+  functions count separately); the few already over are baselined in
+  `.frontend-size-baseline.json` and may only shrink. Raising any baseline
+  is Peter's call (ADR 0129).
 - Green CI is a required merge gate. A local "tests pass" is a local claim;
   CI is the team's source of truth.
 

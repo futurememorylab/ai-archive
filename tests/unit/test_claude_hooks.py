@@ -135,3 +135,31 @@ def test_stop_gate_blocks_on_failing_gate(tmp_path: Path):
     assert proc.returncode == 2, proc.stdout + proc.stderr
     assert "ruff check" in proc.stderr
     assert "F401" in proc.stderr
+
+
+def _project_with_frontend_baseline(tmp_path: Path) -> Path:
+    project = tmp_path / "proj"
+    (project / ".github").mkdir(parents=True)
+    (project / ".github" / "CODEOWNERS").write_text("/.frontend-size-baseline.json @peterhora\n")
+    baseline = {"files": {"a.js": 575}, "functions": {"a.js::f": 94, "b.js::g": 83}}
+    (project / ".frontend-size-baseline.json").write_text(json.dumps(baseline))
+    return project
+
+
+def _write_frontend_baseline(project: Path, data: dict) -> subprocess.CompletedProcess[str]:
+    event = _write(str(project / ".frontend-size-baseline.json"), json.dumps(data))
+    return _hook(PROTECT, event, project)
+
+
+def test_lowering_the_frontend_baseline_or_dropping_entries_is_allowed(tmp_path: Path):
+    project = _project_with_frontend_baseline(tmp_path)
+    lowered = {"files": {"a.js": 560}, "functions": {"a.js::f": 90}}
+    assert _write_frontend_baseline(project, lowered).returncode == 0
+
+
+def test_raising_or_adding_to_the_frontend_baseline_is_blocked(tmp_path: Path):
+    project = _project_with_frontend_baseline(tmp_path)
+    raised = {"files": {"a.js": 600}, "functions": {"a.js::f": 94, "b.js::g": 83}}
+    added = {"files": {"a.js": 575}, "functions": {"a.js::f": 94, "c.js::h": 81}}
+    assert _write_frontend_baseline(project, raised).returncode == 2
+    assert _write_frontend_baseline(project, added).returncode == 2
