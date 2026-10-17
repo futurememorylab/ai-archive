@@ -215,10 +215,12 @@ in `asyncio.to_thread(...)`. The only escape hatch is an inline
 **15. Complexity can hold or fall, never climb.** An erosion
 gate ratchets the structural-erosion ratio (share of complexity mass in
 CC>10 functions) against `.erosion-baseline.json` + a hard CC cap.
-Raising the baseline is a conscious, reviewed act; a refactor that pushes
-past the cap blocks until then.
-*Enforced by:* `tools/erosion_gate.py` + `pylint --enable=duplicate-code`,
-both in the CI `lint` job and pre-commit.
+Max CC may not pass the baseline's, a function changed in a PR may not get
+more complex than at the merge-base, and an improvement must lower the
+baseline in the same PR. The basedpyright baseline may only shrink.
+Raising a baseline is a conscious, reviewed act (invariant 28).
+*Enforced by:* `tools/erosion_gate.py`, `tools/type_baseline_gate.py` and
+`pylint --enable=duplicate-code`, in the CI `lint` job (and pre-commit).
 *ADRs:* 0060.
 
 ## Frontend
