@@ -99,6 +99,10 @@ comes back. When one fails, read its docstring; it explains the rule.
 - Test first for bug fixes and features: a failing test, then the fix.
 - Run the slice you're touching while iterating; run `-n auto` once
   before committing.
+- When the work is done, before opening the PR (or marking it ready),
+  run `/simplify` on the whole diff and apply its fixes, then re-run the
+  tests. `/code-review` catches bugs; `/simplify` catches reuse and
+  cleanup.
 - UI changes (a page template, an Alpine component, a page route, a user
   flow) update the matching Playwright walkthrough in `tests/walkthrough/`
   in the same PR and pass `/e2e` in assert mode. Walkthroughs run offline

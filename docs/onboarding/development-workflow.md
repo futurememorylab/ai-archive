@@ -61,8 +61,9 @@ flowchart LR
    let the agent ask clarifying questions before it writes code.
 2. **Build test-first.** A failing test, then the change. Granular commits
    are fine; they get squashed at merge.
-3. **Review your own diff.** Run `/code-review` (bugs) and `/simplify`
-   (reuse and cleanup) before asking a human. This is hygiene, not a
+3. **Review your own diff.** When the work is done, run `/code-review`
+   (bugs) and `/simplify` (reuse and cleanup) on the whole diff and apply
+   the fixes before asking a human. This is hygiene, not a
    substitute for human review.
 4. **Run the gates locally.** `pre-commit run --all-files` and
    `pytest -n auto`; CI runs the same checks.

@@ -69,7 +69,7 @@ def test_both_cards_bind_tabs_to_root_mode(client):
     html = r.text
     # Both cards' tab buttons bind to the page-level `mode`, exposed on
     # the card scope via a getter (Alpine's $root doesn't walk past
-    # nested x-data — see studio.js studioPromptCard._page).
+    # nested x-data — see studioPromptCard.js _page).
     cur_count = html.count("mode === 'prompt'")
     out_count = html.count("mode === 'output'")
     assert cur_count >= 2  # both cards have one each

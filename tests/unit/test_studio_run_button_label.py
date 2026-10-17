@@ -1,7 +1,7 @@
-"""Pure-Python mirror of `runButtonLabel()` from studio.js — the
+"""Pure-Python mirror of `runButtonLabel()` from studioRunButton.js — the
 authoritative source for what the Run button says in each state.
 
-The JS implementation in studio.js MUST produce the same string for
+The JS implementation in studioRunButton.js MUST produce the same string for
 the same inputs. Both implementations are short by design.
 """
 

@@ -1,7 +1,7 @@
-"""Pure-Python mirror of studio.js's runButtonLabel().
+"""Pure-Python mirror of studioRunButton.js's runButtonLabel().
 
 Keep this function ≤ 15 lines and verbatim-equivalent to the JS in
-backend/app/static/studio.js. When the JS changes, this file changes
+backend/app/static/studioRunButton.js. When the JS changes, this file changes
 in the same commit; both implementations are reviewed together.
 """
 
