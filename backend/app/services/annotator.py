@@ -11,7 +11,6 @@ import asyncio
 import contextlib
 import json
 import logging
-import mimetypes
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -33,6 +32,7 @@ from backend.app.repositories.review_items import ReviewItemsRepo
 from backend.app.repositories.run_telemetry import RunTelemetryRepo
 from backend.app.repositories.studio_runs import StudioRunsRepo
 from backend.app.services import run_estimator
+from backend.app.services.clip_media import ai_input_for_clip
 from backend.app.services.errors import humanise as _humanise_error
 from backend.app.services.events import EventBus
 from backend.app.services.media_prefetcher import ProgressTracker
@@ -418,6 +418,215 @@ async def _resolve_clip_meta(db, *, clip_id, archive, uploaded_clips_repo) -> _C
     )
 
 
+@dataclass
+class _ItemCacheProgress:
+    """`CacheProgress` for one job item: moves the item through resolving →
+    uploading and mirrors the Cache button with a prefetch_queue row (born
+    `downloading`, never claimed by the worker) so inline caching is visible
+    on the queue page with live progress (spec 2026-06-23)."""
+
+    db: Any
+    item: Any
+    jobs_repo: Any
+    event_bus: Any
+    topic: Any
+    prefetch_queue_repo: PrefetchQueueRepo | None
+    key: tuple[str, str]
+    rid: int | None = None
+    tracker: ProgressTracker | None = None
+
+    async def _status(self, status: str) -> None:
+        await self.jobs_repo.update_item_status(self.db, self.item.id, status)
+        await self.event_bus.publish(self.topic, {"item_id": self.item.id, "status": status})
+
+    async def missed(self) -> ProgressTracker | None:
+        """AI-store miss: open the queue row, then mark the item resolving."""
+        if self.prefetch_queue_repo is not None:
+            self.rid = await self.prefetch_queue_repo.start_inline(
+                self.db, key=self.key, who="annotate"
+            )
+            self.tracker = ProgressTracker(self.prefetch_queue_repo, conn=self.db, rid=self.rid)
+        await self._status("resolving")
+        return self.tracker
+
+    async def uploading(self) -> None:
+        """Proxy resolved: mark the item uploading."""
+        await self._status("uploading")
+
+    async def finish(self, error: str | None = None) -> None:
+        """Close the queue row (if one was opened) as done or errored."""
+        if self.rid is None or self.prefetch_queue_repo is None:
+            return
+        if error is not None:
+            await self.prefetch_queue_repo.mark_error(self.db, self.rid, error)
+        elif self.tracker is not None:
+            await self.prefetch_queue_repo.mark_done(
+                self.db, self.rid, bytes_downloaded=self.tracker.last_downloaded
+            )
+
+
+async def _fail_unavailable(
+    db, item, kind, *, jobs_repo, event_bus, topic, studio_runs_repo: StudioRunsRepo, msg: str
+) -> None:
+    """Mark an item whose media is in no cache layer as failed (and its studio run)."""
+    await jobs_repo.update_item_status(db, item.id, "error", error=msg)
+    await event_bus.publish(topic, {"item_id": item.id, "status": "error", "error": msg})
+    if kind != "studio":
+        return
+    run_id = await studio_runs_repo.find_latest_id_for_job_clip(
+        db, job_id=item.job_id, clip_id=item.catdv_clip_id
+    )
+    if run_id is not None:
+        await studio_runs_repo.complete_error(db, run_id, error=msg)
+
+
+async def _effective_media_resolution(
+    db, *, version, media_kind, force_resolution: str | None, model_config_repo, clip_id
+) -> str:
+    """Per-version override > model default > 'medium', sanitised for the media kind.
+
+    Resolved BEFORE the estimate so the estimate reads same-resolution history
+    and the resolution feedback loop is not a partial no-op.
+    """
+    from backend.app.services.resolution import (
+        resolution_valid_for_kind,
+        resolve_media_resolution,
+    )
+
+    if force_resolution is not None:
+        # Route the override through the validator too: a valid value passes
+        # through unchanged, an invalid one (e.g. a stale/garbage calibration
+        # value) falls back to the default 'medium' instead of KeyErroring at
+        # the SDK map (gemini.py::_SDK_MEDIA_RESOLUTION).
+        media_resolution = resolve_media_resolution(force_resolution, None)
+    else:
+        mc = await model_config_repo.get(db, version.model)
+        model_default = mc.default_media_resolution if mc and not mc.removed else None
+        media_resolution = resolve_media_resolution(version.media_resolution, model_default)
+    if not resolution_valid_for_kind(media_resolution, media_kind):
+        # Vertex rejects HIGH for non-image media; medium is the safe ceiling.
+        # Covers both branches above — even a stray calibration force_resolution
+        # of 'high' on a non-image clip is sanitized here.
+        log.info(
+            "downgrading media_resolution %s->medium for %s clip %s (HIGH is image-only)",
+            media_resolution,
+            media_kind,
+            clip_id,
+        )
+        media_resolution = "medium"
+    return media_resolution
+
+
+async def _pre_run_estimate(
+    db, run_telemetry_repo, *, item, version, media_kind, duration_secs, media_resolution
+) -> "run_estimator.RunEstimate | None":
+    """Pre-call estimate (spec §6; stamped onto the telemetry row so
+    est-vs-actual is one query). Blind to the outcome by construction, and
+    never allowed to block a run."""
+    try:
+        return await run_estimator.estimate_clips(
+            db,
+            run_telemetry_repo,
+            [
+                run_estimator.ClipEstimateInput(
+                    clip_id=item.catdv_clip_id,
+                    media_kind=media_kind,
+                    duration_secs=duration_secs or None,
+                )
+            ],
+            prompt_body=version.body,
+            schema=version.output_schema,
+            model=version.model,
+            media_resolution=media_resolution,
+        )
+    except Exception:  # noqa: BLE001 — estimation must never block a run
+        log.exception("pre-run estimate failed for clip %s", item.catdv_clip_id)
+        return None
+
+
+async def _call_gemini(
+    gemini, *, file_ref, prompt, version, media_resolution
+) -> tuple[dict, float]:
+    """Run the annotate call off the event loop. Returns (result, elapsed seconds)."""
+    t0 = time.monotonic()
+    # The Vertex AI client is synchronous and each call takes seconds; run it
+    # off the event loop so concurrent jobs and ordinary page requests stay
+    # responsive while Gemini works.
+    try:
+        result = await asyncio.to_thread(
+            gemini.annotate,
+            file_ref=file_ref,
+            prompt=prompt,
+            schema=version.output_schema,
+            model=version.model,
+            media_resolution=media_resolution,
+        )
+    except Exception as exc:
+        # Attribute the effective (post-downgrade) resolution onto the
+        # exception so run_job's except block can stamp it on the error
+        # telemetry row — otherwise calibration error rows are resolution-blind.
+        exc.media_resolution_setting = media_resolution  # type: ignore[attr-defined]
+        raise
+    return result, time.monotonic() - t0
+
+
+def _parse_structured(result: dict) -> dict[str, Any] | None:
+    """Gemini's JSON text as a dict, or None for empty / non-JSON output."""
+    try:
+        return json.loads(result["text"]) if result.get("text") else None
+    except json.JSONDecodeError:
+        return None
+
+
+async def _finalize_record_only(
+    db, item, version, structured, result, *, jobs_repo, event_bus, topic, telemetry
+) -> None:
+    """Calibration path: record the telemetry row + mark the item done, but
+    write NO studio-runs / review-items / annotations. Used to measure
+    cost/quality at a forced resolution without mutating review state.
+
+    A non-JSON / truncated Gemini response parses to structured=None.
+    Mirror _finalize_studio's structured-is-None branch: record an 'error'
+    row (error_class "NonJsonOutput") and mark the item failed. Recording it
+    as 'ok' would pollute calibration's per-resolution stats and the
+    estimator's learned output-rates (both count only status='ok' rows) with
+    a garbage sample.
+    """
+    rest = dict(telemetry)
+    repo, tctx = rest.pop("run_telemetry_repo"), rest.pop("telemetry_ctx")
+    if structured is None:
+        await jobs_repo.update_item_status(db, item.id, "error", error="non-JSON output")
+        await event_bus.publish(
+            topic, {"item_id": item.id, "status": "error", "error": "non-JSON output"}
+        )
+        await _record_telemetry(
+            db,
+            repo,
+            tctx,
+            kind="studio",
+            item=item,
+            version=version,
+            status="error",
+            error_class="NonJsonOutput",
+            result=result,
+            **rest,
+        )
+        return
+    await jobs_repo.update_item_status(db, item.id, "review_ready")
+    await event_bus.publish(topic, {"item_id": item.id, "status": "review_ready"})
+    await _record_telemetry(
+        db,
+        repo,
+        tctx,
+        kind="studio",
+        item=item,
+        version=version,
+        status="ok",
+        result=result,
+        **rest,
+    )
+
+
 async def _process_item(
     *,
     db,
@@ -455,56 +664,41 @@ async def _process_item(
         else ("catdv", str(item.catdv_clip_id))
     )
 
-    # Fast path: if the AI store already has this clip, skip the local
-    # resolver + upload entirely. Gemini reads from GCS directly via the
-    # returned reference, so the local proxy isn't needed at all. GCS
-    # `UploadedRef`s have no expiry, so a non-None status() is durable.
-    upload = await ai_store.status(clip_key)
-
-    if upload is None:
-        # Cache miss in AI store → need the local file to upload it. Mirror the
-        # Cache button: record a prefetch_queue row (born `downloading`, never
-        # claimed by the worker) so this caching is visible on the queue page
-        # and reports live progress. The annotator still downloads inline — the
-        # row is purely for visibility/progress (spec 2026-06-23).
-        rid: int | None = None
-        tracker: ProgressTracker | None = None
-        if prefetch_queue_repo is not None:
-            rid = await prefetch_queue_repo.start_inline(db, key=clip_key, who="annotate")
-            tracker = ProgressTracker(prefetch_queue_repo, conn=db, rid=rid)
-
-        await jobs_repo.update_item_status(db, item.id, "resolving")
-        await event_bus.publish(topic, {"item_id": item.id, "status": "resolving"})
-        try:
-            local_path: Path = await proxy_resolver.path_for_clip_id(item.catdv_clip_id, tracker)
-        except ProxyNotFound:
-            msg = (
-                f"clip {item.catdv_clip_id} is not locally cached and not in "
-                f"AI store — cache the clip on /clips first, or reconnect to CatDV"
-            )
-            if rid is not None and prefetch_queue_repo is not None:
-                await prefetch_queue_repo.mark_error(db, rid, msg)
-            await jobs_repo.update_item_status(db, item.id, "error", error=msg)
-            await event_bus.publish(topic, {"item_id": item.id, "status": "error", "error": msg})
-            if kind == "studio":
-                run_id = await studio_runs_repo.find_latest_id_for_job_clip(
-                    db, job_id=item.job_id, clip_id=item.catdv_clip_id
-                )
-                if run_id is not None:
-                    await studio_runs_repo.complete_error(db, run_id, error=msg)
-            return
-
-        await jobs_repo.update_item_status(db, item.id, "uploading")
-        await event_bus.publish(topic, {"item_id": item.id, "status": "uploading"})
-        mime = mimetypes.guess_type(str(local_path))[0] or "video/quicktime"
-        try:
-            upload = await ai_store.ensure_uploaded(clip_key, local_path, mime)
-        except Exception as exc:  # noqa: BLE001 — re-raised after marking the row
-            if rid is not None and prefetch_queue_repo is not None:
-                await prefetch_queue_repo.mark_error(db, rid, _humanise_error(exc))
-            raise
-        if rid is not None and tracker is not None and prefetch_queue_repo is not None:
-            await prefetch_queue_repo.mark_done(db, rid, bytes_downloaded=tracker.last_downloaded)
+    # Cache layers (clip_media.ai_input_for_clip): an AI-store hit skips the
+    # local resolver + upload entirely; GCS `UploadedRef`s have no expiry, so
+    # a hit is durable. The annotator still downloads inline on a miss.
+    progress = _ItemCacheProgress(
+        db, item, jobs_repo, event_bus, topic, prefetch_queue_repo, key=clip_key
+    )
+    try:
+        upload = await ai_input_for_clip(
+            clip_key,
+            item.catdv_clip_id,
+            ai_store=ai_store,
+            proxy_resolver=proxy_resolver,
+            progress=progress,
+        )
+    except ProxyNotFound:
+        msg = (
+            f"clip {item.catdv_clip_id} is not locally cached and not in "
+            f"AI store — cache the clip on /clips first, or reconnect to CatDV"
+        )
+        await progress.finish(error=msg)
+        await _fail_unavailable(
+            db,
+            item,
+            kind,
+            jobs_repo=jobs_repo,
+            event_bus=event_bus,
+            topic=topic,
+            studio_runs_repo=studio_runs_repo,
+            msg=msg,
+        )
+        return
+    except Exception as exc:  # noqa: BLE001 — re-raised after marking the row
+        await progress.finish(error=_humanise_error(exc))
+        raise
+    await progress.finish()
 
     file_ref = await ai_store.reference_for_gemini(upload)
 
@@ -518,68 +712,30 @@ async def _process_item(
         archive=archive,
         uploaded_clips_repo=uploaded_clips_repo,
     )
-    clip_snapshot: dict[str, Any] = meta.clip_snapshot
     duration_secs = meta.duration_secs
-    media_kind = meta.media_kind
-
-    # Effective media resolution: per-version override > model default >
-    # 'medium'. Invalid stored values are ignored (never reach the SDK map).
-    # Resolved BEFORE the estimate so the estimate reads same-resolution
-    # history and the resolution feedback loop is not a partial no-op.
-    from backend.app.services.resolution import (
-        resolution_valid_for_kind,
-        resolve_media_resolution,
+    media_resolution = await _effective_media_resolution(
+        db,
+        version=version,
+        media_kind=meta.media_kind,
+        force_resolution=force_resolution,
+        model_config_repo=model_config_repo,
+        clip_id=item.catdv_clip_id,
     )
-
-    if force_resolution is not None:
-        # Route the override through the validator too: a valid value passes
-        # through unchanged, an invalid one (e.g. a stale/garbage calibration
-        # value) falls back to the default 'medium' instead of KeyErroring at
-        # the SDK map (gemini.py::_SDK_MEDIA_RESOLUTION).
-        media_resolution = resolve_media_resolution(force_resolution, None)
-    else:
-        _mc = await model_config_repo.get(db, version.model)
-        _model_default = _mc.default_media_resolution if _mc and not _mc.removed else None
-        media_resolution = resolve_media_resolution(version.media_resolution, _model_default)
-    if not resolution_valid_for_kind(media_resolution, media_kind):
-        # Vertex rejects HIGH for non-image media; medium is the safe ceiling.
-        # Covers both branches above — even a stray calibration force_resolution
-        # of 'high' on a non-image clip is sanitized here.
-        log.info(
-            "downgrading media_resolution %s->medium for %s clip %s (HIGH is image-only)",
-            media_resolution,
-            media_kind,
-            item.catdv_clip_id,
-        )
-        media_resolution = "medium"
-
-    # Pre-call estimate (spec §6; stamped onto the telemetry row so
-    # est-vs-actual is one query). Blind to the outcome by construction.
-    est: run_estimator.RunEstimate | None = None
-    try:
-        est = await run_estimator.estimate_clips(
-            db,
-            run_telemetry_repo,
-            [
-                run_estimator.ClipEstimateInput(
-                    clip_id=item.catdv_clip_id,
-                    media_kind=media_kind,
-                    duration_secs=duration_secs or None,
-                )
-            ],
-            prompt_body=version.body,
-            schema=version.output_schema,
-            model=version.model,
-            media_resolution=media_resolution,
-        )
-    except Exception:  # noqa: BLE001 — estimation must never block a run
-        log.exception("pre-run estimate failed for clip %s", item.catdv_clip_id)
+    est = await _pre_run_estimate(
+        db,
+        run_telemetry_repo,
+        item=item,
+        version=version,
+        media_kind=meta.media_kind,
+        duration_secs=duration_secs,
+        media_resolution=media_resolution,
+    )
 
     await jobs_repo.update_item_status(db, item.id, "prompting")
     await event_bus.publish(topic, {"item_id": item.id, "status": "prompting"})
     rendered_body = _render_prompt(version.body, duration_secs=duration_secs)
     capture = CaptureMeta(
-        media_kind=media_kind,
+        media_kind=meta.media_kind,
         media_duration_secs=duration_secs or None,
         media_fps=meta.media_fps,
         media_bytes=meta.media_bytes,
@@ -587,85 +743,35 @@ async def _process_item(
         clip_name=meta.clip_name,
         prompt_chars_rendered=len(rendered_body),
     )
-    t0 = time.monotonic()
-    # The Vertex AI client is synchronous and each call takes seconds; run it
-    # off the event loop so concurrent jobs and ordinary page requests stay
-    # responsive while Gemini works.
-    try:
-        result = await asyncio.to_thread(
-            gemini.annotate,
-            file_ref=file_ref,
-            prompt=rendered_body,
-            schema=version.output_schema,
-            model=version.model,
-            media_resolution=media_resolution,
-        )
-    except Exception as exc:
-        # Attribute the effective (post-downgrade) resolution onto the
-        # exception so run_job's except block can stamp it on the error
-        # telemetry row — otherwise calibration error rows are resolution-blind.
-        exc.media_resolution_setting = media_resolution  # type: ignore[attr-defined]
-        raise
-    elapsed_s = time.monotonic() - t0
+    result, elapsed_s = await _call_gemini(
+        gemini,
+        file_ref=file_ref,
+        prompt=rendered_body,
+        version=version,
+        media_resolution=media_resolution,
+    )
+    structured = _parse_structured(result)
 
-    structured: dict[str, Any] | None
-    try:
-        structured = json.loads(result["text"]) if result.get("text") else None
-    except json.JSONDecodeError:
-        structured = None
-
-    ai_store_kind = getattr(ai_store, "id", None)
+    telemetry = {
+        "run_telemetry_repo": run_telemetry_repo,
+        "telemetry_ctx": telemetry_ctx,
+        "capture": capture,
+        "est": est,
+        "ai_store_kind": getattr(ai_store, "id", None),
+        "media_resolution_setting": media_resolution,
+    }
     if record_only:
-        # Calibration path: record the telemetry row + mark the item done, but
-        # write NO studio-runs / review-items / annotations. Used to measure
-        # cost/quality at a forced resolution without mutating review state.
-        #
-        # A non-JSON / truncated Gemini response parses to structured=None.
-        # Mirror _finalize_studio's structured-is-None branch: record an
-        # 'error' row (error_class "NonJsonOutput") and mark the item failed.
-        # Recording it as 'ok' would pollute calibration's per-resolution stats
-        # and the estimator's learned output-rates (both count only status='ok'
-        # rows) with a garbage sample.
-        if structured is None:
-            await jobs_repo.update_item_status(db, item.id, "error", error="non-JSON output")
-            await event_bus.publish(
-                topic, {"item_id": item.id, "status": "error", "error": "non-JSON output"}
-            )
-            await _record_telemetry(
-                db,
-                run_telemetry_repo,
-                telemetry_ctx,
-                kind="studio",
-                item=item,
-                version=version,
-                status="error",
-                error_class="NonJsonOutput",
-                result=result,
-                duration_s=elapsed_s,
-                capture=capture,
-                est=est,
-                ai_store_kind=ai_store_kind,
-                media_resolution_setting=media_resolution,
-            )
-            return
-        await jobs_repo.update_item_status(db, item.id, "review_ready")
-        await event_bus.publish(topic, {"item_id": item.id, "status": "review_ready"})
-        await _record_telemetry(
+        await _finalize_record_only(
             db,
-            run_telemetry_repo,
-            telemetry_ctx,
-            kind="studio",
-            item=item,
-            version=version,
-            status="ok",
-            result=result,
-            duration_s=elapsed_s,
-            capture=capture,
-            est=est,
-            ai_store_kind=ai_store_kind,
-            media_resolution_setting=media_resolution,
+            item,
+            version,
+            structured,
+            result,
+            jobs_repo=jobs_repo,
+            event_bus=event_bus,
+            topic=topic,
+            telemetry={**telemetry, "duration_s": elapsed_s},
         )
-        return
     elif kind == "studio":
         await _finalize_studio(
             db,
@@ -680,12 +786,7 @@ async def _process_item(
             jobs_repo,
             event_bus,
             topic,
-            run_telemetry_repo=run_telemetry_repo,
-            telemetry_ctx=telemetry_ctx,
-            capture=capture,
-            est=est,
-            ai_store_kind=ai_store_kind,
-            media_resolution_setting=media_resolution,
+            **telemetry,
         )
     else:
         await _finalize_annotation(
@@ -695,20 +796,15 @@ async def _process_item(
             structured,
             result,
             rendered_body,
-            clip_snapshot,
+            meta.clip_snapshot,
             duration_secs,
             annotations_repo,
             review_items_repo,
             jobs_repo,
             event_bus,
             topic,
-            run_telemetry_repo=run_telemetry_repo,
-            telemetry_ctx=telemetry_ctx,
-            capture=capture,
-            est=est,
-            ai_store_kind=ai_store_kind,
             elapsed_s=elapsed_s,
-            media_resolution_setting=media_resolution,
+            **telemetry,
         )
 
 
