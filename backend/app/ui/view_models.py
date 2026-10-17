@@ -351,6 +351,7 @@ def batch_view(row: dict) -> dict:
         "completed": c["completed"],
         "failed": c["failed"],
         "awaiting": c["awaiting"],
+        "stopped": c["cancelled"],
         "running": running,
         "section": section,
         "headline": headline,

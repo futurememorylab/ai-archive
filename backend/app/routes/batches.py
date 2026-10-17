@@ -203,41 +203,51 @@ class RetryFailed(BaseModel):
     clip_ids: list[int] | None = None
 
 
-@router.post("/batches/retry-failed")
-async def retry_failed(request: Request, body: RetryFailed):
-    """Re-run failed clips. The worker only re-processes 'error'/'pending'
-    items, so resetting the targeted failures to 'pending' is what scopes the
-    retry. Requires live services + a proxy resolver."""
-    live = get_live_ctx(request)  # 503 when offline
+async def _requeue(live, job_ids: list[int], status: str, only: set[int] | None) -> list[int]:
+    """Flip each job's items in `status` (optionally only `only` clips) back to
+    'pending', and the job with them, so the lifespan JobRunner re-claims it.
+    The worker processes ONLY 'pending' items, so this is what scopes the run.
+
+    The reset is synchronous, BEFORE the worker picks the job up: the run can
+    take seconds to start flipping statuses (proxy resolution over the VPN),
+    and 'pending' makes in_flight > 0 at once, so the next /batches/table
+    refresh already reads the batch as running instead of a stale state.
+    Routes never execute jobs themselves (ADR 0125)."""
     if live.proxy_resolver is None:
         raise HTTPException(503, "Proxy resolver offline — cannot run annotations")
     core = live.core
-    only = set(body.clip_ids) if body.clip_ids else None
-
     started: list[int] = []
-    for jid in body.job_ids:
+    for jid in job_ids:
         items = await core.jobs_repo.list_items(core.db, jid)
-        failed = [
-            it
-            for it in items
-            if it.status == "error" and (only is None or it.catdv_clip_id in only)
+        targets = [
+            it for it in items if it.status == status and (only is None or it.catdv_clip_id in only)
         ]
-        if not failed:
+        if not targets:
             continue
-        # Flip the targeted failures back to 'pending' synchronously, BEFORE the
-        # worker picks the job up. The background run can take seconds to begin
-        # flipping statuses (proxy resolution over the VPN), so without this the
-        # next /batches/table refresh lands in that gap and shows a stale
-        # "Failed" until something else triggers a re-render. 'pending' makes
-        # in_flight > 0 immediately → the batch reads as running. The worker
-        # processes ONLY 'pending' items, so resetting just these targeted
-        # failures is exactly what scopes the retry — untargeted 'error' items in
-        # the same job are left alone and are NOT re-run (fix #1).
-        for it in failed:
+        for it in targets:
             await core.jobs_repo.update_item_status(core.db, it.id, "pending")
-        # Flip the job back to pending so the lifespan JobRunner re-claims it.
-        # Only the items reset to 'pending' above actually re-run. Routes never
-        # execute jobs themselves (ADR 0125).
         await core.jobs_repo.update_status(core.db, jid, "pending")
         started.append(jid)
-    return {"started": started}
+    return started
+
+
+@router.post("/batches/retry-failed")
+async def retry_failed(request: Request, body: RetryFailed):
+    """Re-run failed clips; untargeted failures in the same job stay as they
+    are. Requires live services + a proxy resolver."""
+    live = get_live_ctx(request)  # 503 when offline
+    only = set(body.clip_ids) if body.clip_ids else None
+    return {"started": await _requeue(live, body.job_ids, "error", only)}
+
+
+class RestartBatch(BaseModel):
+    job_ids: list[int]
+
+
+@router.post("/batches/restart")
+async def restart_batch(request: Request, body: RestartBatch):
+    """Run the clips a Cancel stopped. Clips that already ran keep their
+    results. Requires live services + a proxy resolver."""
+    require_permission(request, "run")
+    live = get_live_ctx(request)  # 503 when offline
+    return {"started": await _requeue(live, body.job_ids, "cancelled", None)}

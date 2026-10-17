@@ -3,7 +3,11 @@
    from the search list: the stack uses its 64×36 .thumb (shimmer + empty
    placeholder), actions are .btn.sm, the expanded list is _video_list.html.
    Re-rendered by batchesPage().refresh() on job events, so per-row UI state
-   (open, renaming) lives in the page's Alpine scope, keyed by batch_key. #}
+   (open, renaming) lives in the page's Alpine scope, keyed by batch_key.
+   refresh() patches the live page instead of replacing it: it matches
+   sections and rows by key and swaps only the [data-part] blocks whose
+   data-sig (a hash of the block's markup) changed, so thumbnails and open
+   clip lists aren't rebuilt on every tick of a running batch. #}
 {% if not batches %}
   <div class="batches-empty">
     No batches yet.
@@ -12,27 +16,30 @@
 {% else %}
 {% for sec in sections %}
 <section class="bsec" data-test="batch-section-{{ sec.key }}">
-  <div class="bsec-h">
+  {% set head %}
     <h2>{{ sec.title }}</h2>
     <span class="bsec-count mono">{{ sec.batches|length }}</span>
     <span class="bsec-hint">{{ sec.hint }}</span>
-  </div>
+  {% endset %}
+  <div class="bsec-h" data-part="head" data-sig="{{ head|sig }}">{{ head }}</div>
   {% for b in sec.batches %}
   {% set key = b.batch_key|tojson|forceescape %}
   <article class="batch-row" data-test="batch-row" data-batch-key="{{ b.batch_key }}"
            :class="{ open: expanded[{{ key }}] }">
     <div class="br-main">
-      <div class="bstack" role="img" aria-label="{{ b.clips }} clip{{ '' if b.clips == 1 else 's' }}">
+      {% set stack %}
         {% for t in b.thumbs %}
         <img class="thumb" loading="lazy" src="{{ t.url }}" alt=""
              onload="this.classList.add('thumb--ready');"
              onerror="this.classList.add('thumb--empty'); this.removeAttribute('src');">
         {% endfor %}
         {% if b.more %}<span class="bstack-more mono">+{{ b.more }}</span>{% endif %}
-      </div>
+      {% endset %}
+      <div class="bstack" data-part="stack" data-sig="{{ stack|sig }}" role="img"
+           aria-label="{{ b.clips }} clip{{ '' if b.clips == 1 else 's' }}">{{ stack }}</div>
 
       <div class="br-info">
-        <div class="br-name" x-show="renaming !== {{ key }}">
+        {% set name %}
           <span class="br-title" data-test="batch-name">{{ b.name }}</span>
           <button type="button" class="btn ghost sm icon" aria-label="Rename batch"
                   title="Rename batch" @click="startRename({{ key }}, {{ b.name|tojson|forceescape }})">
@@ -40,7 +47,8 @@
                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
           </button>
-        </div>
+        {% endset %}
+        <div class="br-name" data-part="name" data-sig="{{ name|sig }}" x-show="renaming !== {{ key }}">{{ name }}</div>
         <form class="br-rename" x-show="renaming === {{ key }}" x-cloak
               @submit.prevent="saveRename({{ b.job_ids|tojson }})" @keydown.escape="renaming = null">
           <input type="text" class="txt sm" maxlength="120" aria-label="Batch name"
@@ -48,16 +56,17 @@
           <button type="submit" class="btn sm primary">Save</button>
           <button type="button" class="btn sm ghost" @click="renaming = null">Cancel</button>
         </form>
-        <div class="br-sub">
+        {% set sub %}
           <span>{{ b.clips }} clip{{ '' if b.clips == 1 else 's' }}</span>
           <span class="mono">{{ b.started }}</span>
           <span>{{ b.prompt }}{% if b.version is not none %} v{{ b.version }}{% endif %}</span>
           {% if b.model %}<span class="mono">{{ b.model }}</span>{% endif %}
           <span class="bt-cost mono">{{ b.cost_usd|usd }}{% if b.cost_partial %}<span class="muted" title="Some runs in this batch have no recorded cost yet — this total is partial.">*</span>{% endif %}{% if b.cost_usd is not none and b.est_cost_usd %} <span class="muted" title="estimated (p50) vs actual">(est {{ b.est_cost_usd|usd }})</span>{% endif %}</span>
-        </div>
+        {% endset %}
+        <div class="br-sub" data-part="sub" data-sig="{{ sub|sig }}">{{ sub }}</div>
       </div>
 
-      <div class="br-prog">
+      {% set prog %}
         <div class="br-head {{ b.headline_state }}" data-test="batch-headline">
           {% if b.running %}<span class="ca-spinner" aria-hidden="true"></span>{% endif %}{{ b.headline }}
         </div>
@@ -67,15 +76,19 @@
         <div class="blegend">
           {% for s in b.segments %}<span><span class="bdot seg-{{ s.key }}"></span>{{ s.label }}</span>{% endfor %}
         </div>
-      </div>
+      {% endset %}
+      <div class="br-prog" data-part="prog" data-sig="{{ prog|sig }}">{{ prog }}</div>
 
-      <div class="br-actions">
+      {% set actions %}
         {% if not b.running and b.awaiting %}
         <button type="button" class="btn sm primary"
                 @click="reviewBatch({{ b.job_ids|tojson }}, '{{ b.review_href }}')">Review {{ b.awaiting }} clip{{ '' if b.awaiting == 1 else 's' }}</button>
         {% endif %}
         {% if not b.running and b.failed %}
         <button type="button" class="btn sm" @click="retryFailed({{ b.job_ids|tojson }})">Retry {{ b.failed }} failed</button>
+        {% endif %}
+        {% if not b.running and b.stopped %}
+        <button type="button" class="btn sm" @click="restartBatch({{ b.job_ids|tojson }})">Restart {{ b.stopped }} stopped</button>
         {% endif %}
         {% if b.running %}
         <button type="button" class="btn sm danger" @click="cancelBatch({{ b.job_ids|tojson }})">Cancel</button>
@@ -84,7 +97,8 @@
                 :aria-expanded="expanded[{{ key }}] ? 'true' : 'false'"
                 @click="toggle({{ key }})"
                 x-text="expanded[{{ key }}] ? 'Hide clips' : 'Show clips'">Show clips</button>
-      </div>
+      {% endset %}
+      <div class="br-actions" data-part="actions" data-sig="{{ actions|sig }}">{{ actions }}</div>
     </div>
 
     {# Filled by batchesPage().loadClips() when opened (and again after each

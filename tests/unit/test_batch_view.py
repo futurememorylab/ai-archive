@@ -163,3 +163,9 @@ def test_files_href_lists_all_batch_clips_no_status_filter():
 def test_zero_ran_has_no_segments():
     v = batch_view(_row(ran=0, completed=0, failed=0, awaiting_clips=0))
     assert v["segments"] == []
+
+
+def test_stopped_counts_the_clips_a_restart_would_run():
+    v = batch_view(_row(cancelled=3, ran=5, completed=2, failed=0, awaiting_clips=0))
+    assert v["stopped"] == 3
+    assert batch_view(_row())["stopped"] == 0

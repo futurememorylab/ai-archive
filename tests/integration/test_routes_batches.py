@@ -194,6 +194,67 @@ def test_retry_failed_flips_failed_items_and_job_to_pending(monkeypatch, tmp_pat
         assert job_status == "pending"  # job requeued for the worker
 
 
+async def _seed_stopped_batch(ctx):
+    """One finished clip and two the user stopped with Cancel."""
+    prompts = PromptsRepo()
+    _, vid = await prompts.create_with_initial_version(
+        ctx.db,
+        name="Obraz",
+        description=None,
+        body="p",
+        target_map={"x": {"kind": "markers"}},
+        output_schema={},
+        model="gemini-2.5-pro",
+    )
+    jobs = JobsRepo()
+    jid = await jobs.create_job(
+        ctx.db, prompt_version_id=vid, clip_ids=[201, 202, 203], run_group="rg-s"
+    )
+    its = await jobs.list_items(ctx.db, jid)
+    await jobs.update_item_status(ctx.db, its[0].id, "review_ready")
+    await jobs.cancel_job(ctx.db, jid)
+    return jid
+
+
+def test_stopped_batch_offers_restart(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        asyncio.run(_seed_stopped_batch(client.app.state.core_ctx))
+        r = client.get("/batches/table")
+        assert r.status_code == 200
+        assert "Restart 2 stopped" in r.text
+
+
+def test_restart_503_when_offline(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        jid = asyncio.run(_seed_stopped_batch(client.app.state.core_ctx))
+        r = client.post("/batches/restart", json={"job_ids": [jid]})
+        assert r.status_code == 503
+
+
+def test_restart_requeues_only_the_stopped_clips(monkeypatch, tmp_path):
+    """Restart flips the stopped (cancelled) clips and their job back to
+    'pending' so the JobRunner re-claims the job; clips that already ran keep
+    their results. A job with nothing stopped is left alone."""
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.core_ctx
+        jid = asyncio.run(_seed_stopped_batch(ctx))
+        untouched = asyncio.run(_seed_batch(ctx))
+        install_live_ctx(client.app, proxy_resolver=MagicMock())
+
+        r = client.post("/batches/restart", json={"job_ids": [jid, untouched]})
+        assert r.status_code == 200
+        assert r.json()["started"] == [jid]
+
+        async def _state():
+            jobs = JobsRepo()
+            statuses = {it.catdv_clip_id: it.status for it in await jobs.list_items(ctx.db, jid)}
+            return statuses, (await jobs.get_job(ctx.db, jid)).status
+
+        statuses, job_status = asyncio.run(_state())
+        assert statuses == {201: "review_ready", 202: "pending", 203: "pending"}
+        assert job_status == "pending"
+
+
 def _picker_clip(clip_id=12041, name="Abramcukova_Anna_09", file_path=None):
     # Kind is derived from the media.filePath extension at render time; default
     # to a .mov (→ video) so existing tests stay "video".

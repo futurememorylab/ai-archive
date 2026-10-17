@@ -86,6 +86,7 @@
       _es: null,
       _t: null,
       _poll: null,
+      _lastTable: null,
 
       init() {
         window.addEventListener("jobs-changed", () => this._schedule());
@@ -124,13 +125,17 @@
           if (!r.ok) return;
           const region = document.getElementById("batches-table-region");
           if (!region) return;
-          region.innerHTML = await r.text();
-          // Alpine's MutationObserver binds the injected rows' directives to
+          const html = await r.text();
+          // The 3s poll and job events mostly return what's already shown.
+          if (html === this._lastTable) { this._pollWhileRunning(); return; }
+          this._lastTable = html;
+          const changed = this._patch(region, html);
+          // Alpine's MutationObserver binds the injected blocks' directives to
           // this scope on its own; reinit() would bind every @click a second
           // time, so each button fired twice after a refresh (a row toggle
           // opened and shut again). Only HTMX needs wiring.
           window.htmxAlpine.wireHtmx(region);
-          for (const [key, open] of Object.entries(this.expanded)) if (open) this.loadClips(key);
+          for (const key of changed) if (this.expanded[key]) this.loadClips(key);
           this._pollWhileRunning();
           // Keep the topbar sync chip in step with the live-refreshing table.
           // The chip self-polls only while it already shows queued/problem
@@ -139,6 +144,65 @@
           // "Syncing N" below — until a manual reload. Refresh it alongside.
           window.htmx?.ajax("GET", "/ui/sync-chip", { target: "#sync-chip", swap: "innerHTML" });
         } catch (e) { /* offline — keep current view */ }
+      },
+      // Bring the live table in line with a fresh /batches/table render without
+      // rebuilding what didn't change. Swapping the whole region re-created
+      // every thumbnail (shimmer, reload) and reset open clip lists, so a
+      // running batch made the page flash every few seconds. Sections and
+      // rows are kept by key and only moved inside the document (Alpine
+      // leaves a node that is removed and re-added in one go alone); inside
+      // a row only the [data-part] blocks whose data-sig changed are
+      // replaced. Returns the keys of the rows that are new or changed.
+      _patch(region, html) {
+        const tpl = document.createElement("template");
+        tpl.innerHTML = html;
+        const freshSecs = [...tpl.content.querySelectorAll("section.bsec")];
+        const liveSecs = new Map([...region.querySelectorAll("section.bsec")].map((s) => [s.dataset.test, s]));
+        if (!freshSecs.length || !liveSecs.size) {
+          // Empty state ↔ list: nothing to keep.
+          region.replaceChildren(tpl.content);
+          return [...region.querySelectorAll("[data-batch-key]")].map((r) => r.dataset.batchKey);
+        }
+        const liveRows = new Map([...region.querySelectorAll("[data-batch-key]")].map((r) => [r.dataset.batchKey, r]));
+        const place = (parent, wanted) => {
+          wanted.forEach((el, i) => { if (parent.children[i] !== el) parent.insertBefore(el, parent.children[i] || null); });
+          while (parent.children.length > wanted.length) parent.lastElementChild.remove();
+        };
+        const swap = (cur, next) => {
+          if (cur.dataset.sig === next.dataset.sig) return false;
+          cur.replaceWith(next);
+          return true;
+        };
+        const changed = [];
+        // A new section joins the page before any live row moves into it.
+        const plan = freshSecs.map((fs) => {
+          let sec = liveSecs.get(fs.dataset.test);
+          const head = fs.querySelector(":scope > .bsec-h");
+          if (sec) {
+            swap(sec.querySelector(":scope > .bsec-h"), head);
+          } else {
+            sec = fs.cloneNode(false);
+            sec.append(head);
+            region.append(sec);
+          }
+          return [sec, fs];
+        });
+        for (const [sec, fs] of plan) {
+          const rows = [...fs.querySelectorAll(":scope > [data-batch-key]")].map((fr) => {
+            const key = fr.dataset.batchKey, live = liveRows.get(key);
+            if (!live) { changed.push(key); return fr; }
+            let touched = false;
+            for (const part of [...fr.querySelectorAll("[data-part]")]) {
+              const cur = live.querySelector(`[data-part="${part.dataset.part}"]`);
+              if (cur && swap(cur, part)) touched = true;
+            }
+            if (touched) changed.push(key);
+            return live;
+          });
+          place(sec, [sec.querySelector(":scope > .bsec-h"), ...rows]);
+        }
+        place(region, plan.map(([sec]) => sec));
+        return changed;
       },
       toggle(key) {
         this.expanded[key] = !this.expanded[key];
@@ -150,7 +214,10 @@
         try {
           const r = await fetch(box.dataset.clipsUrl);
           if (!r.ok) throw new Error("HTTP " + r.status);
-          box.innerHTML = await r.text();
+          const html = await r.text();
+          if (html === box._html) return;  // same clips, same statuses: keep the DOM
+          box._html = html;
+          box.innerHTML = html;
           window.htmxAlpine.wireHtmx(box);
         } catch (e) { Alpine.store("toast").push("Couldn't load the batch's clips: " + e.message, { level: "error" }); }
       },
@@ -195,6 +262,17 @@
           Alpine.store("toast").push("Re-running failed clip(s)…", { level: "success" });
           this._schedule();
         } catch (e) { Alpine.store("toast").push("Retry failed: " + e.message, { level: "error" }); }
+      },
+      async restartBatch(jobIds) {
+        try {
+          const r = await fetch("/batches/restart", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ job_ids: jobIds }),
+          });
+          if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || ("HTTP " + r.status)); }
+          Alpine.store("toast").push("Restarting the stopped clips…", { level: "success" });
+          this._schedule();
+        } catch (e) { Alpine.store("toast").push("Restart failed: " + e.message, { level: "error" }); }
       },
       async cancelBatch(jobIds) {
         // A batch is one job per media kind sharing a run_group, so cancel each.
