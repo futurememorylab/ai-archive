@@ -9,12 +9,14 @@ CatDV doesn't know about either dimension — both live in our SQLite. When
 any filter is active we resolve a candidate ``set[int]`` of CatDV clip IDs
 locally, intersect them, then paginate.
 
+Results never include clips known to belong to another catalog (from the
+cached list pages and the catalog tag on clip_cache rows), so a filter
+always stays inside the catalog picked in the topbar.
+
 The two "absence" filters (``cache=none``, ``anno=none``) are bounded to
-the **universe of clips we've already observed** in any local table —
-list pages, metadata cache, proxy cache, ai_store_files, annotations,
-review items. A clip that exists upstream but has never been listed will
-not appear under those filters; that's the documented price of the
-local-first strategy.
+the clips known to be in the active catalog. A clip that exists upstream
+but has never been listed or opened will not appear under those filters;
+that's the documented price of the local-first strategy.
 """
 
 from __future__ import annotations
@@ -108,55 +110,46 @@ async def _ids_with_any_annotation(db: aiosqlite.Connection) -> set[int]:
     return {int(r[0]) for r in await cur.fetchall()}
 
 
-async def _known_clip_id_universe(
+async def _catalog_membership(
     db: aiosqlite.Connection, *, provider_id: str, catalog_id: str
-) -> set[int]:
-    """Best-effort union of every clip ID we've ever stored locally.
+) -> tuple[set[int], set[int]]:
+    """Split every clip ID we have a catalog for into (this catalog, others).
 
-    Used as the universe for the "absence" filters (no-cache, no-anno) so
-    that "none" can't return the empty set when we obviously know about
-    clips. Includes:
+    The cache / annotation / batch tables carry no catalog column, so filter
+    results are checked against this; without it a filter showed clips from
+    whichever catalog they were cached or annotated in. "This catalog" is
+    also the universe for the "absence" filters (no-cache, no-anno). Sources:
 
-      * clip_list_cache pages for (provider_id, catalog_id) — every item
-        in the JSON payload contributes its provider_clip_id.
-      * clip_cache, proxy_cache, ai_store_files, annotations, review_items —
-        any clip we've ever touched.
+      * clip_list_cache pages: every item in a page's JSON payload belongs
+        to that page's catalog.
+      * clip_cache rows, tagged with the catalog CatDV reported when the
+        clip was fetched (clips opened from a batch without being listed).
     """
-    ids: set[int] = set()
-
     # clip_list_cache: each items_json is a JSON array of clip dicts where
     # `key` is [provider_id, provider_clip_id]. json_each() over the
     # outer array gives one row per clip; we project the second element.
     cur = await db.execute(
         """
-        SELECT DISTINCT CAST(je.value ->> '$.key[1]' AS INTEGER)
+        SELECT DISTINCT clip_list_cache.catalog_id,
+               CAST(je.value ->> '$.key[1]' AS INTEGER)
           FROM clip_list_cache, json_each(items_json) je
          WHERE clip_list_cache.provider_id = ?
-           AND clip_list_cache.catalog_id  = ?
+        UNION
+        SELECT DISTINCT catalog_id, CAST(provider_clip_id AS INTEGER)
+          FROM clip_cache
+         WHERE provider_id = ? AND provider_clip_id GLOB '[0-9]*'
         """,
-        (provider_id, catalog_id),
+        (provider_id, provider_id),
     )
-    for r in await cur.fetchall():
-        if r[0] is not None:
-            ids.add(int(r[0]))
-
-    # clip_cache was added in PR 3 with only (provider_id, provider_clip_id).
-    cur = await db.execute(
-        "SELECT DISTINCT provider_clip_id FROM clip_cache WHERE provider_id = ?",
-        (provider_id,),
-    )
-    for r in await cur.fetchall():
-        if r[0] is not None:
-            ids.add(int(r[0]))
-
-    for table in ("proxy_cache", "ai_store_files", "annotations", "review_items"):
-        cur = await db.execute(
-            f"SELECT DISTINCT catdv_clip_id FROM {table} WHERE catdv_clip_id IS NOT NULL"
-        )
-        for r in await cur.fetchall():
-            ids.add(int(r[0]))
-
-    return ids
+    here: set[int] = set()
+    known: set[int] = set()
+    for cat, cid in await cur.fetchall():
+        if cid is None:
+            continue
+        known.add(int(cid))
+        if str(cat) == catalog_id:
+            here.add(int(cid))
+    return here, known - here
 
 
 async def resolve(
@@ -184,15 +177,9 @@ async def resolve(
     if not is_active(cache, anno, batch):
         return None
 
-    universe: set[int] | None = None
-
-    async def get_universe() -> set[int]:
-        nonlocal universe
-        if universe is None:
-            universe = await _known_clip_id_universe(
-                db, provider_id=provider_id, catalog_id=catalog_id
-            )
-        return universe
+    universe, other_catalogs = await _catalog_membership(
+        db, provider_id=provider_id, catalog_id=catalog_id
+    )
 
     candidate: set[int] | None = None
 
@@ -204,7 +191,7 @@ async def resolve(
         else:  # "none"
             ml = await _ids_with_media_local(db, provider_id)
             ai = await _ids_with_media_ai(db, provider_id)
-            cache_set = (await get_universe()) - ml - ai
+            cache_set = universe - ml - ai
         candidate = cache_set
 
     if anno != "any":
@@ -216,7 +203,7 @@ async def resolve(
             anno_set = await _ids_with_any_annotation(db)
         else:  # "none"
             ann = await _ids_with_any_annotation(db)
-            anno_set = (await get_universe()) - ann
+            anno_set = universe - ann
         candidate = anno_set if candidate is None else candidate & anno_set
 
     if batch:
@@ -225,4 +212,7 @@ async def resolve(
         candidate = batch_set if candidate is None else candidate & batch_set
 
     assert candidate is not None  # at least one filter active by definition
-    return candidate
+    # Filters narrow the active catalog; they never reach into another one.
+    # A clip with no known catalog yet is kept: hydrating it tags its catalog
+    # in clip_cache, so it is scoped from the next render on.
+    return candidate - other_catalogs
