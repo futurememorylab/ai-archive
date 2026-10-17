@@ -1,0 +1,35 @@
+# Files that define the quality gates are human-owned (ADR 0129).
+# An agent may propose a change to any of them, but it merges only with
+# @peterhora's review once "Require review from Code Owners" is on for main.
+# .claude/hooks/protect-gate-files.sh reads this file, so keep one pattern
+# per line and no inline comments.
+
+# Structural erosion ratchet
+/.erosion-baseline.json @peterhora
+/tools/erosion_gate.py @peterhora
+
+# Type-check baseline
+/.basedpyright/baseline.json @peterhora
+
+# Layer contracts
+/.importlinter @peterhora
+
+# Hooks and CI
+/.pre-commit-config.yaml @peterhora
+/.github/workflows/ @peterhora
+/.github/CODEOWNERS @peterhora
+
+# Guard tests (see AGENTS.md)
+/tests/unit/test_*guard*.py @peterhora
+/tests/unit/test_no_*.py @peterhora
+/tests/unit/test_*single*.py @peterhora
+/tests/unit/test_templates_shared.py @peterhora
+/tests/unit/test_context_delegation.py @peterhora
+
+# The canon and the agent entry point
+/docs/architecture-invariants.md @peterhora
+/AGENTS.md @peterhora
+/CLAUDE.md @peterhora
+
+# ruff, interrogate and basedpyright settings (also dependency pins)
+/pyproject.toml @peterhora
