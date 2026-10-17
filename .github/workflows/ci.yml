@@ -3,8 +3,9 @@ name: CI
 # The PR gate. deploy.yml only runs on pushes to main and v* tags, so without
 # this workflow a PR merges untested. Mirrors the local pre-commit hooks so
 # the gates hold even when a contributor (or an agent session) never ran
-# `pre-commit install`. basedpyright is left out until its baseline is
-# regenerated against the pinned version.
+# `pre-commit install`. basedpyright runs against the baseline in
+# .basedpyright/baseline.json; the version is pinned in pyproject so the
+# baseline keeps matching.
 on:
   pull_request:
   push:
@@ -33,6 +34,8 @@ jobs:
         run: lint-imports
       - name: Structural erosion gate
         run: python tools/erosion_gate.py --path backend --baseline .erosion-baseline.json --max-cc 30
+      - name: Type check (basedpyright, baselined)
+        run: basedpyright backend tests
 
   test:
     runs-on: ubuntu-latest

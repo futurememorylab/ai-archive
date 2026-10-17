@@ -42,6 +42,11 @@ def _not_cached_yet(p) -> None:
 def _open_clip(p) -> None:
     p.get_by_text(CLIP_NAME).first.click()
     expect(p.locator(PLAY)).to_be_visible()
+    # The play button is server-rendered, so it is visible before Alpine has
+    # bound its @click. Under a loaded parallel run the click landed on a
+    # dead button, no media request went out and the error wait timed out.
+    # The legend is x-cloak'd until Alpine initialises the page scope.
+    expect(p.locator(".provenance-legend")).to_be_visible()
 
 
 def _play_fails(p) -> None:

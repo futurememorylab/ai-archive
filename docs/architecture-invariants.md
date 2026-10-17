@@ -272,12 +272,11 @@ Versions; at most one is `production`; `production`/`archived` versions are
 immutable (partial unique index + `PromptsRepo`). Annotation output is
 materialised as `review_items` the user accepts/rejects, not raw
 `output_json`. Published clip state is a snapshot layer
-(`clip_versions`) on the existing write queue; switching versions
-re-activates a snapshot and reconciles only the markers *we* authored
-(preserving human/pre-existing ones).
+(`clip_versions`) on the existing write queue, recorded on every apply;
+there is no version-switching action (removed in 0128).
 *Enforced by:* `repositories/prompts.py::VersionImmutableError` + partial
 unique index.
-*ADRs:* 0010, 0038, 0099, 0100, 0101.
+*ADRs:* 0010, 0038, 0099, 0100, 0101, 0128.
 
 ## Cloud, deploy & access
 

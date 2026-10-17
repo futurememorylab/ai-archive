@@ -88,7 +88,6 @@ from backend.app.services.media_prefetcher import MediaPrefetcher
 from backend.app.services.pricing_service import PricingService
 from backend.app.services.proxy_cache_reconciler import ProxyCacheReconciler
 from backend.app.services.publish_service import PublishService
-from backend.app.services.restore_service import RestoreService
 from backend.app.services.sync_engine import SyncEngine
 from backend.app.services.usage_service import UsageService
 from backend.app.services.vpn_supervisor import VpnSupervisor
@@ -137,7 +136,6 @@ class CoreCtx:
 
     write_queue: WriteQueue = field(init=False)
     publish_service: PublishService = field(init=False)
-    restore_service: RestoreService = field(init=False)
     # Cache services are DB-first (offline-required). Their live
     # augmentations (deep-orphan provider checks, bucket-side AI
     # eviction) are each a single None-guarded call site, so they live
@@ -189,11 +187,6 @@ class CoreCtx:
             write_queue=ctx.write_queue,
             prompts_repo=ctx.prompts_repo,
             live_snapshot_loader=_load_live_snapshot,
-        )
-        ctx.restore_service = RestoreService(
-            clip_versions_repo=ctx.clip_versions_repo,
-            review_items_repo=ctx.review_items_repo,
-            annotations_repo=ctx.annotations_repo,
         )
 
         import os
@@ -446,10 +439,6 @@ class LiveCtx:
     @property
     def publish_service(self) -> PublishService:
         return self.core.publish_service
-
-    @property
-    def restore_service(self) -> RestoreService:
-        return self.core.restore_service
 
     async def aclose(self) -> None:
         # Stop the live services in the documented order, then close the
