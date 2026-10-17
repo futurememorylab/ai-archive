@@ -82,14 +82,16 @@
         <div class="br-head {{ b.headline_state }}" data-test="batch-headline">
           {% if b.running %}<span class="ca-spinner" aria-hidden="true"></span>{% endif %}{{ b.headline }}
         </div>
+        {# The bar and its legend break the batch down by state; with one state
+           they would only repeat the headline. #}
+        {% if b.segments|length > 1 %}
         <div class="bbar" aria-hidden="true">
           {% for s in b.segments %}<span class="seg-{{ s.key }}" style="flex-grow: {{ s.count }}"></span>{% endfor %}
         </div>
-        {# The legend breaks the bar down by state; with one state it would only
-           repeat the headline. #}
         <div class="blegend">
-          {% for s in b.segments if b.segments|length > 1 %}<span><span class="bdot seg-{{ s.key }}"></span>{{ s.label }}</span>{% endfor %}
+          {% for s in b.segments %}<span><span class="bdot seg-{{ s.key }}"></span>{{ s.label }}</span>{% endfor %}
         </div>
+        {% endif %}
       {% endset %}
       <div class="br-prog" data-part="prog" data-sig="{{ prog|sig }}">{{ prog }}</div>
 

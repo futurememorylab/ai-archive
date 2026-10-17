@@ -91,9 +91,11 @@ missing at read time (a job with no items), the page shows "Batch #<id>".
     ids per batch come from one window-function query for the whole page.
   - **Name** (13px, weight 500) with a rename button, and a sub-line:
     clip count · started · prompt vN · model · cost.
-  - **Progress**: one segmented bar (reviewed, to review, saving, running,
-    waiting, failed, stopped) and a legend with counts, plus a headline
-    ("16 clips to review", "Running · 23 of 38 done", "All reviewed").
+  - **Progress**: a headline ("16 clips to review", "Running · 23 of 38
+    done", "All in archive"). When the batch's clips are in more than one
+    state, a thin segmented bar (at most 160px; reviewed, to review,
+    saving, running, waiting, failed, stopped) and a legend with counts
+    break it down; with one state they would only repeat the headline.
   - **Outline and toggle**: each batch is an outlined card. A caret starts
     the row and turns when it opens; clicking anywhere on the top line
     except its buttons, menu or rename form opens or closes the clip list
@@ -114,7 +116,9 @@ missing at read time (a job with no items), the page shows "Batch #<id>".
   thumbnails and open clip lists don't reload while a batch runs.
 - **Show clips** loads `/batches/clips?job_ids=…` into the row: the shared
   `_video_list.html` (thumbnail column, no cache column) with a Status pill
-  and the error text for failed clips, ordered to-review first, then
+  and a Note column with the error text for failed clips (the table drops
+  the search page's 960px minimum so it stays inside the card in a narrow
+  window), ordered to-review first, then
   failed, running, waiting, the rest. It shows the first 50 clips; larger
   batches get "Open all N in search", which goes to the existing
   batch-filtered search.
