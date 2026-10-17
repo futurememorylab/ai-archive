@@ -366,7 +366,11 @@ async def test_studio_non_json_records_error_telemetry(db, tmp_path):
     )
     rows = await cur.fetchall()
     assert len(rows) == 1  # exactly one row — no double-record
-    assert rows[0] == ("studio", "error", "NonJsonOutput", None, 3000)
+    kind, status, error_class, cost, tokens_in = rows[0]
+    assert (kind, status, error_class, tokens_in) == ("studio", "error", "NonJsonOutput", 3000)
+    # The response came back and its tokens were billed, so the error row
+    # carries the real cost — spend totals must not skip failed outputs.
+    assert cost is not None and cost > 0
 
 
 @pytest.mark.asyncio

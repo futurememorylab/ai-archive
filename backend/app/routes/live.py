@@ -2,6 +2,7 @@
 
 import json
 import uuid
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request
@@ -14,6 +15,7 @@ from backend.app.repositories.prompts import PromptsRepo
 from backend.app.services.live_sessions import (
     assemble_setup_payload,
     mint_ephemeral_token,
+    record_live_usage,
     summarize,
 )
 
@@ -113,6 +115,26 @@ class TranscriptPayload(BaseModel):
     end_reason: Literal["user_stop", "voice_stop", "inactivity", "navigate", "error"]
     transcript: list[TranscriptEntry]
     frame_count: int = 0
+    # Token usage the browser saw on the Live WebSocket: the per-message
+    # usageMetadata summed over the session (`summed`, usageMetadata-shaped),
+    # the last message's own copy (`last`) and how many carried one. The
+    # audio never passes through this server, so this is the only place the
+    # session's spend can be recorded.
+    usage: dict[str, Any] | None = None
+
+
+def _session_seconds(started_at: str | None) -> float | None:
+    """Seconds from the session's start until now (the transcript post ends
+    it), or None when it never went active."""
+    if not started_at:
+        return None
+    try:
+        start = datetime.fromisoformat(started_at)
+    except ValueError:
+        return None
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - start).total_seconds()
 
 
 @router.post("/sessions/{session_id}/transcript")
@@ -124,9 +146,28 @@ async def post_transcript(
     ctx = get_core_ctx(request)
     repo = LiveSessionsRepo()
     try:
-        await repo.get(ctx.db, session_id)
+        session = await repo.get(ctx.db, session_id)
     except LookupError:
         raise HTTPException(404, detail="session not found") from None
+    # Record the session's spend once: a navigate beacon followed by a stop
+    # can post the transcript twice, and only the first post is the session.
+    if session.state != "ended" and body.usage:
+        await record_live_usage(
+            ctx.db,
+            ctx.run_telemetry_repo,
+            ctx.telemetry_ctx,
+            session=session,
+            call="audio_session",
+            model=ctx.settings.gemini_live_model,
+            raw={"usageMetadata": body.usage.get("summed") or {}},
+            duration_s=_session_seconds(session.started_at),
+            attrs={
+                "usage_messages": body.usage.get("messages"),
+                "last_usage": body.usage.get("last"),
+                "frame_count": body.frame_count,
+                "end_reason": body.end_reason,
+            },
+        )
     await repo.mark_ended(
         ctx.db,
         session_id,
@@ -148,7 +189,13 @@ async def post_summarize(request: Request, session_id: str) -> dict:
         await repo.get(ctx.db, session_id)
     except LookupError:
         raise HTTPException(404, detail="session not found") from None
-    await summarize(ctx.db, session_id=session_id, settings=ctx.settings)
+    await summarize(
+        ctx.db,
+        session_id=session_id,
+        settings=ctx.settings,
+        run_telemetry_repo=ctx.run_telemetry_repo,
+        telemetry_ctx=ctx.telemetry_ctx,
+    )
     session = await repo.get(ctx.db, session_id)
     return {"summary_cs": session.summary_cs}
 

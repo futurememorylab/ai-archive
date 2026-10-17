@@ -21,6 +21,7 @@ function liveSession(clipId, config) {
     _workletNode: null,
     _mediaStream: null,
     _frameCount: 0,
+    _usage: { summed: {}, last: null, messages: 0 },
     _startedAt: 0,
     _elapsedTimer: null,
     _inactivityTimer: null,
@@ -44,6 +45,7 @@ function liveSession(clipId, config) {
       this.error = null;
       this.transcript = [];
       this._frameCount = 0;
+      this._usage = { summed: {}, last: null, messages: 0 };
       this._setupComplete = false;
       this._endReason = null;
       this.state = "connecting";
@@ -263,7 +265,30 @@ function liveSession(clipId, config) {
       if (msg.setupComplete) this._onSetupComplete();
       if (msg.serverContent) this._handleServerContent(msg.serverContent);
       if (msg.toolCall) this._handleToolCall(msg.toolCall);
+      if (msg.usageMetadata) this._addUsage(msg.usageMetadata);
       this._resetInactivity();
+    },
+
+    // Sum the usageMetadata Gemini sends on Live messages so the session's
+    // token spend can be recorded server-side (the audio never passes through
+    // our server). Numeric counts add up; *TokensDetails lists add up per
+    // modality. The last message's own copy is kept too, so the record stays
+    // correct whichever way Gemini meant the counts (per turn or running).
+    _addUsage(u) {
+      const acc = this._usage.summed;
+      for (const [k, v] of Object.entries(u)) {
+        if (typeof v === "number") acc[k] = (acc[k] || 0) + v;
+        else if (Array.isArray(v)) {
+          const byMod = Object.fromEntries((acc[k] || []).map(d => [d.modality, d]));
+          for (const d of v) {
+            const cur = byMod[d.modality] || (byMod[d.modality] = { modality: d.modality, tokenCount: 0 });
+            cur.tokenCount += d.tokenCount || 0;
+          }
+          acc[k] = Object.values(byMod);
+        }
+      }
+      this._usage.last = u;
+      this._usage.messages += 1;
     },
 
     _onSetupComplete() {
@@ -391,6 +416,7 @@ function liveSession(clipId, config) {
         end_reason: this._endReason || "user_stop",
         transcript: this.transcript,
         frame_count: this._frameCount,
+        usage: this._usage.messages ? this._usage : null,
       };
       try {
         const blob = new Blob([JSON.stringify(body)], { type: "application/json" });

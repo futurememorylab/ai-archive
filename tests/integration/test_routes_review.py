@@ -694,3 +694,27 @@ def test_clips_list_has_review_bulk_actions(monkeypatch, tmp_path):
         # Primary review actions must be present in the markup.
         assert "Review selected" in r.text
         assert "Apply drafts" in r.text
+
+
+def test_decision_route_logs_the_signed_in_author(monkeypatch, tmp_path):
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.core_ctx
+        _, _, items = _run(_seed(ctx))
+        field = items[1]
+
+        r = client.post(
+            f"/api/review/items/{field.id}/decision",
+            json={"decision": "accepted", "edited_value": "40.léta"},
+        )
+        assert r.status_code == 200
+
+        async def _rows():
+            cur = await ctx.db.execute(
+                "SELECT author, action, decision_after, edited_after FROM review_edit_log"
+            )
+            return await cur.fetchall()
+
+        [(author, action, decision, edited)] = _run(_rows())
+        assert author == ctx.settings.dev_user_email
+        assert (action, decision, edited) == ("decision", "accepted", '"40.léta"')

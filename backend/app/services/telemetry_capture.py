@@ -55,7 +55,12 @@ def extract_usage(raw: dict[str, Any]) -> TokenUsage:
         tokens_in_audio=by_modality.get("AUDIO", 0),
         tokens_in_image=by_modality.get("IMAGE", 0),
         tokens_cached=_int(_get(usage, "cachedContentTokenCount", "cached_content_token_count")),
-        tokens_out=_int(_get(usage, "candidatesTokenCount", "candidates_token_count")),
+        # generateContent reports output as candidatesTokenCount; the Live
+        # (BidiGenerateContent) API calls the same thing responseTokenCount.
+        tokens_out=_int(
+            _get(usage, "candidatesTokenCount", "candidates_token_count")
+            or _get(usage, "responseTokenCount", "response_token_count")
+        ),
         tokens_thinking=_int(_get(usage, "thoughtsTokenCount", "thoughts_token_count")),
     )
 

@@ -180,12 +180,64 @@ class ReviewItemsRepo:
         decision: Literal["pending", "accepted", "rejected"],
         *,
         edited_value=None,
+        author: str | None = None,
+        action: Literal["decision", "bulk_accept"] = "decision",
     ) -> None:
+        """Set an item's decision (and optionally its edited value), and append
+        a review_edit_log row when anything actually changed — in the same
+        commit, so a human correction is never recorded in the draft without
+        also landing in the durable log (spec 2026-10-17)."""
         edited_json = (
             json.dumps(edited_value, ensure_ascii=False, default=_json_default)
             if edited_value is not None
             else None
         )
+        cur = await conn.execute(
+            """
+            SELECT ri.catdv_clip_id, ri.annotation_id, ri.studio_run_id, ri.kind,
+                   ri.target_identifier, ri.proposed_value, ri.decision, ri.edited_value,
+                   COALESCE(a.prompt_version_id, sr.prompt_version_id),
+                   COALESCE(a.model, sr.model)
+            FROM review_items ri
+            LEFT JOIN annotations a ON a.id = ri.annotation_id
+            LEFT JOIN studio_run sr ON sr.id = ri.studio_run_id
+            WHERE ri.id = ?
+            """,
+            (item_id,),
+        )
+        row = await cur.fetchone()
+        now = _now_iso()
+        if row is not None:
+            edited_after = edited_json if edited_json is not None else row[7]
+            if decision != row[6] or edited_after != row[7]:
+                await conn.execute(
+                    """
+                    INSERT INTO review_edit_log
+                      (occurred_at, author, action, review_item_id, catdv_clip_id,
+                       annotation_id, studio_run_id, prompt_version_id, model, kind,
+                       target_identifier, proposed_value, decision_before, decision_after,
+                       edited_before, edited_after)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        now,
+                        author,
+                        action,
+                        item_id,
+                        row[0],
+                        row[1],
+                        row[2],
+                        row[8],
+                        row[9],
+                        row[3],
+                        row[4],
+                        row[5],
+                        row[6],
+                        decision,
+                        row[7],
+                        edited_after,
+                    ),
+                )
         await conn.execute(
             """
             UPDATE review_items
@@ -193,7 +245,7 @@ class ReviewItemsRepo:
                 decided_at = ?
             WHERE id = ?
             """,
-            (decision, edited_json, _now_iso(), item_id),
+            (decision, edited_json, now, item_id),
         )
         await conn.commit()
 

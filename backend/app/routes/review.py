@@ -71,6 +71,7 @@ async def set_decision(request: Request, item_id: int, body: Decision):
         item_id,
         body.decision,
         edited_value=body.edited_value,
+        author=_author(request),
     )
     return {"id": item_id, "decision": body.decision}
 
@@ -132,7 +133,9 @@ async def apply_batch(request: Request, body: ApplyBatch):
         if not to_accept:
             continue
         for it in to_accept:
-            await ctx.review_items_repo.set_decision(ctx.db, it.id, "accepted")
+            await ctx.review_items_repo.set_decision(
+                ctx.db, it.id, "accepted", author=_author(request), action="bulk_accept"
+            )
         queued = await _resolve_and_enqueue_clip(ctx, clip_id, kinds=kinds)
         if queued:
             clips_touched += 1

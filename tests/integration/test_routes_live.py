@@ -8,7 +8,9 @@ from httpx import ASGITransport, AsyncClient, Response
 
 from backend.app.main import app
 from backend.app.migrations_runner import apply_migrations
+from backend.app.models.telemetry import TelemetryCtx
 from backend.app.repositories.live_sessions import LiveSessionsRepo
+from backend.app.repositories.run_telemetry import RunTelemetryRepo
 from backend.app.seed import seed_live_system_instruction
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "backend" / "migrations"
@@ -30,6 +32,8 @@ async def client_and_db(tmp_path):
     class _Ctx:
         db = conn
         mode = "online"
+        run_telemetry_repo = RunTelemetryRepo()
+        telemetry_ctx = TelemetryCtx(install_id="inst-test")
         settings = type(
             "S",
             (),
@@ -316,3 +320,95 @@ async def test_get_detail_404(client_and_db):
     ac, _ = client_and_db
     r = await ac.get("/api/live/sessions/no-such")
     assert r.status_code == 404
+
+
+async def _live_rows(conn):
+    cur = await conn.execute(
+        "SELECT kind, status, clip_id, model, tokens_in, tokens_in_audio, tokens_out, "
+        "prompt_version_id, media_kind, duration_s, attrs FROM run_telemetry"
+    )
+    return await cur.fetchall()
+
+
+@pytest.mark.asyncio
+async def test_transcript_records_live_session_usage_once(client_and_db):
+    ac, conn = client_and_db
+    repo = LiveSessionsRepo()
+    await repo.insert_pending(conn, id="abc", clip_id=42, prompt_version=None)
+    await repo.mark_active(conn, "abc")
+    usage = {
+        "summed": {
+            "promptTokenCount": 5000,
+            "responseTokenCount": 300,
+            "promptTokensDetails": [
+                {"modality": "AUDIO", "tokenCount": 4000},
+                {"modality": "TEXT", "tokenCount": 1000},
+            ],
+        },
+        "last": {"promptTokenCount": 2600, "responseTokenCount": 120},
+        "messages": 2,
+    }
+    payload = {"end_reason": "user_stop", "transcript": [], "frame_count": 1, "usage": usage}
+
+    r = await ac.post("/api/live/sessions/abc/transcript", json=payload)
+    assert r.status_code == 200, r.text
+    # A second post (navigate beacon + stop) must not double-count the session.
+    r = await ac.post("/api/live/sessions/abc/transcript", json=payload)
+    assert r.status_code == 200, r.text
+
+    [row] = await _live_rows(conn)
+    kind, status, clip_id, model, t_in, t_audio, t_out, pv, media_kind, dur, attrs = row
+    assert (kind, status, clip_id) == ("live", "ok", 42)
+    assert model == "gemini-2.5-flash-native-audio-latest"
+    assert (t_in, t_audio, t_out) == (5000, 4000, 300)
+    # Kept out of the annotation estimator, which keys on both.
+    assert pv is None and media_kind is None
+    assert dur is not None and dur >= 0
+    a = json.loads(attrs)
+    assert a["call"] == "audio_session" and a["live_session_id"] == "abc"
+    assert a["usage_messages"] == 2 and a["last_usage"]["promptTokenCount"] == 2600
+
+
+@pytest.mark.asyncio
+async def test_transcript_without_usage_records_nothing(client_and_db):
+    ac, conn = client_and_db
+    repo = LiveSessionsRepo()
+    await repo.insert_pending(conn, id="abc", clip_id=42, prompt_version=None)
+    r = await ac.post(
+        "/api/live/sessions/abc/transcript", json={"end_reason": "user_stop", "transcript": []}
+    )
+    assert r.status_code == 200
+    assert await _live_rows(conn) == []
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_summarize_records_its_token_usage(client_and_db):
+    ac, conn = client_and_db
+    repo = LiveSessionsRepo()
+    await repo.insert_pending(conn, id="abc", clip_id=42, prompt_version=None)
+    await repo.mark_active(conn, "abc")
+    await repo.mark_ended(
+        conn,
+        "abc",
+        end_reason="user_stop",
+        transcript_json=json.dumps([{"role": "user", "text": "x", "ts": 1}]),
+    )
+    respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        "gemini-2.5-flash-lite:generateContent"
+    ).mock(
+        return_value=Response(
+            200,
+            json={
+                "candidates": [{"content": {"parts": [{"text": "Shrnutí."}]}}],
+                "usageMetadata": {"promptTokenCount": 120, "candidatesTokenCount": 30},
+            },
+        )
+    )
+    r = await ac.post("/api/live/sessions/abc/summarize")
+    assert r.status_code == 200, r.text
+
+    [row] = await _live_rows(conn)
+    assert row[:7] == ("live", "ok", 42, "gemini-2.5-flash-lite", 120, 0, 30)
+    assert json.loads(row[10])["call"] == "summary"
