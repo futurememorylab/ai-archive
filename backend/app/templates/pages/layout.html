@@ -1,4 +1,5 @@
 <!doctype html>
+{% import "components/_ui.html" as ui %}
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
@@ -50,7 +51,7 @@
     <header class="topbar">
       <a class="brand" href="/"><span class="brand-dot"></span> CatDV Annotator</a>
       <div id="catalog-picker" data-test="catalog-picker" hx-get="/ui/catalog-picker" hx-trigger="load" hx-swap="innerHTML"></div>
-      {% block crumb %}{% endblock %}
+      {% block crumb %}{{ ui.breadcrumb([]) }}{% endblock %}
       <span class="grow"></span>
       {% block topbar_pills %}{% include "pages/_topbar_pills.html" %}{% endblock %}
       {# Email + env + the env-appropriate session action (Log out on cloud/IAP,

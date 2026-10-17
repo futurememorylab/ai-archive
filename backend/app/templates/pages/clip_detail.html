@@ -2,7 +2,7 @@
 {% import "components/_ui.html" as ui %}
 {% block rail_active %}preview{% endblock %}
 {% block title %}{{ clip.name }} · CatDV Annotator{% endblock %}
-{% block crumb %}{{ ui.breadcrumb([('All clips', '/'), (clip.name, None)]) }}{% endblock %}
+{% block crumb %}{{ ui.breadcrumb([(clip.name, None)]) }}{% endblock %}
 {% block body %}
 {#- Media is playable/annotatable if CatDV is online (can fetch on demand) or
     the proxy is already cached — locally (dev) OR in the AI store / GCS (cloud,

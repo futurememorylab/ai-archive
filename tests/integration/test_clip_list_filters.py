@@ -438,3 +438,104 @@ async def test_resolve_batch_returns_none_when_no_filter(db):
         batch=None,
     )
     assert out is None
+
+
+# ---------------------------------------------------------------------------
+# Catalog scope: a filter narrows the active catalog, never switches it
+# ---------------------------------------------------------------------------
+
+OTHER_CATALOG = "913722"
+
+
+async def _seed_other_catalog(db, clip_ids: list[int]) -> None:
+    repo = ClipListCacheRepo()
+    items = tuple(_clip(str(i), name=f"Other {i}") for i in clip_ids)
+    await repo.upsert(
+        db,
+        provider_id=PROVIDER,
+        catalog_id=OTHER_CATALOG,
+        query_text=None,
+        offset=0,
+        limit=50,
+        total=len(items),
+        items=items,
+        fetched_at_iso="2026-05-22T00:00:00+00:00",
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("cache", "anno"),
+    [("local", "any"), ("ai", "any"), ("none", "any"), ("any", "has_any"), ("any", "none")],
+)
+async def test_filters_stay_in_active_catalog(db, cache, anno):
+    """Clips listed only in another catalog never show up, whichever filter
+    is set — the cache/annotation tables have no catalog column."""
+    await _seed_list_cache(db, [1, 2])
+    await _seed_other_catalog(db, [8, 9])
+    await _seed_prompt_version(db)
+    for cid in (1, 8):
+        await _insert_proxy(db, cid)
+        await _insert_ai_file(db, cid)
+        await _insert_annotation(db, cid)
+
+    out = await resolve(db, provider_id=PROVIDER, catalog_id=CATALOG, cache=cache, anno=anno)
+    assert out is not None
+    assert out <= {1, 2}
+    other = await resolve(
+        db, provider_id=PROVIDER, catalog_id=OTHER_CATALOG, cache=cache, anno=anno
+    )
+    assert other is not None
+    assert other <= {8, 9}
+
+
+@pytest.mark.asyncio
+async def test_for_review_and_batch_stay_in_active_catalog(db):
+    await _seed_list_cache(db, [1])
+    await _seed_other_catalog(db, [8])
+    await _seed_prompt_version(db)
+    for cid in (1, 8):
+        a = await _insert_annotation(db, cid)
+        await _insert_review_item(db, annotation_id=a, clip_id=cid, applied=False)
+    await _insert_job(db, job_id=10)
+    await _insert_job_item(db, job_id=10, clip_id=1)
+    await _insert_job_item(db, job_id=10, clip_id=8)
+
+    review = await resolve(
+        db, provider_id=PROVIDER, catalog_id=CATALOG, cache="any", anno="for_review"
+    )
+    assert review == {1}
+    batch = await resolve(
+        db, provider_id=PROVIDER, catalog_id=CATALOG, cache="any", anno="any", batch=10
+    )
+    assert batch == {1}
+
+
+@pytest.mark.asyncio
+async def test_clip_opened_in_catalog_but_never_listed_is_in_scope(db):
+    """clip_cache rows tagged with the catalog count as members, so a clip
+    reached from a batch (never listed) still shows under a filter."""
+    from backend.app.repositories.clip_cache import ClipCacheRepo
+
+    await _seed_list_cache(db, [1])
+    await _seed_prompt_version(db)
+    await ClipCacheRepo().upsert(db, clip=_clip("5"), catalog_id=CATALOG)
+    await ClipCacheRepo().upsert(db, clip=_clip("6"), catalog_id=OTHER_CATALOG)
+    for cid in (5, 6):
+        await _insert_annotation(db, cid)
+
+    out = await resolve(db, provider_id=PROVIDER, catalog_id=CATALOG, cache="any", anno="has_any")
+    assert out == {5}
+
+
+@pytest.mark.asyncio
+async def test_clip_with_no_known_catalog_is_kept(db):
+    """No list page or clip_cache row names a catalog for clip 7: it stays in
+    (hydrating it tags its catalog, which scopes it from then on)."""
+    await _seed_list_cache(db, [1])
+    await _seed_other_catalog(db, [8])
+    await _insert_proxy(db, 7)
+    await _insert_proxy(db, 8)
+
+    out = await resolve(db, provider_id=PROVIDER, catalog_id=CATALOG, cache="local", anno="any")
+    assert out == {7}
