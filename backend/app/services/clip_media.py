@@ -38,11 +38,9 @@ class CacheProgress(Protocol):
 
     async def missed(self) -> ProgressCb | None:
         """The AI store missed; about to resolve the proxy. May return a download tracker."""
-        ...
 
     async def uploading(self) -> None:
         """The proxy resolved; about to upload it to the AI store."""
-        ...
 
 
 async def ai_input_for_clip(
