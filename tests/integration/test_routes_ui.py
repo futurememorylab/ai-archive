@@ -115,7 +115,7 @@ def test_sync_drawer_humanises_status_and_drops_dead_conflict_button(monkeypatch
     assert "Failed" in r.text
     assert "Note" in r.text and "AppendNote" not in r.text  # op kind humanised
     assert "pill" in r.text  # reuses ui.status_pill
-    assert "Changed in CatDV" in r.text  # conflict explained
+    assert "Changed in archive" in r.text  # conflict explained
     # The old dead button (no JS handler) must be gone.
     assert "view-conflict" not in r.text
     assert "View conflict" not in r.text

@@ -37,9 +37,9 @@ def run(wt):
         "See the blue dot on the Draft button",
         lambda p: p.locator('[data-test="draft-dot"]').wait_for(state="visible"),
     )
-    # Accept & apply sits beside the Published/Draft switch, but only on Draft.
+    # Accept & apply sits beside the In archive/Draft switch, but only on Draft.
     wt.step(
-        "No Accept & apply button on the published view",
+        "No Accept & apply button on the In archive view",
         lambda p: p.locator('[data-test="apply-draft"]').wait_for(state="hidden"),
     )
     wt.step(
@@ -102,8 +102,8 @@ def run(wt):
     # After the write-queue drains (SyncEngine → the fake applies the ownership
     # rule), the published panel refreshes without a reload.
     wt.step(
-        "Switch to the published view",
-        lambda p: p.locator('button[data-scope="published"]').click(),
+        "Switch to the In archive view",
+        lambda p: p.locator('button[data-scope="published"]', has_text="In archive").click(),
     )
     wt.step(
         "The Draft dot is gone once nothing is left to apply",

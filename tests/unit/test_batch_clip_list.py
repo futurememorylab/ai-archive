@@ -33,7 +33,7 @@ def test_statuses_and_order_put_what_needs_you_first():
         (7, "Couldn't save"),
         (3, "Running"),
         (2, "Waiting"),
-        (6, "Saving to CatDV…"),
+        (6, "Saving to archive…"),
         (1, "Reviewed"),
         (8, "Stopped"),
     ]

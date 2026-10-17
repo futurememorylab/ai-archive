@@ -65,8 +65,8 @@ def run(wt):
     # Wait on the clip page until the write-back has landed (the published
     # panel refreshes itself), so the Batches page is opened once, settled.
     wt.step(
-        "Switch to the published view",
-        lambda p: p.locator('button[data-scope="published"]').click(),
+        "Switch to the In archive view",
+        lambda p: p.locator('button[data-scope="published"]', has_text="In archive").click(),
     )
     wt.step(
         "The AI marker is published to the archive",

@@ -267,18 +267,18 @@ function reviewMixin(clipId) {
       const f = this.syncFailed, c = this.syncConflicts;
       const parts = [];
       if (f > 0) parts.push(`${f} change${this._plural(f)} didn't reach CatDV`);
-      if (c > 0) parts.push(`${c} change${this._plural(c)} changed in CatDV after you reviewed`);
+      if (c > 0) parts.push(`${c} change${this._plural(c)} changed in archive after you reviewed`);
       const tail = c > 0 ? "open the Sync drawer to resolve." : "retry from the Sync drawer.";
       return `${parts.join(" and ")} — ${tail}`;
     },
     appliedMessage() {
       const n = this.appliedCount;
       if (this.syncState === "synced")
-        return `${n} proposal${this._plural(n)} applied to CatDV ✓ — see Published.`;
+        return `${n} proposal${this._plural(n)} applied to the archive ✓ — see In archive.`;
       if (this.syncState === "problem")
         return `${n} sent, but ${this._problemMessage()}`;
       // Syncing: be honest about how many are actually ON CatDV vs just queued.
-      return `${n} sent to CatDV — ${this.syncedCount} confirmed on the server so far; the rest are still syncing (visible under Published once synced).`;
+      return `${n} sent to CatDV — ${this.syncedCount} confirmed on the server so far; the rest are still syncing (visible under In archive once synced).`;
     },
     async _checkSyncOnce() {
       // One-shot reconciliation on page load (no toasts): set the message to
@@ -321,7 +321,7 @@ function reviewMixin(clipId) {
         // without a reload instead of lingering blue in the draft band.
         this.scope = "published";
         this._refreshVersionPanel();  // headline pill → Live vN; history updates
-        Alpine.store("toast").push("Synced to CatDV — Published updated.", { level: "success" });
+        Alpine.store("toast").push("Synced — In archive updated.", { level: "success" });
         return;
       }
     },

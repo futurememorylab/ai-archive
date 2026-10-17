@@ -379,7 +379,7 @@ def _clip_status(r: dict) -> tuple[int, str, str]:
     if status == "pending":
         return 3, "Waiting", ""
     if r["sync"] == "saving":
-        return 4, "Saving to CatDV…", "accent"
+        return 4, "Saving to archive…", "accent"
     if status == "cancelled":
         return 6, "Stopped", ""
     return 5, "Reviewed", "ok"

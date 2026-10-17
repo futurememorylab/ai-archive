@@ -170,7 +170,7 @@
        Alpine scope so it tracks publishes/edits without a reload. #}
     <div class="timeline-legend provenance-legend mono-cell muted" x-cloak>
       <span class="legend-human">● Human <span x-text="markers.filter(m => m.origin === 'human').length">0</span></span>
-      <span class="legend-ai">● AI published <span x-text="markers.filter(m => m.origin === 'ai').length">0</span></span>
+      <span class="legend-ai">● AI in archive <span x-text="markers.filter(m => m.origin === 'ai').length">0</span></span>
       <span class="legend-draft" x-show="scope === 'draft'">● AI draft <span x-text="draftMarkers.length">0</span></span>
     </div>
   </section>
@@ -195,7 +195,7 @@
                   :class="{ active: scope === 'published' }"
                   :aria-selected="scope === 'published'"
                   @click="scope = 'published'">
-            Published
+            In archive
           </button>
           <button type="button" class="btn sm" data-scope="draft"
                   :class="{ active: scope === 'draft' }"

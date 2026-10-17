@@ -18,17 +18,17 @@
    data-review marks clips with suggestions waiting; reviewSelected() reads it. #}
 <td class="col-drafts"{% if row.review_tip %} data-review="1"{% endif %}>
   {%- set _ps = row.publish_state -%}
-  {%- set _v = ("Version " ~ row.publish_version_num ~ " is in CatDV") if row.publish_version_num else "" -%}
+  {%- set _v = ("Version " ~ row.publish_version_num ~ " is in the archive") if row.publish_version_num else "" -%}
   {%- if _ps == "live" -%}
-    <span title="{{ _v }}">{{ ui.status_pill("In CatDV", "ok") }}</span>
+    <span title="{{ _v }}">{{ ui.status_pill("In archive", "ok") }}</span>
   {%- elif _ps == "publishing" -%}
-    {{ ui.status_pill("Saving to CatDV…", "accent") }}
+    {{ ui.status_pill("Saving to archive…", "accent") }}
   {%- elif _ps == "draft" -%}
     <span title="{{ row.review_tip }}">{{ ui.status_pill("To review", "info") }}</span>
   {%- elif _ps == "failed" -%}
     <span title="The write to CatDV failed. Open Sync to retry.">{{ ui.status_pill("Couldn't save", "bad") }}</span>
   {%- elif _ps == "conflict" -%}
-    <span title="Someone changed this clip in CatDV meanwhile. Open Sync to pick which to keep.">{{ ui.status_pill("Changed in CatDV", "bad") }}</span>
+    <span title="Someone changed this clip in CatDV meanwhile. Open Sync to pick which to keep.">{{ ui.status_pill("Changed in archive", "bad") }}</span>
   {%- else -%}
     <span class="muted" title="Not annotated">—</span>
   {%- endif -%}
