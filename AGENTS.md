@@ -35,6 +35,11 @@ function you change may not get more complex, and when your PR lowers
 erosion or max CC the gate asks you to `--write-baseline` and commit the
 lower values. Raising a baseline is Peter's call (ADR 0129).
 
+Claude Code sessions run two hooks from `.claude/hooks/`: edits to any
+file in `.github/CODEOWNERS` are blocked (stop and ask Peter), and a
+session can't finish while ruff, import contracts, the erosion gate or
+the matching tests are red for the Python it changed.
+
 ## CatDV license seat (the one rule that bites)
 
 CatDV allows 2 sessions and the human web client usually holds one, so
