@@ -449,6 +449,37 @@ def test_batch_row_has_one_main_action_and_a_more_menu(monkeypatch, tmp_path):
         assert '@click="rowClick($event,' in html
 
 
+def test_progress_bar_only_when_the_batch_is_mixed(monkeypatch, tmp_path):
+    """The bar and legend break a batch down by state; a batch in one state
+    shows only its headline."""
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = _core_ctx(client)
+
+        async def _seed_all_failed():
+            _, vid = await PromptsRepo().create_with_initial_version(
+                ctx.db,
+                name="Popis",
+                description=None,
+                body="p",
+                target_map={"x": {"kind": "markers"}},
+                output_schema={},
+                model="gemini-2.5-pro",
+            )
+            jobs = JobsRepo()
+            jid = await jobs.create_job(ctx.db, prompt_version_id=vid, clip_ids=[401])
+            for it in await jobs.list_items(ctx.db, jid):
+                assert it.id is not None
+                await jobs.update_item_status(ctx.db, it.id, "error", error="boom")
+
+        asyncio.run(_seed_all_failed())
+        html = client.get("/batches/table").text
+        assert 'data-test="batch-headline"' in html
+        assert 'class="bbar"' not in html
+
+        asyncio.run(_seed_stopped_batch(ctx))  # one done, two stopped
+        assert 'class="bbar"' in client.get("/batches/table").text
+
+
 def _seed_big_batch(ctx, n):
     async def go():
         _, vid = await PromptsRepo().create_with_initial_version(
@@ -502,6 +533,7 @@ def test_batch_clips_lists_every_clip_with_its_status(monkeypatch, tmp_path):
         assert "location.href='/clips/102'" in html
         assert "Clip 102" in html
         assert "ProxyNotFound" in html
+        assert '<th class="col-berror">Note</th>' in html
         # what needs the user first: the failed clip before the finished one
         assert html.index("Clip 102") < html.index("Clip 101")
         assert "Open all" not in html  # small batch: nothing hidden
