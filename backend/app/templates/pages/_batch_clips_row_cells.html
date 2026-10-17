@@ -1,0 +1,3 @@
+{% import "components/_ui.html" as ui %}
+<td class="col-bstatus">{{ ui.status_pill(row.status.label, row.status.state) }}</td>
+<td class="col-berror">{% if row.error %}<span class="bt-fail-err" title="{{ row.error }}">{{ row.error }}</span>{% endif %}</td>

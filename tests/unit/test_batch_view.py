@@ -22,124 +22,116 @@ def _row(**over):
     return base
 
 
-def test_basic_counts_and_reviewed_clamp():
+def test_basic_counts():
     v = batch_view(_row())
     assert v["id"] == 42
     assert v["job_ids"] == [42, 43]
     assert v["ran"] == 12
     assert v["completed"] == 11
     assert v["failed"] == 1
-    assert v["reviewed"] == 6  # completed(11) - awaiting(5)
-    assert v["pct_done"] == 100  # (completed+failed)/ran = 12/12
-    assert v["pct_reviewed"] == 55  # round(6/11*100)
+    assert v["awaiting"] == 5
 
 
-def test_status_cancelled_orphan_is_not_running_or_applied():
-    # A job interrupted by a restart is cancelled (job + its in-flight items).
-    # The batch must read "Cancelled" — never "Running" (the bug: a leftover
-    # pending item counted as in_flight) and never green "Applied".
+def test_name_comes_from_the_batch_with_a_fallback():
+    assert batch_view(_row(batch_name="Tatry 1934"))["name"] == "Tatry 1934"
+    assert batch_view(_row(batch_name=None))["name"] == "Batch #42"
+
+
+def _head(**over):
+    v = batch_view(_row(**over))
+    return v["section"], v["headline"], v["headline_state"]
+
+
+def test_running_batch():
+    assert _head(running_jobs=1, completed=4, failed=1) == (
+        "running",
+        "Running · 5 of 12 done",
+        "accent",
+    )
+
+
+def test_clips_to_review_need_you():
+    assert _head(completed=10, awaiting_clips=3) == ("attention", "3 clips to review", "info")
+    assert _head(completed=1, awaiting_clips=1, ran=1, failed=0)[1] == "1 clip to review"
+
+
+def test_review_takes_precedence_over_cancelled_and_saving():
+    assert _head(cancelled=1, completed=3, awaiting_clips=1, syncing_clips=2)[1] == (
+        "1 clip to review"
+    )
+
+
+def test_write_back_problem_needs_you_and_beats_saving():
+    # A failed / conflicted write-back must never read green, and must win over
+    # an in-flight one so it isn't masked (same source as the topbar sync chip).
+    assert _head(completed=10, awaiting_clips=0, failed=0, syncing_clips=1, problem_clips=2) == (
+        "attention",
+        "2 couldn't save to CatDV",
+        "bad",
+    )
+
+
+def test_failed_clips_need_you():
+    assert _head(completed=11, awaiting_clips=0, failed=1) == ("attention", "1 failed", "bad")
+
+
+def test_saving_is_done_but_not_green():
+    assert _head(completed=10, awaiting_clips=0, failed=0, syncing_clips=3) == (
+        "done",
+        "Saving 3 to CatDV…",
+        "accent",
+    )
+
+
+def test_stopped_batch_without_output():
+    # A job interrupted by a restart: never "Running", never green.
+    assert _head(cancelled=1, ran=1, completed=0, failed=0, awaiting_clips=0) == (
+        "done",
+        "Stopped",
+        "",
+    )
+
+
+def test_all_reviewed():
+    assert _head(completed=10, awaiting_clips=0, failed=0) == ("done", "All reviewed", "ok")
+
+
+def test_segments_and_legend_count_each_state():
     v = batch_view(
         _row(
-            running_jobs=0,
+            ran=20,
+            completed=12,
+            awaiting_clips=5,
+            syncing_clips=1,
+            problem_clips=1,
+            failed=2,
             in_flight=0,
-            cancelled=1,
-            ran=1,
-            completed=0,
-            failed=0,
-            awaiting_clips=0,
+            cancelled=6,
         )
     )
-    assert v["running"] is False
-    assert v["status_label"] == "Cancelled"
-    assert v["status_state"] != "ok"
+    assert [(s["key"], s["count"]) for s in v["segments"]] == [
+        ("reviewed", 5),
+        ("review", 5),
+        ("saving", 1),
+        ("problem", 1),
+        ("failed", 2),
+        ("stopped", 6),
+    ]
+    assert [s["label"] for s in v["segments"]] == [
+        "5 reviewed",
+        "5 to review",
+        "1 saving",
+        "1 couldn't save",
+        "2 failed",
+        "6 stopped",
+    ]
 
 
-def test_awaiting_review_takes_precedence_over_cancelled():
-    # A partly-done batch (some clips annotated + awaiting, one cancelled) should
-    # still point the user at the actionable review, not "Cancelled".
+def test_running_segment_and_empty_states_are_dropped():
     v = batch_view(
-        _row(
-            running_jobs=0,
-            in_flight=0,
-            cancelled=1,
-            ran=4,
-            completed=3,
-            failed=0,
-            awaiting_clips=1,
-        )
+        _row(running_jobs=1, ran=4, completed=1, awaiting_clips=1, failed=0, in_flight=3)
     )
-    assert v["status_label"] == "1 to review"
-
-
-def test_cancelled_field_absent_is_back_compat():
-    v = batch_view(_row(running_jobs=0, completed=10, awaiting_clips=0))
-    assert v["status_label"] == "Applied"
-
-
-def test_status_running():
-    v = batch_view(_row(running_jobs=1, completed=4, failed=1))
-    assert v["running"] is True
-    assert v["status_state"] == "accent"
-    assert v["status_label"] == "Running 5/12"
-
-
-def test_status_awaiting_review_when_none_reviewed():
-    v = batch_view(_row(running_jobs=0, completed=10, awaiting_clips=10))
-    assert v["status_state"] == ""
-    assert v["status_label"] == "Awaiting review"
-
-
-def test_status_n_to_review():
-    v = batch_view(_row(running_jobs=0, completed=10, awaiting_clips=3))
-    assert v["status_label"] == "3 to review"
-
-
-def test_status_applied_when_all_reviewed_and_synced():
-    # All reviewed AND all write-backs confirmed on CatDV (synced_at set) → Applied.
-    v = batch_view(_row(running_jobs=0, completed=10, awaiting_clips=0, syncing_clips=0))
-    assert v["status_state"] == "ok"
-    assert v["status_label"] == "Applied"
-
-
-def test_status_syncing_when_reviewed_but_writes_unconfirmed():
-    # All reviewed (awaiting 0) but write-backs not yet confirmed on CatDV
-    # (e.g. CatDV offline, ops parked) → "Syncing N", NOT a premature "Applied".
-    v = batch_view(_row(running_jobs=0, completed=10, awaiting_clips=0, syncing_clips=3))
-    assert v["status_state"] == "accent"
-    assert v["status_label"] == "Syncing 3"
-
-
-def test_awaiting_review_takes_precedence_over_syncing():
-    # Some clips still need review AND some are applied-but-unsynced → review wins.
-    v = batch_view(_row(running_jobs=0, completed=10, awaiting_clips=3, syncing_clips=2))
-    assert v["status_label"] == "3 to review"
-
-
-def test_status_applied_when_syncing_field_absent():
-    # Back-compat: rows without syncing_clips (older callers) still resolve to Applied.
-    v = batch_view(_row(running_jobs=0, completed=10, awaiting_clips=0))
-    assert v["status_label"] == "Applied"
-
-
-def test_status_sync_failed_must_not_read_applied():
-    # A write-back that exhausted retries (failed) or hit a conflict must NOT
-    # let the batch read green "Applied" — it surfaces as a problem state so the
-    # batch row and the topbar sync chip can never disagree.
-    v = batch_view(
-        _row(running_jobs=0, completed=10, awaiting_clips=0, syncing_clips=0, problem_clips=2)
-    )
-    assert v["status_state"] == "bad"
-    assert v["status_label"] == "2 failed to sync"
-
-
-def test_sync_problem_takes_precedence_over_syncing():
-    # One clip's write failed while another is still in-flight → the failure
-    # wins, so it isn't masked until the in-flight ops happen to settle.
-    v = batch_view(
-        _row(running_jobs=0, completed=10, awaiting_clips=0, syncing_clips=1, problem_clips=1)
-    )
-    assert v["status_state"] == "bad"
-    assert v["status_label"] == "1 failed to sync"
+    assert [(s["key"], s["count"]) for s in v["segments"]] == [("review", 1), ("running", 3)]
 
 
 def test_multi_prompt_label():
@@ -168,7 +160,6 @@ def test_files_href_lists_all_batch_clips_no_status_filter():
     assert v["files_href"] == "/?batch=42,43"
 
 
-def test_zero_ran_no_divide_by_zero():
+def test_zero_ran_has_no_segments():
     v = batch_view(_row(ran=0, completed=0, failed=0, awaiting_clips=0))
-    assert v["pct_done"] == 0
-    assert v["pct_reviewed"] == 0
+    assert v["segments"] == []

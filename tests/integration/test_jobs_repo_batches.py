@@ -160,25 +160,6 @@ async def test_list_batches_excludes_studio_jobs(db):
 
 
 @pytest.mark.asyncio
-async def test_count_total_batches(db):
-    _, vid = await _seed_version(db)
-    jobs = JobsRepo()
-    await jobs.create_job(db, prompt_version_id=vid, clip_ids=[1], run_group="rg-1")
-    await jobs.create_job(db, prompt_version_id=vid, clip_ids=[2], run_group="rg-1")
-    await jobs.create_job(db, prompt_version_id=vid, clip_ids=[3])  # singleton
-    assert await jobs.count_total_batches(db) == 2
-
-
-@pytest.mark.asyncio
-async def test_count_total_batches_excludes_studio_jobs(db):
-    _, vid = await _seed_version(db)
-    jobs = JobsRepo()
-    await jobs.create_job(db, prompt_version_id=vid, clip_ids=[1])  # normal
-    await jobs.create_job(db, prompt_version_id=vid, clip_ids=[2], kind="studio")  # excluded
-    assert await jobs.count_total_batches(db) == 1
-
-
-@pytest.mark.asyncio
 async def test_list_batches_running_jobs_and_in_flight(db):
     _, vid = await _seed_version(db)
     jobs = JobsRepo()
@@ -194,38 +175,6 @@ async def test_list_batches_running_jobs_and_in_flight(db):
     r = rows[0]
     assert r["running_jobs"] == 1
     assert r["in_flight"] == 1
-
-
-@pytest.mark.asyncio
-async def test_failed_items_for_jobs_resolves_clip_name(db):
-    _, vid = await _seed_version(db)
-    jobs = JobsRepo()
-    jid = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[882290, 999])
-    its = await jobs.list_items(db, jid)
-    await jobs.update_item_status(db, its[0].id, "error", error="ProxyNotFound: not on disk")
-    await jobs.update_item_status(db, its[1].id, "review_ready")  # not failed
-    # name only known for 882290 via clip_cache
-    await db.execute(
-        "INSERT INTO clip_cache "
-        "(provider_id, provider_clip_id, name, catalog_id, duration_secs, fps, "
-        " canonical_json, provider_etag, fetched_at) "
-        "VALUES ('catdv', '882290', 'Návštěva delegace', '7', 1.0, 25.0, '{}', NULL, "
-        " '2026-06-02T00:00:00')"
-    )
-    await db.commit()
-
-    fails = await jobs.failed_items_for_jobs(db, [jid])
-    assert len(fails) == 1
-    f = fails[0]
-    assert f["job_id"] == jid
-    assert f["catdv_clip_id"] == 882290
-    assert f["error_message"] == "ProxyNotFound: not on disk"
-    assert f["clip_name"] == "Návštěva delegace"
-
-
-@pytest.mark.asyncio
-async def test_failed_items_for_jobs_empty_input(db):
-    assert await JobsRepo().failed_items_for_jobs(db, []) == []
 
 
 @pytest.mark.asyncio
@@ -328,3 +277,112 @@ async def test_list_batches_unapplied_owned_field_is_still_awaiting(db):
     )
     rows = await jobs.list_batches(db, limit=50)
     assert rows[0]["awaiting_clips"] == 1
+
+
+# --- Batch names (docs/specs/2026-10-17-batches-redesign-design.md) ---------
+
+
+@pytest.mark.asyncio
+async def test_batch_name_is_stored_and_read_from_the_primary_job(db):
+    _, vid = await _seed_version(db)
+    jobs = JobsRepo()
+    j1 = await jobs.create_job(
+        db, prompt_version_id=vid, clip_ids=[101], run_group="rg-1", batch_name="Tatry"
+    )
+    j2 = await jobs.create_job(
+        db, prompt_version_id=vid, clip_ids=[102], run_group="rg-1", batch_name="Tatry"
+    )
+    rows = await jobs.list_batches(db, limit=50)
+    assert rows[0]["batch_name"] == "Tatry"
+    assert {j.id: j.batch_name for j in await jobs.list_jobs(db)} == {j1: "Tatry", j2: "Tatry"}
+
+
+@pytest.mark.asyncio
+async def test_rename_batch_updates_every_job_of_the_batch(db):
+    _, vid = await _seed_version(db)
+    jobs = JobsRepo()
+    j1 = await jobs.create_job(
+        db, prompt_version_id=vid, clip_ids=[1], run_group="rg", batch_name="a"
+    )
+    j2 = await jobs.create_job(
+        db, prompt_version_id=vid, clip_ids=[2], run_group="rg", batch_name="a"
+    )
+    other = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[3], batch_name="keep")
+
+    await jobs.rename_batch(db, [j1, j2], "Tatry 1934")
+
+    names = await jobs.batch_names_for_jobs(db, [j1, j2, other])
+    assert names == {j1: "Tatry 1934", j2: "Tatry 1934", other: "keep"}
+
+
+@pytest.mark.asyncio
+async def test_batch_names_for_jobs_maps_every_job_to_its_primary_jobs_name(db):
+    _, vid = await _seed_version(db)
+    jobs = JobsRepo()
+    j1 = await jobs.create_job(
+        db, prompt_version_id=vid, clip_ids=[1], run_group="rg", batch_name="first"
+    )
+    # A second per-kind job created without a name still reads the batch's name.
+    j2 = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[2], run_group="rg")
+    async with assert_query_count(db, 1):
+        names = await jobs.batch_names_for_jobs(db, [j2])
+    assert names == {j2: "first"}
+    assert await jobs.batch_names_for_jobs(db, []) == {}
+    assert j1 < j2
+
+
+@pytest.mark.asyncio
+async def test_batch_previews_first_five_distinct_clips_and_count(db):
+    _, vid = await _seed_version(db)
+    jobs = JobsRepo()
+    await jobs.create_job(db, prompt_version_id=vid, clip_ids=[11, 12, 13, 14], run_group="big")
+    # Second per-kind job of the same batch; clip 12 again counts once.
+    await jobs.create_job(db, prompt_version_id=vid, clip_ids=[15, 16, 12], run_group="big")
+    solo = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[21])
+
+    async with assert_query_count(db, 1):
+        prev = await jobs.batch_previews(db, ["big", f"job:{solo}"], first=5)
+
+    assert prev["big"] == {"clip_ids": [11, 12, 13, 14, 15], "clips": 6}
+    assert prev[f"job:{solo}"] == {"clip_ids": [21], "clips": 1}
+    assert await jobs.batch_previews(db, []) == {}
+
+
+@pytest.mark.asyncio
+async def test_batch_clip_rows_reports_each_clips_state(db):
+    _, vid = await _seed_version(db)
+    jobs = JobsRepo()
+    jid = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[1, 2, 3, 4, 5, 6])
+    its = await jobs.list_items(db, jid)
+    await jobs.update_item_status(db, its[0].id, "review_ready")  # 1: to review
+    await jobs.update_item_status(db, its[1].id, "error", error="Gemini timed out")  # 2
+    await jobs.update_item_status(db, its[2].id, "prompting")  # 3: running
+    # 4 stays pending (waiting)
+    await jobs.update_item_status(db, its[4].id, "review_ready")  # 5: saving
+    await jobs.update_item_status(db, its[5].id, "review_ready")  # 6: reviewed
+    await _annotation_with_review(db, job_id=jid, clip_id=1, applied=False, prompt_version_id=vid)
+    await _annotation_with_review(db, job_id=jid, clip_id=5, applied=True, prompt_version_id=vid)
+    await _annotation_with_review(db, job_id=jid, clip_id=6, applied=True, prompt_version_id=vid)
+    await _pending_op(db, clip_id=5, status="pending")
+    await db.execute(
+        "INSERT INTO clip_cache (provider_id, provider_clip_id, name, catalog_id, "
+        "duration_secs, fps, canonical_json, fetched_at) "
+        "VALUES ('catdv', '1', 'Výlet do Tater', '7', 1, 25, '{}', '2026-01-01')"
+    )
+    await db.commit()
+
+    async with assert_query_count(db, 1):
+        rows = await jobs.batch_clip_rows(db, [jid])
+
+    by_id = {r["clip_id"]: r for r in rows}
+    assert by_id[1]["name"] == "Výlet do Tater"
+    # Not in clip_cache: the name the clip's annotation recorded, else None.
+    assert by_id[6]["name"] == "Clip_6"
+    assert by_id[2]["name"] is None
+    assert by_id[1]["awaiting"] and not by_id[6]["awaiting"]
+    assert by_id[2]["item_status"] == "error"
+    assert by_id[2]["error"] == "Gemini timed out"
+    assert by_id[3]["item_status"] == "prompting"
+    assert by_id[4]["item_status"] == "pending"
+    assert by_id[5]["sync"] == "saving"
+    assert by_id[6]["sync"] is None

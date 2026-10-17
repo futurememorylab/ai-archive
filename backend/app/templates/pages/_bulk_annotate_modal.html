@@ -4,6 +4,8 @@
 {% import "components/_ui.html" as ui %}
 {% call ui.modal('annoOpen', label='Annotate selected') %}
   <div class="modal-body">
+    {{ ui.field('Batch name', 'batch_name', help='Name it after what the clips are. You can rename it on the Batches page.',
+                input_attrs='x-model="annoName" maxlength="120" data-test="batch-name-input"', cls='ba-name') }}
     <template x-if="annoLoading"><p class="muted">Loading prompts…</p></template>
     <template x-if="annoError"><p class="muted" style="color:var(--bad)" x-text="annoError"></p></template>
 

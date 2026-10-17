@@ -1,10 +1,10 @@
-"""Walkthrough scenario: a batch moves from "Awaiting review" to "Applied".
+"""Walkthrough scenario: a batch moves from "1 clip to review" to "All reviewed".
 
 Runs a real (offline) annotation on a dedicated clip, reviews it from the
 Batches page and publishes it. The draft carries an AI marker (written) and a
 shared decade field (a copy-only suggestion that is never written, #123); the
-batch must still settle to "Applied" once the marker is published. Before the
-fix the leftover suggestion kept the batch in "Awaiting review" forever.
+batch must still settle to "All reviewed" once the marker is published. Before
+the fix the leftover suggestion kept the batch waiting for review forever.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from playwright.sync_api import expect
 from tests.walkthrough.fakes import BATCH_REVIEW_CLIP_NAME
 from tests.walkthrough.scenarios._job_support import (
     assign_production_prompt,
+    batch_row,
     expect_toast,
     open_annotate_modal,
     open_batches,
@@ -23,14 +24,12 @@ from tests.walkthrough.scenarios._job_support import (
 
 SLUG = "batch-review-apply"
 TOPIC = "Batches page"
-TITLE = "Review a batch and see it applied"
+TITLE = "Review a batch and see it done"
 DESCRIPTION = (
     "An operator annotates a clip, opens the Batches page where the run waits "
-    "for review, clicks Review, publishes the draft, and returns to see the "
-    "batch settle to Applied, even though the draft's shared decade field is "
-    "only a copy-me suggestion that is never written. While waiting for each "
-    "status the test reloads the Batches page every half second, so the video "
-    "jumps and repeats moments; that is the test polling, not the app retrying."
+    "under Needs you, clicks Review, publishes the draft, and returns to see the "
+    "batch settle to All reviewed under Done, even though the draft's shared "
+    "decade field is only a copy-me suggestion that is never written."
 )
 
 
@@ -48,12 +47,12 @@ def run(wt):
     )
     wt.step("Open the Batches page", open_batches)
     wt.step(
-        "The finished batch waits for review",
-        lambda p: _expect_status(p, "Awaiting review"),
+        "The finished batch waits for review under Needs you",
+        lambda p: _expect_status(p, "1 clip to review", section="attention"),
     )
     wt.step(
         "Click Review on the batch",
-        lambda p: _newest_row(p).get_by_role("button", name="Review →").click(),
+        lambda p: _row(p).get_by_role("button", name="Review 1 clip").click(),
     )
     wt.step(
         "The review walk opens the clip's draft",
@@ -79,17 +78,20 @@ def run(wt):
     )
     wt.step("Back to the Batches page", open_batches)
     wt.step(
-        "The batch reads Applied, not Awaiting review",
-        lambda p: _expect_status(p, "Applied"),
+        "The batch is done: All reviewed",
+        lambda p: _expect_status(p, "All reviewed", section="done"),
     )
 
 
-def _newest_row(p):
-    # list_batches is newest first; this scenario's run is the latest batch.
-    return p.locator("table.batch-tbl tr.batch-row").first
+def _row(p):
+    # The Annotate modal names a one-clip batch after its clip.
+    return batch_row(p, BATCH_REVIEW_CLIP_NAME)
 
 
-def _expect_status(p, label: str) -> None:
-    """The newest row's status pill reads `label`. The table live-refreshes on
-    job events, so this waits for the run to finish without reloading."""
-    expect(_newest_row(p).locator(".pill")).to_have_text(label, timeout=15000)
+def _expect_status(p, label: str, *, section: str) -> None:
+    """The batch's headline reads `label`, in `section`. The page live-refreshes
+    on job events, so this waits for the run to finish without reloading."""
+    expect(_row(p).locator('[data-test="batch-headline"]')).to_have_text(label, timeout=15000)
+    expect(p.locator(f'[data-test="batch-section-{section}"]')).to_contain_text(
+        BATCH_REVIEW_CLIP_NAME
+    )

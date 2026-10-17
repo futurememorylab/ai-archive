@@ -15,8 +15,10 @@ _ANNO_MODAL = '[role="dialog"][aria-label="Annotate selected"]'
 
 
 def select_clip(p, name: str) -> None:
-    """Tick the select checkbox on the clip row whose name matches `name`."""
-    row = p.locator("tr.vrow").filter(has_text=name)
+    """Tick the select checkbox on the clip row whose name is `name`. Matches
+    the name cell only: the Batch column can carry the same text, since a batch
+    is named after its first clip."""
+    row = p.locator("tr.vrow").filter(has=p.locator(".name").get_by_text(name, exact=True))
     row.locator("input.row-check").check()
 
 
@@ -49,7 +51,14 @@ def expect_toast(p, text: str) -> None:
 def open_batches(p) -> None:
     """Navigate to the Batches page via the left-rail link."""
     p.locator('a[title="Batches"]').click()
-    expect(p.locator("table.batch-tbl")).to_be_visible()
+    expect(p.locator('[data-test="batch-row"]').first).to_be_visible()
+
+
+def batch_row(p, name: str):
+    """The Batches page row of the batch called `name`."""
+    return p.locator('[data-test="batch-row"]').filter(
+        has=p.locator('[data-test="batch-name"]').get_by_text(name, exact=True)
+    )
 
 
 def wait_until_prompting(gemini: FakeGemini) -> None:

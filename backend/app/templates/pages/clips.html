@@ -186,7 +186,7 @@
         const ids = this._selected()
           .filter(el => {
             const cell = el.closest('tr')?.querySelector('.col-drafts');
-            return cell && cell.textContent.trim() !== '—';
+            return cell?.dataset.review === '1';
           })
           .map(el => parseInt(el.value.split('/')[1], 10))
           .filter(id => !isNaN(id));

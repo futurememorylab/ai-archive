@@ -82,7 +82,19 @@
     return { status: row.status, pct };
   }
 
+  // Default name for a new batch (docs/specs/2026-10-17-batches-redesign-design.md):
+  // the search text the clips were found with, else the first clip's name
+  // plus "and N more". Mirrors services/batch_names.py::default_batch_name.
+  function defaultBatchName(q, names) {
+    const query = (q || "").trim();
+    if (query) return query;
+    if (!names || !names.length) return "";
+    const first = (names[0] || "").trim();
+    return names.length > 1 ? `${first} and ${names.length - 1} more` : first;
+  }
+
   window.fmtTimecode = fmtTimecode;
+  window.defaultBatchName = defaultBatchName;
   window.cacheProgressForClip = cacheProgressForClip;
   window.elapsedTimer = elapsedTimer;
   window.fmtBytes = fmtBytes;

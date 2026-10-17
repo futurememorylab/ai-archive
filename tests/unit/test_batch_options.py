@@ -4,7 +4,7 @@ from backend.app.models.job import Job
 from backend.app.routes.pages.clips import _batch_options
 
 
-def _job(jid, *, total=1, run_group=None, kind=None, notes=None) -> Job:
+def _job(jid, *, total=1, run_group=None, kind=None, notes=None, batch_name=None) -> Job:
     return Job(
         id=jid,
         prompt_version_id=1,
@@ -13,6 +13,7 @@ def _job(jid, *, total=1, run_group=None, kind=None, notes=None) -> Job:
         run_group=run_group,
         kind=kind,
         notes=notes,
+        batch_name=batch_name,
     )
 
 
@@ -43,3 +44,13 @@ def test_grouped_and_ungrouped_mix():
     opts = _batch_options(jobs)
     values = [o["value"] for o in opts]
     assert values == ["8", "5,6"]
+
+
+def test_named_batches_are_listed_by_name():
+    # The batch reads its primary (lowest id) job's name.
+    jobs = [
+        _job(9, total=1, batch_name="Výlet do Tater"),
+        _job(6, total=3, run_group="abc", batch_name="other kind"),
+        _job(5, total=9, run_group="abc", batch_name="Tatry 1934"),
+    ]
+    assert [o["label"] for o in _batch_options(jobs)] == ["Výlet do Tater (1)", "Tatry 1934 (12)"]

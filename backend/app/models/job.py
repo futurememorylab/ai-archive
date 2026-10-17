@@ -28,6 +28,9 @@ class Job(BaseModel):
     notes: str | None = None
     kind: str | None = None
     run_group: str | None = None
+    # Human name of the batch this job belongs to (docs/specs/
+    # 2026-10-17-batches-redesign-design.md); readers use the primary job's.
+    batch_name: str | None = None
     # Per-job run parameters read by the JobRunner when it executes the job
     # (ADR 0125). Set on calibration sweeps; default for normal jobs.
     force_resolution: str | None = None

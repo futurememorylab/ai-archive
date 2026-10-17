@@ -8,35 +8,13 @@
 <div class="page batches-page" x-data="batchesPage()" data-screen-label="Batches">
   <div class="page-hdr">
     <h1>Batches</h1>
-    <span class="meta">annotation runs</span>
     <div class="grow"></div>
     <button type="button" class="btn primary" @click="openPicker()">+ New batch</button>
   </div>
 
   <div class="batches-scroll">
-    <div class="metric-strip">
-      <div class="metric">
-        <div class="m-label">Batches</div>
-        <div class="m-value">{{ metrics.total_batches }}</div>
-        <div class="m-sub">{{ metrics.shown }} shown</div>
-      </div>
-      <div class="metric">
-        <div class="m-label">Drafts produced</div>
-        <div class="m-value">{{ metrics.drafts_produced }}</div>
-        <div class="m-sub">across recent batches</div>
-      </div>
-      <div class="metric">
-        <div class="m-label">Awaiting review</div>
-        <div class="m-value">{{ metrics.awaiting_review }}</div>
-        <div class="m-sub">{{ metrics.awaiting_batches }} batch{{ '' if metrics.awaiting_batches == 1 else 'es' }}</div>
-      </div>
-      <div class="metric danger">
-        <div class="m-label">Failed clips</div>
-        <div class="m-value">{{ metrics.failed_clips }}</div>
-        <div class="m-sub">across recent batches</div>
-      </div>
-    </div>
-
+    <p class="batches-intro">A batch runs one AI prompt over a set of clips. Its results wait here
+      as suggestions; nothing reaches CatDV until you review and accept them.</p>
     <div id="batches-table-region">
       {% include "pages/_batches_table.html" %}
     </div>
@@ -52,6 +30,11 @@
     <div class="nb-body">
         {% include "pages/_clip_picker_main.html" %}
         <div class="nb-side">
+          <div class="nb-name">
+            {{ ui.field('Batch name', 'batch_name',
+                        help='Starts from your search. Name it after what the clips are.',
+                        input_attrs=':value="batchNameValue()" @input="batchName = $event.target.value; nameTouched = true" maxlength="120" data-test="new-batch-name"') }}
+          </div>
           {% include "pages/_clip_picker_basket.html" %}
           <div class="nb-prompts" x-show="selectedKinds().length > 0" x-cloak>
             <div class="nb-prompts-h">Prompt per media kind</div>
@@ -94,17 +77,26 @@
   function batchesPage() {
     return {
       ...window.clipPickerCore(),
-      // ── table (v1) ──────────────────────────────────────────────
+      // ── batch rows ──────────────────────────────────────────────
+      // Keyed by batch_key; survive the live table refresh (they live here,
+      // not in the swapped region).
       expanded: {},
+      renaming: null,
+      renameText: "",
       _es: null,
       _t: null,
+      _poll: null,
 
       init() {
         window.addEventListener("jobs-changed", () => this._schedule());
         try {
           this._es = new EventSource("/api/jobs/events");
           this._es.onmessage = () => this._schedule();
+          // The bus has no replay: a job that settles before this stream
+          // (re)connects sends nothing more, so refresh once on every open.
+          this._es.onopen = () => this._schedule();
         } catch (e) { /* SSE unavailable; table is still usable */ }
+        this._pollWhileRunning();
         // Auto-open pre-seeded from the clips list (sessionStorage / ?new=1).
         try {
           const seed = JSON.parse(sessionStorage.getItem("catdv:batchQueue") || "null");
@@ -118,6 +110,14 @@
       },
 
       _schedule() { clearTimeout(this._t); this._t = setTimeout(() => this.refresh(), 500); },
+      // Safety net under the SSE push, like the clips list's batch poll:
+      // while anything runs, re-check every few seconds until it settles.
+      _pollWhileRunning() {
+        clearTimeout(this._poll);
+        if (document.querySelector('[data-test="batch-section-running"]')) {
+          this._poll = setTimeout(() => this.refresh(), 3000);
+        }
+      },
       async refresh() {
         try {
           const r = await fetch("/batches/table");
@@ -125,7 +125,13 @@
           const region = document.getElementById("batches-table-region");
           if (!region) return;
           region.innerHTML = await r.text();
-          window.htmxAlpine.reinit(region);
+          // Alpine's MutationObserver binds the injected rows' directives to
+          // this scope on its own; reinit() would bind every @click a second
+          // time, so each button fired twice after a refresh (a row toggle
+          // opened and shut again). Only HTMX needs wiring.
+          window.htmxAlpine.wireHtmx(region);
+          for (const [key, open] of Object.entries(this.expanded)) if (open) this.loadClips(key);
+          this._pollWhileRunning();
           // Keep the topbar sync chip in step with the live-refreshing table.
           // The chip self-polls only while it already shows queued/problem
           // writes (ADR 0095), so a write-back that starts in the background
@@ -134,7 +140,36 @@
           window.htmx?.ajax("GET", "/ui/sync-chip", { target: "#sync-chip", swap: "innerHTML" });
         } catch (e) { /* offline — keep current view */ }
       },
-      toggle(key) { this.expanded[key] = !this.expanded[key]; },
+      toggle(key) {
+        this.expanded[key] = !this.expanded[key];
+        if (this.expanded[key]) this.loadClips(key);
+      },
+      async loadClips(key) {
+        const box = document.querySelector(`[data-clips-for="${CSS.escape(key)}"]`);
+        if (!box) return;
+        try {
+          const r = await fetch(box.dataset.clipsUrl);
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          box.innerHTML = await r.text();
+          window.htmxAlpine.wireHtmx(box);
+        } catch (e) { Alpine.store("toast").push("Couldn't load the batch's clips: " + e.message, { level: "error" }); }
+      },
+      startRename(key, name) {
+        this.renaming = key;
+        this.renameText = name;
+        this.$nextTick(() => document.querySelector(`[data-batch-key="${CSS.escape(key)}"] [data-test="batch-rename-input"]`)?.select());
+      },
+      async saveRename(jobIds) {
+        try {
+          const r = await fetch("/batches/rename", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ job_ids: jobIds, name: this.renameText }),
+          });
+          if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || ("HTTP " + r.status)); }
+          this.renaming = null;
+          await this.refresh();
+        } catch (e) { Alpine.store("toast").push("Rename failed: " + e.message, { level: "error" }); }
+      },
       async reviewBatch(jobIds, fallbackHref) {
         try {
           const r = await fetch("/batches/review-queue?job_ids=" + jobIds.join(","));
@@ -176,12 +211,15 @@
       // ── new-batch picker ────────────────────────────────────────
       newOpen: false,
       kindPrompt: {},          // kind -> production_version_id
+      batchName: "",           // typed name; used once nameTouched
+      nameTouched: false,
       _allPrompts: null,
 
       openPicker(keepSel = false) {
         if (!keepSel) this.sel = {};
         this.q = ""; this.cacheF = "any"; this.annoF = "any";
         this.selOnly = false; this.offset = 0; this.kindPrompt = {};
+        this.batchName = ""; this.nameTouched = false;
         this.newOpen = true;
         this._loadPrompts();
         this.$nextTick(() => this.fetchPage());
@@ -281,6 +319,12 @@
         return s;
       },
 
+      // Follows the search + selection until the user types a name.
+      batchNameValue() {
+        if (this.nameTouched) return this.batchName;
+        return window.defaultBatchName(this.q, this.selectedClips().map((c) => c.name));
+      },
+
       runnableCount() {
         const runnable = new Set(this.selectedKinds().filter((k) => this.kindPrompt[k]));
         return this.selectedClips().filter((c) => runnable.has(c.kind)).length;
@@ -299,7 +343,7 @@
           try {
             const r = await fetch("/api/jobs", {
               method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ prompt_version_id: Number(pv), clip_ids: ids, run_group: runGroup }),
+              body: JSON.stringify({ prompt_version_id: Number(pv), clip_ids: ids, run_group: runGroup, batch_name: this.batchNameValue() }),
             });
             if (!r.ok) failures.push(kind + ": HTTP " + r.status);
             // else: enqueued; the JobRunner runs it (resumes if offline) — ADR 0125.
