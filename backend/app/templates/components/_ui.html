@@ -34,10 +34,13 @@
   </div>
 {%- endmacro %}
 
+{# Every topbar crumb starts with an "All clips" link, so the clip list of
+   the active catalog is one click away from any screen. #}
 {% macro breadcrumb(segments) -%}
   <span class="crumb">
+    <a href="/" data-test="crumb-all-clips">All clips</a>
     {%- for seg in segments -%}
-      {%- if not loop.first %}<span class="sep"> / </span>{% endif -%}
+      <span class="sep"> / </span>
       {%- if seg[1] %}<a href="{{ seg[1] }}">{{ seg[0] }}</a>
       {%- else %}<span class="strong">{{ seg[0] }}</span>{% endif -%}
     {%- endfor -%}
