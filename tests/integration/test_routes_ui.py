@@ -275,6 +275,18 @@ def test_pages_have_breadcrumb_and_single_title(monkeypatch, tmp_path: Path):
     assert '<span class="strong">Cache</span>' in cache
 
 
+def test_topbar_all_clips_link_on_every_screen(monkeypatch, tmp_path: Path):
+    """The crumb always starts with "All clips" → "/", a shortcut back to the
+    active catalog's clip list from any screen."""
+    app = _make_app(monkeypatch, tmp_path)
+    link = '<a href="/" data-test="crumb-all-clips">All clips</a>'
+    with TestClient(app) as client:
+        for path in ("/prompts", "/prompts/new", "/cache", "/batches", "/studio"):
+            r = client.get(path)
+            assert r.status_code == 200, path
+            assert r.text.count(link) == 1, path
+
+
 def test_cache_metric_cap_labelled_and_no_raw_bytes(monkeypatch, tmp_path: Path):
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
