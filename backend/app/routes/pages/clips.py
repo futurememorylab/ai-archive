@@ -629,63 +629,6 @@ async def _build_draft_view_model_for_live(ctx, clip_id: int) -> dict:
     }
 
 
-# ClipPublishState → pill CSS class + human label, used by the headline pill and
-# the history menu so the version panel and its refresh route agree.
-_PILL_STATE: dict[str, str] = {
-    "live": "ok",
-    "publishing": "accent",
-    # A pending draft is flagged by a dot on the Draft scope button, not by the
-    # headline pill, which keeps showing the live version.
-    "draft": "ok",
-    "failed": "bad",
-    "conflict": "bad",
-    "none": "",
-}
-_PILL_LABEL: dict[str, str] = {
-    "publishing": "Publishing…",
-    "failed": "Failed",
-    "conflict": "Conflict",
-}
-
-
-def _publish_pill(state: str, num: int | None) -> tuple[str, str]:
-    """(label, pill CSS state) for the headline pill."""
-    if state in ("live", "draft"):
-        return (f"Live v{num}", "ok") if num is not None else ("", "")
-    return _PILL_LABEL.get(state, ""), _PILL_STATE.get(state, "")
-
-
-async def _version_panel_ctx(ctx, clip_id: int, *, has_draft: bool) -> dict:
-    """Shared context for the version panel (headline pill + history dropdown),
-    rendered both inline on the clip page and by the /version-panel refresh
-    route. The publishing/failed/conflict signal comes from pending_operations
-    (the write queue) — not the drift-prone clip_versions.publish_state copy."""
-    versions = await ctx.clip_versions_repo.list_by_clip(ctx.db, clip_id)
-    # list_by_clip already returns every version (version_num DESC), so the live
-    # one is the first with publish_state == 'live' — no second query needed.
-    live = next((v for v in versions if v.publish_state == "live"), None)
-    counts = await ctx.pending_ops_repo.status_counts_for_clip(
-        ctx.db, provider_id="catdv", provider_clip_id=str(clip_id)
-    )
-    state, num = resolve_publish_status(
-        has_draft=has_draft,
-        pending_write=(counts.get("pending", 0) + counts.get("in_flight", 0)) > 0,
-        failed_write=counts.get("failed", 0) > 0,
-        conflict_write=counts.get("conflict", 0) > 0,
-        live_version_num=live.version_num if live else None,
-    )
-    label, pill_state = _publish_pill(state, num)
-    return {
-        "versions": [v.model_dump() for v in versions],
-        "publish_status": {
-            "state": state,
-            "version_num": num,
-            "pill_state": pill_state,
-            "label": label,
-        },
-    }
-
-
 @router.get("/clips/{clip_id}", response_class=HTMLResponse)
 async def clip_detail_page(request: Request, clip_id: int, review: int | None = None):
     ctx = get_live_ctx(request)
@@ -728,30 +671,7 @@ async def clip_detail_page(request: Request, clip_id: int, review: int | None = 
     )
     ctx_dict["review_mode"] = bool(review)
 
-    # Version history + headline publish status (shared with the /version-panel
-    # refresh route).
-    panel = await _version_panel_ctx(
-        ctx, clip_id, has_draft=bool(ctx_dict["draft"].get("has_draft", False))
-    )
-    ctx_dict["versions"] = panel["versions"]
-    ctx_dict["publish_status"] = panel["publish_status"]
-
     return templates.TemplateResponse(request, "pages/clip_detail.html", ctx_dict)
-
-
-@router.get("/clips/{clip_id}/version-panel", response_class=HTMLResponse)
-async def clip_version_panel(request: Request, clip_id: int):
-    """The headline pill + history dropdown, re-rendered so review.js can swap
-    #version-panel after a Make-live / publish without a full reload. DB-only
-    (offline-safe)."""
-    ctx = get_core_ctx(request)
-    draft = await _build_draft_for_clip(ctx, clip_id)
-    panel = await _version_panel_ctx(ctx, clip_id, has_draft=bool(draft.get("has_draft", False)))
-    return templates.TemplateResponse(
-        request,
-        "pages/_version_panel.html",
-        {"versions": panel["versions"], "publish_status": panel["publish_status"]},
-    )
 
 
 @router.get("/clips/{clip_id}/draft", response_class=HTMLResponse)

@@ -1,9 +1,9 @@
-"""Walkthrough scenario: a batch moves from "1 clip to review" to "All reviewed".
+"""Walkthrough scenario: a batch moves from "1 clip to review" to "All in archive".
 
 Runs a real (offline) annotation on a dedicated clip, reviews it from the
 Batches page and publishes it. The draft carries an AI marker (written) and a
 shared decade field (a copy-only suggestion that is never written, #123); the
-batch must still settle to "All reviewed" once the marker is published. Before
+batch must still settle to "All in archive" once the marker is published. Before
 the fix the leftover suggestion kept the batch waiting for review forever.
 """
 
@@ -28,7 +28,7 @@ TITLE = "Review a batch and see it done"
 DESCRIPTION = (
     "An operator annotates a clip, opens the Batches page where the run waits "
     "under Needs you, clicks Review, publishes the draft, and returns to see the "
-    "batch settle to All reviewed under Done, even though the draft's shared "
+    "batch settle to All in archive under Done, even though the draft's shared "
     "decade field is only a copy-me suggestion that is never written."
 )
 
@@ -78,8 +78,8 @@ def run(wt):
     )
     wt.step("Back to the Batches page", open_batches)
     wt.step(
-        "The batch is done: All reviewed",
-        lambda p: _expect_status(p, "All reviewed", section="done"),
+        "The batch is done: All in archive",
+        lambda p: _expect_status(p, "All in archive", section="done"),
     )
 
 

@@ -48,7 +48,10 @@ def _open_more(p) -> None:
     p.locator(MORE).get_by_role("button", name="More actions").click()
     panel = p.locator(f"{MORE} .clip-more-panel")
     expect(panel).to_be_visible()
-    expect(panel.locator(".cache-ctl")).to_be_visible()
+    expect(panel.locator(".cache-ctl .menu-header")).to_have_text("Cache")
+    expect(panel.locator('[data-test="cache-status"]')).to_be_visible()
+    # Every action is a menu row, not a page button.
+    expect(panel.locator(".btn")).to_have_count(0)
     expect(panel.get_by_role("button", name="Live")).to_be_visible()
 
 
@@ -62,5 +65,5 @@ def run(wt):
     wt.step("The top bar has no spend, review or synced pills", _quiet_topbar)
     wt.step("The header has no duplicate timecode readout", _no_header_timecode)
     wt.step("Annotate sits on the right of the header", _annotate_on_the_right)
-    wt.step("The ⋯ menu holds the cache control and Live", _open_more)
+    wt.step("The ⋯ menu lists a Cache section and Live as menu rows", _open_more)
     wt.step("Escape closes the menu", _close_more)

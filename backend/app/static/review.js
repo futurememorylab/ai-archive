@@ -21,7 +21,6 @@ function reviewMixin(clipId) {
       // "syncing…" forever — reconcile the message against the real queue once.
       if (this.appliedCount > 0) this._checkSyncOnce();
       // Wire delegated Restore / Restore-and-publish handlers on the history panel.
-      this._initRestoreDelegation();
       // Wire the suggestion Copy buttons (shared fields the app never writes;
       // #123). Delegated so it also covers rows swapped in by _refreshPublished.
       this._initCopyButtons();
@@ -307,7 +306,6 @@ function reviewMixin(clipId) {
         if (st.unfinished > 0) { this.syncState = "syncing"; continue; }
         if (st.problems > 0) {
           this._setProblems(st);
-          this._refreshVersionPanel();  // headline pill → Failed/Conflict
           Alpine.store("toast").push(this._problemMessage(), { level: "error" });
           return;
         }
@@ -320,18 +318,9 @@ function reviewMixin(clipId) {
         // reactive `markers` array, so the just-published bars render orange
         // without a reload instead of lingering blue in the draft band.
         this.scope = "published";
-        this._refreshVersionPanel();  // headline pill → Live vN; history updates
         Alpine.store("toast").push("Synced — In archive updated.", { level: "success" });
         return;
       }
-    },
-    // Re-render the headline pill + history dropdown in place after a Make-live
-    // / publish, so #version-panel reflects the new live version without a reload.
-    _refreshVersionPanel() {
-      window.htmx?.ajax("GET", `/clips/${clipId}/version-panel`, {
-        target: "#version-panel",
-        swap: "innerHTML",
-      });
     },
     async _refreshPublished() {
       // Swap the server-rendered Published panel in place and refresh the
@@ -352,51 +341,6 @@ function reviewMixin(clipId) {
           } catch (e) { /* keep current markers */ }
         }
       } catch (e) { /* keep current view */ }
-    },
-    // ── version history: Restore + Restore-and-publish ───────────────────
-    // Delegated handlers attached on x-init via $root delegation. Mirror the
-    // fetch+toast+refreshDraft style used by applyDraft / _persist above.
-    // POST /api/review/clips/{id}/versions/{n}/restore → rehydrate draft.
-    // POST /api/review/clips/{id}/versions/{n}/restore-and-publish → same, then
-    //   the SyncEngine publishes it; poll + refresh as in applyDraft.
-    // History actions. "activate" switches the clip back to an existing version
-    // (re-PUT + make live, NO new version). "restore" loads a version into the
-    // working draft for editing. Neither forks a duplicate version any more.
-    async _handleVersionAction(btn, action) {
-      const vnum = btn.dataset.activate ?? btn.dataset.restore;
-      if (!vnum) return;
-      const path = action === "activate" ? "activate" : "restore";
-      try {
-        const r = await fetch(`/api/review/clips/${clipId}/versions/${vnum}/${path}`, { method: "POST" });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        await this.refreshDraft();
-        if (action === "activate") {
-          Alpine.store("toast").push(`Switching to version ${vnum}…`, { level: "success" });
-          this.syncState = "syncing";
-          this._pollSync();
-          this._refreshVersionPanel();  // immediate: pill → Publishing…; _pollSync → Live vN
-          window.htmx?.ajax("GET", "/ui/sync-chip", { target: "#sync-chip", swap: "innerHTML" });
-        } else {
-          Alpine.store("toast").push(`Draft loaded from version ${vnum}.`, { level: "success" });
-        }
-      } catch (e) {
-        Alpine.store("toast").push(`Version action failed: ${e.message || e}`, { level: "error" });
-      }
-    },
-    _initRestoreDelegation() {
-      // ONE delegated listener on the aside (the history panel is server-
-      // rendered, so its items don't get individual Alpine bindings). Guard
-      // against a re-init double-binding it — a second listener would fire the
-      // POST twice and create duplicate writes. See publishing audit, A5.
-      const aside = this.$root.closest(".anno-col") ?? this.$root;
-      if (aside._versionActionsBound) return;
-      aside._versionActionsBound = true;
-      aside.addEventListener("click", (ev) => {
-        const activate = ev.target.closest("[data-activate]");
-        if (activate) { ev.preventDefault(); this._handleVersionAction(activate, "activate"); return; }
-        const restore = ev.target.closest("[data-restore]");
-        if (restore) { ev.preventDefault(); this._handleVersionAction(restore, "restore"); }
-      });
     },
   };
 }

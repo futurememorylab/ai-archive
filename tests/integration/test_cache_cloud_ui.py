@@ -119,6 +119,18 @@ def test_cache_actions_ai_cached_shows_purge_not_cache(monkeypatch, tmp_path: Pa
     assert "Cache video" not in r.text
 
 
+def test_cache_actions_local_mode_purges_an_ai_only_leftover(monkeypatch, tmp_path: Path):
+    # Local dev: the proxy is already evicted but an AI-store copy remains.
+    # Purge clears both layers, so the leftover must still be purgeable.
+    app = _make_app(monkeypatch, tmp_path, media_cache="local")
+    with TestClient(app) as client:
+        _seed_clip(client, key=("catdv", "15"), ai_size=2048)
+        r = client.get("/ui/cache-actions/15?kind=video")
+    assert r.status_code == 200
+    assert "Purge cache" in r.text
+    assert "Video cached" in r.text
+
+
 def test_cache_actions_ai_absent_shows_cache_not_purge(monkeypatch, tmp_path: Path):
     app = _make_app(monkeypatch, tmp_path, media_cache="ai_store")
     with TestClient(app) as client:

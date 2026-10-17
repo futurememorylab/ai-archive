@@ -66,7 +66,7 @@ def test_write_back_problem_needs_you_and_beats_saving():
     # an in-flight one so it isn't masked (same source as the topbar sync chip).
     assert _head(completed=10, awaiting_clips=0, failed=0, syncing_clips=1, problem_clips=2) == (
         "attention",
-        "2 couldn't save to CatDV",
+        "2 couldn't save to archive",
         "bad",
     )
 
@@ -78,7 +78,7 @@ def test_failed_clips_need_you():
 def test_saving_is_done_but_not_green():
     assert _head(completed=10, awaiting_clips=0, failed=0, syncing_clips=3) == (
         "done",
-        "Saving 3 to CatDV…",
+        "Saving 3 to archive…",
         "accent",
     )
 
@@ -93,7 +93,7 @@ def test_stopped_batch_without_output():
 
 
 def test_all_reviewed():
-    assert _head(completed=10, awaiting_clips=0, failed=0) == ("done", "All reviewed", "ok")
+    assert _head(completed=10, awaiting_clips=0, failed=0) == ("done", "All in archive", "ok")
 
 
 def test_segments_and_legend_count_each_state():
@@ -118,7 +118,7 @@ def test_segments_and_legend_count_each_state():
         ("stopped", 6),
     ]
     assert [s["label"] for s in v["segments"]] == [
-        "5 reviewed",
+        "5 in archive",
         "5 to review",
         "1 saving",
         "1 couldn't save",

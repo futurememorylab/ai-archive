@@ -23,18 +23,6 @@ def test_clip_page_purge_clears_both_media_layers():
     assert "'media-local', 'media-ai'" in js or "'media-local','media-ai'" in js
 
 
-def test_clip_cache_actions_clear_button_appears_when_either_media_present():
-    # In local dev a clip can hold a local proxy AND an AI-store copy; the
-    # clear button must show (and clear both) whenever either is present — so
-    # an AI-only leftover (local already evicted) is still purgeable here.
-    html = (TPL / "_cache_actions.html").read_text()
-    # The local-mode branch shows the clear button when EITHER media layer is
-    # present (an OR), so an AI-only leftover is purgeable.
-    assert "media_local.present or clip.cache.media_ai.present" in html
-    # And the button delegates to purge() (which clears both layers).
-    assert 'purge()">Purge cache' in html
-
-
 def test_cache_page_bulk_evict_is_tab_aware():
     html = (TPL_ROOT / "cache_page.html").read_text()
     # The request body sends the tab-derived layers, not a hardcoded array.
