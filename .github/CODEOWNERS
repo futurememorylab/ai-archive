@@ -19,6 +19,10 @@
 /.github/workflows/ @peterhora
 /.github/CODEOWNERS @peterhora
 
+# Agent hooks that enforce these files (a hook can't guard itself)
+/.claude/settings.json @peterhora
+/.claude/hooks/ @peterhora
+
 # Guard tests (see AGENTS.md)
 /tests/unit/test_*guard*.py @peterhora
 /tests/unit/test_no_*.py @peterhora
