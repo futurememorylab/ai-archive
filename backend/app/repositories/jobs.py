@@ -569,7 +569,8 @@ class JobsRepo:
             f"               AND status IN ({','.join('?' * len(in_flight))}))",
             (*ids, *ids, *in_flight),
         )
-        if (await cur.fetchone())[0]:
+        row = await cur.fetchone()
+        if row and row[0]:
             raise ValueError("batch is still running")
         await conn.execute(f"UPDATE annotations SET job_id = NULL WHERE job_id IN ({ph})", ids)
         await conn.execute(f"UPDATE studio_run SET job_id = NULL WHERE job_id IN ({ph})", ids)

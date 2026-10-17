@@ -94,10 +94,21 @@ missing at read time (a job with no items), the page shows "Batch #<id>".
   - **Progress**: one segmented bar (reviewed, to review, saving, running,
     waiting, failed, stopped) and a legend with counts, plus a headline
     ("16 clips to review", "Running · 23 of 38 done", "All reviewed").
-  - **Actions** (`.btn.sm`): Review N clips (primary), Retry N failed,
-    Restart N stopped (runs the clips a Cancel stopped; clips that already
-    ran keep their results), Cancel while running, and Show clips / Hide
-    clips.
+  - **Outline and toggle**: each batch is an outlined card. A caret starts
+    the row and turns when it opens; clicking anywhere on the top line
+    except its buttons, menu or rename form opens or closes the clip list
+    inside the card (the caret is the keyboard toggle).
+  - **Actions** (`.btn.sm`), the clip page's pattern: one main action and a
+    ⋯ menu. The main action is Cancel while running, else Review N clips
+    (primary), else Retry N failed, else Restart N stopped (runs the clips
+    a Cancel stopped; clips that already ran keep their results). The menu
+    holds whichever of Retry / Restart isn't the main action, then Delete
+    batch.
+  - **Delete batch** removes the batch's jobs and their items only. What
+    it produced stays: annotations keep their drafts and accepted results
+    on the clips (their `job_id` is cleared), so unreviewed drafts still
+    show under To review on the Clips page. It is refused (409, menu item
+    disabled) while the batch runs.
 - **Live updates** patch the page in place: sections and rows are matched by
   key and only the row blocks whose content changed are replaced, so
   thumbnails and open clip lists don't reload while a batch runs.
@@ -135,9 +146,12 @@ clips still to review, and one fully reviewed.
    - Open the search page: that batch's clips show "Tatry 1934" in the
      Batch column and in the Batch filter.
 4. **Show clips**
-   - Click Show clips. A clip table like the search list opens under the
+   - Click a batch row's name line or progress bar (not a button). The
+     caret turns down and a clip table like the search list opens under the
      row with each clip's status; failed clips show their error.
    - Click a clip: its clip page opens.
+   - Back on `/batches`, click the open row's top line: the list closes and
+     the caret points right again. Clicking Review or ⋯ never toggles it.
 5. **New batch name**
    - Click + New batch, search "Tatry", tick two clips. The Batch name
      field reads "Tatry". Change it and start; the new row carries that
@@ -157,3 +171,11 @@ clips still to review, and one fully reviewed.
      "Restart N stopped" button.
    - Click it. The batch moves back to Running and runs only the stopped
      clips.
+9. **Delete a batch**
+   - On a finished batch with drafts to review, open ⋯ and choose Delete
+     batch. The confirmation says saved results stay on their clips; accept.
+   - A "Batch deleted." toast shows and the row is gone.
+   - On the Clips page, filter To review: the batch's clips are still
+     there with their drafts.
+   - On a running batch, ⋯ shows Delete batch greyed out ("Cancel it
+     first").

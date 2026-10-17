@@ -406,6 +406,7 @@ async def test_delete_batch_removes_jobs_but_keeps_annotations(db):
     for jid in (a, b, keep):
         await jobs.update_status(db, jid, "completed")
         for it in await jobs.list_items(db, jid):
+            assert it.id is not None
             await jobs.update_item_status(db, it.id, "review_ready")
     await _annotation_with_review(db, job_id=a, clip_id=1, applied=False, prompt_version_id=vid)
 
@@ -426,9 +427,10 @@ async def test_delete_batch_refuses_a_running_batch(db):
     _, vid = await _seed_version(db)
     jobs = JobsRepo()
     jid = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[1, 2], run_group="rg-run")
-    its = await jobs.list_items(db, jid)
-    await jobs.update_item_status(db, its[0].id, "review_ready")
-    # its[1] is still pending: the batch is running.
+    first = (await jobs.list_items(db, jid))[0]
+    assert first.id is not None
+    await jobs.update_item_status(db, first.id, "review_ready")
+    # The second clip is still pending: the batch is running.
 
     with pytest.raises(ValueError):
         await jobs.delete_batch(db, [jid])

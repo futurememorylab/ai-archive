@@ -1,8 +1,10 @@
 import asyncio
 import importlib
 from datetime import UTC, datetime
+from typing import cast
 from unittest.mock import MagicMock
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.app.archive.errors import ProviderError
@@ -390,9 +392,14 @@ def test_rename_batch_renames_and_rejects_blank(monkeypatch, tmp_path):
         assert "Tatry 1934" in client.get("/batches/table").text
 
 
+def _core_ctx(client: TestClient):
+    """The app's core context; TestClient types `.app` as its ASGI wrapper."""
+    return cast(FastAPI, client.app).state.core_ctx
+
+
 def test_delete_batch_removes_the_row_and_keeps_drafts(monkeypatch, tmp_path):
     with _make_client(monkeypatch, tmp_path) as client:
-        ctx = client.app.state.core_ctx
+        ctx = _core_ctx(client)
         jid = asyncio.run(_seed_batch(ctx))
         assert f"Batch #{jid}" in client.get("/batches/table").text
 
@@ -404,7 +411,7 @@ def test_delete_batch_removes_the_row_and_keeps_drafts(monkeypatch, tmp_path):
 
 def test_delete_batch_refuses_while_running(monkeypatch, tmp_path):
     with _make_client(monkeypatch, tmp_path) as client:
-        ctx = client.app.state.core_ctx
+        ctx = _core_ctx(client)
 
         async def _seed_running():
             _, vid = await PromptsRepo().create_with_initial_version(
@@ -429,7 +436,7 @@ def test_batch_row_has_one_main_action_and_a_more_menu(monkeypatch, tmp_path):
     """A row shows one main action; the rest (and Delete) sit in its ⋯ menu.
     The whole row toggles its clip list, so there's no Show clips button."""
     with _make_client(monkeypatch, tmp_path) as client:
-        asyncio.run(_seed_batch(client.app.state.core_ctx))
+        asyncio.run(_seed_batch(_core_ctx(client)))
         html = client.get("/batches/table").text
         assert html.count('data-test="batch-main-action"') == 1
         # Nothing to review, so retrying the failed clip is the main action.
