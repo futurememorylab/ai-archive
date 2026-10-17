@@ -501,9 +501,14 @@ async def test_for_review_and_batch_stay_in_active_catalog(db):
     await _insert_job_item(db, job_id=10, clip_id=1)
     await _insert_job_item(db, job_id=10, clip_id=8)
 
-    for kwargs in ({"anno": "for_review"}, {"anno": "any", "batch": 10}):
-        out = await resolve(db, provider_id=PROVIDER, catalog_id=CATALOG, cache="any", **kwargs)
-        assert out == {1}
+    review = await resolve(
+        db, provider_id=PROVIDER, catalog_id=CATALOG, cache="any", anno="for_review"
+    )
+    assert review == {1}
+    batch = await resolve(
+        db, provider_id=PROVIDER, catalog_id=CATALOG, cache="any", anno="any", batch=10
+    )
+    assert batch == {1}
 
 
 @pytest.mark.asyncio
