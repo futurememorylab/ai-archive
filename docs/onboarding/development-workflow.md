@@ -33,9 +33,10 @@ flowchart LR
   branch with implementation branches hanging off it is an epic branch in
   disguise — it defers all integration to one merge and re-creates big-bang
   integration. Don't.
-- `main` should be protected: no direct pushes, merge only via PR with green CI
-  and at least one human approval. (Set this in GitHub → Settings → Branches;
-  until then it is convention only.)
+- `main` is protected by a ruleset: no direct pushes, merge only via PR with
+  green `lint` and `test` checks and at least one human approval. Files that
+  define the quality gates are listed in `.github/CODEOWNERS` and need Peter's
+  review (ADR 0129).
 - Branch naming: `<issue>-<short-desc>` for board issues (what `gh-design`
   creates), `chore/<short-desc>` otherwise. Agent sessions may use their own
   `claude/...` branch names.
@@ -120,6 +121,12 @@ When PR-2 genuinely depends on PR-1, do not create an epic branch. Either:
 Either way, each PR still merges into `main` individually and in order. The
 stack is a development and review convenience — not an integration branch.
 
+### PR size
+
+Aim for under ~600 changed lines, not counting generated files and
+baselines. Larger work splits into stacked PRs as above: big PRs get
+skimmed, and review is the bottleneck.
+
 ## Incomplete work: feature flags
 
 Code that lands before it is user-visible goes behind a feature flag. This
@@ -139,9 +146,14 @@ develop on trunk.
 ## CI
 
 - `.github/workflows/ci.yml` runs on every PR and on `main`: ruff check,
-  ruff format, import contracts, the erosion (complexity) gate and the full
-  test suite. basedpyright is still local-only until its baseline is
-  regenerated.
+  ruff format, import contracts, the erosion (complexity) gate, basedpyright
+  against its baseline, docstring coverage (`interrogate`), pylint
+  duplicate-code and the full test suite.
+- The baselines only tighten. On a PR the erosion gate also fails when a
+  function changed since the merge-base got more complex, and when erosion
+  or max CC fell without the baseline being lowered (run `--write-baseline`
+  and commit). `tools/type_baseline_gate.py` fails when the basedpyright
+  baseline grew. Raising any baseline is Peter's call (ADR 0129).
 - Green CI is a required merge gate. A local "tests pass" is a local claim;
   CI is the team's source of truth.
 
@@ -155,6 +167,18 @@ develop on trunk.
   human review becomes the real bottleneck.
 - If parallel worktrees flood the review queue, apply a WIP limit on open PRs
   per author.
+
+## Maintenance loop
+
+Gates stop complexity from growing; this loop pays it down. A weekly
+scheduled routine, `refactor-hotspot`, takes the highest-mass offender from
+the erosion gate's report that no PR touched in the last 7 days (skipping
+any with an open PR), does a behaviour-preserving extraction (existing tests
+unchanged; new tests for extracted helpers allowed), and opens one PR
+labelled `refactor` with before/after CC and erosion in the description and
+the baseline lowered. It runs the full suite and `/e2e`, and never touches
+the CatDV seat. The routine is created only with Peter's approval of it and
+its model.
 
 ## Commit attribution
 
