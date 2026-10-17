@@ -657,8 +657,9 @@ def test_clip_detail_no_draft_no_action_bar(monkeypatch, tmp_path):
 
 
 def test_clips_list_shows_draft_columns(monkeypatch, tmp_path):
-    """GET / must render Type, Batch, and Drafts column headers, and for a clip
-    with pending review items the Drafts cell must contain the counts label."""
+    """GET / must render Type, Batch, and Annotation column headers, and for a
+    clip with pending review items the Annotation cell's tooltip must spell out
+    the counts."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         ctx = client.app.state.core_ctx
@@ -671,12 +672,12 @@ def test_clips_list_shows_draft_columns(monkeypatch, tmp_path):
         # Column headers must be present.
         assert "Type" in r.text
         assert "Batch" in r.text
-        assert "Drafts" in r.text
+        assert ">Annotation</th>" in r.text
         # Clip 1 has 1 marker draft; the decade field draft is a shared
         # (non-owned) field → a suggestion, excluded from the pending draft
         # counts (#123), so only the marker count shows.
-        assert "1m" in r.text
-        assert "1f" not in r.text
+        assert 'title="1 marker to review"' in r.text
+        assert "1 field" not in r.text
         # Clip kind (video, since no filePath in provider_data) must appear.
         assert "video" in r.text
 

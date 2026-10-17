@@ -235,57 +235,88 @@ def cache_status_view(status) -> dict[str, Any]:
     }
 
 
-def batch_view(row: dict) -> dict:
-    """Shape a `JobsRepo.list_batches` row into the dict the Batches table
-    renders. Pure function (no I/O) so it is unit-tested in isolation.
+def _plural(n: int, word: str) -> str:
+    return f"{n} {word}{'' if n == 1 else 's'}"
 
-    Status mirrors the design: running → 'Running X/Y'; not running with
-    drafts still awaiting → 'Awaiting review' / 'N to review'; otherwise
-    'Applied'.
-    """
-    ran = int(row["ran"])
-    completed = int(row["completed"])
-    failed = int(row["failed"])
-    awaiting = int(row["awaiting_clips"])
-    # Clips whose accepted write-backs are enqueued (applied_at) but not yet
-    # confirmed on CatDV (synced_at NULL) — in-flight or, while CatDV is offline,
-    # parked. Lets the batch show "Syncing" instead of claiming "Applied" before
-    # the change is actually on the server (see ADR 0093). Rejected items never
-    # get applied_at, so they don't wedge this count. Optional for back-compat.
-    syncing = int(row.get("syncing_clips", 0) or 0)
-    # Clips whose write-back FAILED (exhausted retries) or hit a CONFLICT — the
-    # change never reached CatDV. Must beat "Syncing"/"Applied" so a stuck queue
-    # is never masked as green; mirrors the topbar sync chip's problem count so
-    # the two can't disagree (see ADR 0096). Optional for back-compat.
-    problems = int(row.get("problem_clips", 0) or 0)
-    # Items cancelled by orphan recovery (job interrupted by a restart). Counted
-    # separately from in_flight/completed so a stopped job reads "Cancelled",
-    # not a phantom "Running" (the leftover pending item) nor a false green
-    # "Applied". Optional for back-compat.
-    cancelled = int(row.get("cancelled", 0) or 0)
-    running = int(row["running_jobs"]) > 0 or int(row["in_flight"]) > 0
-    reviewed = max(0, completed - awaiting)
 
+def _batch_headline(c: dict[str, int], running: bool) -> tuple[str, str, str]:
+    """(section, headline, state) for one batch. Precedence: running, clips to
+    review, write-backs that failed (never masked as green, same source as the
+    topbar sync chip, ADR 0096), failed clips, write-backs in flight, stopped
+    with no output, else all reviewed. Sections: 'attention' (Needs you),
+    'running', 'done'."""
     if running:
-        status_state, status_label = "accent", f"Running {completed + failed}/{ran}"
-    elif awaiting > 0:
-        status_state = ""
-        status_label = "Awaiting review" if reviewed == 0 else f"{awaiting} to review"
-    elif problems > 0:
-        # Write-back stuck (failed / conflict) — surface it instead of "Applied".
-        status_state, status_label = "bad", f"{problems} failed to sync"
-    elif syncing > 0:
-        # Review done, but write-backs haven't landed on CatDV yet.
-        status_state, status_label = "accent", f"Syncing {syncing}"
-    elif cancelled > 0 and completed == 0 and failed == 0:
-        # Interrupted job with no usable output — stopped, not "Applied".
-        status_state, status_label = "", "Cancelled"
-    else:
-        status_state, status_label = "ok", "Applied"
+        done = c["completed"] + c["failed"]
+        return "running", f"Running · {done} of {c['ran']} done", "accent"
+    if c["awaiting"]:
+        return "attention", f"{_plural(c['awaiting'], 'clip')} to review", "info"
+    if c["problems"]:
+        return "attention", f"{c['problems']} couldn't save to CatDV", "bad"
+    if c["failed"]:
+        return "attention", f"{c['failed']} failed", "bad"
+    if c["syncing"]:
+        return "done", f"Saving {c['syncing']} to CatDV…", "accent"
+    if c["cancelled"] and not c["completed"]:
+        return "done", "Stopped", ""
+    return "done", "All reviewed", "ok"
 
-    name = row.get("prompt_name") or "(prompt unavailable)"
+
+_SEGMENT_LABELS = {
+    "reviewed": "reviewed",
+    "review": "to review",
+    "saving": "saving",
+    "problem": "couldn't save",
+    "running": "running",
+    "failed": "failed",
+    "stopped": "stopped",
+}
+
+
+def _batch_segments(c: dict[str, int]) -> list[dict[str, Any]]:
+    """One entry per non-empty state, in bar order, for the segmented progress
+    bar and its legend. Reviewed = finished clips not waiting on review or a
+    write-back."""
+    counts = {
+        "reviewed": max(0, c["completed"] - c["awaiting"] - c["syncing"] - c["problems"]),
+        "review": c["awaiting"],
+        "saving": c["syncing"],
+        "problem": c["problems"],
+        "running": c["in_flight"],
+        "failed": c["failed"],
+        "stopped": c["cancelled"],
+    }
+    return [
+        {"key": k, "count": n, "label": f"{n} {_SEGMENT_LABELS[k]}"}
+        for k, n in counts.items()
+        if n > 0
+    ]
+
+
+def batch_view(row: dict) -> dict:
+    """Shape a `JobsRepo.list_batches` row into the dict a Batches page row
+    renders (docs/specs/2026-10-17-batches-redesign-design.md). Pure function
+    (no I/O) so it is unit-tested in isolation. The route adds the thumbnail
+    preview (`thumbs`, `clips`) from `JobsRepo.batch_previews`."""
+    c = {
+        "ran": int(row["ran"]),
+        "completed": int(row["completed"]),
+        "failed": int(row["failed"]),
+        "awaiting": int(row["awaiting_clips"]),
+        "in_flight": int(row.get("in_flight", 0) or 0),
+        # Clips whose write-backs are queued but not confirmed on CatDV, and
+        # ones that failed / conflicted (pending_operations, ADR 0093 / 0096).
+        # Optional for back-compat.
+        "syncing": int(row.get("syncing_clips", 0) or 0),
+        "problems": int(row.get("problem_clips", 0) or 0),
+        # Items cancelled by orphan recovery or Cancel. Optional for back-compat.
+        "cancelled": int(row.get("cancelled", 0) or 0),
+    }
+    running = int(row["running_jobs"]) > 0 or c["in_flight"] > 0
+    section, headline, headline_state = _batch_headline(c, running)
+
+    prompt = row.get("prompt_name") or "(prompt unavailable)"
     if row.get("prompt_name") and int(row.get("prompt_count", 1)) > 1:
-        name = f"{name} + {int(row['prompt_count']) - 1} more"
+        prompt = f"{prompt} + {int(row['prompt_count']) - 1} more"
 
     job_ids = list(row["job_ids"])
     started = row.get("started_at") or ""
@@ -296,7 +327,7 @@ def batch_view(row: dict) -> dict:
     except (ValueError, TypeError):
         pass
 
-    # "Review →" jumps straight into the review of the first un-reviewed clip
+    # "Review" jumps straight into the review of the first un-reviewed clip
     # of this batch; fall back to the batch-filtered clips list if none.
     first_pending = row.get("first_pending_clip_id")
     review_href = (
@@ -304,32 +335,75 @@ def batch_view(row: dict) -> dict:
         if first_pending is not None
         else f"/?batch={','.join(str(i) for i in job_ids)}&anno=for_review"
     )
-    # Clicking the batch row opens the clips list filtered to this batch — ALL
-    # its files (every job_item, any status), each showing its queued /
-    # processing / done / failed badge. No anno filter, so nothing is hidden.
+    # The search page filtered to this batch: ALL its clips, any status.
     files_href = f"/?batch={','.join(str(i) for i in job_ids)}"
 
     return {
         "batch_key": row["batch_key"],
         "id": int(row["primary_job_id"]),
+        "name": row.get("batch_name") or f"Batch #{int(row['primary_job_id'])}",
         "job_ids": job_ids,
-        "prompt": name,
+        "prompt": prompt,
         "version": row.get("version_num"),
         "model": row.get("model") or "",
         "started": started,
-        "ran": ran,
-        "completed": completed,
-        "failed": failed,
-        "reviewed": reviewed,
-        "awaiting": awaiting,
+        "ran": c["ran"],
+        "completed": c["completed"],
+        "failed": c["failed"],
+        "awaiting": c["awaiting"],
         "running": running,
-        "pct_done": round((completed + failed) / ran * 100) if ran else 0,
-        "pct_reviewed": round(reviewed / completed * 100) if completed else 0,
-        "status_state": status_state,
-        "status_label": status_label,
+        "section": section,
+        "headline": headline,
+        "headline_state": headline_state,
+        "segments": _batch_segments(c),
         "review_href": review_href,
         "files_href": files_href,
     }
+
+
+_RUNNING_ITEM = frozenset({"resolving", "uploading", "prompting"})
+
+
+def _clip_status(r: dict) -> tuple[int, str, str]:
+    """(rank, label, pill state) of one clip in a batch; lower rank lists
+    first, so what needs the user leads the Show clips list."""
+    status = r["item_status"]
+    if r["awaiting"]:
+        return 0, "To review", "info"
+    if status == "error":
+        return 1, "Failed", "bad"
+    if r["sync"] == "problem":
+        return 1, "Couldn't save", "bad"
+    if status in _RUNNING_ITEM:
+        return 2, "Running", "accent"
+    if status == "pending":
+        return 3, "Waiting", ""
+    if r["sync"] == "saving":
+        return 4, "Saving to CatDV…", "accent"
+    if status == "cancelled":
+        return 6, "Stopped", ""
+    return 5, "Reviewed", "ok"
+
+
+def batch_clip_list(rows: list[dict], *, limit: int = 50) -> tuple[list[dict], int]:
+    """Shape `JobsRepo.batch_clip_rows` for the shared `_video_list.html`:
+    status-ordered (queue order within a status), capped at `limit`. Returns
+    (items, total clip count)."""
+    ranked = sorted(
+        ((_clip_status(r), i, r) for i, r in enumerate(rows)), key=lambda t: (t[0][0], t[1])
+    )
+    items = [
+        {
+            "id": r["clip_id"],
+            "name": r["name"] or f"Clip {r['clip_id']}",
+            "thumb_url": f"/api/media/{r['clip_id']}/thumb",
+            "row_href": f"/clips/{r['clip_id']}",
+            "status": {"label": label, "state": state},
+            "error": r["error"] if r["item_status"] == "error" else None,
+        }
+        for (_, label, state), _, r in ranked[:limit]
+    ]
+    return items, len(rows)
 
 
 def draft_review_arrays(draft: dict) -> dict:

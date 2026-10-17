@@ -65,3 +65,51 @@ def test_create_job_lists_and_cancels(monkeypatch, tmp_path):
         assert r.status_code == 200
         r = client.get(f"/api/jobs/{job_id}")
         assert r.json()["status"] == "cancelled"
+
+
+def test_create_job_names_the_batch(monkeypatch, tmp_path):
+    """A sent name is cleaned and kept; without one the batch is named after
+    its first clip (cached name, else "Clip <id>") plus "and N more"."""
+    _setenv(monkeypatch, tmp_path)
+    from backend.app import main as main_mod
+
+    importlib.reload(main_mod)
+    with TestClient(main_mod.app) as client:
+        ctx = client.app.state.core_ctx
+        _, vid = _run(
+            ctx.prompts_repo.create_with_initial_version(
+                ctx.db,
+                name="t",
+                description=None,
+                body="p",
+                target_map={"scenes": {"kind": "markers"}},
+                output_schema={},
+                model="m",
+            )
+        )
+
+        async def _cache_name():
+            await ctx.db.execute(
+                "INSERT INTO clip_cache (provider_id, provider_clip_id, name, catalog_id, "
+                "duration_secs, fps, canonical_json, fetched_at) "
+                "VALUES ('catdv', '7', 'Výlet do Tater', '881507', 1, 25, '{}', '2026-01-01')"
+            )
+            await ctx.db.commit()
+
+        _run(_cache_name())
+
+        def create(**extra):
+            r = client.post("/api/jobs", json={"prompt_version_id": vid, **extra})
+            assert r.status_code == 201
+            return r.json()["id"]
+
+        named = create(clip_ids=[7, 8], batch_name="  Tatry   1934 ")
+        cached = create(clip_ids=[7, 8, 9])
+        uncached = create(clip_ids=[42])
+        blank = create(clip_ids=[42], batch_name="   ")
+
+        names = {j["id"]: j["batch_name"] for j in client.get("/api/jobs").json()}
+        assert names[named] == "Tatry 1934"
+        assert names[cached] == "Výlet do Tater and 2 more"
+        assert names[uncached] == "Clip 42"
+        assert names[blank] == "Clip 42"

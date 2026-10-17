@@ -1,8 +1,8 @@
 """Clips-list unified publish-status badge — render + N+1 guard.
 
 Covers:
-1. A clip with a live clip_version shows 'Live v<N>' in the rendered row.
-2. A clip with only a pending draft (review_items, no version) shows 'Draft'.
+1. A clip with a live clip_version shows 'In CatDV' (version in the tooltip).
+2. A clip with only a pending draft (review_items, no version) shows 'To review'.
 3. A clip with no version and no draft shows no badge (no pill).
 4. The batched status derivation is O(1) in clip count: the same number of
    SQL statements fires for 3 clips vs 30 clips (assert_query_count +
@@ -167,7 +167,8 @@ async def _seed_pending_op(ctx, clip_id: int, status: str) -> None:
 
 
 def test_live_badge_rendered(monkeypatch, tmp_path):
-    """A clip with a live version shows 'Live v1' status pill."""
+    """A clip with a live version shows 'In CatDV', the version in the tooltip
+    (docs/specs/2026-10-17-batches-redesign-design.md: no Live/Draft jargon)."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         ctx = client.app.state.core_ctx
@@ -178,8 +179,9 @@ def test_live_badge_rendered(monkeypatch, tmp_path):
         install_live_ctx(app, archive=_FakeArchive([_canonical(clip_id)]))
         r = client.get("/")
         assert r.status_code == 200
-        # The pill label for a live clip is "Live v1"
-        assert "Live v1" in r.text, f"Expected 'Live v1' in response; got:\n{r.text[:3000]}"
+        assert ">In CatDV<" in r.text, f"Expected 'In CatDV' in response; got:\n{r.text[:3000]}"
+        assert 'title="Version 1 is in CatDV"' in r.text
+        assert ">Annotation</th>" in r.text
 
 
 def test_live_badge_version_num(monkeypatch, tmp_path):
@@ -194,11 +196,12 @@ def test_live_badge_version_num(monkeypatch, tmp_path):
         install_live_ctx(app, archive=_FakeArchive([_canonical(clip_id)]))
         r = client.get("/")
         assert r.status_code == 200
-        assert "Live v3" in r.text
+        assert 'title="Version 3 is in CatDV"' in r.text
 
 
 def test_draft_badge_rendered(monkeypatch, tmp_path):
-    """A clip with only a pending draft (no version) shows 'Draft' pill."""
+    """A clip with only a pending draft (no version) shows 'To review', with
+    the proposal counts spelled out in the tooltip."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         ctx = client.app.state.core_ctx
@@ -209,7 +212,9 @@ def test_draft_badge_rendered(monkeypatch, tmp_path):
         install_live_ctx(app, archive=_FakeArchive([_canonical(clip_id)]))
         r = client.get("/")
         assert r.status_code == 200
-        assert "Draft" in r.text, f"Expected 'Draft' in response; got:\n{r.text[:3000]}"
+        assert ">To review<" in r.text, f"Expected 'To review' in response; got:\n{r.text[:3000]}"
+        assert 'title="1 marker to review"' in r.text
+        assert 'data-review="1"' in r.text
 
 
 def test_failed_write_shows_failed_not_stale_version_state(monkeypatch, tmp_path):
@@ -228,12 +233,12 @@ def test_failed_write_shows_failed_not_stale_version_state(monkeypatch, tmp_path
         install_live_ctx(app, archive=_FakeArchive([_canonical(clip_id)]))
         r = client.get("/")
         assert r.status_code == 200
-        assert "Failed" in r.text
-        assert "Publishing" not in r.text
+        assert ">Couldn&#39;t save<" in r.text
+        assert "Saving to CatDV" not in r.text
 
 
 def test_pending_write_shows_publishing(monkeypatch, tmp_path):
-    """A clip with an in-flight write shows 'Publishing…' from the queue."""
+    """A clip with an in-flight write shows 'Saving to CatDV…' from the queue."""
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         ctx = client.app.state.core_ctx
@@ -243,7 +248,7 @@ def test_pending_write_shows_publishing(monkeypatch, tmp_path):
         install_live_ctx(app, archive=_FakeArchive([_canonical(clip_id)]))
         r = client.get("/")
         assert r.status_code == 200
-        assert "Publishing" in r.text
+        assert "Saving to CatDV…" in r.text
 
 
 def test_no_badge_for_clean_clip(monkeypatch, tmp_path):
@@ -257,8 +262,43 @@ def test_no_badge_for_clean_clip(monkeypatch, tmp_path):
         # No Live vN pill and no Draft pill for a clean clip.
         # "Draft" appears in other page chrome (column header "Drafts", JS "applyDrafts"),
         # so we check for the pill markup specifically.
-        assert "Live v" not in r.text
-        assert ">Draft<" not in r.text  # pill label, not surrounding chrome
+        assert ">In CatDV<" not in r.text
+        assert ">To review<" not in r.text  # pill label, not surrounding chrome
+        assert 'title="Not annotated"' in r.text
+        assert 'data-review="1"' not in r.text
+
+
+def test_batch_column_and_filter_show_the_batch_name(monkeypatch, tmp_path):
+    """The Batch column and the Batch filter name the batch, not '#<job id>'."""
+    app = _make_app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        ctx = client.app.state.core_ctx
+        clip_id = 501
+
+        async def seed():
+            _, vid = await ctx.prompts_repo.create_with_initial_version(
+                ctx.db,
+                name="p",
+                description=None,
+                body="b",
+                target_map={"scenes": {"kind": "markers"}},
+                output_schema={},
+                model="m",
+            )
+            jid = await ctx.jobs_repo.create_job(
+                ctx.db, prompt_version_id=vid, clip_ids=[clip_id], batch_name="Tatry 1934"
+            )
+            await _seed_pending_draft(ctx, clip_id)
+            await ctx.db.execute("UPDATE annotations SET job_id = ?", (jid,))
+            await ctx.db.commit()
+            return jid
+
+        jid = asyncio.run(seed())
+        install_live_ctx(app, archive=_FakeArchive([_canonical(clip_id)]))
+        html = client.get("/").text
+        assert 'title="Tatry 1934"' in html
+        assert f">#{jid}<" not in html
+        assert f"Tatry 1934 ({1})" in html  # the Batch filter option
 
 
 # ---------------------------------------------------------------------------

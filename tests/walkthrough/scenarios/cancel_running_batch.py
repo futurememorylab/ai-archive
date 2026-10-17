@@ -2,8 +2,8 @@
 
 Starts a batch whose Gemini call is held open by the slow-Gemini hook so it
 stays 'running' long enough to observe progress and click Cancel. The cancel
-flips the batch to 'cancelled' (ADR 0115: cancel actually cancels); releasing
-the hook lets the run end cleanly.
+flips the batch to 'cancelled' (ADR 0115: cancel actually cancels), which the
+Batches page shows as Stopped; releasing the hook lets the run end cleanly.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ TITLE = "Cancel a running batch"
 DESCRIPTION = (
     "An operator starts an annotation batch, opens the Batches page while it is "
     "still running, and cancels it. The row shows a Cancel button while running "
-    "and settles to 'Cancelled' once stopped."
+    "and settles to Stopped under Done once cancelled."
 )
 
 
@@ -80,7 +80,7 @@ def run(wt):
             lambda p: gemini.release(),
         )
         wt.step(
-            "The batch row settles to Cancelled",
+            "The batch row settles to Stopped",
             _expect_settled_cancelled,
         )
     finally:
@@ -90,12 +90,13 @@ def run(wt):
 
 
 def _expect_running_with_cancel(p) -> None:
-    expect(p.locator("table.batch-tbl")).to_contain_text("Running")
-    expect(p.get_by_role("button", name="Cancel")).to_be_visible()
+    running = p.locator('[data-test="batch-section-running"]')
+    expect(running).to_contain_text("Running · 0 of 1 done")
+    expect(running.get_by_role("button", name="Cancel")).to_be_visible()
 
 
 def _expect_settled_cancelled(p) -> None:
     # The Cancel button disappears once the row is no longer running, and the
-    # status pill reads "Cancelled".
+    # batch reads "Stopped" under Done.
     expect(p.get_by_role("button", name="Cancel")).to_have_count(0)
-    expect(p.locator("table.batch-tbl")).to_contain_text("Cancelled")
+    expect(p.locator('[data-test="batch-section-done"]')).to_contain_text("Stopped")

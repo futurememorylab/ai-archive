@@ -9,6 +9,7 @@ from backend.app.auth.guards import require_permission
 from backend.app.deps import get_core_ctx
 from backend.app.routes.events import _event_generator
 from backend.app.services.annotator import JOBS_TOPIC
+from backend.app.services.batch_names import clean_batch_name, default_batch_name
 from backend.app.services.run_estimator import estimate_for_clip_ids
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -20,17 +21,31 @@ class JobCreate(BaseModel):
     # Shared token tying together the per-kind jobs of one bulk action so the
     # Batch filter can present them as a single run.
     run_group: str | None = None
+    # Human name of the batch; the browser pre-fills it. Without one the
+    # server names the batch after its first clip (services/batch_names.py).
+    batch_name: str | None = None
+
+
+async def _default_name(ctx, clip_ids: list[int]) -> str | None:
+    if not clip_ids:
+        return None
+    row = await ctx.clip_cache_repo.get_row(
+        ctx.db, provider_id="catdv", provider_clip_id=str(clip_ids[0])
+    )
+    return default_batch_name(row and row.get("name"), clip_ids[0], len(set(clip_ids)))
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_job(request: Request, body: JobCreate):
     require_permission(request, "run")
     ctx = get_core_ctx(request)
+    name = clean_batch_name(body.batch_name) or await _default_name(ctx, body.clip_ids)
     job_id = await ctx.jobs_repo.create_job(
         ctx.db,
         prompt_version_id=body.prompt_version_id,
         clip_ids=body.clip_ids,
         run_group=body.run_group,
+        batch_name=name,
     )
     # The lifespan-owned JobRunner claims pending jobs when the live stack is
     # up; offline, the job stays pending and resumes on the next live boot.

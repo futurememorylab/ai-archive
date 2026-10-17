@@ -85,6 +85,23 @@ def _batch_status_view(status: str | None) -> dict[str, str] | None:
     return {"label": label, "state": state}
 
 
+def _review_tip(pending: dict | None) -> str:
+    """Tooltip for the Annotation column's 'To review' pill: what the AI
+    proposed, in words ("12 markers, 3 fields to review")."""
+    if not pending:
+        return ""
+    parts = [
+        f"{n} {word}{'' if n == 1 else 's'}"
+        for n, word in (
+            (pending.get("marker_count") or 0, "marker"),
+            (pending.get("field_count") or 0, "field"),
+            (pending.get("note_count") or 0, "note"),
+        )
+        if n
+    ]
+    return f"{', '.join(parts)} to review" if parts else "Suggestions to review"
+
+
 def _batch_options(jobs: list) -> list[dict[str, str]]:
     """Batch-filter dropdown entries. The per-kind jobs of one bulk action
     share a run_group and collapse into a single entry (value = all their job
@@ -104,17 +121,15 @@ def _batch_options(jobs: list) -> list[dict[str, str]]:
             members = by_group[j.run_group]
             ids = sorted(int(m.id) for m in members)
             total = sum(m.total_clips for m in members)
-            options.append(
-                {
-                    "value": ",".join(str(i) for i in ids),
-                    "label": "#" + "+".join(str(i) for i in ids) + f" · bulk ({total})",
-                }
-            )
+            # The batch's name is its primary (lowest id) job's, as on /batches.
+            name = min(members, key=lambda m: int(m.id)).batch_name
+            label = name or "#" + "+".join(str(i) for i in ids) + " · bulk"
+            options.append({"value": ",".join(str(i) for i in ids), "label": f"{label} ({total})"})
         else:
-            label = f"#{j.id}"
-            if j.notes:
+            label = j.batch_name or f"#{j.id}"
+            if not j.batch_name and j.notes:
                 label += f" · {j.notes}"
-            elif j.kind:
+            elif not j.batch_name and j.kind:
                 label += f" · {j.kind}"
             label += f" ({j.total_clips})"
             options.append({"value": str(j.id), "label": label})
@@ -364,6 +379,10 @@ async def clips_list(
     # Annotate each row with its pending-draft counts and batch job id.
     pending_rows = await ctx.review_items_repo.list_pending_clips(ctx.db, limit=2000, offset=0)
     pmap = {r["catdv_clip_id"]: r for r in pending_rows}
+    batch_names = await ctx.jobs_repo.batch_names_for_jobs(
+        ctx.db,
+        sorted({p["job_id"] for p in pmap.values() if p.get("job_id") is not None}),
+    )
 
     # Batched, O(1) regardless of page size: the publishing/failed/conflict
     # signal comes from pending_operations (the durable write queue — the same
@@ -380,18 +399,9 @@ async def clips_list(
         bc = batch_cost_map.get(row["id"])
         row["batch_cost_usd"] = bc if bc else None
         p = pmap.get(row["id"])
-        mc = p["marker_count"] if p else 0
-        fc = p["field_count"] if p else 0
-        nc = p["note_count"] if p else 0
-        parts = []
-        if mc:
-            parts.append(f"{mc}m")
-        if fc:
-            parts.append(f"{fc}f")
-        if nc:
-            parts.append(f"{nc}n")
-        row["draft_label"] = " · ".join(parts) if parts else ""
+        row["review_tip"] = _review_tip(p)
         row["batch"] = p["job_id"] if p else None
+        row["batch_name"] = batch_names.get(row["batch"]) if row["batch"] is not None else None
         # Unified publish status for the status-badge column.
         b = pending_by_clip.get(str(row["id"]), {})
         ps_state, ps_num = resolve_publish_status(

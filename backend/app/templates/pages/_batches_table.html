@@ -1,116 +1,101 @@
+{# Batches page body (docs/specs/2026-10-17-batches-redesign-design.md):
+   batches grouped into Needs you / Running / Done, one row each. Sizes come
+   from the search list: the stack uses its 64×36 .thumb (shimmer + empty
+   placeholder), actions are .btn.sm, the expanded list is _video_list.html.
+   Re-rendered by batchesPage().refresh() on job events, so per-row UI state
+   (open, renaming) lives in the page's Alpine scope, keyed by batch_key. #}
 {% if not batches %}
   <div class="batches-empty">
     No batches yet.
     <a href="/">Select clips and run Annotate</a> to create your first batch.
   </div>
 {% else %}
-<table class="batch-tbl">
-  <thead>
-    <tr>
-      <th>Batch</th><th>Started</th><th>Ran</th>
-      <th>Completed</th><th>Reviewed</th><th>Cost</th><th>Status</th><th></th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for b in batches %}
-    <tr class="batch-row" onclick="location.href='{{ b.files_href }}'"
-        title="View this batch's clips">
-      <td>
-        <div class="bt-id">
-          <span class="bt-num">#{{ b.id }}</span>
-          <span class="bt-prompt">{{ b.prompt }}</span>
-          {% if b.version is not none %}<span class="bt-meta">v{{ b.version }} · {{ b.model }}</span>{% endif %}
+{% for sec in sections %}
+<section class="bsec" data-test="batch-section-{{ sec.key }}">
+  <div class="bsec-h">
+    <h2>{{ sec.title }}</h2>
+    <span class="bsec-count mono">{{ sec.batches|length }}</span>
+    <span class="bsec-hint">{{ sec.hint }}</span>
+  </div>
+  {% for b in sec.batches %}
+  {% set key = b.batch_key|tojson|forceescape %}
+  <article class="batch-row" data-test="batch-row" data-batch-key="{{ b.batch_key }}"
+           :class="{ open: expanded[{{ key }}] }">
+    <div class="br-main">
+      <div class="bstack" role="img" aria-label="{{ b.clips }} clip{{ '' if b.clips == 1 else 's' }}">
+        {% for t in b.thumbs %}
+        <img class="thumb" loading="lazy" src="{{ t.url }}" alt=""
+             onload="this.classList.add('thumb--ready');"
+             onerror="this.classList.add('thumb--empty'); this.removeAttribute('src');">
+        {% endfor %}
+        {% if b.more %}<span class="bstack-more mono">+{{ b.more }}</span>{% endif %}
+      </div>
+
+      <div class="br-info">
+        <div class="br-name" x-show="renaming !== {{ key }}">
+          <span class="br-title" data-test="batch-name">{{ b.name }}</span>
+          <button type="button" class="btn ghost sm icon" aria-label="Rename batch"
+                  title="Rename batch" @click="startRename({{ key }}, {{ b.name|tojson|forceescape }})">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button>
         </div>
-      </td>
-      <td><span class="bt-when">{{ b.started }}</span></td>
-      <td><span class="bt-ran">{{ b.ran }}</span></td>
-      <td class="bcell-prog">
-        <div class="miniprog">
-          <div class="mp-label">
-            <span>{{ b.completed }}/{{ b.ran }}</span>
-            {% if b.failed %}
-            <button type="button" class="btn link danger sm mono" @click.stop="toggle('{{ b.batch_key }}')">·
-              {{ b.failed }} failed
-              <span x-text="expanded['{{ b.batch_key }}'] ? '▴' : '▾'">▾</span>
-            </button>
-            {% endif %}
-          </div>
-          <div class="mp-bar">
-            <span class="{{ 'fill-run' if b.running else 'fill-done' }}"
-                  style="width: {{ b.pct_done }}%"></span>
-          </div>
+        <form class="br-rename" x-show="renaming === {{ key }}" x-cloak
+              @submit.prevent="saveRename({{ b.job_ids|tojson }})" @keydown.escape="renaming = null">
+          <input type="text" class="txt sm" maxlength="120" aria-label="Batch name"
+                 data-test="batch-rename-input" x-model="renameText">
+          <button type="submit" class="btn sm primary">Save</button>
+          <button type="button" class="btn sm ghost" @click="renaming = null">Cancel</button>
+        </form>
+        <div class="br-sub">
+          <span>{{ b.clips }} clip{{ '' if b.clips == 1 else 's' }}</span>
+          <span class="mono">{{ b.started }}</span>
+          <span>{{ b.prompt }}{% if b.version is not none %} v{{ b.version }}{% endif %}</span>
+          {% if b.model %}<span class="mono">{{ b.model }}</span>{% endif %}
+          <span class="bt-cost mono">{{ b.cost_usd|usd }}{% if b.cost_partial %}<span class="muted" title="Some runs in this batch have no recorded cost yet — this total is partial.">*</span>{% endif %}{% if b.cost_usd is not none and b.est_cost_usd %} <span class="muted" title="estimated (p50) vs actual">(est {{ b.est_cost_usd|usd }})</span>{% endif %}</span>
         </div>
-      </td>
-      <td class="bcell-prog">
-        <div class="miniprog">
-          <div class="mp-label"><span>{{ b.reviewed }}/{{ b.completed }}</span></div>
-          <div class="mp-bar">
-            <span class="fill-rev" style="width: {{ b.pct_reviewed }}%"></span>
-          </div>
+      </div>
+
+      <div class="br-prog">
+        <div class="br-head {{ b.headline_state }}" data-test="batch-headline">
+          {% if b.running %}<span class="ca-spinner" aria-hidden="true"></span>{% endif %}{{ b.headline }}
         </div>
-      </td>
-      <td class="bt-cost mono">
-        {{ b.cost_usd|usd }}{% if b.cost_partial %}<span class="muted" title="Some runs in this batch have no recorded cost yet — this total is partial.">*</span>{% endif %}
-        {% if b.cost_usd is not none and b.est_cost_usd %}<span class="muted" title="estimated (p50) vs actual">(est {{ b.est_cost_usd|usd }})</span>{% endif %}
-      </td>
-      <td>
-        <span class="pill {{ b.status_state }}">
-          {% if b.running %}<span class="ca-spinner" aria-hidden="true"></span>{% endif %}
-          <span class="led"></span>{{ b.status_label }}
-        </span>
-      </td>
-      <td class="bt-actions" onclick="event.stopPropagation()">
-        <div class="bt-actions-inner">
-        {% if b.running %}
-        <button type="button" class="btn sm danger" @click="cancelBatch({{ b.job_ids|tojson }})">
-          Cancel
-        </button>
+        <div class="bbar" aria-hidden="true">
+          {% for s in b.segments %}<span class="seg-{{ s.key }}" style="flex-grow: {{ s.count }}"></span>{% endfor %}
+        </div>
+        <div class="blegend">
+          {% for s in b.segments %}<span><span class="bdot seg-{{ s.key }}"></span>{{ s.label }}</span>{% endfor %}
+        </div>
+      </div>
+
+      <div class="br-actions">
+        {% if not b.running and b.awaiting %}
+        <button type="button" class="btn sm primary"
+                @click="reviewBatch({{ b.job_ids|tojson }}, '{{ b.review_href }}')">Review {{ b.awaiting }} clip{{ '' if b.awaiting == 1 else 's' }}</button>
         {% endif %}
         {% if not b.running and b.failed %}
-        <button type="button" class="btn sm" @click="retryFailed({{ b.job_ids|tojson }})">
-          ↻ Retry failed ({{ b.failed }})
-        </button>
+        <button type="button" class="btn sm" @click="retryFailed({{ b.job_ids|tojson }})">Retry {{ b.failed }} failed</button>
         {% endif %}
-        {% if not b.running and b.reviewed < b.completed %}
-        <button type="button" class="btn sm primary"
-                @click="reviewBatch({{ b.job_ids|tojson }}, '{{ b.review_href }}')">Review →</button>
+        {% if b.running %}
+        <button type="button" class="btn sm danger" @click="cancelBatch({{ b.job_ids|tojson }})">Cancel</button>
         {% endif %}
-        {% if b.running or (b.reviewed >= b.completed and not b.failed) %}
-        {# Open the batch's own clip list (every file, live status pills) — NOT
-           review_href, which points at the for_review filter and is empty once
-           the batch is fully reviewed. Matches the row click. #}
-        <a class="btn sm ghost" href="{{ b.files_href }}">Open</a>
-        {% endif %}
-        </div>
-      </td>
-    </tr>
-    {% if b.fails %}
-    <tr class="bt-detail" x-show="expanded['{{ b.batch_key }}']" x-cloak>
-      <td colspan="8">
-        <div class="bt-fails">
-          <div class="bt-fails-h">
-            <span>Failed clips ({{ b.fails|length }})</span>
-            <span class="grow"></span>
-            <button type="button" class="btn sm" @click="retryFailed({{ b.job_ids|tojson }})">
-              ↻ Retry all failed
-            </button>
-          </div>
-          {% for f in b.fails %}
-          <div class="bt-fail-row">
-            <div>
-              <div class="bt-fail-name">{{ f.name }}</div>
-              <div class="bt-fail-err">{{ f.error }}</div>
-            </div>
-            <span class="grow"></span>
-            <button type="button" class="btn sm ghost"
-                    @click="retryFailed({{ b.job_ids|tojson }}, {{ f.id }})">↻ Retry</button>
-          </div>
-          {% endfor %}
-        </div>
-      </td>
-    </tr>
-    {% endif %}
-    {% endfor %}
-  </tbody>
-</table>
+        <button type="button" class="btn sm ghost" data-test="batch-toggle"
+                :aria-expanded="expanded[{{ key }}] ? 'true' : 'false'"
+                @click="toggle({{ key }})"
+                x-text="expanded[{{ key }}] ? 'Hide clips' : 'Show clips'">Show clips</button>
+      </div>
+    </div>
+
+    {# Filled by batchesPage().loadClips() when opened (and again after each
+       live refresh while open): GET /batches/clips, the shared clip table. #}
+    <div class="br-clips" x-show="expanded[{{ key }}]" x-cloak
+         data-clips-for="{{ b.batch_key }}"
+         data-clips-url="/batches/clips?job_ids={{ b.job_ids|join(',') }}">
+      <div class="br-clips-loading muted">Loading clips…</div>
+    </div>
+  </article>
+  {% endfor %}
+</section>
+{% endfor %}
 {% endif %}

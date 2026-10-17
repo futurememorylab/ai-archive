@@ -4,29 +4,32 @@
 <td class="mono num col-dur">{{ "%d:%02d"|format((row.duration_secs|int)//60, (row.duration_secs|int)%60) }}</td>
 <td class="mono num col-mk">{{ row.marker_count }}</td>
 <td class="col-type mono">{{ row.kind }}</td>
-<td class="num col-batch mono">
+<td class="col-batch">
   {# id'd span so a running batch can refresh just this pill via an OOB swap
      (see /ui/batch-statuses) without re-rendering the whole list. #}
   <span id="bstatus-{{ row.id }}">
     {%- if row.batch_status -%}{{ ui.status_pill(row.batch_status.label, row.batch_status.state) }}
-    {%- elif row.batch is not none -%}#{{ row.batch }}
+    {%- elif row.batch is not none -%}<span class="batch-name" title="{{ row.batch_name or ('#' ~ row.batch) }}">{{ row.batch_name or ('#' ~ row.batch) }}</span>
     {%- else -%}—{%- endif -%}
   </span>
 </td>
 {% if batch_query %}<td class="batch-cost num mono">{{ row.batch_cost_usd|usd }}</td>{% endif %}
-<td class="col-drafts mono">
+{# Annotation status in plain words (docs/specs/2026-10-17-batches-redesign-design.md).
+   data-review marks clips with suggestions waiting; reviewSelected() reads it. #}
+<td class="col-drafts"{% if row.review_tip %} data-review="1"{% endif %}>
   {%- set _ps = row.publish_state -%}
+  {%- set _v = ("Version " ~ row.publish_version_num ~ " is in CatDV") if row.publish_version_num else "" -%}
   {%- if _ps == "live" -%}
-    {{ ui.status_pill("Live v" ~ row.publish_version_num, "ok") }}
+    <span title="{{ _v }}">{{ ui.status_pill("In CatDV", "ok") }}</span>
   {%- elif _ps == "publishing" -%}
-    {{ ui.status_pill("Publishing…", "accent") }}
+    {{ ui.status_pill("Saving to CatDV…", "accent") }}
   {%- elif _ps == "draft" -%}
-    {{ ui.status_pill("Draft", "accent") }}{{ " " ~ row.draft_label if row.draft_label else "" }}
+    <span title="{{ row.review_tip }}">{{ ui.status_pill("To review", "info") }}</span>
   {%- elif _ps == "failed" -%}
-    {{ ui.status_pill("Failed", "bad") }}
+    <span title="The write to CatDV failed. Open Sync to retry.">{{ ui.status_pill("Couldn't save", "bad") }}</span>
   {%- elif _ps == "conflict" -%}
-    {{ ui.status_pill("Conflict", "bad") }}
+    <span title="Someone changed this clip in CatDV meanwhile. Open Sync to pick which to keep.">{{ ui.status_pill("Changed in CatDV", "bad") }}</span>
   {%- else -%}
-    {{ row.draft_label or "—" }}
+    <span class="muted" title="Not annotated">—</span>
   {%- endif -%}
 </td>

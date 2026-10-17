@@ -22,16 +22,19 @@
                   drop it — e.g. the main clips list, where it isn't needed.
      thumb_col    render the thumbnail in its own column ahead of the name,
                   instead of inline in the name cell (default False).
+     show_select  render the select-all + per-row checkbox column (default
+                  True). The Batches page's read-only clip list passes False.
 
    show_cache/thumb_col default to the original layout, so existing callers
    that don't pass them (batch picker, cache inventory) render unchanged.
 #}
 {% set show_cache = show_cache | default(true) %}
 {% set thumb_col = thumb_col | default(false) %}
+{% set show_select = show_select | default(true) %}
 <table class="vlist">
   <thead>
     <tr>
-      <th class="col-sel"><input type="checkbox" id="row-select-all" aria-label="Select all"></th>
+      {% if show_select %}<th class="col-sel"><input type="checkbox" id="row-select-all" aria-label="Select all"></th>{% endif %}
       {% if show_cache %}<th class="col-cache" title="metadata · media-local · media-ai">{{ cache_label | default("Cache") }}</th>{% endif %}
       {% if thumb_col %}<th class="col-thumb" aria-label="Thumbnail"></th>{% endif %}
       <th class="col-name">Clip</th>
@@ -49,12 +52,14 @@
       </span>{% endset %}
     <tr class="vrow{% if row.row_class %} {{ row.row_class }}{% endif %}"
         {% if row.row_href %}onclick="location.href='{{ row.row_href }}'"{% endif %}>
+      {% if show_select %}
       <td class="col-sel" onclick="event.stopPropagation()">
         <input type="checkbox" class="row-check" name="clip_keys"
                value="{{ row.select_value }}"
                {% if row.row_bytes is defined and row.row_bytes is not none %}data-bytes="{{ row.row_bytes }}"{% endif %}
                aria-label="Select {{ row.name }}">
       </td>
+      {% endif %}
       {% if show_cache %}
       {# No stopPropagation here: the badge is display-only, so a click should
          fall through to the row's onclick (open the clip) like any other cell.

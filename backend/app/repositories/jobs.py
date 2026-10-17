@@ -39,13 +39,14 @@ class JobsRepo:
         run_group: str | None = None,
         force_resolution: str | None = None,
         record_only: bool = False,
+        batch_name: str | None = None,
     ) -> int:
         cur = await conn.execute(
             """
             INSERT INTO jobs
               (prompt_version_id, status, created_at, total_clips, kind, run_group,
-               force_resolution, record_only)
-            VALUES (?, 'pending', ?, ?, ?, ?, ?, ?)
+               force_resolution, record_only, batch_name)
+            VALUES (?, 'pending', ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 prompt_version_id,
@@ -55,6 +56,7 @@ class JobsRepo:
                 run_group,
                 force_resolution,
                 1 if record_only else 0,
+                batch_name,
             ),
         )
         job_id = cur.lastrowid
@@ -143,8 +145,8 @@ class JobsRepo:
 
     async def list_jobs(self, conn: aiosqlite.Connection, *, limit: int = 50) -> list[Job]:
         cur = await conn.execute(
-            "SELECT id, prompt_version_id, status, total_clips, notes, kind, run_group "
-            "FROM jobs ORDER BY id DESC LIMIT ?",
+            "SELECT id, prompt_version_id, status, total_clips, notes, kind, run_group, "
+            "batch_name FROM jobs ORDER BY id DESC LIMIT ?",
             (limit,),
         )
         return [
@@ -156,6 +158,7 @@ class JobsRepo:
                 notes=r[4],
                 kind=r[5],
                 run_group=r[6],
+                batch_name=r[7],
             )
             for r in await cur.fetchall()
         ]
@@ -483,6 +486,7 @@ class JobsRepo:
           b.job_ids_csv                 AS job_ids_csv,
           b.prompt_count                AS prompt_count,
           b.running_jobs                AS running_jobs,
+          pj.batch_name                 AS batch_name,
           p.name                        AS prompt_name,
           pv.version_num                AS version_num,
           pv.model                      AS model,
@@ -518,43 +522,132 @@ class JobsRepo:
             r["job_ids"] = sorted(int(x) for x in csv.split(",") if x)
         return rows
 
-    async def count_total_batches(self, conn: aiosqlite.Connection) -> int:
-        """Grand total of distinct batches (run_groups + singleton jobs),
-        excluding studio jobs. Powers the 'Batches' metric."""
-        cur = await conn.execute(
-            """
-            SELECT COUNT(*) FROM (
-              SELECT COALESCE(run_group, 'job:' || id) AS bk
-              FROM jobs WHERE COALESCE(kind, '') != 'studio'
-              GROUP BY bk
-            )
-            """
-        )
-        row = await cur.fetchone()
-        return int(row[0]) if row else 0
+    # --- Batch names + contents (docs/specs/2026-10-17-batches-redesign-design.md)
 
-    async def failed_items_for_jobs(
+    async def rename_batch(self, conn: aiosqlite.Connection, job_ids: list[int], name: str) -> int:
+        """Set `name` on every job of the batch(es) the given jobs belong to —
+        the jobs themselves plus any job sharing their run_group, so a caller
+        holding a stale subset of the job ids still renames the whole batch."""
+        if not job_ids:
+            return 0
+        placeholders = ",".join("?" * len(job_ids))
+        cur = await conn.execute(
+            f"UPDATE jobs SET batch_name = ? "
+            f"WHERE id IN ({placeholders}) "
+            f"   OR run_group IN (SELECT run_group FROM jobs "
+            f"                    WHERE id IN ({placeholders}) AND run_group IS NOT NULL)",
+            (name, *job_ids, *job_ids),
+        )
+        await conn.commit()
+        return cur.rowcount or 0
+
+    async def batch_names_for_jobs(
         self, conn: aiosqlite.Connection, job_ids: list[int]
-    ) -> list[dict]:
-        """Failed (status='error') items across the given jobs, with the clip
-        name resolved from clip_cache when available. `job_ids` is bounded by
-        the page's batch limit, so a single IN clause is safe (one statement,
-        not a per-row loop)."""
+    ) -> dict[int, str | None]:
+        """`{job_id: batch name}` — each job maps to its batch's primary (lowest
+        id) job's name, the one the Batches page shows. One chunked query."""
+        out: dict[int, str | None] = {}
+        for fragment, params in chunked_in_clause((j,) for j in job_ids):
+            cur = await conn.execute(
+                f"""
+                SELECT j.id, p.batch_name
+                FROM jobs j
+                JOIN jobs p ON p.id = CASE
+                  WHEN j.run_group IS NULL THEN j.id
+                  ELSE (SELECT MIN(x.id) FROM jobs x WHERE x.run_group = j.run_group)
+                END
+                WHERE j.id IN ({fragment})
+                """,
+                params,
+            )
+            out.update({int(r[0]): r[1] for r in await cur.fetchall()})
+        return out
+
+    async def batch_previews(
+        self, conn: aiosqlite.Connection, batch_keys: list[str], *, first: int = 5
+    ) -> dict[str, dict]:
+        """Per batch key: the first `first` distinct clip ids in the order they
+        were queued, and the distinct clip count. Feeds the thumbnail stack.
+        Chunked by batch key so a batch's jobs are never split across chunks."""
+        out: dict[str, dict] = {}
+        for fragment, params in chunked_in_clause((k,) for k in batch_keys):
+            cur = await conn.execute(
+                f"""
+                WITH it AS (
+                  SELECT COALESCE(j.run_group, 'job:' || j.id) AS bk,
+                         ji.catdv_clip_id AS clip_id,
+                         MIN(ji.id) AS first_item
+                  FROM job_items ji
+                  JOIN jobs j ON j.id = ji.job_id
+                  WHERE COALESCE(j.run_group, 'job:' || j.id) IN ({fragment})
+                  GROUP BY bk, clip_id
+                ),
+                ranked AS (
+                  SELECT bk, clip_id,
+                         ROW_NUMBER() OVER (PARTITION BY bk ORDER BY first_item) AS rn,
+                         COUNT(*) OVER (PARTITION BY bk) AS n
+                  FROM it
+                )
+                SELECT bk, clip_id, n FROM ranked WHERE rn <= ? ORDER BY bk, rn
+                """,
+                (*params, first),
+            )
+            for bk, clip_id, n in await cur.fetchall():
+                entry = out.setdefault(bk, {"clip_ids": [], "clips": int(n)})
+                entry["clip_ids"].append(int(clip_id))
+        return out
+
+    async def batch_clip_rows(self, conn: aiosqlite.Connection, job_ids: list[int]) -> list[dict]:
+        """Every distinct clip of one batch with what the Batches page needs to
+        say where it stands: its latest item status and error, whether it still
+        has suggestions to review (the shared for-review predicate), its
+        write-back state from pending_operations ('saving' | 'problem' | None,
+        the topbar sync chip's source) and its name (clip_cache, else its latest
+        annotation). In queue order.
+        `job_ids` is one batch's jobs (one per media kind), so a single IN
+        clause is safe."""
         if not job_ids:
             return []
-        placeholders = ",".join("?" * len(job_ids))
+        ph = ",".join("?" * len(job_ids))
         sql = f"""
-            SELECT ji.job_id        AS job_id,
-                   ji.catdv_clip_id AS catdv_clip_id,
-                   ji.error_message AS error_message,
-                   cc.name          AS clip_name
-            FROM job_items ji
+            WITH it AS (
+              SELECT catdv_clip_id AS clip_id, MIN(id) AS first_item, MAX(id) AS last_item
+              FROM job_items WHERE job_id IN ({ph})
+              GROUP BY catdv_clip_id
+            )
+            SELECT it.clip_id                    AS clip_id,
+                   -- clip_cache only holds clips someone opened; an annotated
+                   -- clip's annotation recorded its name too.
+                   COALESCE(cc.name, (
+                     SELECT a.catdv_clip_name FROM annotations a
+                     WHERE a.catdv_clip_id = it.clip_id ORDER BY a.id DESC LIMIT 1
+                   ))                            AS name,
+                   ji.status                     AS item_status,
+                   ji.error_message              AS error,
+                   EXISTS (
+                     SELECT 1 FROM annotations a
+                     JOIN review_items ri ON ri.annotation_id = a.id
+                      AND {for_review_where("ri")}
+                     WHERE a.job_id IN ({ph}) AND a.catdv_clip_id = it.clip_id
+                   )                             AS awaiting,
+                   (SELECT CASE
+                      WHEN SUM(po.status IN ('failed', 'conflict')) > 0 THEN 'problem'
+                      WHEN SUM(po.status IN ('pending', 'in_flight')) > 0 THEN 'saving'
+                    END
+                    FROM pending_operations po
+                    WHERE po.provider_id = 'catdv'
+                      AND po.provider_clip_id = CAST(it.clip_id AS TEXT)
+                   )                             AS sync
+            FROM it
+            JOIN job_items ji ON ji.id = it.last_item
             LEFT JOIN clip_cache cc
               ON cc.provider_id = 'catdv'
-             AND cc.provider_clip_id = CAST(ji.catdv_clip_id AS TEXT)
-            WHERE ji.status = 'error' AND ji.job_id IN ({placeholders})
-            ORDER BY ji.job_id, ji.catdv_clip_id
+             AND cc.provider_clip_id = CAST(it.clip_id AS TEXT)
+            ORDER BY it.first_item
         """
-        cur = await conn.execute(sql, tuple(job_ids))
+        cur = await conn.execute(sql, (*job_ids, *job_ids))
         cols = [c[0] for c in cur.description]
-        return [dict(zip(cols, r, strict=True)) for r in await cur.fetchall()]
+        rows = [dict(zip(cols, r, strict=True)) for r in await cur.fetchall()]
+        for r in rows:
+            r["awaiting"] = bool(r["awaiting"])
+        return rows

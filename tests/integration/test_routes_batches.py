@@ -72,7 +72,7 @@ async def _seed_batch(ctx):
 
 def test_batches_page_renders(monkeypatch, tmp_path):
     with _make_client(monkeypatch, tmp_path) as client:
-        asyncio.run(_seed_batch(client.app.state.core_ctx))
+        jid = asyncio.run(_seed_batch(client.app.state.core_ctx))
         r = client.get("/batches")
         assert r.status_code == 200
         assert "<!doctype html>" in r.text.lower()
@@ -81,11 +81,16 @@ def test_batches_page_renders(monkeypatch, tmp_path):
         # rail marks Batches active
         assert 'title="Batches"' in r.text
         assert "rail-btn active" in r.text
-        # failed count surfaced
+        # failed count surfaced as the headline; the batch needs the user
         assert "1 failed" in r.text
-        # actual batch cost surfaced in its own <td> ($0.12 → 2 decimals via the usd filter)
+        assert "Needs you" in r.text
+        # actual batch cost surfaced in the sub-line ($0.12 via the usd filter)
         assert "$0.12" in r.text
         assert 'class="bt-cost mono"' in r.text
+        # unnamed batch (created straight through the repo) falls back to its id
+        assert f"Batch #{jid}" in r.text
+        # the redesign drops the metric strip
+        assert "metric-strip" not in r.text
 
 
 def test_batches_table_partial(monkeypatch, tmp_path):
@@ -95,9 +100,12 @@ def test_batches_table_partial(monkeypatch, tmp_path):
         assert r.status_code == 200
         assert "<!doctype html>" not in r.text.lower()
         assert "Scénické značky CZ" in r.text
-        # The whole row is clickable → the batch's full file list (?batch=…).
-        assert "location.href='/?batch=" in r.text
         assert 'class="batch-row"' in r.text
+        # Show clips lazy-loads the batch's clip list into the row.
+        assert 'data-clips-url="/batches/clips?job_ids=' in r.text
+        # The thumbnail stack uses the search list's lazy .thumb images.
+        assert 'class="thumb" loading="lazy" src="/api/media/101/thumb"' in r.text
+        assert 'src="/api/media/102/thumb"' in r.text
 
 
 def test_batches_page_empty_state(monkeypatch, tmp_path):
@@ -301,3 +309,88 @@ def test_batches_picker_no_kind_returns_both(monkeypatch, tmp_path):
             assert 'value="catdv/1"' in r.text
             assert 'value="catdv/2"' in r.text
             assert 'data-total="2"' in r.text
+
+
+# --- Batch names + contents (docs/specs/2026-10-17-batches-redesign-design.md)
+
+
+def test_rename_batch_renames_and_rejects_blank(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.core_ctx
+        jid = asyncio.run(_seed_batch(ctx))
+
+        r = client.post("/batches/rename", json={"job_ids": [jid], "name": "  Tatry 1934 "})
+        assert r.status_code == 200
+        assert r.json() == {"name": "Tatry 1934"}
+        assert "Tatry 1934" in client.get("/batches/table").text
+
+        r = client.post("/batches/rename", json={"job_ids": [jid], "name": "   "})
+        assert r.status_code == 422
+        assert "Tatry 1934" in client.get("/batches/table").text
+
+
+def _seed_big_batch(ctx, n):
+    async def go():
+        _, vid = await PromptsRepo().create_with_initial_version(
+            ctx.db,
+            name="big",
+            description=None,
+            body="p",
+            target_map={"x": {"kind": "markers"}},
+            output_schema={},
+            model="m",
+        )
+        return await JobsRepo().create_job(
+            ctx.db,
+            prompt_version_id=vid,
+            clip_ids=list(range(1, n + 1)),
+            batch_name="Tatry 1934",
+        )
+
+    return asyncio.run(go())
+
+
+def test_thumbnail_stack_caps_at_five_plus_a_count(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        _seed_big_batch(client.app.state.core_ctx, 8)
+        html = client.get("/batches/table").text
+        assert "Tatry 1934" in html
+        assert html.count('class="thumb" loading="lazy"') == 5
+        assert "/api/media/6/thumb" not in html
+        assert ">+3<" in html
+        assert "8 clips" in html
+
+
+def test_thumbnail_stack_shows_six_clips_in_full(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        _seed_big_batch(client.app.state.core_ctx, 6)
+        html = client.get("/batches/table").text
+        assert html.count('class="thumb" loading="lazy"') == 6
+        assert "bstack-more" not in html
+
+
+def test_batch_clips_lists_every_clip_with_its_status(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        ctx = client.app.state.core_ctx
+        jid = asyncio.run(_seed_batch(ctx))
+        r = client.get(f"/batches/clips?job_ids={jid}")
+        assert r.status_code == 200
+        html = r.text
+        # the shared search-page clip table, without the selection column
+        assert 'class="vlist"' in html
+        assert "row-select-all" not in html
+        assert "location.href='/clips/102'" in html
+        assert "Clip 102" in html
+        assert "ProxyNotFound" in html
+        # what needs the user first: the failed clip before the finished one
+        assert html.index("Clip 102") < html.index("Clip 101")
+        assert "Open all" not in html  # small batch: nothing hidden
+
+
+def test_batch_clips_caps_long_batches_with_a_search_link(monkeypatch, tmp_path):
+    with _make_client(monkeypatch, tmp_path) as client:
+        jid = _seed_big_batch(client.app.state.core_ctx, 60)
+        html = client.get(f"/batches/clips?job_ids={jid}").text
+        assert html.count('class="vrow"') == 50
+        assert "Open all 60 in search" in html
+        assert f'href="/?batch={jid}"' in html

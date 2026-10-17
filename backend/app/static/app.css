@@ -418,20 +418,23 @@ a { color: inherit; text-decoration: none; }
    fixed-layout cell at 96px clipped it (overflow:hidden), while short pills
    like "DONE" fit. The pill is flex-shrink:0 nowrap, so the column must hold it. */
 .vlist .col-batch { width: 128px; }
-.vlist .col-drafts { width: 96px; }
+.vlist .col-batch .batch-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Wide enough for the longest Annotation pill ("Saving to CatDV…"). */
+.vlist .col-drafts { width: 140px; }
 .vlist .namecell { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .vlist .name-wrap { display: flex; flex-direction: column; min-width: 0; }
 .vlist .name { overflow: hidden; text-overflow: ellipsis; }
 .vlist .name-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
 .vlist .empty { text-align: center; color: var(--text-3); padding: 32px 0; }
 
-.vlist .thumb {
+.vlist .thumb, .bstack .thumb {
   width: 64px; height: 36px; flex: none; border-radius: 4px;
   object-fit: cover; background: #211e19;
 }
 /* loading shimmer while the <img> has a src but no pixels yet;
    stops matching once the image resolves (--ready) or fails (--empty) */
-.vlist .thumb:not(.thumb--ready):not(.thumb--empty) {
+.vlist .thumb:not(.thumb--ready):not(.thumb--empty),
+.bstack .thumb:not(.thumb--ready):not(.thumb--empty) {
   background: linear-gradient(90deg, #221f1a 0%, #2c2820 50%, #221f1a 100%);
   background-size: 200% 100%;
   animation: thumb-shimmer 1.2s ease-in-out infinite;
@@ -440,7 +443,7 @@ a { color: inherit; text-decoration: none; }
 /* loaded image overrides the shimmer background with its own pixels;
    onerror adds .thumb--empty to show the quiet placeholder gradient */
 /* once the real image has loaded, stop the shimmer (its opaque pixels cover the box) */
-.vlist .thumb--ready { animation: none; background: transparent; }
+.vlist .thumb--ready, .bstack .thumb--ready { animation: none; background: transparent; }
 
 /* Shared empty/failed-thumbnail placeholder: film-frame gradient + a quiet
    centred glyph. Applied (via onerror) on every thumb surface so a genuinely
@@ -449,6 +452,7 @@ a { color: inherit; text-decoration: none; }
    studio clip card (.thumb.thumb-missing). */
 .thumb--empty,
 .vlist .thumb--empty,
+.bstack .thumb--empty,
 .studio-clip-card .thumb.thumb-missing,
 .nb-bchip .thumb.thumb--empty {
   animation: none;
@@ -2391,6 +2395,7 @@ body.studio-resizing {
 .ri-note-row:last-child { border-bottom: none; }
 
 /* Bulk-annotate picker */
+.modal-body > .field { margin-bottom: 14px; }
 .ba-groups { display: flex; flex-direction: column; gap: 12px; }
 .ba-group { display: flex; flex-direction: column; gap: 4px; }
 .ba-group-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
@@ -2516,48 +2521,77 @@ body.studio-resizing {
 }
 
 /* ─── Batches hub (/batches) ─────────────────────────────────────────── */
+/* docs/specs/2026-10-17-batches-redesign-design.md. Sizes are the search
+   list's: 64×36 .thumb (its shimmer/empty rules above apply via the shared
+   classes), .btn.sm actions, 13px text with 11px sub-lines, the .vlist
+   header style for section headings. */
 .batches-page { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .batches-scroll { overflow: auto; flex: 1; min-height: 0; padding: 0 20px 28px; }
 .batches-empty { padding: 48px; text-align: center; color: var(--text-3); }
+.batches-intro { margin: 12px 0 4px; max-width: 720px; color: var(--text-3); font-size: 12.5px; line-height: 1.5; }
 
-.batch-tbl { width: 100%; border-collapse: collapse; }
-.batch-tbl thead th {
-  position: sticky; top: 0; z-index: 1; text-align: left;
-  background: var(--panel); border-bottom: 1px solid var(--line);
-  padding: 9px 12px; font-size: 10.5px; letter-spacing: 0.06em;
-  text-transform: uppercase; color: var(--text-3); font-weight: 600;
+.bsec { margin-top: 14px; }
+.bsec-h {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px;
+  padding: 8px 0; border-bottom: 1px solid var(--line);
 }
-.batch-tbl tbody td { padding: 12px; border-bottom: 1px solid var(--line); vertical-align: middle; font-size: 13px; }
-.batch-tbl tbody tr:hover { background: var(--hover); }
-.batch-tbl tbody tr.batch-row { cursor: pointer; }
-.bt-id { display: flex; flex-direction: column; gap: 2px; }
-.bt-id .bt-num { font-family: var(--f-mono); color: var(--text-3); font-size: 11px; }
-.bt-id .bt-prompt { font-weight: 500; }
-.bt-meta { color: var(--text-3); font-size: 11px; }
-.bt-when { color: var(--text-2); font-family: var(--f-mono); font-size: 12px; white-space: nowrap; }
-.bt-ran { font-family: var(--f-mono); }
+.bsec-h h2 { margin: 0; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); font-weight: 600; }
+.bsec-count { font-size: 11px; color: var(--text-3); }
+.bsec-hint { font-size: 11.5px; color: var(--text-4); }
 
-.bcell-prog { min-width: 130px; }
-.miniprog { display: flex; flex-direction: column; gap: 4px; }
-.miniprog .mp-label { font-family: var(--f-mono); font-size: 11.5px; color: var(--text-2); display: flex; gap: 6px; align-items: baseline; }
-.miniprog .mp-bar { height: 5px; border-radius: 3px; background: var(--surface); overflow: hidden; }
-.miniprog .mp-bar > span { display: block; height: 100%; border-radius: 3px; transition: width 0.4s; }
-.miniprog .mp-bar > span.fill-done { background: var(--good); }
-.miniprog .mp-bar > span.fill-rev { background: var(--accent); }
-.miniprog .mp-bar > span.fill-run { background: var(--info); }
+.batch-row { border-bottom: 1px solid var(--line); }
+.batch-row:hover, .batch-row.open { background: var(--hover); }
+.br-main { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; padding: 10px 12px; min-height: 48px; }
 
-/* The td stays a real table-cell (vertical-align: middle, full row height) so
-   its bottom divider lines up with the other columns; flex lives on the inner
-   wrapper. A display:flex td only grows to its button content and pulls the
-   gray row-divider line up out of alignment under the last column. */
-.bt-actions { text-align: right; white-space: nowrap; }
-.bt-actions-inner { display: inline-flex; gap: 6px; justify-content: flex-end; align-items: center; }
-.bt-detail > td { padding: 0 12px 14px; background: var(--bg-2); border-bottom: 1px solid var(--line); }
-.bt-fails { border: 1px solid color-mix(in oklab, var(--bad) 30%, var(--line)); border-radius: var(--r-2); background: var(--panel); padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
-.bt-fails-h { display: flex; align-items: center; gap: 8px; padding-bottom: 6px; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
-.bt-fail-row { display: flex; align-items: center; gap: 11px; padding: 8px 0; border-top: 1px solid var(--line); }
-.bt-fail-name { font-size: 12.5px; }
-.bt-fail-err { font-size: 11px; color: var(--bad); font-family: var(--f-mono); margin-top: 2px; }
+/* Thumbnail stack: the list's 64×36 .thumb, overlapped; past six clips, five
+   and a same-sized "+N" tile, so every row's stack has the same width. */
+/* 199px = one 64px thumb + five 27px steps (64 - 37 overlap). */
+.bstack { display: flex; align-items: center; flex: none; width: 199px; }
+.bstack .thumb, .bstack-more {
+  width: 64px; height: 36px; flex: none; border-radius: 4px;
+  box-shadow: 0 0 0 2px var(--panel);
+}
+.bstack > * + * { margin-left: -37px; }
+.bstack-more {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--surface-2); color: var(--text); font-size: 12px;
+}
+
+.br-info { flex: 1 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.br-name { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.br-title { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.br-name .btn.icon { color: var(--text-3); border-color: transparent; }
+.br-name .btn.icon:hover { color: var(--text); }
+.br-rename { display: flex; align-items: center; gap: 6px; }
+.br-rename .txt { flex: 1; min-width: 0; max-width: 360px; }
+.br-sub { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 11px; color: var(--text-3); }
+.br-sub .mono { font-size: 11px; }
+
+.br-prog { flex: 0 1 260px; min-width: 200px; display: flex; flex-direction: column; gap: 5px; }
+.br-head { font-size: 12.5px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); }
+.br-head.info { color: var(--info); }
+.br-head.accent { color: var(--accent); }
+.br-head.bad { color: var(--bad); }
+.br-head.ok { color: var(--good); }
+.bbar { display: flex; gap: 2px; height: 5px; border-radius: 3px; overflow: hidden; background: var(--surface); }
+.bbar > span { display: block; height: 100%; min-width: 3px; transition: flex-grow 0.4s; }
+.blegend { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 11px; color: var(--text-3); }
+.bdot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; }
+.seg-reviewed { background: var(--good); }
+.seg-review { background: var(--info); }
+.seg-saving, .seg-running { background: var(--accent); }
+.seg-problem, .seg-failed { background: var(--bad); }
+.seg-stopped { background: var(--text-4); }
+
+.br-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-left: auto; }
+
+/* Show clips: the shared .vlist, inset under the row. */
+.br-clips { padding: 0 12px 12px; }
+.br-clips .vlist { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--r-2); }
+.br-clips-loading { padding: 10px 0; font-size: 12px; }
+.br-clips-more { display: flex; align-items: center; gap: 10px; padding: 8px 2px 0; color: var(--text-3); font-size: 11.5px; }
+.vlist .col-bstatus { width: 150px; }
+.bt-fail-err { font-size: 11px; color: var(--bad); font-family: var(--f-mono); }
 
 /* ─── New-batch picker modal (two-pane: list + selection basket) ─────── */
 .modal-card.nb-card { width: 1080px; max-width: 94vw; }
@@ -2565,6 +2599,7 @@ body.studio-resizing {
    how many clips are selected — the modal doesn't grow/shrink as you pick. */
 .nb-body { padding: 0; display: flex; min-height: 0; height: min(640px, calc(86vh - 112px)); }
 .nb-main { flex: 1; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
+.nb-name { padding: 11px 12px; border-bottom: 1px solid var(--line); }
 .nb-side { width: 304px; flex: none; display: flex; flex-direction: column; background: var(--panel); min-height: 0; }
 .nb-filters { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .nb-filters .search { flex: 1; min-width: 150px; height: 30px; }

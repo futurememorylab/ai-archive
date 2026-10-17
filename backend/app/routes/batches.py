@@ -7,35 +7,50 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from backend.app.archive.errors import ProviderError
+from backend.app.auth.guards import require_permission
 from backend.app.deps import get_core_ctx, get_live_ctx
 from backend.app.routes.pages.clips import query_clip_page
 from backend.app.routes.pages.templates import templates
 from backend.app.services.active_catalog import active_catalog_id
+from backend.app.services.batch_names import clean_batch_name
 from backend.app.services.clip_list_filters import normalize_anno, normalize_cache
-from backend.app.ui.view_models import batch_view
+from backend.app.ui.view_models import batch_clip_list, batch_view
 
 router = APIRouter(tags=["batches"])
+
+
+# Up to this many clips show in full in a row's thumbnail stack; past it, the
+# first STACK_SHOWN_WHEN_CAPPED and a "+N" tile of the same size.
+STACK_FULL = 6
+STACK_SHOWN_WHEN_CAPPED = 5
+
+# The page's three sections, in order (docs/specs/2026-10-17-batches-redesign-design.md).
+_SECTIONS = (
+    ("attention", "Needs you", "Review the AI's suggestions, or retry clips that failed."),
+    ("running", "Running", "Finished clips can be reviewed while the rest run."),
+    ("done", "Done", "What you accepted is saved to CatDV."),
+)
+
+
+def _with_preview(view: dict, preview: dict | None) -> None:
+    ids = (preview or {}).get("clip_ids", [])
+    clips = (preview or {}).get("clips", view["ran"])
+    shown = ids if clips <= STACK_FULL else ids[:STACK_SHOWN_WHEN_CAPPED]
+    view["clips"] = clips
+    view["thumbs"] = [{"id": cid, "url": f"/api/media/{cid}/thumb"} for cid in shown]
+    view["more"] = clips - len(shown) if clips > STACK_FULL else 0
 
 
 async def _load_batches_ctx(ctx, limit: int) -> dict:
     rows = await ctx.jobs_repo.list_batches(ctx.db, limit=limit)
     views = [batch_view(r) for r in rows]
-
     all_job_ids = [jid for r in rows for jid in r["job_ids"]]
-    fails = await ctx.jobs_repo.failed_items_for_jobs(ctx.db, all_job_ids)
-    job_to_key = {jid: r["batch_key"] for r in rows for jid in r["job_ids"]}
-    fails_by_key: dict[str, list[dict]] = {}
-    for f in fails:
-        key = job_to_key.get(f["job_id"])
-        fails_by_key.setdefault(key, []).append(
-            {
-                "id": f["catdv_clip_id"],
-                "name": f["clip_name"] or f"Clip {f['catdv_clip_id']}",
-                "error": f["error_message"] or "Unknown error",
-            }
-        )
+
+    previews = await ctx.jobs_repo.batch_previews(
+        ctx.db, [v["batch_key"] for v in views], first=STACK_FULL
+    )
     for v in views:
-        v["fails"] = fails_by_key.get(v["batch_key"], [])
+        _with_preview(v, previews.get(v["batch_key"]))
 
     # Actual billable spend per batch: one batched aggregate over every
     # member job_id, summed back per batch_key (no per-batch query).
@@ -56,16 +71,12 @@ async def _load_batches_ctx(ctx, limit: int) -> dict:
         est = sum(est_by_job.get(jid, 0.0) for jid in v["job_ids"])
         v["est_cost_usd"] = est if est else None
 
-    total_batches = await ctx.jobs_repo.count_total_batches(ctx.db)
-    metrics = {
-        "total_batches": total_batches,
-        "shown": len(views),
-        "drafts_produced": sum(v["completed"] for v in views),
-        "awaiting_review": sum(v["awaiting"] for v in views),
-        "awaiting_batches": sum(1 for v in views if not v["running"] and v["awaiting"] > 0),
-        "failed_clips": sum(v["failed"] for v in views),
-    }
-    return {"batches": views, "metrics": metrics}
+    sections = [
+        {"key": key, "title": title, "hint": hint, "batches": members}
+        for key, title, hint in _SECTIONS
+        if (members := [v for v in views if v["section"] == key])
+    ]
+    return {"batches": views, "sections": sections}
 
 
 @router.get("/batches", response_class=HTMLResponse)
@@ -81,6 +92,29 @@ async def batches_table(request: Request, limit: int = 50):
     ctx = get_core_ctx(request)
     ctx_dict = await _load_batches_ctx(ctx, limit)
     return templates.TemplateResponse(request, "pages/_batches_table.html", ctx_dict)
+
+
+# Clips listed under an expanded batch row; longer batches link to the search.
+BATCH_CLIPS_LIMIT = 50
+
+
+@router.get("/batches/clips", response_class=HTMLResponse)
+async def batch_clips(request: Request, job_ids: str = ""):
+    """Show clips: every clip of one batch with its status, in the shared
+    search-page clip table. Pure DB (offline-safe)."""
+    ctx = get_core_ctx(request)
+    ids = sorted(int(x) for x in job_ids.split(",") if x.strip().isdigit())
+    rows = await ctx.jobs_repo.batch_clip_rows(ctx.db, ids)
+    clips, total = batch_clip_list(rows, limit=BATCH_CLIPS_LIMIT)
+    return templates.TemplateResponse(
+        request,
+        "pages/_batch_clips.html",
+        {
+            "clips": clips,
+            "total": total,
+            "files_href": f"/?batch={','.join(str(i) for i in ids)}",
+        },
+    )
 
 
 @router.get("/batches/picker", response_class=HTMLResponse)
@@ -145,6 +179,23 @@ async def batches_review_queue(request: Request, job_ids: str = ""):
     ids = [int(x) for x in job_ids.split(",") if x.strip().isdigit()]
     clip_ids = await ctx.review_items_repo.pending_clip_ids_for_jobs(ctx.db, ids)
     return {"clip_ids": clip_ids}
+
+
+class RenameBatch(BaseModel):
+    job_ids: list[int]
+    name: str
+
+
+@router.post("/batches/rename")
+async def rename_batch(request: Request, body: RenameBatch):
+    """Rename a batch (every job sharing its run_group). Pure DB."""
+    require_permission(request, "run")
+    name = clean_batch_name(body.name)
+    if name is None:
+        raise HTTPException(422, "A batch needs a name.")
+    ctx = get_core_ctx(request)
+    await ctx.jobs_repo.rename_batch(ctx.db, body.job_ids, name)
+    return {"name": name}
 
 
 class RetryFailed(BaseModel):

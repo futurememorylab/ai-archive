@@ -1,0 +1,15 @@
+{# A batch's clips, opened from its row on the Batches page (GET
+   /batches/clips). The search page's own clip table (_video_list.html), so
+   thumbnails, row height and type match; status + error columns trail. #}
+{% with rows=clips, head_cells="pages/_batch_clips_head_cells.html",
+        row_cells="pages/_batch_clips_row_cells.html", show_cache=false,
+        thumb_col=true, show_select=false, colspan=4,
+        empty_msg="This batch has no clips." %}
+  {% include "pages/_video_list.html" %}
+{% endwith %}
+{% if total > clips|length %}
+<div class="br-clips-more">
+  Showing {{ clips|length }} of {{ total }}.
+  <a class="btn sm ghost" href="{{ files_href }}">Open all {{ total }} in search</a>
+</div>
+{% endif %}

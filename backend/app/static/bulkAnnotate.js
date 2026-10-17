@@ -10,11 +10,13 @@ function bulkAnnotateMixin() {
     // [{ kind, clipIds: [int], promptVersionId: int|null }]
     annoGroups: [],
     annoPromptsByKind: {}, // kind -> [{id, name, current_production_version_id, media_kind}]
+    annoName: "", // the batch's name, pre-filled on open (window.defaultBatchName)
 
     async openAnnotate() {
       // Group selected rows by their media kind (read from the .col-type cell,
       // same approach reviewSelected() uses for .col-drafts).
       const groups = {};
+      const names = [];
       for (const el of this._selected()) {
         const id = parseInt(el.value.split("/")[1], 10);
         if (isNaN(id)) continue;
@@ -22,6 +24,7 @@ function bulkAnnotateMixin() {
           el.closest("tr")?.querySelector(".col-type")?.textContent || "video"
         ).trim();
         (groups[kind] ||= []).push(id);
+        names.push((el.closest("tr")?.querySelector(".name")?.textContent || `Clip ${id}`).trim());
       }
       this.annoGroups = Object.entries(groups).map(([kind, clipIds]) => ({
         kind,
@@ -29,6 +32,8 @@ function bulkAnnotateMixin() {
         promptVersionId: "",
       }));
       if (!this.annoGroups.length) return;
+      const q = document.querySelector('.filter-form input[name="q"]')?.value;
+      this.annoName = window.defaultBatchName(q, names);
       this.annoOpen = true;
       this.annoError = null;
       await this._loadPrompts();
@@ -86,6 +91,7 @@ function bulkAnnotateMixin() {
               prompt_version_id: Number(g.promptVersionId),
               clip_ids: g.clipIds,
               run_group: runGroup,
+              batch_name: this.annoName,
             }),
           });
           if (!r.ok) {
