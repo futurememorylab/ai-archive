@@ -386,3 +386,50 @@ async def test_batch_clip_rows_reports_each_clips_state(db):
     assert by_id[4]["item_status"] == "pending"
     assert by_id[5]["sync"] == "saving"
     assert by_id[6]["sync"] is None
+
+
+async def _job_ids(db) -> list[int]:
+    cur = await db.execute("SELECT id FROM jobs ORDER BY id")
+    return [r[0] for r in await cur.fetchall()]
+
+
+@pytest.mark.asyncio
+async def test_delete_batch_removes_jobs_but_keeps_annotations(db):
+    """Delete batch drops the batch record (every job sharing its run_group and
+    their items); annotations the batch produced stay, detached from it, so
+    drafts and accepted results remain on their clips."""
+    _, vid = await _seed_version(db)
+    jobs = JobsRepo()
+    a = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[1, 2], run_group="rg-del")
+    b = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[3], run_group="rg-del")
+    keep = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[4], run_group="rg-keep")
+    for jid in (a, b, keep):
+        await jobs.update_status(db, jid, "completed")
+        for it in await jobs.list_items(db, jid):
+            await jobs.update_item_status(db, it.id, "review_ready")
+    await _annotation_with_review(db, job_id=a, clip_id=1, applied=False, prompt_version_id=vid)
+
+    # A stale subset of the batch's job ids still deletes the whole batch.
+    assert await jobs.delete_batch(db, [a]) == 2
+
+    assert await _job_ids(db) == [keep]
+    cur = await db.execute("SELECT COUNT(*) FROM job_items WHERE job_id IN (?, ?)", (a, b))
+    assert (await cur.fetchone())[0] == 0
+    cur = await db.execute("SELECT job_id FROM annotations WHERE catdv_clip_id = 1")
+    assert [r[0] for r in await cur.fetchall()] == [None]
+    cur = await db.execute("SELECT COUNT(*) FROM review_items WHERE catdv_clip_id = 1")
+    assert (await cur.fetchone())[0] == 1
+
+
+@pytest.mark.asyncio
+async def test_delete_batch_refuses_a_running_batch(db):
+    _, vid = await _seed_version(db)
+    jobs = JobsRepo()
+    jid = await jobs.create_job(db, prompt_version_id=vid, clip_ids=[1, 2], run_group="rg-run")
+    its = await jobs.list_items(db, jid)
+    await jobs.update_item_status(db, its[0].id, "review_ready")
+    # its[1] is still pending: the batch is running.
+
+    with pytest.raises(ValueError):
+        await jobs.delete_batch(db, [jid])
+    assert await _job_ids(db) == [jid]

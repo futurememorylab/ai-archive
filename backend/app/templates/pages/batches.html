@@ -208,6 +208,14 @@
         this.expanded[key] = !this.expanded[key];
         if (this.expanded[key]) this.loadClips(key);
       },
+      // A click anywhere on a row's top line opens or closes its clips,
+      // except on its controls (they do their own thing) or after the user
+      // selected text in it.
+      rowClick(ev, key) {
+        if (ev.target.closest("button, a, input, select, textarea, form, .popover")) return;
+        if (window.getSelection()?.toString()) return;
+        this.toggle(key);
+      },
       async loadClips(key) {
         const box = document.querySelector(`[data-clips-for="${CSS.escape(key)}"]`);
         if (!box) return;
@@ -276,6 +284,23 @@
           Alpine.store("toast").push("Restarting the stopped clips…", { level: "success" });
           this._schedule();
         } catch (e) { Alpine.store("toast").push("Restart failed: " + e.message, { level: "error" }); }
+      },
+      async deleteBatch(jobIds, key, name, awaiting) {
+        // Removes the batch from this page only: what it produced stays on
+        // the clips (drafts still under To review on the Clips page).
+        let msg = `Delete the batch "${name}"? Results already saved stay on their clips.`;
+        if (awaiting) msg += ` ${awaiting} clip${awaiting === 1 ? "" : "s"} with drafts stay under To review on the Clips page.`;
+        if (!confirm(msg)) return;
+        try {
+          const r = await fetch("/batches/delete", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ job_ids: jobIds }),
+          });
+          if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || ("HTTP " + r.status)); }
+          delete this.expanded[key];
+          Alpine.store("toast").push("Batch deleted.", { level: "success" });
+          await this.refresh();
+        } catch (e) { Alpine.store("toast").push("Delete failed: " + e.message, { level: "error" }); }
       },
       async cancelBatch(jobIds) {
         // A batch is one job per media kind sharing a run_group, so cancel each.
