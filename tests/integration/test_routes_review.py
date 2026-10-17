@@ -693,8 +693,8 @@ def test_clips_list_has_review_bulk_actions(monkeypatch, tmp_path):
         r = client.get("/")
         assert r.status_code == 200
         # Primary review actions must be present in the markup.
-        assert "Review selected" in r.text
-        assert "Apply drafts" in r.text
+        assert ">Review<" in r.text
+        assert "Accept &amp; apply drafts" in r.text
 
 
 def test_decision_route_logs_the_signed_in_author(monkeypatch, tmp_path):

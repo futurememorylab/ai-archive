@@ -51,6 +51,10 @@ function bulkAnnotateMixin() {
           this.annoPromptsByKind[g.kind] = all.filter(
             (p) => p.media_kind === g.kind || p.media_kind === "any",
           );
+          // Pre-pick the first production prompt so the button never reads
+          // "Pick a prompt first" when there is an obvious one.
+          const first = this.annoPromptsByKind[g.kind][0];
+          if (first && !g.promptVersionId) g.promptVersionId = String(first.current_production_version_id);
         }
       } catch (e) {
         this.annoError = String(e);
@@ -112,7 +116,7 @@ function bulkAnnotateMixin() {
       // Confirm the kickoff — mirrors the Batches-page startBatch() toast so the
       // search-page bulk flow isn't silent (the topbar indicator is easy to miss).
       Alpine.store("toast").push(
-        "Annotation started — " + this.annoRunCount() + " clip(s).",
+        "Annotation started: " + this.annoRunCount() + (this.annoRunCount() === 1 ? " clip." : " clips."),
         { level: "success" },
       );
       // Nudge the topbar indicator to pick up the new jobs immediately.

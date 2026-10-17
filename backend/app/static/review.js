@@ -8,6 +8,8 @@
 function reviewMixin(clipId) {
   return {
     reviewQueue: [],
+    // Where the walk started (a batch or the clips list), for the review bar.
+    reviewFrom: { name: "batch", href: "/batches" },
     // Writeback state surfaced in the draft message: the upstream apply runs
     // asynchronously in the SyncEngine, so we poll /api/sync/clip/{id}/status
     // to learn when it lands (or fails) and refresh Published without a reload.
@@ -17,6 +19,8 @@ function reviewMixin(clipId) {
     _reviewInit() {
       try { this.reviewQueue = JSON.parse(sessionStorage.getItem("catdv:reviewQueue") || "[]"); }
       catch (e) { this.reviewQueue = []; }
+      try { Object.assign(this.reviewFrom, JSON.parse(sessionStorage.getItem("catdv:reviewFrom") || "{}")); }
+      catch (e) { /* keep the defaults */ }
       // Reloading a page whose draft was already applied must not show a stale
       // "syncing…" forever — reconcile the message against the real queue once.
       if (this.appliedCount > 0) this._checkSyncOnce();
@@ -42,7 +46,7 @@ function reviewMixin(clipId) {
           return;
         }
         navigator.clipboard.writeText(text).then(
-          () => toast?.push("Copied — paste it into CatDV.", { level: "success" }),
+          () => toast?.push("Copied — paste it into the archive.", { level: "success" }),
           () => toast?.push("Copy failed — copy by hand.", { level: "error" }),
         );
       });
@@ -54,6 +58,17 @@ function reviewMixin(clipId) {
     // app never writes, #123) stay listed for copying but don't count, so the
     // Draft dot and the apply button clear once the real proposals are applied.
     applicableCount() { return this._allDraft().filter(it => !it.suggestion).length; },
+    // "2 to apply · 1 to copy by hand": only what Accept & apply writes is
+    // counted as applicable; suggestions (fields the app can't write) are named
+    // separately so the button's count never looks wrong next to the total.
+    draftSummary() {
+      const apply = this.applicableCount();
+      const copy = this.totalCount() - apply;
+      const parts = [];
+      if (apply) parts.push(`${apply} to apply`);
+      if (copy) parts.push(`${copy} to copy by hand`);
+      return parts.join(" · ") || "Nothing to review";
+    },
     // ── queue / walk ─────────────────────────────────────────────
     _qIdx() { return this.reviewQueue.indexOf(clipId); },
     reviewPos() { const i = this._qIdx(); return i >= 0 ? (i + 1) : 1; },
@@ -206,6 +221,7 @@ function reviewMixin(clipId) {
         // Wait for any in-flight accept/edit decisions to land first, so the
         // upstream apply enqueues exactly what the UI shows as accepted.
         await Promise.allSettled([...this._inflight]);
+        const applied = this.applicableCount();
         const r = await fetch(`/api/review/clips/${clipId}/apply`, { method: "POST" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         let queued = 0;
@@ -213,7 +229,7 @@ function reviewMixin(clipId) {
         // (the accepted changes + the provenance stamp) were enqueued. Fall back
         // to the legacy `queued` field for any non-publish caller.
         try { const b = await r.json(); queued = b.version_id != null ? 1 : (b.queued || 0); } catch (e) { /* non-JSON body */ }
-        Alpine.store("toast").push("Accepted proposals applied.", { level: "success" });
+        Alpine.store("toast").push(`Applied ${applied} change${applied === 1 ? "" : "s"} to the archive.`, { level: "success" });
         await this.refreshDraft();
         // Hand off to the async writeback: poll until it reaches CatDV, then
         // resolve the message + refresh Published. No-op if nothing enqueued.

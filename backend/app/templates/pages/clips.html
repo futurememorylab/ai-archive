@@ -42,7 +42,6 @@
         </a>
         {% endif %}
       {% endif %}
-      <span class="meta mono">catalog {{ catalog.id }}</span>
     </div>
 
     <div class="filter-row">
@@ -51,12 +50,12 @@
         <span class="filter-lbl">Cache</span>
         <select name="cache" onchange="this.form.requestSubmit()">
           <option value="any"   {% if cache_filter == 'any'   %}selected{% endif %}>Any</option>
-          <option value="none"  {% if cache_filter == 'none'  %}selected{% endif %}>None</option>
+          <option value="none"  {% if cache_filter == 'none'  %}selected{% endif %}>Not downloaded</option>
           {# No local proxy cache in cloud (ai_store) — media lives only in GCS. #}
           {% if media_cache != 'ai_store' %}
-          <option value="local" {% if cache_filter == 'local' %}selected{% endif %}>Local</option>
+          <option value="local" {% if cache_filter == 'local' %}selected{% endif %}>Downloaded</option>
           {% endif %}
-          <option value="ai"    {% if cache_filter == 'ai'    %}selected{% endif %}>AI</option>
+          <option value="ai"    {% if cache_filter == 'ai'    %}selected{% endif %}>Ready for AI</option>
         </select>
       </label>
       {% endif %}
@@ -67,8 +66,8 @@
           <option value="any"        {% if anno_filter == 'any'        %}selected{% endif %}>All clips</option>
           <option value="has_any"    {% if anno_filter == 'has_any'    %}selected{% endif %}>Annotated</option>
           <option value="none"       {% if anno_filter == 'none'       %}selected{% endif %}>Not annotated</option>
-          <option value="for_review" {% if anno_filter == 'for_review' %}selected{% endif %}>Awaiting review</option>
-          <option value="applied"    {% if anno_filter == 'applied'    %}selected{% endif %}>Saved to archive</option>
+          <option value="for_review" {% if anno_filter == 'for_review' %}selected{% endif %}>To review</option>
+          <option value="applied"    {% if anno_filter == 'applied'    %}selected{% endif %}>In archive</option>
         </select>
       </label>
       <label class="filter-field">
@@ -96,15 +95,15 @@
           <span class="caret" aria-hidden="true">▾</span>
         </button>
         <div class="popover-panel menu align-right" x-show="open" x-cloak>
-          {{ ui.menu_item('Review selected →', action='close(); reviewSelected()') }}
-          {{ ui.menu_item('Apply drafts (selected)', action='close(); applyDrafts()') }}
-          {{ ui.menu_item('Annotate selected →', action='close(); openAnnotate()') }}
+          {{ ui.menu_item('Review', action='close(); reviewSelected()') }}
+          {{ ui.menu_item('Accept & apply drafts', action='close(); applyDrafts()') }}
+          {{ ui.menu_item('Annotate…', action='close(); openAnnotate()') }}
           {{ ui.menu_sep() }}
           {% if not host_local_proxies and mode == "online" %}
-          {{ ui.menu_item('Cache locally', action='close(); bulkPrefetch()') }}
+          {{ ui.menu_item('Download videos', action='close(); bulkPrefetch()') }}
           {% endif %}
           {% if not host_local_proxies %}
-          {{ ui.menu_item('Remove from local cache', action='close(); bulkEvict()', danger=true) }}
+          {{ ui.menu_item('Remove downloads', action='close(); bulkEvict()', danger=true) }}
           {% endif %}
         </div>
       </div>
@@ -195,13 +194,14 @@
           return;
         }
         sessionStorage.setItem('catdv:reviewQueue', JSON.stringify(ids));
+        sessionStorage.setItem('catdv:reviewFrom', JSON.stringify({ name: 'selected clips', href: '/' + (sessionStorage.getItem('catdv:clipsListQuery') || '') }));
         location.href = `/clips/${ids[0]}?review=1`;
       },
       async applyDrafts() {
         const clip_ids = this._selectedClipIds();
         const kinds = this._activeKinds();
         if (!clip_ids.length || !kinds.length) return;
-        if (!confirm(`Apply ${kinds.join(', ')} drafts for ${clip_ids.length} clip(s)?`)) return;
+        if (!confirm(`Accept and apply the drafts of ${clip_ids.length} clip${clip_ids.length === 1 ? '' : 's'} to the archive?`)) return;
         const r = await fetch('/api/review/apply-batch', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ clip_ids, kinds }),
@@ -221,7 +221,7 @@
       async bulkEvict() {
         const keys = this._selectedKeys();
         if (keys.length === 0) return;
-        if (!confirm(`Evict local media for ${keys.length} clip(s)?`)) return;
+        if (!confirm(`Remove the downloaded video of ${keys.length} clip${keys.length === 1 ? '' : 's'}?`)) return;
         const r = await fetch('/api/cache/bulk-evict', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ clip_keys: keys, layers: ['media-local'], force: false }),

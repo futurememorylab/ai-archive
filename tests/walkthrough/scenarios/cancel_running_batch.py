@@ -32,7 +32,7 @@ DESCRIPTION = (
     "An operator starts an annotation batch, opens the Batches page while it is "
     "still running, and cancels it. The row shows a Cancel button while running "
     "and settles to Stopped under Done once cancelled. Restart runs the stopped "
-    "clip, and the batch moves to Needs you with the clip to review."
+    "clip, and the batch moves to To review with the clip to review."
 )
 
 
@@ -47,7 +47,7 @@ def run(wt):
             lambda p: select_clip(p, ANNOTATE_SAFE_NAMES[0]),
         )
         wt.step(
-            "Open 'Annotate selected' from the Actions menu",
+            "Open 'Annotate…' from the Actions menu",
             open_annotate_modal,
         )
         wt.step(

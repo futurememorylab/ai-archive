@@ -26,9 +26,9 @@ STACK_SHOWN_WHEN_CAPPED = 5
 
 # The page's three sections, in order (docs/specs/2026-10-17-batches-redesign-design.md).
 _SECTIONS = (
-    ("attention", "Needs you", "Review the AI's suggestions, or retry clips that failed."),
+    ("attention", "To review", "Review the AI's drafts, or retry clips that failed."),
     ("running", "Running", "Finished clips can be reviewed while the rest run."),
-    ("done", "Done", "What you accepted is saved to CatDV."),
+    ("done", "Done", "What you accepted is in the archive."),
 )
 
 

@@ -262,8 +262,10 @@ def test_no_badge_for_clean_clip(monkeypatch, tmp_path):
         # No Live vN pill and no Draft pill for a clean clip.
         # "Draft" appears in other page chrome (column header "Drafts", JS "applyDrafts"),
         # so we check for the pill markup specifically.
-        assert ">In archive<" not in r.text
-        assert ">To review<" not in r.text  # pill label, not surrounding chrome
+        # The filter <select> also says "In archive" / "To review", so match
+        # the pill markup (led + label) rather than the bare words.
+        assert '<span class="led"></span>In archive</span>' not in r.text
+        assert '<span class="led"></span>To review</span>' not in r.text
         assert 'title="Not annotated"' in r.text
         assert 'data-review="1"' not in r.text
 

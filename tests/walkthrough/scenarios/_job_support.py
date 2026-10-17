@@ -11,7 +11,7 @@ from playwright.sync_api import expect
 
 from tests.walkthrough.fakes import PRODUCTION_PROMPT_NAME, FakeGemini
 
-_ANNO_MODAL = '[role="dialog"][aria-label="Annotate selected"]'
+_ANNO_MODAL = '[role="dialog"][aria-label="Annotate clips"]'
 
 
 def select_clip(p, name: str) -> None:
@@ -23,9 +23,9 @@ def select_clip(p, name: str) -> None:
 
 
 def open_annotate_modal(p) -> None:
-    """Open the Actions menu and choose 'Annotate selected →'."""
+    """Open the Actions menu and choose 'Annotate…'."""
     p.get_by_role("button", name="Actions").click()
-    p.get_by_role("button", name="Annotate selected").click()
+    p.get_by_role("button", name="Annotate…", exact=True).click()
     expect(p.locator(_ANNO_MODAL)).to_be_visible()
 
 

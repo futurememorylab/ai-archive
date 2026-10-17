@@ -1,0 +1,11 @@
+{% extends "pages/layout.html" %}
+{% import "components/_ui.html" as ui %}
+{% block title %}Clip not found · CatDV Annotator{% endblock %}
+{% block crumb %}{{ ui.breadcrumb([('All clips', '/'), ('Clip ' ~ clip_id, None)]) }}{% endblock %}
+{% block body %}
+<div class="empty-state">
+  <h2>Clip {{ clip_id }} isn't in this catalog</h2>
+  <p>It may have been removed from the archive, or the link points at another catalog.</p>
+  <p><a class="btn primary" href="/">Back to clips</a></p>
+</div>
+{% endblock %}

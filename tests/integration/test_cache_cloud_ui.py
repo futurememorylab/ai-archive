@@ -115,8 +115,8 @@ def test_cache_actions_ai_cached_shows_purge_not_cache(monkeypatch, tmp_path: Pa
         _seed_clip(client, key=("catdv", "13"), ai_size=2048)
         r = client.get("/ui/cache-actions/13?kind=video")
     assert r.status_code == 200
-    assert "Delete cache" in r.text
-    assert "Cache video" not in r.text
+    assert "Remove download" in r.text
+    assert "Download video" not in r.text
 
 
 def test_cache_actions_local_mode_purges_an_ai_only_leftover(monkeypatch, tmp_path: Path):
@@ -127,8 +127,8 @@ def test_cache_actions_local_mode_purges_an_ai_only_leftover(monkeypatch, tmp_pa
         _seed_clip(client, key=("catdv", "15"), ai_size=2048)
         r = client.get("/ui/cache-actions/15?kind=video")
     assert r.status_code == 200
-    assert "Delete cache" in r.text
-    assert "Video cached" in r.text
+    assert "Remove download" in r.text
+    assert "Video downloaded" in r.text
 
 
 def test_cache_actions_ai_absent_shows_cache_not_purge(monkeypatch, tmp_path: Path):
@@ -137,8 +137,8 @@ def test_cache_actions_ai_absent_shows_cache_not_purge(monkeypatch, tmp_path: Pa
         _seed_clip(client, key=("catdv", "14"))  # metadata only, no ai bytes
         r = client.get("/ui/cache-actions/14?kind=video")
     assert r.status_code == 200
-    assert "Cache video" in r.text
-    assert "Delete cache" not in r.text
+    assert "Download video" in r.text
+    assert "Remove download" not in r.text
 
 
 # ── "Local" filter option is removed everywhere in ai_store (cloud) mode ──

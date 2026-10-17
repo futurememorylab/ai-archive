@@ -12,7 +12,7 @@ import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
-from backend.app.archive.errors import ProviderError
+from backend.app.archive.errors import NotFoundError
 from backend.app.archive.model import (
     CanonicalClip,
     CatalogInfo,
@@ -230,7 +230,7 @@ class FakeArchive:
         for clip in self._clips:
             if clip_id_str == clip.key[1]:
                 return clip
-        raise ProviderError(f"clip not found: {clip_id_str}")
+        raise NotFoundError(f"clip not found: {clip_id_str}")
 
     async def apply_changes(self, change_set):
         # Record the attempt AND apply the #123 ownership rule to the in-memory

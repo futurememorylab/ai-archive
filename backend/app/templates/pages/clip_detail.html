@@ -74,7 +74,8 @@
             <div class="popover-panel menu align-right clip-more-panel" x-show="moreOpen" x-cloak
                  @click.outside="moreOpen = false" @keydown.escape.window="moreOpen = false">
               {% include "pages/_cache_actions.html" %}
-              {% if media_ready and clip.duration_secs %}
+              {# Live needs a Gemini key; without one, no separator and no row. #}
+              {% if media_ready and clip.duration_secs and (live_available is not defined or live_available) %}
                 {{ ui.menu_sep() }}
                 {%- set spark -%}
                 {#- Gemini four-pointed "spark" mark. -#}
