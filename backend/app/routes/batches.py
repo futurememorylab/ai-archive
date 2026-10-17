@@ -198,6 +198,24 @@ async def rename_batch(request: Request, body: RenameBatch):
     return {"name": name}
 
 
+class DeleteBatch(BaseModel):
+    job_ids: list[int]
+
+
+@router.post("/batches/delete")
+async def delete_batch(request: Request, body: DeleteBatch):
+    """Delete a batch record (every job sharing its run_group). What the batch
+    produced stays: drafts and accepted results remain on their clips. Refused
+    while the batch runs. Pure DB."""
+    require_permission(request, "run")
+    ctx = get_core_ctx(request)
+    try:
+        deleted = await ctx.jobs_repo.delete_batch(ctx.db, body.job_ids)
+    except ValueError as exc:
+        raise HTTPException(409, "Cancel the batch before deleting it.") from exc
+    return {"deleted": deleted}
+
+
 class RetryFailed(BaseModel):
     job_ids: list[int]
     clip_ids: list[int] | None = None

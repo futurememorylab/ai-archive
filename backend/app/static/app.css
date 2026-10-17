@@ -2528,9 +2528,25 @@ body.studio-resizing {
 .bsec-count { font-size: 11px; color: var(--text-3); }
 .bsec-hint { font-size: 11.5px; color: var(--text-4); }
 
-.batch-row { border-bottom: 1px solid var(--line); }
-.batch-row:hover, .batch-row.open { background: var(--hover); }
-.br-main { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; padding: 10px 12px; min-height: 48px; }
+/* Each batch is one outlined card; open, its clip list sits inside it. The
+   top line is the toggle (rowClick); the caret shows which way it is. */
+.batch-row {
+  margin-top: 8px; border: 1px solid var(--line-2); border-radius: var(--r-2);
+  background: var(--panel);
+}
+.batch-row:hover { border-color: var(--line-3); }
+.batch-row.open { border-color: var(--line-3); background: var(--panel-2); }
+.br-main { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; padding: 10px 12px; min-height: 48px; cursor: pointer; }
+.batch-row.open .br-main { border-bottom: 1px solid var(--line); }
+.br-main .br-rename, .br-main .br-actions { cursor: default; }
+.br-caret {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; margin-right: -12px; padding: 0;
+  border: 0; border-radius: var(--r-1); background: none; color: var(--text-3); cursor: pointer;
+}
+.br-caret:hover { color: var(--text); background: var(--hover); }
+.br-caret svg { transition: transform 0.15s; }
+.batch-row.open .br-caret svg { transform: rotate(90deg); }
 
 /* Thumbnail stack: the list's 64×36 .thumb, overlapped; past six clips, five
    and a same-sized "+N" tile, so every row's stack has the same width. */
@@ -2575,7 +2591,7 @@ body.studio-resizing {
 .br-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-left: auto; }
 
 /* Show clips: the shared .vlist, inset under the row. */
-.br-clips { padding: 0 12px 12px; }
+.br-clips { padding: 10px 12px 12px; }
 .br-clips .vlist { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--r-2); }
 .br-clips-loading { padding: 10px 0; font-size: 12px; }
 .br-clips-more { display: flex; align-items: center; gap: 10px; padding: 8px 2px 0; color: var(--text-3); font-size: 11.5px; }

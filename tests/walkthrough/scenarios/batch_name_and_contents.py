@@ -1,9 +1,11 @@
-"""Walkthrough scenario: name a batch, see what's in it, rename it.
+"""Walkthrough scenario: name a batch, see what's in it, rename it, delete it.
 
 The batches redesign (docs/specs/2026-10-17-batches-redesign-design.md): a
 batch is named after its contents (the Annotate modal pre-fills the name), its
-row shows a thumbnail stack, Show clips opens the batch's clips in the search
-page's clip table, and the name follows the batch into the search results.
+row shows a thumbnail stack, clicking the row opens the batch's clips in the
+search page's clip table (clicking its top line again closes them), and the
+name follows the batch into the search results. Delete batch, in the row's ⋯
+menu, removes the batch but leaves its drafts on the clips.
 """
 
 from __future__ import annotations
@@ -26,13 +28,15 @@ from tests.walkthrough.scenarios._job_support import (
 
 SLUG = "batch-name-and-contents"
 TOPIC = "Batches page"
-TITLE = "Name a batch, see its clips, rename it"
+TITLE = "Name a batch, see its clips, rename and delete it"
 DESCRIPTION = (
     "An operator selects two clips and opens Annotate selected; the batch name "
     "starts as the first clip's name 'and 1 more', and they type their own. On "
     "the Batches page the batch shows under its name with a thumbnail per clip. "
-    "They rename it, open Show clips to see both clips with their status, and "
-    "find the new name in the search results' Batch column."
+    "They rename it, click the row to see both clips with their status, click "
+    "its top line to close them, and find the new name in the search results' "
+    "Batch column. Back on the Batches page they delete the batch from its ⋯ "
+    "menu; its clips keep their drafts."
 )
 
 NAME = "Newsreels and interviews"
@@ -69,10 +73,11 @@ def run(wt):
         lambda p: expect(batch_row(p, RENAMED)).to_be_visible(),
     )
     wt.step(
-        "Show clips",
-        lambda p: batch_row(p, RENAMED).locator('[data-test="batch-toggle"]').click(),
+        "Click the row to show its clips",
+        lambda p: batch_row(p, RENAMED).locator(".br-sub").click(),
     )
     wt.step("Both clips are listed with their status", _expect_clip_list)
+    wt.step("Click the row's top line to hide them again", _collapse_row)
     wt.step("Back to the search page", lambda p: p.locator("#rail-clips").click())
     wt.step(
         "The Batch column names the batch",
@@ -82,6 +87,12 @@ def run(wt):
             .locator(".col-batch")
         ).to_have_text(RENAMED),
     )
+    wt.step("Open the Batches page", open_batches)
+    wt.step("Open the row's ⋯ menu and delete the batch", _delete_batch)
+    wt.step("A toast confirms the batch was deleted", lambda p: expect_toast(p, "Batch deleted."))
+    wt.step("The batch is gone", lambda p: expect(batch_row(p, RENAMED)).to_have_count(0))
+    wt.step("Back to the search page", lambda p: p.locator("#rail-clips").click())
+    wt.step("The clips still have their drafts to review", _expect_drafts_kept)
 
 
 def _name_input(p):
@@ -103,6 +114,26 @@ def _type_new_name(p) -> None:
     field = p.locator('[data-test="batch-rename-input"]:visible')
     field.fill(RENAMED)
     field.press("Enter")
+
+
+def _collapse_row(p) -> None:
+    row = batch_row(p, RENAMED)
+    row.locator(".br-prog").click()
+    expect(row.locator(".br-clips")).to_be_hidden()
+    expect(row.locator('[data-test="batch-toggle"]')).to_have_attribute("aria-expanded", "false")
+
+
+def _delete_batch(p) -> None:
+    row = batch_row(p, RENAMED)
+    row.get_by_role("button", name="More actions").click()
+    p.once("dialog", lambda d: d.accept())
+    row.locator('[data-test="batch-delete"]').click()
+
+
+def _expect_drafts_kept(p) -> None:
+    for name in ANNOTATE_SAFE_NAMES:
+        row = p.locator("tr.vrow").filter(has=p.locator(".name").get_by_text(name, exact=True))
+        expect(row.locator(".pill", has_text="To review")).to_have_count(1)
 
 
 def _expect_clip_list(p) -> None:

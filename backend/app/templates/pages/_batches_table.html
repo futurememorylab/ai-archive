@@ -8,6 +8,7 @@
    sections and rows by key and swaps only the [data-part] blocks whose
    data-sig (a hash of the block's markup) changed, so thumbnails and open
    clip lists aren't rebuilt on every tick of a running batch. #}
+{% import "components/_ui.html" as ui %}
 {% if not batches %}
   <div class="batches-empty">
     No batches yet.
@@ -26,7 +27,18 @@
   {% set key = b.batch_key|tojson|forceescape %}
   <article class="batch-row" data-test="batch-row" data-batch-key="{{ b.batch_key }}"
            :class="{ open: expanded[{{ key }}] }">
-    <div class="br-main">
+    {# The whole top row opens and closes the clip list; its buttons, menu and
+       rename form keep their own clicks (rowClick). The caret shows the state
+       and is the keyboard toggle. #}
+    <div class="br-main" @click="rowClick($event, {{ key }})">
+      <button type="button" class="br-caret" data-test="batch-toggle"
+              :aria-expanded="expanded[{{ key }}] ? 'true' : 'false'"
+              :aria-label="expanded[{{ key }}] ? 'Hide clips' : 'Show clips'"
+              aria-label="Show clips" @click="toggle({{ key }})">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="m9 6 6 6-6 6"/></svg>
+      </button>
       {% set stack %}
         {% for t in b.thumbs %}
         <img class="thumb" loading="lazy" src="{{ t.url }}" alt=""
@@ -81,24 +93,45 @@
       {% endset %}
       <div class="br-prog" data-part="prog" data-sig="{{ prog|sig }}">{{ prog }}</div>
 
+      {# One main action, the rest in the ⋯ menu (the clip page's pattern).
+         Main: Cancel while running, else Review, else Retry, else Restart. #}
+      {% set main = 'cancel' if b.running else 'review' if b.awaiting
+                    else 'retry' if b.failed else 'restart' if b.stopped else '' %}
       {% set actions %}
-        {% if not b.running and b.awaiting %}
-        <button type="button" class="btn sm primary"
+        {% if main == 'cancel' %}
+        <button type="button" class="btn sm danger" data-test="batch-main-action"
+                @click="cancelBatch({{ b.job_ids|tojson }})">Cancel</button>
+        {% elif main == 'review' %}
+        <button type="button" class="btn sm primary" data-test="batch-main-action"
                 @click="reviewBatch({{ b.job_ids|tojson }}, '{{ b.review_href }}', {{ b.name|tojson|forceescape }})">Review {{ b.awaiting }} clip{{ '' if b.awaiting == 1 else 's' }}</button>
+        {% elif main == 'retry' %}
+        <button type="button" class="btn sm" data-test="batch-main-action"
+                @click="retryFailed({{ b.job_ids|tojson }})">Retry {{ b.failed }} failed</button>
+        {% elif main == 'restart' %}
+        <button type="button" class="btn sm" data-test="batch-main-action"
+                @click="restartBatch({{ b.job_ids|tojson }})">Restart {{ b.stopped }} stopped</button>
         {% endif %}
-        {% if not b.running and b.failed %}
-        <button type="button" class="btn sm" @click="retryFailed({{ b.job_ids|tojson }})">Retry {{ b.failed }} failed</button>
-        {% endif %}
-        {% if not b.running and b.stopped %}
-        <button type="button" class="btn sm" @click="restartBatch({{ b.job_ids|tojson }})">Restart {{ b.stopped }} stopped</button>
-        {% endif %}
-        {% if b.running %}
-        <button type="button" class="btn sm danger" @click="cancelBatch({{ b.job_ids|tojson }})">Cancel</button>
-        {% endif %}
-        <button type="button" class="btn sm ghost" data-test="batch-toggle"
-                :aria-expanded="expanded[{{ key }}] ? 'true' : 'false'"
-                @click="toggle({{ key }})"
-                x-text="expanded[{{ key }}] ? 'Hide clips' : 'Show clips'">Show clips</button>
+        <div class="popover br-more" x-data="popover()" data-test="batch-more">
+          <button type="button" class="btn ghost sm icon" :class="open && 'open'"
+                  @click="toggle()" title="More actions" aria-label="More actions">⋯</button>
+          <div class="popover-panel menu align-right" x-show="open" x-cloak
+               @click.outside="close()" @keydown.escape.window="close()">
+            {% if not b.running and b.failed and main != 'retry' %}
+              {{ ui.menu_item('Retry ' ~ b.failed ~ ' failed', action='close(); retryFailed(' ~ b.job_ids|tojson ~ ')') }}
+            {% endif %}
+            {% if not b.running and b.stopped and main != 'restart' %}
+              {{ ui.menu_item('Restart ' ~ b.stopped ~ ' stopped', action='close(); restartBatch(' ~ b.job_ids|tojson ~ ')') }}
+            {% endif %}
+            {% if not b.running and ((b.failed and main != 'retry') or (b.stopped and main != 'restart')) %}
+              {{ ui.menu_sep() }}
+            {% endif %}
+            {% if b.running %}
+              {{ ui.menu_item('Delete batch', danger=True, desc='Cancel it first', attrs='disabled') }}
+            {% else %}
+              {{ ui.menu_item('Delete batch', danger=True, action=('close(); deleteBatch(' ~ b.job_ids|tojson ~ ', ' ~ b.batch_key|tojson ~ ', ' ~ b.name|tojson ~ ', ' ~ b.awaiting ~ ')')|forceescape, attrs='data-test="batch-delete"') }}
+            {% endif %}
+          </div>
+        </div>
       {% endset %}
       <div class="br-actions" data-part="actions" data-sig="{{ actions|sig }}">{{ actions }}</div>
     </div>

@@ -541,6 +541,44 @@ class JobsRepo:
         await conn.commit()
         return cur.rowcount or 0
 
+    async def delete_batch(self, conn: aiosqlite.Connection, job_ids: list[int]) -> int:
+        """Delete the batch(es) the given jobs belong to (widened to their
+        run_group, as rename_batch is): the jobs and their items. Annotations
+        and Studio runs the batch produced stay, with job_id cleared, so its
+        drafts and accepted results remain on their clips. Studio jobs are
+        never touched. Raises ValueError while any of the jobs still runs.
+        Returns the number of jobs deleted."""
+        if not job_ids:
+            return 0
+        ph = ",".join("?" * len(job_ids))
+        cur = await conn.execute(
+            f"SELECT id FROM jobs "
+            f"WHERE COALESCE(kind, '') != 'studio' AND (id IN ({ph}) "
+            f"   OR run_group IN (SELECT run_group FROM jobs "
+            f"                    WHERE id IN ({ph}) AND run_group IS NOT NULL))",
+            (*job_ids, *job_ids),
+        )
+        ids = [int(r[0]) for r in await cur.fetchall()]
+        if not ids:
+            return 0
+        ph = ",".join("?" * len(ids))
+        in_flight = ("pending", *TRANSIENT_STATUSES)
+        cur = await conn.execute(
+            f"SELECT EXISTS (SELECT 1 FROM jobs WHERE id IN ({ph}) AND status = 'running') "
+            f"    OR EXISTS (SELECT 1 FROM job_items WHERE job_id IN ({ph}) "
+            f"               AND status IN ({','.join('?' * len(in_flight))}))",
+            (*ids, *ids, *in_flight),
+        )
+        row = await cur.fetchone()
+        if row and row[0]:
+            raise ValueError("batch is still running")
+        await conn.execute(f"UPDATE annotations SET job_id = NULL WHERE job_id IN ({ph})", ids)
+        await conn.execute(f"UPDATE studio_run SET job_id = NULL WHERE job_id IN ({ph})", ids)
+        await conn.execute(f"DELETE FROM job_items WHERE job_id IN ({ph})", ids)
+        await conn.execute(f"DELETE FROM jobs WHERE id IN ({ph})", ids)
+        await conn.commit()
+        return len(ids)
+
     async def batch_names_for_jobs(
         self, conn: aiosqlite.Connection, job_ids: list[int]
     ) -> dict[int, str | None]:
