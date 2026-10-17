@@ -9,14 +9,22 @@ flow through this process — see docs/decisions.md 2026-05-23.
 from __future__ import annotations
 
 import json as _json
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import aiosqlite
 import httpx
 
+from backend.app.models.live_session import LiveSession
+from backend.app.models.telemetry import RunTelemetryRecord, TelemetryCtx
 from backend.app.repositories.live_sessions import LiveSessionsRepo
+from backend.app.repositories.run_telemetry import RunTelemetryRepo
 from backend.app.services.live_context import build_context_text
+from backend.app.services.pricing import compute_cost
+from backend.app.services.telemetry_capture import extract_finish_reason, extract_usage
+
+log = logging.getLogger(__name__)
 
 AUTH_TOKENS_URL = "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
 # How long the minted token may keep an open session sending messages.
@@ -139,6 +147,60 @@ async def mint_ephemeral_token(*, setup: dict, settings: Any) -> str:
     return name
 
 
+async def record_live_usage(
+    conn: aiosqlite.Connection,
+    repo: RunTelemetryRepo,
+    tctx: TelemetryCtx,
+    *,
+    session: LiveSession,
+    call: str,
+    model: str,
+    raw: dict[str, Any] | None,
+    duration_s: float | None = None,
+    attrs: dict[str, Any] | None = None,
+) -> None:
+    """Write one kind='live' run_telemetry row for a Gemini Live audio session
+    or its summary call — the Gemini spend that used to have no row at all.
+
+    `raw` is a response-shaped dict carrying `usageMetadata`. media_kind and
+    prompt_version_id stay NULL on purpose: the estimator keys on both, so
+    live rows count towards spend totals but never skew annotation estimates.
+    Like the annotator's telemetry, this never raises."""
+    try:
+        usage = extract_usage(raw or {})
+        cost_usd, pricing_version = compute_cost(usage, model)
+        await repo.insert(
+            conn,
+            RunTelemetryRecord(
+                occurred_at=datetime.now(UTC).isoformat(),
+                install_id=tctx.install_id,
+                app_version=tctx.app_version,
+                kind="live",
+                archive_id=tctx.archive_id,
+                clip_id=session.clip_id,
+                prompt_version_id=None,
+                model=model,
+                status="ok",
+                finish_reason=extract_finish_reason(raw or {}),
+                attempt_count=1,
+                duration_s=duration_s,
+                tokens_in=usage.tokens_in,
+                tokens_in_text=usage.tokens_in_text,
+                tokens_in_video=usage.tokens_in_video,
+                tokens_in_audio=usage.tokens_in_audio,
+                tokens_in_image=usage.tokens_in_image,
+                tokens_cached=usage.tokens_cached,
+                tokens_out=usage.tokens_out,
+                tokens_thinking=usage.tokens_thinking,
+                cost_usd=cost_usd,
+                pricing_version=pricing_version,
+                attrs={"call": call, "live_session_id": session.id, **(attrs or {})},
+            ),
+        )
+    except Exception:  # noqa: BLE001 — telemetry must never fail the request
+        log.exception("live run_telemetry insert failed (session %s)", session.id)
+
+
 def _generate_content_url(model: str) -> str:
     return f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
@@ -148,11 +210,15 @@ async def summarize(
     *,
     session_id: str,
     settings: Any,
+    run_telemetry_repo: RunTelemetryRepo | None = None,
+    telemetry_ctx: TelemetryCtx | None = None,
 ) -> bool:
     """Generate + store the Czech summary for a finished session.
 
     Idempotent: returns False (no-op) if summary already set or transcript
-    is empty. Returns True when a new summary was written.
+    is empty. Returns True when a new summary was written. When the
+    telemetry repo + ctx are given, the call's token usage is recorded as a
+    kind='live' run_telemetry row (call='summary').
     """
     repo = LiveSessionsRepo()
     session = await repo.get(conn, session_id)
@@ -172,7 +238,18 @@ async def summarize(
         )
     if r.status_code != 200:
         raise RuntimeError(f"generateContent failed: {r.status_code} {r.text}")
-    candidates = r.json().get("candidates") or []
+    payload = r.json() or {}
+    if run_telemetry_repo is not None and telemetry_ctx is not None:
+        await record_live_usage(
+            conn,
+            run_telemetry_repo,
+            telemetry_ctx,
+            session=session,
+            call="summary",
+            model=settings.gemini_model,
+            raw=payload,
+        )
+    candidates = payload.get("candidates") or []
     text = ""
     if candidates:
         parts = candidates[0].get("content", {}).get("parts") or []

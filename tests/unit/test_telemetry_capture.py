@@ -94,3 +94,9 @@ def test_camel_wins_when_both_key_forms_present():
 
 def test_finish_reason_malformed_candidate_is_none():
     assert extract_finish_reason({"candidates": [None]}) is None
+
+
+def test_extract_usage_reads_live_api_response_token_count():
+    # The Live (BidiGenerateContent) API names output responseTokenCount.
+    u = extract_usage({"usageMetadata": {"promptTokenCount": 50, "responseTokenCount": 7}})
+    assert (u.tokens_in, u.tokens_out) == (50, 7)

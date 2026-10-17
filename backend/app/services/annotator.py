@@ -140,7 +140,11 @@ async def _record_telemetry(
         raw = (result or {}).get("raw") or {}
         usage = extract_usage(raw)
         cost_usd, pricing_version = compute_cost(usage, version.model)
-        if status == "error":
+        if result is None:
+            # No response reached us (the call raised), so there is no usage to
+            # price; NULL rather than a misleading $0. An error row that DID get
+            # a response (non-JSON / truncated output) keeps its cost: those
+            # tokens were billed, and spend totals must include them.
             cost_usd = None
         rendered_len = len((result or {}).get("text") or "") if result else None
         mm = capture or CaptureMeta()

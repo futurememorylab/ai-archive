@@ -10,7 +10,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
-TelemetryKind = Literal["studio", "annotation"]
+TelemetryKind = Literal["studio", "annotation", "live"]
 TelemetryStatus = Literal["ok", "error"]
 
 
