@@ -64,7 +64,8 @@ lets it decide hit-vs-fetch — it never calls `catdv.download_*` or
 guard. A new clip-touching cache (e.g. waveforms) is added as a *new layer
 in the same shape*, not wedged into an existing one.
 *Enforced by:* convention; the canonical pattern is
-`services/annotator.py::_process_item`.
+`services/clip_media.py::ai_input_for_clip` (kept at CC ≤ 10 by
+`tests/unit/test_canonical_pointer_guard.py`).
 *ADRs:* 0006, 0021, 0065, 0069, 0071, 0072.
 
 **5. Offline-first: every cache miss degrades gracefully.** A miss returns
