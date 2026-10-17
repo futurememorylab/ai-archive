@@ -14,7 +14,7 @@
 
   <div class="batches-scroll">
     <p class="batches-intro">A batch runs one AI prompt over a set of clips. Its results wait here
-      as suggestions; nothing reaches CatDV until you review and accept them.</p>
+      as drafts; nothing reaches the archive until you review and accept them.</p>
     <div id="batches-table-region">
       {% include "pages/_batches_table.html" %}
     </div>
@@ -36,13 +36,13 @@
                         input_attrs=':value="batchNameValue()" @input="batchName = $event.target.value; nameTouched = true" maxlength="120" data-test="new-batch-name"') }}
           </div>
           {% include "pages/_clip_picker_basket.html" %}
-          <div class="nb-prompts" x-show="selectedKinds().length > 0" x-cloak>
-            <div class="nb-prompts-h">Prompt per media kind</div>
+          <div class="nb-prompts" x-show="selectedKinds().length > 0" x-effect="defaultPrompts()" x-cloak>
+            <div class="nb-prompts-h">Prompt</div>
             <template x-for="k in selectedKinds()" :key="k">
               <div class="nb-prow">
                 <span class="tag mono" x-text="k"></span>
                 <select x-model="kindPrompt[k]">
-                  <option value="">— skip this kind —</option>
+                  <option value="">— skip these clips —</option>
                   <template x-for="p in promptsForKind(k)" :key="p.id">
                     <option :value="p.current_production_version_id" x-text="p.name + ' · v' + p.current_production_version_num"></option>
                   </template>
@@ -58,7 +58,7 @@
              x-effect="refreshEstimate()"
              x-text="estimateLabel()"></div>
         <button type="button" class="btn primary" :disabled="!canStart()" @click="startBatch()"
-                x-text="selCount() ? ('▶ Start batch — ' + runnableCount() + ' clip' + (runnableCount() === 1 ? '' : 's')) : 'Select clips'"></button>
+                x-text="!selCount() ? 'Select clips' : !canStart() ? 'Pick a prompt first' : ('▶ Start batch — ' + runnableCount() + ' clip' + (runnableCount() === 1 ? '' : 's'))"></button>
       </div>
   {% endcall %}
 </div>
@@ -237,7 +237,10 @@
           await this.refresh();
         } catch (e) { Alpine.store("toast").push("Rename failed: " + e.message, { level: "error" }); }
       },
-      async reviewBatch(jobIds, fallbackHref) {
+      async reviewBatch(jobIds, fallbackHref, name) {
+        // Tell the clip page which batch it is walking, so its review bar can
+        // name it and offer a way back here.
+        sessionStorage.setItem("catdv:reviewFrom", JSON.stringify({ name: name || "batch", href: "/batches" }));
         try {
           const r = await fetch("/batches/review-queue?job_ids=" + jobIds.join(","));
           if (r.ok) {
@@ -317,6 +320,20 @@
       promptsForKind(kind) {
         return (this._allPrompts || []).filter((p) => p.media_kind === kind || p.media_kind === "any");
       },
+      // Pre-pick the first production prompt for a kind the moment it enters
+      // the selection, so the Start button never reads "0 clips" by surprise.
+      defaultPrompts() {
+        let changed = false;
+        for (const k of this.selectedKinds()) {
+          if (this.kindPrompt[k] === undefined) {
+            const first = this.promptsForKind(k)[0];
+            if (first) { this.kindPrompt[k] = String(first.current_production_version_id); changed = true; }
+          }
+        }
+        // The <select>'s options render a tick after x-model is set, so re-set
+        // it once they exist or the control keeps showing the placeholder.
+        if (changed) this.$nextTick(() => { this.kindPrompt = { ...this.kindPrompt }; });
+      },
 
       // ── cost estimate ───────────────────────────────────────────
       estimate: null,
@@ -385,14 +402,14 @@
         const e = this.estimate;
         if (e.pricing_missing) {
           let s = `cost unknown — no rate card · confidence: ${e.confidence}`;
-          if (e.n_unknown) s += ` · ${e.n_unknown} clip(s) not cached — guessed`;
+          if (e.n_unknown) s += ` · ${e.n_unknown} not downloaded — guessed`;
           return s;
         }
         let s = `Estimated: ${fmtUsd(e.cost_usd_p50)} – ${fmtUsd(e.cost_usd_p90)}`
           + ` · ~${(e.tokens_in / 1e6).toFixed(1)}M tokens in`
           + ` · confidence: ${e.confidence}`;
         if (e.n_samples) s += ` (${e.n_samples} prior runs)`;
-        if (e.n_unknown) s += ` · ${e.n_unknown} clip(s) not cached — guessed`;
+        if (e.n_unknown) s += ` · ${e.n_unknown} not downloaded — guessed`;
         if (e.media_resolution) s += ` · ${e.media_resolution} res`;
         return s;
       },
@@ -432,7 +449,7 @@
           return;  // keep the modal open so the user sees the error
         }
         this.newOpen = false;
-        Alpine.store("toast").push("Batch started — " + this.runnableCount() + " clip(s).", { level: "success" });
+        Alpine.store("toast").push("Batch started: " + this.runnableCount() + " clip" + (this.runnableCount() === 1 ? "" : "s") + ".", { level: "success" });
         window.dispatchEvent(new CustomEvent("jobs-changed"));
       },
     };

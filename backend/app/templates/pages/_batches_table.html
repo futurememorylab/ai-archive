@@ -11,7 +11,7 @@
 {% if not batches %}
   <div class="batches-empty">
     No batches yet.
-    <a href="/">Select clips and run Annotate</a> to create your first batch.
+    <a href="/">Tick clips on the Clips page</a>, then choose Actions → Annotate.
   </div>
 {% else %}
 {% for sec in sections %}
@@ -73,8 +73,10 @@
         <div class="bbar" aria-hidden="true">
           {% for s in b.segments %}<span class="seg-{{ s.key }}" style="flex-grow: {{ s.count }}"></span>{% endfor %}
         </div>
+        {# The legend breaks the bar down by state; with one state it would only
+           repeat the headline. #}
         <div class="blegend">
-          {% for s in b.segments %}<span><span class="bdot seg-{{ s.key }}"></span>{{ s.label }}</span>{% endfor %}
+          {% for s in b.segments if b.segments|length > 1 %}<span><span class="bdot seg-{{ s.key }}"></span>{{ s.label }}</span>{% endfor %}
         </div>
       {% endset %}
       <div class="br-prog" data-part="prog" data-sig="{{ prog|sig }}">{{ prog }}</div>
@@ -82,7 +84,7 @@
       {% set actions %}
         {% if not b.running and b.awaiting %}
         <button type="button" class="btn sm primary"
-                @click="reviewBatch({{ b.job_ids|tojson }}, '{{ b.review_href }}')">Review {{ b.awaiting }} clip{{ '' if b.awaiting == 1 else 's' }}</button>
+                @click="reviewBatch({{ b.job_ids|tojson }}, '{{ b.review_href }}', {{ b.name|tojson|forceescape }})">Review {{ b.awaiting }} clip{{ '' if b.awaiting == 1 else 's' }}</button>
         {% endif %}
         {% if not b.running and b.failed %}
         <button type="button" class="btn sm" @click="retryFailed({{ b.job_ids|tojson }})">Retry {{ b.failed }} failed</button>

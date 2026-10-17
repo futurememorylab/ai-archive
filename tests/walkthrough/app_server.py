@@ -46,6 +46,10 @@ _OFFLINE_ENV = {
     "GCS_BUCKET_NAME": "test-bucket",
     "INSTANCE_ID": "test-instance",
     "PROXY_SOURCE": "rest",
+    # Live (audio) is only offered when a key is configured. A placeholder keeps
+    # the Live row and tab visible for the walkthroughs; nothing contacts Gemini
+    # unless Live is actually started, which no scenario does.
+    "GEMINI_API_KEY": "walkthrough-placeholder",
 }
 
 

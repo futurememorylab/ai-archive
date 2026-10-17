@@ -30,7 +30,7 @@ def run(wt):
         lambda p: expect_clip_visible(p, NOT_ANNOTATED_CLIP_NAME),
     )
     wt.step(
-        "Set the annotation-status filter to 'Awaiting review'",
+        "Set the annotation-status filter to 'To review'",
         lambda p: filter_anno(p, "for_review"),
     )
     wt.step(

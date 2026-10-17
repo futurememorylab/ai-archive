@@ -27,7 +27,7 @@ TOPIC = "Batches page"
 TITLE = "Review a batch and see it done"
 DESCRIPTION = (
     "An operator annotates a clip, opens the Batches page where the run waits "
-    "under Needs you, clicks Review, publishes the draft, and returns to see the "
+    "under To review, clicks Review, publishes the draft, and returns to see the "
     "batch settle to All in archive under Done, even though the draft's shared "
     "decade field is only a copy-me suggestion that is never written."
 )
@@ -38,16 +38,16 @@ def run(wt):
         "Select a clip to annotate",
         lambda p: select_clip(p, BATCH_REVIEW_CLIP_NAME),
     )
-    wt.step("Open 'Annotate selected' from the Actions menu", open_annotate_modal)
+    wt.step("Open 'Annotate…' from the Actions menu", open_annotate_modal)
     wt.step("Assign the production prompt", assign_production_prompt)
     wt.step("Run the annotation", run_annotate)
     wt.step(
         "A toast confirms the job started",
-        lambda p: expect_toast(p, "Annotation started — 1 clip(s)."),
+        lambda p: expect_toast(p, "Annotation started: 1 clip."),
     )
     wt.step("Open the Batches page", open_batches)
     wt.step(
-        "The finished batch waits for review under Needs you",
+        "The finished batch waits for review under To review",
         lambda p: _expect_status(p, "1 clip to review", section="attention"),
     )
     wt.step(
@@ -57,6 +57,12 @@ def run(wt):
     wt.step(
         "The review walk opens the clip's draft",
         lambda p: expect(p.locator('[data-test="apply-draft"]')).to_be_visible(),
+    )
+    wt.step(
+        "The draft panel names the batch being reviewed and offers a way back",
+        lambda p: expect(p.locator('[data-test="review-walk"] .review-from')).to_contain_text(
+            "Reviewing"
+        ),
     )
     wt.step(
         "Accept & apply (publish) the draft",

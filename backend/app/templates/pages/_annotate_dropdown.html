@@ -1,6 +1,7 @@
 <div class="popover">
   <button type="button"
           class="btn primary"
+          aria-label="Annotate"
           :disabled="running"
           @click="toggleOpen()">
     <span x-show="!running">Annotate</span>
@@ -24,6 +25,9 @@
         No production prompts.
         <a href="/prompts">Open Prompts</a> to create one.
       </p>
+    </template>
+    <template x-if="!loading && prompts && prompts.length > 0">
+      <div class="menu-header">Annotate with…</div>
     </template>
     <template x-if="!loading && prompts && prompts.length > 0">
       <template x-for="p in prompts" :key="p.id">

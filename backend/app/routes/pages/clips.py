@@ -642,7 +642,12 @@ async def clip_detail_page(request: Request, clip_id: int, review: int | None = 
                 {"clip_id": clip_id},
                 status_code=404,
             )
-        raise HTTPException(404, f"clip not found: {exc}") from exc
+        if is_provider_not_found(exc):
+            # A page, not the API's JSON: the user typed or followed a link.
+            return templates.TemplateResponse(
+                request, "pages/clip_not_found.html", {"clip_id": clip_id}, status_code=404
+            )
+        raise HTTPException(502, f"archive error: {exc}") from exc
 
     cache_status = await ctx.cache_inspector.status_for_clip(clip.key)
 
@@ -670,6 +675,9 @@ async def clip_detail_page(request: Request, clip_id: int, review: int | None = 
         60,
     )
     ctx_dict["review_mode"] = bool(review)
+    # Live (audio assistant) needs a Gemini API key; hide its tab and menu
+    # entry when there is none, rather than offering a feature that can't start.
+    ctx_dict["live_available"] = bool(getattr(ctx.settings, "gemini_api_key", None))
 
     return templates.TemplateResponse(request, "pages/clip_detail.html", ctx_dict)
 
@@ -708,7 +716,12 @@ async def clip_published_partial(request: Request, clip_id: int):
     # so skip the cache_inspector lookup that clip_detail_page needs.
     ctx_dict = clip_detail(clip)
     return templates.TemplateResponse(
-        request, "pages/_published_refreshable.html", {"clip": ctx_dict["clip"]}
+        request,
+        "pages/_published_refreshable.html",
+        {
+            "clip": ctx_dict["clip"],
+            "live_available": bool(getattr(ctx.settings, "gemini_api_key", None)),
+        },
     )
 
 

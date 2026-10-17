@@ -62,8 +62,8 @@ def test_list_page_bulk_toolbar_actions_present(client):
     if r.status_code == 200:
         # Single "Actions" dropdown replaces the old per-action buttons.
         assert "actions-dropdown" in r.text
-        assert "Cache locally" in r.text
-        assert "Remove from local cache" in r.text
+        assert "Download videos" in r.text
+        assert "Remove downloads" in r.text
 
 
 def test_list_page_filter_form_renders_with_dropdowns(client):
@@ -83,7 +83,7 @@ def test_list_page_filter_form_renders_with_dropdowns(client):
     assert "search-icon" in html
     assert 'name="cache"' in html
     assert 'name="anno"' in html
-    assert ">Awaiting review<" in html
+    assert ">To review<" in html
 
 
 def test_list_page_filter_path_uses_local_first(client, tmp_path):

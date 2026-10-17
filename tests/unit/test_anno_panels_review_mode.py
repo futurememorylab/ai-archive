@@ -176,7 +176,7 @@ def test_suggestion_field_has_copy_button_and_no_keep():
     }
     html = _render_panels(panels)
     assert "AI · suggestion" in html
-    assert "Suggestion — not written to CatDV." in html
+    assert "Copy it into the archive by hand." in html
     assert 'data-copy="30.léta"' in html
     # the suggestion row offers no keep checkbox
     assert 'data-item-id="7"' in html

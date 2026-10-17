@@ -5,12 +5,24 @@
   <div class="anno-status error"><span x-text="`Failed: ${runError}`"></span></div>
 </template>
 
+{# Walking a review queue (?review=1 — from a batch, or clips ticked on the
+   list): name what is being walked and offer a way back; the arrows only show
+   when there is more than one clip. A clip opened on its own shows just the
+   draft summary. #}
 <div class="review-bar">
-  <span class="review-kept" x-text="totalCount() + ' proposal' + (totalCount() === 1 ? '' : 's')"></span>
+  <span class="review-kept" x-text="draftSummary()"></span>
   <span class="grow"></span>
-  <button type="button" class="btn sm nav" :disabled="reviewPos() <= 1" @click="navClip(-1)" title="Previous clip">‹</button>
-  <span class="review-pos" x-text="'Clip ' + reviewPos() + ' / ' + reviewLen()"></span>
-  <button type="button" class="btn sm nav" :disabled="reviewPos() >= reviewLen()" @click="navClip(1)" title="Next clip">›</button>
+  {% if review_mode %}
+    <span class="review-walk" data-test="review-walk">
+      <a class="review-from" :href="reviewFrom.href" :title="'Back to ' + reviewFrom.name" x-text="'Reviewing ' + reviewFrom.name"></a>
+      <span class="review-walk" x-show="reviewLen() > 1">
+        <button type="button" class="btn sm nav" :disabled="reviewPos() <= 1" @click="navClip(-1)" title="Previous clip">‹</button>
+        <span class="review-pos" x-text="'Clip ' + reviewPos() + ' / ' + reviewLen()"></span>
+        <button type="button" class="btn sm nav" :disabled="reviewPos() >= reviewLen()" @click="navClip(1)" title="Next clip">›</button>
+      </span>
+      <a class="btn sm ghost" :href="reviewFrom.href">Back</a>
+    </span>
+  {% endif %}
 </div>
 
 <template x-if="totalCount() === 0 && appliedCount > 0">
@@ -97,8 +109,8 @@
       <template x-if="f.suggestion">
         <div class="ri-suggestion-actions">
           <button type="button" class="btn sm ghost" :data-copy="f.value"
-                  title="Copy the value to paste into CatDV by hand">Copy</button>
-          <p class="ri-suggestion-note muted">Suggestion — not written to CatDV.</p>
+                  title="Copy the value to paste into the archive by hand">Copy</button>
+          <p class="ri-suggestion-note muted">The app can't write this one. Copy it into the archive by hand.</p>
         </div>
       </template>
       {# Owned field: the normal edit / delete controls. #}
@@ -141,8 +153,8 @@
       <template x-if="n.suggestion">
         <div class="ri-suggestion-actions">
           <button type="button" class="btn sm ghost" :data-copy="n.text"
-                  title="Copy the text to paste into CatDV by hand">Copy</button>
-          <p class="ri-suggestion-note muted">Suggestion — not written to CatDV.</p>
+                  title="Copy the text to paste into the archive by hand">Copy</button>
+          <p class="ri-suggestion-note muted">The app can't write this one. Copy it into the archive by hand.</p>
         </div>
       </template>
       <template x-if="!n.suggestion">

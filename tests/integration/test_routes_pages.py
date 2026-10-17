@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 
-from backend.app.archive.errors import ProviderError
+from backend.app.archive.errors import NotFoundError
 from backend.app.archive.model import (
     CanonicalClip,
     ClipPage,
@@ -89,7 +89,7 @@ class FakeArchive:
         for c in self._clips:
             if c.key[1] == clip_id_str:
                 return c
-        raise ProviderError("not found")
+        raise NotFoundError("not found")
 
 
 def test_clips_list_returns_full_page(monkeypatch, tmp_path):
@@ -237,10 +237,15 @@ def test_clip_detail_shows_annotation_cost(monkeypatch, tmp_path):
 
 
 def test_clip_detail_404_when_missing(monkeypatch, tmp_path):
+    """A missing clip gets a page a person can read (with a way back), not the
+    API's JSON body. Only not-found evidence (archive/errors.py) counts as
+    missing; any other provider error is a 502."""
     with _make_client(monkeypatch, tmp_path) as client:
         install_live_ctx(client.app, archive=FakeArchive(()))
         r = client.get("/clips/99999")
         assert r.status_code == 404
+        assert "isn't in this catalog" in r.text
+        assert 'href="/"' in r.text
 
 
 def test_static_mount(monkeypatch, tmp_path):

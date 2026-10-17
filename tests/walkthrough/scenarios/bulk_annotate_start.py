@@ -36,7 +36,7 @@ def run(wt):
         lambda p: select_clip(p, ANNOTATE_SAFE_NAMES[1]),
     )
     wt.step(
-        "Open 'Annotate selected' from the Actions menu",
+        "Open 'Annotate…' from the Actions menu",
         open_annotate_modal,
     )
     wt.step(
@@ -49,5 +49,5 @@ def run(wt):
     )
     wt.step(
         "A toast confirms the job started for 2 clips",
-        lambda p: expect_toast(p, "Annotation started — 2 clip(s)."),
+        lambda p: expect_toast(p, "Annotation started: 2 clips."),
     )

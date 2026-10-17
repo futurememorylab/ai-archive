@@ -83,7 +83,7 @@ def test_batches_page_renders(monkeypatch, tmp_path):
         assert "rail-btn active" in r.text
         # failed count surfaced as the headline; the batch needs the user
         assert "1 failed" in r.text
-        assert "Needs you" in r.text
+        assert "<h2>To review</h2>" in r.text
         # actual batch cost surfaced in the sub-line ($0.12 via the usd filter)
         assert "$0.12" in r.text
         assert 'class="bt-cost mono"' in r.text

@@ -32,11 +32,11 @@
 <div class="cache-ctl" id="cache-ctl-{{ clip.id }}"
      x-data="cacheActions({ id: {{ clip.id }}, kind: '{{ clip.kind }}' })"
      @clip-cache-refresh.window="if ($event.detail.id === id) onAnnotateCached()">
-  {{ ui.menu_header('Cache') }}
+  {{ ui.menu_header('Video file') }}
   {#- Status row: same shape as the action rows, but not clickable. -#}
   <div class="menu-item menu-status" data-test="cache-status">
     <span class="cache-dot{% if cached %} on{% endif %}" aria-hidden="true"></span>
-    <span class="menu-lbl">{% if cached %}{{ label|capitalize }} cached{% else %}Not cached{% endif %}</span>
+    <span class="menu-lbl">{% if cached %}{{ label|capitalize }} downloaded{% else %}Not downloaded{% endif %}</span>
     {% if cached and layer.size_mb %}<span class="menu-meta">{{ layer.size_mb }} MB</span>{% endif %}
   </div>
   <div class="menu-item menu-status" x-show="busy" x-cloak>
@@ -46,9 +46,9 @@
   <div x-show="!busy" x-cloak>
     {%- if media_cache == 'ai_store' or not host_local_proxies -%}
       {% if cached %}
-        {{ ui.menu_item('Delete cache', action='purge()', icon=bin, danger=True) }}
+        {{ ui.menu_item('Remove download', action='purge()', icon=bin, danger=True) }}
       {% elif mode == "online" %}
-        {{ ui.menu_item('Cache ' ~ label, action='cacheNow()', icon=dl) }}
+        {{ ui.menu_item('Download ' ~ label, action='cacheNow()', icon=dl) }}
       {% endif %}
     {%- endif -%}
   </div>

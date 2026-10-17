@@ -5,14 +5,14 @@
 
    The Preview button's href is rewritten at load time from
    localStorage["catdv:lastClipId"] so a click from any screen lands on
-   the most recently visited clip. If no clip has been visited yet, it
-   stays on "/" (which is fine — the clips list is the natural fallback).
+   the most recently visited clip. Until a clip has been visited it is
+   hidden, so a new user never sees a link to a clip they have not opened.
 #}
 {% set _active = (rail_active or "") | trim %}
 <a class="rail-btn{% if _active == 'clips' %} active{% endif %}"
    id="rail-clips" href="/" title="Clips">{% include "icons/_clips.svg" %}</a>
 <a class="rail-btn{% if _active == 'preview' %} active{% endif %}"
-   id="rail-preview" href="/" title="Preview clip">{% include "icons/_play.svg" %}</a>
+   id="rail-preview" href="/" title="Last clip" hidden>{% include "icons/_play.svg" %}</a>
 <a class="rail-btn{% if _active == 'prompts' %} active{% endif %}"
    href="/prompts" title="Prompts">{% include "icons/_prompts.svg" %}</a>
 <a class="rail-btn{% if _active == 'studio' %} active{% endif %}"
@@ -30,7 +30,7 @@
     try {
       var id = localStorage.getItem("catdv:lastClipId");
       var btn = document.getElementById("rail-preview");
-      if (id && btn) btn.href = "/clips/" + id;
+      if (id && btn) { btn.href = "/clips/" + id; btn.hidden = false; }
     } catch (e) { /* localStorage unavailable; leave default href */ }
     try {
       // Restore the last clip-list query (filters, search, paging) so the

@@ -15,6 +15,8 @@ from tests.integration.test_clip_detail_draft import FakeArchive, _canonical, _m
 
 
 def _page(monkeypatch, tmp_path) -> str:
+    # Live is only offered when a Gemini key is configured.
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         install_live_ctx(client.app, archive=FakeArchive((_canonical(101),)))
@@ -50,9 +52,9 @@ def test_overflow_menu_rows_share_the_menu_style(monkeypatch, tmp_path):
     html = _page(monkeypatch, tmp_path)
     more = html.split('data-test="clip-more"', 1)[1].split('class="live-bar"', 1)[0]
     cache = more.split('class="cache-ctl', 1)[1].split('class="menu-sep"', 1)[0]
-    assert '<div class="menu-header">Cache</div>' in cache
+    assert '<div class="menu-header">Video file</div>' in cache
     assert 'data-test="cache-status"' in cache
-    assert "Not cached" in cache
+    assert "Not downloaded" in cache
     assert 'class="menu-item" @click="cacheNow()"' in cache
     assert 'class="btn' not in cache
     live = more.split('class="menu-sep"', 1)[1]

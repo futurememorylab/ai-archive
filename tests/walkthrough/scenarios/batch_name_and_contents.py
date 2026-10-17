@@ -42,7 +42,7 @@ RENAMED = "Newsreels 1940s"
 def run(wt):
     wt.step("Select the first clip", lambda p: select_clip(p, ANNOTATE_SAFE_NAMES[0]))
     wt.step("Select a second clip", lambda p: select_clip(p, ANNOTATE_SAFE_NAMES[1]))
-    wt.step("Open 'Annotate selected' from the Actions menu", open_annotate_modal)
+    wt.step("Open 'Annotate…' from the Actions menu", open_annotate_modal)
     wt.step(
         "The batch name starts as the first clip's name and 1 more",
         lambda p: expect(_name_input(p)).to_have_value(re.compile(r".+ and 1 more$")),
@@ -52,7 +52,7 @@ def run(wt):
     wt.step("Run the annotation", run_annotate)
     wt.step(
         "A toast confirms the job started for 2 clips",
-        lambda p: expect_toast(p, "Annotation started — 2 clip(s)."),
+        lambda p: expect_toast(p, "Annotation started: 2 clips."),
     )
     wt.step("Open the Batches page", open_batches)
     wt.step("The batch shows under its name, one thumbnail per clip", _expect_named_row)

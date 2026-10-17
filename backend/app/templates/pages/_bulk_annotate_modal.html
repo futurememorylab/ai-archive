@@ -2,7 +2,7 @@
    so it shares the selection state. One prompt dropdown per media kind in
    the current selection; unassigned kinds are flagged as skipped. #}
 {% import "components/_ui.html" as ui %}
-{% call ui.modal('annoOpen', label='Annotate selected') %}
+{% call ui.modal('annoOpen', label='Annotate clips') %}
   <div class="modal-body">
     {{ ui.field('Batch name', 'batch_name', help='Name it after what the clips are. You can rename it on the Batches page.',
                 input_attrs='x-model="annoName" maxlength="120" data-test="batch-name-input"', cls='ba-name') }}
@@ -15,11 +15,11 @@
           <div class="ba-group">
             <div class="ba-group-head">
               <span class="tag mono" x-text="g.kind"></span>
-              <span class="muted" x-text="g.clipIds.length + ' clip(s)'"></span>
+              <span class="muted" x-text="g.clipIds.length + (g.clipIds.length === 1 ? ' clip' : ' clips')"></span>
             </div>
             <template x-if="(annoPromptsByKind[g.kind] || []).length">
               <select x-model="g.promptVersionId" class="ba-select">
-                <option value="">— skip this kind —</option>
+                <option value="">— skip these clips —</option>
                 <template x-for="p in annoPromptsByKind[g.kind]" :key="p.id">
                   <option :value="p.current_production_version_id"
                           x-text="p.name"></option>
@@ -38,7 +38,7 @@
 
     <template x-if="!annoLoading && annoSkippedCount() > 0">
       <p class="ba-skip-note"
-         x-text="annoSkippedCount() + ' clip(s) will be skipped (no prompt assigned).'">
+         x-text="annoSkippedCount() + (annoSkippedCount() === 1 ? ' clip' : ' clips') + ' will be skipped (no prompt picked).'">
       </p>
     </template>
   </div>
@@ -47,9 +47,9 @@
     <button type="button" class="btn ghost" @click="annoOpen = false">Cancel</button>
     <button type="button" class="btn primary" :disabled="!annoRunnable()"
             @click="runAnnotate()"
-            x-text="annoRunCount() ? ('Annotate ' + annoRunCount() + ' clip(s)' +
+            x-text="annoRunCount() ? ('Annotate ' + annoRunCount() + (annoRunCount() === 1 ? ' clip' : ' clips') +
                      (annoSkippedCount() ? ' (skipping ' + annoSkippedCount() + ')' : ''))
-                     : 'Select a prompt'">
+                     : 'Pick a prompt first'">
     </button>
   </div>
 {% endcall %}
