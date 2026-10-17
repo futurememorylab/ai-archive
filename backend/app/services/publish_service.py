@@ -24,17 +24,8 @@ from typing import Any
 
 import aiosqlite
 
-from backend.app.archive.model import (
-    AI_OWNED_FIELDS,
-    ChangeOp,
-    Marker,
-    ReplaceAIMarkers,
-    SetField,
-)
 from backend.app.models.annotation import ClipVersion
-from backend.app.models.prompt import TargetMap
 from backend.app.services.write_queue import (
-    _marker_from_review_value,
     ai_marker_values,
     etag_from_snapshot,
     fps_from_snapshot,
@@ -118,83 +109,6 @@ class PublishService:
             clip_version_id=version_id,
         )
         return version_id
-
-    async def reactivate(
-        self, conn: aiosqlite.Connection, *, clip_id: int, version_num: int
-    ) -> int:
-        """Switch a clip back to an existing published version WITHOUT creating
-        a new row.
-
-        Re-PUTs the chosen version's snapshot to CatDV and (on success) marks it
-        live again, superseding the current live. This is the 'switch versions'
-        action — distinct from publish-forward, which forked a new identical
-        version on every restore and proliferated history. Re-bases on the live
-        clip (expected_etag=None): 'make this live' is an explicit override of
-        whatever is currently on the clip. See the publishing audit, A3/A4.
-        """
-        versions = await self._versions.list_by_clip(conn, clip_id)
-        target = next((v for v in versions if v.version_num == version_num), None)
-        if target is None:
-            raise LookupError(f"clip {clip_id} has no version {version_num}")
-        if target.publish_state == "live":
-            return target.id  # already live — no-op
-
-        ops = _switch_ops(target, versions)
-        await self._versions.mark_publishing(conn, target.id)
-        if not ops:
-            # Nothing to assert and nothing to drop — it's live in effect.
-            await self._versions.mark_live(conn, target.id)
-            return target.id
-        await self._wq.enqueue_apply(
-            conn,
-            clip_key=("catdv", str(clip_id)),
-            items=[],
-            target_map=TargetMap({}),
-            expected_etag=None,
-            annotation_id=target.annotation_id,
-            fps=DEFAULT_FPS,
-            clip_version_id=target.id,
-            extra_ops=ops,
-        )
-        return target.id
-
-
-def _switch_ops(target: ClipVersion, versions: list[ClipVersion]) -> list[ChangeOp]:
-    """Ops that switch a clip to `target`'s snapshot (the 'Make live' path).
-
-    Under the #123 ownership rule, publish and Make live are the same operation:
-    emit ReplaceAIMarkers with the target version's markers, which the payload
-    builder turns into "the AI set becomes exactly these; every non-AI (human /
-    legacy) marker is kept". A later version's extra AI markers are dropped
-    without tracking drop_secs across versions — ownership is category-based, not
-    frame-based.
-
-    Only AI_OWNED_FIELDS are written. The target's other snapshot values
-    (popis.materialu, decade/year, top-level notes/bigNotes) are never emitted,
-    so Make live never overwrites a human field. A field is never cleared: a key
-    absent from the snapshot simply isn't written.
-
-    `versions` is unused now (it fed the old drop_secs computation) but kept in
-    the signature for callers.
-    """
-    _ = versions
-    snap = target.snapshot
-    desired: list[Marker] = []
-    for m in snap.get("markers") or []:
-        if isinstance(m, dict):
-            # fps=0.0 sentinel: the frame is derived from the clip's REAL fps in
-            # build_put_payload, never a hardcoded value.
-            mm = _marker_from_review_value(m, 0.0)
-            if mm is not None:
-                desired.append(mm)
-
-    # Always re-assert the AI set to the target's markers (an empty set clears
-    # our markers while keeping human ones), so switching is deterministic.
-    ops: list[ChangeOp] = [ReplaceAIMarkers(desired=tuple(desired))]
-    for ident, val in (snap.get("fields") or {}).items():
-        if ident in AI_OWNED_FIELDS:
-            ops.append(SetField(identifier=ident, value=val))
-    return ops
 
 
 def _materialize(

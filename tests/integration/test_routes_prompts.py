@@ -226,3 +226,15 @@ def test_promote_archived_returns_409(client):
     r = client.post(f"/api/prompts/{pid}/versions/{v1}:promote")
     assert r.status_code == 409
     assert r.json()["error_code"] == "version_immutable"
+
+
+def test_list_hides_the_live_system_instruction(client):
+    """The lifespan seeds the Gemini Live system instruction as a Prompt (so it
+    is editable on the Prompts page). It is a chat system prompt, not an
+    annotation prompt: the clip Annotate menu, bulk annotate and the New batch
+    picker all build on this list, so it must not be offered there."""
+    from backend.app.models.prompt import LIVE_SYSTEM_PROMPT_NAME
+
+    names = {p["name"] for p in client.get("/api/prompts?archived=0").json()}
+    assert LIVE_SYSTEM_PROMPT_NAME not in names
+    assert names, "the seeded annotation prompts are still listed"

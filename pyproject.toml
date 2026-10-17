@@ -36,7 +36,7 @@ dev = [
   "playwright>=1.63",
   "ruff==0.15.13",  # keep in lockstep with .pre-commit-config.yaml (CI runs this one)
   "respx>=0.21",
-  "basedpyright>=1.18",
+  "basedpyright==1.40.2",  # pinned: the baseline only matches the version that wrote it
   "pre-commit>=3.7",
   "import-linter>=2.0",
   "interrogate>=1.7",

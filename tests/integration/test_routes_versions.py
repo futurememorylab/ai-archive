@@ -1,4 +1,5 @@
-"""Integration tests for clip version history + restore routes.
+"""Integration test for the apply route's version id (clip versions are
+recorded on apply; the version-switching routes were removed in ADR 0128).
 
 These tests use the same harness as test_routes_review.py (_setenv,
 install_live_ctx, _seed, TestClient). The harness boots offline (no
@@ -90,117 +91,6 @@ def _run(coro):
         return loop.run_until_complete(coro)
     finally:
         loop.close()
-
-
-def test_versions_list_after_apply(monkeypatch, tmp_path):
-    """After accepting items + applying, the versions endpoint returns the
-    published version with publish_state in (publishing, live)."""
-    app = _make_app(monkeypatch, tmp_path)
-    with TestClient(app) as client:
-        ctx = client.app.state.core_ctx
-        _, _, items = _run(_seed(ctx))
-
-        # Accept all items
-        for it in items:
-            client.post(
-                f"/api/review/items/{it.id}/decision",
-                json={"decision": "accepted"},
-            )
-
-        # Apply (publish)
-        r = client.post("/api/review/clips/1/apply")
-        assert r.status_code == 200
-
-        # Versions list must contain the published version
-        r = client.get("/api/review/clips/1/versions")
-        assert r.status_code == 200
-        versions = r.json()
-        assert len(versions) == 1
-        assert versions[0]["publish_state"] in ("publishing", "live")
-        assert versions[0]["version_num"] == 1
-
-
-def test_versions_list_empty_before_apply(monkeypatch, tmp_path):
-    """Before any apply, the versions list is empty."""
-    app = _make_app(monkeypatch, tmp_path)
-    with TestClient(app) as client:
-        ctx = client.app.state.core_ctx
-        _run(_seed(ctx))
-
-        r = client.get("/api/review/clips/1/versions")
-        assert r.status_code == 200
-        assert r.json() == []
-
-
-def test_restore_creates_pending_draft(monkeypatch, tmp_path):
-    """Restoring a version re-creates pending review items for the clip."""
-    app = _make_app(monkeypatch, tmp_path)
-    with TestClient(app) as client:
-        ctx = client.app.state.core_ctx
-        _, _, items = _run(_seed(ctx))
-
-        # Accept all + apply to create a version
-        for it in items:
-            client.post(
-                f"/api/review/items/{it.id}/decision",
-                json={"decision": "accepted"},
-            )
-        client.post("/api/review/clips/1/apply")
-
-        # Restore version 1
-        rr = client.post("/api/review/clips/1/versions/1/restore")
-        assert rr.status_code == 200
-        body = rr.json()
-        assert body["restored_items"] >= 1
-
-        # The clip should now have pending review items again
-        items2 = client.get("/api/review/clips/1/items").json()
-        assert any(it["decision"] == "pending" for it in items2)
-
-
-def test_restore_404_on_missing_version(monkeypatch, tmp_path):
-    """Restoring a non-existent version returns 404."""
-    app = _make_app(monkeypatch, tmp_path)
-    with TestClient(app) as client:
-        ctx = client.app.state.core_ctx
-        _run(_seed(ctx))
-
-        r = client.post("/api/review/clips/1/versions/999/restore")
-        assert r.status_code == 404
-
-
-def test_activate_does_not_create_a_new_version(monkeypatch, tmp_path):
-    """Activating (switching to) a version re-PUTs it live WITHOUT forking a new
-    version — history stays at its real count. Replaces the old publish-forward
-    'restore & publish'. See the publishing audit, A3."""
-    app = _make_app(monkeypatch, tmp_path)
-    with TestClient(app) as client:
-        ctx = client.app.state.core_ctx
-        _, _, items = _run(_seed(ctx))
-
-        for it in items:
-            client.post(f"/api/review/items/{it.id}/decision", json={"decision": "accepted"})
-        client.post("/api/review/clips/1/apply")
-
-        before = client.get("/api/review/clips/1/versions").json()
-        assert len(before) == 1
-
-        r = client.post("/api/review/clips/1/versions/1/activate")
-        assert r.status_code == 200
-        assert "activated_version_id" in r.json()
-
-        after = client.get("/api/review/clips/1/versions").json()
-        assert len(after) == 1  # no new version was created
-
-
-def test_activate_404_on_missing_version(monkeypatch, tmp_path):
-    """Activating a non-existent version returns 404."""
-    app = _make_app(monkeypatch, tmp_path)
-    with TestClient(app) as client:
-        ctx = client.app.state.core_ctx
-        _run(_seed(ctx))
-        r = client.post("/api/review/clips/1/versions/999/activate")
-        assert r.status_code == 404
 
 
 def test_apply_clip_json_response_has_version_id(monkeypatch, tmp_path):

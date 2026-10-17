@@ -12,6 +12,11 @@ from pydantic import BaseModel, ConfigDict, RootModel, model_validator
 PromptVersionState = Literal["draft", "production", "archived"]
 PROMPT_VERSION_STATES: tuple[str, ...] = get_args(PromptVersionState)
 
+# The Gemini Live system instruction is stored as a Prompt so it can be edited
+# on the Prompts page, but it is a chat system prompt, not an annotation
+# prompt: the annotation pickers must never offer it.
+LIVE_SYSTEM_PROMPT_NAME = "live.system_instruction.cs"
+
 
 class TargetEntry(BaseModel):
     kind: Literal["markers", "field", "note"]

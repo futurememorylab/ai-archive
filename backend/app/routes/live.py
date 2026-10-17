@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from backend.app.auth.guards import require_permission
 from backend.app.deps import get_core_ctx, get_live_ctx
+from backend.app.models.prompt import LIVE_SYSTEM_PROMPT_NAME
 from backend.app.repositories.live_sessions import LiveSessionsRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.services.live_sessions import (
@@ -62,7 +63,7 @@ async def session_config(request: Request, clip_id: int) -> dict:
     draft = await load_draft_for_live(ctx, clip_id)
 
     prompts = PromptsRepo()
-    prompt = await prompts.get_by_name(ctx.db, "live.system_instruction.cs")
+    prompt = await prompts.get_by_name(ctx.db, LIVE_SYSTEM_PROMPT_NAME)
     if prompt is None:
         raise HTTPException(500, detail="live system instruction prompt missing")
     version = await prompts.get_production_version(ctx.db, prompt.id)
