@@ -95,7 +95,12 @@ missing at read time (a job with no items), the page shows "Batch #<id>".
     waiting, failed, stopped) and a legend with counts, plus a headline
     ("16 clips to review", "Running · 23 of 38 done", "All reviewed").
   - **Actions** (`.btn.sm`): Review N clips (primary), Retry N failed,
-    Cancel while running, and Show clips / Hide clips.
+    Restart N stopped (runs the clips a Cancel stopped; clips that already
+    ran keep their results), Cancel while running, and Show clips / Hide
+    clips.
+- **Live updates** patch the page in place: sections and rows are matched by
+  key and only the row blocks whose content changed are replaced, so
+  thumbnails and open clip lists don't reload while a batch runs.
 - **Show clips** loads `/batches/clips?job_ids=…` into the row: the shared
   `_video_list.html` (thumbnail column, no cache column) with a Status pill
   and the error text for failed clips, ordered to-review first, then
@@ -145,3 +150,10 @@ clips still to review, and one fully reviewed.
    - In the search results, the Annotation column reads To review / In
      CatDV / Not annotated; hovering To review lists the marker and field
      counts.
+8. **Stop and restart**
+   - Start a batch of a few clips and open `/batches` while it runs. The
+     row's thumbnails stay put (no flashing) as its progress updates.
+   - Click Cancel. The row moves to Done and reads Stopped, with a
+     "Restart N stopped" button.
+   - Click it. The batch moves back to Running and runs only the stopped
+     clips.

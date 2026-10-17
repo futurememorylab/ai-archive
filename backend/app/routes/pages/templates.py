@@ -5,6 +5,7 @@ all route modules reach the same configured `templates` without duplicating
 setup.
 """
 
+import hashlib
 import json as _json
 from pathlib import Path
 
@@ -56,9 +57,16 @@ def _usd(x: float | None) -> str:
     return f"${n:.3f}" if n < 0.1 else f"${n:.2f}"
 
 
+def _sig(markup: str) -> str:
+    """Short content hash of a rendered block, so a live-patched page can tell
+    which blocks changed between two renders (see _batches_table.html)."""
+    return hashlib.blake2s(str(markup).encode(), digest_size=6).hexdigest()
+
+
 templates.env.filters["bytes_human"] = _bytes_human
 templates.env.filters["comma"] = _comma
 templates.env.filters["usd"] = _usd
+templates.env.filters["sig"] = _sig
 
 
 def _fixed_enums_json() -> str:
