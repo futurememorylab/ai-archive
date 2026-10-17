@@ -344,7 +344,7 @@ class FakeAIStore:
 
     `status()` returning non-None makes the annotator take its fast path
     (skip the local-proxy resolve + upload entirely — see
-    services/annotator.py::_process_item), so a job can run with no network
+    services/clip_media.py::ai_input_for_clip), so a job can run with no network
     and no CatDV seat. Mirrors the GCS store's DB-only, offline-safe
     `status()` contract (CLAUDE.md, cache layers)."""
 

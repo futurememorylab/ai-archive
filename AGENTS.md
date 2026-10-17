@@ -65,7 +65,7 @@ Detail: `docs/onboarding/05-catdv-license-discipline.md`.
   GCS: `ctx.proxy_resolver.path_for_clip_id`, `ctx.ai_store.status` then
   `ensure_uploaded`, `ctx.thumbnail_service.get_or_fetch`. Every miss must
   degrade gracefully and name the layer that missed. Canonical example:
-  `services/annotator.py::_process_item`. No eager fetching on page render.
+  `services/clip_media.py::ai_input_for_clip`. No eager fetching on page render.
 - **Absence needs evidence.** Decide "clip is gone" only via
   `archive/errors.py::is_provider_not_found(exc)`; anything else is
   transient. Catch `Exception`, not `BaseException`.
