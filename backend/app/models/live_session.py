@@ -1,5 +1,5 @@
-"""Pydantic model for a Gemini Live narration session — persisted by
-LiveSessionsRepo."""
+"""Pydantic model for a clip chat session (the table keeps its Live-era
+name) — persisted by LiveSessionsRepo."""
 
 from typing import Literal
 

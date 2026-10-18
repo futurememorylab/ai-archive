@@ -44,8 +44,9 @@ def test_turns_replay_the_transcript_and_add_the_new_question_with_its_frame():
         {"role": "user", "text": "Z kterého je to desetiletí?", "kind": "typed"},
         {"role": "model", "text": "Spíš třicátá léta."},
         {"role": "system", "text": "a note", "kind": "note"},
+        {"role": "user", "text": "A kde?", "kind": "typed"},
     ]
-    turns = conversation_turns(transcript, question="A kde?", image_jpeg=b"jpeg")
+    turns = conversation_turns(transcript, image_jpeg=b"jpeg")
     assert [t["role"] for t in turns] == ["user", "model", "user", "model", "user"]
     assert turns[0]["text"] == OPENING_CUE_CS
     assert turns[-1] == {"role": "user", "text": "A kde?", "image_jpeg": b"jpeg"}
@@ -58,9 +59,11 @@ def test_a_sent_frame_replays_as_the_frame_question_not_its_label():
         {"role": "model", "text": "Dobrý den."},
         {"role": "user", "text": "Frame at 0:12", "kind": "frame"},
         {"role": "model", "text": "Na snímku je auto."},
+        {"role": "user", "text": "Frame at 0:20", "kind": "frame"},
     ]
-    turns = conversation_turns(transcript, question="Jaké?", image_jpeg=None)
+    turns = conversation_turns(transcript, image_jpeg=None)
     assert turns[2]["text"] == FRAME_CUE_CS
+    assert turns[-1]["text"] == FRAME_CUE_CS
 
 
 async def _ended_session(conn, transcript: list[dict]) -> LiveSessionsRepo:

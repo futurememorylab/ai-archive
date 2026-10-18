@@ -104,12 +104,7 @@ function liveSession(clipId) {
     },
 
     _summarize() {
-      fetch(`/api/live/sessions/${this.sessionId}/summarize`, { method: "POST" }).catch(err => {
-        Alpine.store("toast").push(
-          `Chat summary failed: ${err.message || String(err)}`,
-          { level: "error" },
-        );
-      });
+      this._post(`/api/live/sessions/${this.sessionId}/summarize`, {});
     },
 
     // The frame on screen as base64 JPEG (null when the video has no picture

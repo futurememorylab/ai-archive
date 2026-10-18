@@ -48,12 +48,10 @@ def build_system_instruction(*, prompt_body: str, clip: dict, draft: dict) -> st
     return f"{prompt_body}\n\n{build_context_text(clip, draft)}"
 
 
-def conversation_turns(
-    transcript: list[dict], *, question: str, image_jpeg: bytes | None
-) -> list[ChatTurn]:
-    """Rebuild what Gemini sees from the stored transcript (which starts with
-    the answer to the opening cue), then add the new question. Earlier frames
-    are not re-sent: only the new turn carries an image."""
+def conversation_turns(transcript: list[dict], *, image_jpeg: bytes | None) -> list[ChatTurn]:
+    """What Gemini sees, rebuilt from the transcript: the opening cue, then
+    every line, ending with the new question. A sent frame reads as the frame
+    question. Earlier frames are not re-sent: only the last turn has an image."""
     turns: list[ChatTurn] = [{"role": "user", "text": OPENING_CUE_CS}]
     for entry in transcript:
         if entry.get("role") == "model":
@@ -61,7 +59,7 @@ def conversation_turns(
         elif entry.get("role") == "user":
             text = FRAME_CUE_CS if entry.get("kind") == "frame" else entry.get("text", "")
             turns.append({"role": "user", "text": text})
-    turns.append({"role": "user", "text": question, "image_jpeg": image_jpeg})
+    turns[-1]["image_jpeg"] = image_jpeg
     return turns
 
 

@@ -1,4 +1,4 @@
-"""build_context_text — render Czech context blocks for Gemini Live.
+"""build_context_text — render Czech context blocks for the clip chat.
 
 Two clearly-labeled sections so the model never conflates committed data
 with the operator's working hypothesis:

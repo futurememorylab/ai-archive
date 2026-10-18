@@ -22,7 +22,7 @@ same features minus voice.
 5. **Send frame** adds "Frame at 0:12" to the transcript and asks Gemini to
    describe that frame.
 6. **End chat** asks "End chat?" with **Keep chatting** / **End chat**. After
-   ending, the transcript stays under the video and the History tab lists
+   ending, the transcript stays under the video and the Chats tab lists
    the chat with a short summary.
 7. Starting another chat on the same page keeps the earlier one above a
    "New chat" divider, greyed.
@@ -108,7 +108,7 @@ Vertex, so it works on staging too.
    the dialog closes and the chat carries on (ask another question to
    check).
 5. Press **End chat** again and confirm with **End chat**. The input row
-   goes away and the transcript stays under the video. Open the History
+   goes away and the transcript stays under the video. Open the Chats
    tab: the chat is listed with a short Czech summary.
 6. Choose **Chat with Gemini** again on the same page. The earlier chat
    stays above a "New chat" divider, greyed, and a new greeting appears
@@ -117,5 +117,5 @@ Vertex, so it works on staging too.
    the server's), then ask a question. A toast shows the error, your
    question stays in the transcript and the chat stays open. Turn the
    network back on and ask again: Gemini answers.
-8. Start a chat, then reload the page. In the History tab the chat is
+8. Start a chat, then reload the page. In the Chats tab the chat is
    listed with reason `navigate`.

@@ -24,7 +24,6 @@ from backend.app.repositories.prompts import PromptsRepo
 from backend.app.services.errors import humanise
 from backend.app.services.gemini import ChatTurn, GeminiError
 from backend.app.services.live_sessions import (
-    FRAME_CUE_CS,
     OPENING_CUE_CS,
     build_system_instruction,
     conversation_turns,
@@ -75,7 +74,9 @@ async def _system_instruction(ctx: Any, clip_id: int, prompt_version: int | None
     return build_system_instruction(prompt_body=version.body, clip=clip, draft=draft)
 
 
-async def _answer(ctx: Any, session: LiveSession, turns: list[ChatTurn], *, call: str) -> str:
+async def _answer(
+    ctx: Any, session: LiveSession, turns: list[ChatTurn], *, call: str, google_search: bool = True
+) -> str:
     """Ask Gemini, record the call's cost, and return the reply text. A
     failed call is a 502 carrying the reason the toast shows."""
     model = ctx.settings.gemini_chat_model
@@ -83,7 +84,10 @@ async def _answer(ctx: Any, session: LiveSession, turns: list[ChatTurn], *, call
     started = time.monotonic()
     try:
         result = await ctx.gemini.chat(
-            model=model, system_instruction=system_instruction, turns=turns
+            model=model,
+            system_instruction=system_instruction,
+            turns=turns,
+            google_search=google_search,
         )
     except GeminiError as exc:
         raise HTTPException(502, detail=f"Gemini didn't answer: {humanise(exc)}") from exc
@@ -96,7 +100,7 @@ async def _answer(ctx: Any, session: LiveSession, turns: list[ChatTurn], *, call
         model=model,
         raw=result["raw"],
         duration_s=time.monotonic() - started,
-        attrs={"with_frame": any(t.get("image_jpeg") for t in turns[-1:])},
+        attrs={"with_frame": bool(turns[-1].get("image_jpeg"))},
     )
     if not result["text"]:
         raise HTTPException(502, detail="Gemini returned an empty answer. Try asking again.")
@@ -133,7 +137,8 @@ async def start_session(request: Request, body: StartPayload) -> dict:
     session = await repo.get(ctx.db, session_id)
     opening: list[ChatTurn] = [{"role": "user", "text": OPENING_CUE_CS, "image_jpeg": frame}]
     try:
-        reply = await _answer(ctx, session, opening, call="chat_open")
+        # The greeting only describes the frame; it needs no web search.
+        reply = await _answer(ctx, session, opening, call="chat_open", google_search=False)
     except HTTPException:
         await repo.mark_ended(ctx.db, session_id, end_reason="error")
         raise
@@ -168,13 +173,10 @@ async def post_turn(request: Request, session_id: str, body: TurnPayload) -> dic
         raise HTTPException(422, detail="question is empty")
     frame = _decode_frame(body.frame_b64)
     transcript = json.loads(session.transcript_json or "[]")
-    question = FRAME_CUE_CS if body.kind == "frame" else text
-    turns = conversation_turns(transcript, question=question, image_jpeg=frame)
+    transcript.append({"role": "user", "text": text, "ts": _now_ms(), "kind": body.kind})
+    turns = conversation_turns(transcript, image_jpeg=frame)
     reply = await _answer(ctx, session, turns, call="chat_turn")
-    transcript += [
-        {"role": "user", "text": text, "ts": _now_ms(), "kind": body.kind},
-        {"role": "model", "text": reply, "ts": _now_ms()},
-    ]
+    transcript.append({"role": "model", "text": reply, "ts": _now_ms()})
     await repo.save_transcript(
         ctx.db,
         session_id,

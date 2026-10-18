@@ -56,7 +56,7 @@ document.addEventListener("alpine:init", () => {
     // Playback gate. False only when the operator is offline AND the clip's
     // media isn't cached anywhere (local proxy or AI store / GCS) — the
     // <video> would just fail to fetch. clip_detail.html overrides this from
-    // the same online-or-cached condition that gates Annotate/Live. Defaults
+    // the same online-or-cached condition that gates Annotate and the chat. Defaults
     // true so the online/cached cases and the studio player are unaffected.
     canPlay: true,
     markers: Array.isArray(markers) ? markers : [],

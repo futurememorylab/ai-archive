@@ -35,7 +35,7 @@
 {# `tab` is shared with the Draft panel, whose tab set differs (it has Notes;
    this one may not). When this panel is shown or re-rendered after an apply,
    fall back to its first tab instead of showing an empty body. #}
-{% set _tabs = (['fields'] if _is_image else ['markers', 'fields']) + (['notes'] if has_notes else []) + (['history'] if (show_history is not defined or show_history) else []) %}
+{% set _tabs = (['fields'] if _is_image else ['markers', 'fields']) + (['notes'] if has_notes else []) + (['history'] if show_history is not defined or show_history else []) %}
 <div class="anno-tabs" role="tablist"
      x-effect="if ($data.scope !== 'draft' && !['{{ _tabs|join("','") }}'].includes(tab)) tab = '{{ _tabs[0] }}'">
   {% if not _is_image %}
@@ -60,13 +60,12 @@
     Notes
   </button>
   {% endif %}
-  {# Live needs a Gemini key; without one the tab would only ever be empty. #}
-  {% if (show_history is not defined or show_history) %}
+  {% if show_history is not defined or show_history %}
   <button type="button" class="anno-tab" role="tab"
           :class="{ active: tab === 'history' }"
           :aria-selected="tab === 'history'"
           @click="tab = 'history'; if (!historyLoaded) loadHistory()">
-    Live sessions
+    Chats
   </button>
   {% endif %}
 </div>

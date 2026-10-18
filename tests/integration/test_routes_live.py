@@ -106,6 +106,7 @@ async def test_start_greets_about_the_frame_on_screen(chat):
     assert r.json()["reply"] == "Dobrý den, vidím zahradu."
     (call,) = gemini.calls
     assert call["model"] == "gemini-3.8-flash"
+    assert call["google_search"] is False  # the greeting needs no web search
     # The system prompt carries the clip's context; the opening turn the frame.
     assert "rodinný výlet" in call["system_instruction"]
     assert call["turns"] == [
@@ -134,6 +135,7 @@ async def test_a_question_carries_the_conversation_and_is_saved(chat):
         "Z kterého je to desetiletí?",
     ]
     assert turns[-1]["image_jpeg"] == b"\xff\xd8jpeg"
+    assert gemini.calls[-1]["google_search"] is True
     session = await LiveSessionsRepo().get(conn, sid)
     transcript = json.loads(session.transcript_json or "[]")
     assert [(t["role"], t["text"]) for t in transcript[1:]] == [
