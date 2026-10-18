@@ -164,6 +164,18 @@ develop on trunk.
 
 ## Code review
 
+- **Every PR gets an independent Claude review**
+  (`.github/workflows/claude-code-review.yml`) when it opens or is marked
+  ready. It posts only findings it has verified, as inline comments, and
+  checks the change against the CLAUDE.md files on its path;
+  `backend/CLAUDE.md` names what counts as a serious problem here. The
+  agent driving the PR fixes each finding or answers it with a reason.
+  It reviews a PR once, skips drafts, and runs on Peter's Claude
+  subscription.
+- The PR template asks what changes for the user, how it was tested, the
+  risk level and how to undo it. Peter merges on green CI with no open
+  review finding; for a High-risk PR he also asks the agent for a
+  plain-language explainer of what could go wrong.
 - The reviewer reads the spec and plan **first**, then reviews the diff
   against stated intent. Review the intent, not just the lines.
 - AI self-review covers mechanical issues — dead code, missed edge cases, test
