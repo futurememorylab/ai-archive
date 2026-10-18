@@ -135,7 +135,7 @@ historical record. Candidate clusters, largest first:
 | 0040 | 2026-05-28 | [Studio layout toggles (list / player / prompt-output position)](./adr/0040-studio-layout-toggles.md) |
 | 0041 | 2026-05-29 | [Bound the boot-time CatDV login with a short, separate timeout](./adr/0041-bound-boot-login-timeout.md) |
 | 0042 | 2026-05-30 | [Narrow provider errors — never treat exceptions as "not found"](./adr/0042-narrow-provider-errors-never-treat-exceptions-as-not-found.md) |
-| 0043 | 2026-05-30 | [Gemini Live API key browser exposure — accepted risk](./adr/0043-gemini-live-api-key-exposure-accepted-risk.md) |
+| 0043 | 2026-05-30 | [Gemini Live API key browser exposure — accepted risk](./adr/0043-gemini-live-api-key-exposure-accepted-risk.md) — *superseded by 0112* |
 | 0044 | 2026-05-30 | [Migration numbering and the 0011 gap](./adr/0044-migration-numbering-and-the-0011-gap.md) |
 | 0045 | 2026-05-30 | [Bulk "Annotate selected" — one job per media kind, ephemeral progress indicator](./adr/0045-bulk-annotate-selected.md) |
 | 0046 | 2026-05-30 | [No N+1 — batch repository reads with WHERE IN](./adr/0046-no-n-plus-one-batch-with-where-in.md) |

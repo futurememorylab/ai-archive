@@ -1,18 +1,23 @@
 """Walkthrough scenario: chat with Gemini about a clip.
 
-The chat goes through our server to Gemini on Vertex. The walkthrough is
-offline, so the scenario answers the `/api/live/sessions*` calls itself.
-The dialog sits under the video with Send frame, End chat (with a
-confirmation) and the text box; ending the chat closes the dialog.
+The chat goes through our server's `/api/live/sessions*` routes, which the
+walkthrough answers with the offline FakeGemini (no network, no archive
+seat). The dialog sits under the video with Send frame, End chat (with a
+confirmation) and the text box; it stays on screen once a full-size video
+has loaded. Ending the chat closes the dialog and lists it in the Chats tab.
 """
 
 from __future__ import annotations
 
-import json
-
 from playwright.sync_api import expect
 
-from tests.walkthrough.fakes import CLIP_NAME
+from tests.walkthrough.fakes import (
+    CHAT_ANSWER,
+    CHAT_FRAME_ANSWER,
+    CHAT_GREETING,
+    CLIP_NAME,
+    gemini_fake,
+)
 
 SLUG = "clip-chat"
 TOPIC = "Clip page"
@@ -21,80 +26,65 @@ DESCRIPTION = (
     "An operator starts a chat from the ⋯ menu. Gemini greets and describes "
     "the frame, then answers a typed question and a sent frame. Send frame "
     "and End chat sit next to the text box; End chat asks first, then closes "
-    "the dialog and points to the Chats tab."
+    "the dialog, and the chat is listed in the Chats tab."
 )
 
 MORE = '[data-test="clip-more"]'
 DIALOG = '[data-test="live-dialog"]'
-GREETING = "Dobrý den, vidím zahradu."
-ANSWER = "Podle oblečení spíš třicátá léta."
-FRAME_ANSWER = "Na snímku jsou dvě děti u plotu."
+QUESTION = "Z kterého je to desetiletí?"
 
-# Each question the page sent, as the server received it.
-_turns: list[dict] = []
-_ended: list[str] = []
-
-
-def _stand_in_for_the_server(p) -> None:
-    _turns.clear()
-    _ended.clear()
-    p.route(
-        "**/api/live/sessions",
-        lambda r: r.fulfill(json={"session_id": "wt-chat", "reply": GREETING}),
-    )
-
-    def turn(route) -> None:
-        body = json.loads(route.request.post_data or "{}")
-        _turns.append(body)
-        reply = FRAME_ANSWER if body.get("kind") == "frame" else ANSWER
-        route.fulfill(json={"reply": reply})
-
-    def end(route) -> None:
-        _ended.append(json.loads(route.request.post_data or "{}").get("end_reason"))
-        route.fulfill(json={"ok": True})
-
-    p.route("**/api/live/sessions/wt-chat/turns", turn)
-    p.route("**/api/live/sessions/wt-chat/end", end)
-    p.route(
-        "**/api/live/sessions/wt-chat/summarize",
-        lambda r: r.fulfill(json={"summary_cs": None}),
-    )
+# A 1920x1080 poster gives the <video> a full-HD natural size, which once
+# pushed the dialog below the window (fixed by the grid's minmax(0, 1fr) row).
+_FULL_HD_POSTER = """() => {
+  const c = document.createElement("canvas");
+  c.width = 1920; c.height = 1080;
+  const v = document.querySelector("video.video");
+  v.poster = c.toDataURL("image/png");
+  return new Promise((ok) => { const i = new Image(); i.onload = ok; i.src = v.poster; });
+}"""
 
 
 def _open_clip(p) -> None:
+    gemini_fake().chat_calls.clear()
     p.get_by_text(CLIP_NAME).first.click()
     expect(p.locator(MORE)).to_be_visible()
     expect(p.locator(DIALOG)).to_be_hidden()
+    p.evaluate(_FULL_HD_POSTER)
 
 
 def _start_chat(p) -> None:
     p.locator(MORE).get_by_role("button", name="More actions").click()
     p.locator(MORE).get_by_role("button", name="Chat with Gemini").click()
-    expect(p.locator(DIALOG)).to_contain_text(GREETING)
+    expect(p.locator(DIALOG)).to_contain_text(CHAT_GREETING)
+    assert gemini_fake().chat_calls[-1]["google_search"] is False
 
 
-def _controls_in_dialog(p) -> None:
+def _dialog_on_screen(p) -> None:
+    box = p.locator(f"{DIALOG} .live-dialog-input").bounding_box()
+    height = p.viewport_size["height"] if p.viewport_size else 800
+    assert box and box["y"] + box["height"] <= height, (box, height)
     expect(p.locator(f"{DIALOG} [data-test='live-send-frame']")).to_be_visible()
     expect(p.locator(f"{DIALOG} [data-test='live-end']")).to_have_text("End chat")
     expect(p.locator(".detail-hdr").get_by_text("Send frame")).to_have_count(0)
 
 
 def _type_question(p) -> None:
-    p.locator(f"{DIALOG} [data-test='live-text']").fill("Z kterého je to desetiletí?")
+    p.locator(f"{DIALOG} [data-test='live-text']").fill(QUESTION)
     p.locator(f"{DIALOG} [data-test='live-send-text']").click()
     dialog = p.locator(DIALOG)
-    expect(dialog.locator(".chat-user")).to_contain_text("Z kterého je to desetiletí?")
-    expect(dialog.locator(".chat-model").last).to_contain_text(ANSWER)
+    expect(dialog.locator(".chat-user")).to_contain_text(QUESTION)
+    expect(dialog.locator(".chat-model").last).to_contain_text(CHAT_ANSWER)
     expect(p.locator(f"{DIALOG} [data-test='live-text']")).to_have_value("")
-    assert _turns[-1]["kind"] == "typed", _turns
+    # The server rebuilt the whole conversation: cue, greeting, the question.
+    texts = [t["text"] for t in gemini_fake().chat_calls[-1]["turns"]]
+    assert texts[1:] == [CHAT_GREETING, QUESTION], texts
 
 
 def _send_frame(p) -> None:
     p.locator(f"{DIALOG} [data-test='live-send-frame']").click()
     dialog = p.locator(DIALOG)
     expect(dialog.locator(".chat-user").last).to_contain_text("Frame at")
-    expect(dialog.locator(".chat-model").last).to_contain_text(FRAME_ANSWER)
-    assert _turns[-1]["kind"] == "frame", _turns
+    expect(dialog.locator(".chat-model").last).to_contain_text(CHAT_FRAME_ANSWER)
 
 
 def _end_chat_asks_first(p) -> None:
@@ -102,7 +92,6 @@ def _end_chat_asks_first(p) -> None:
     p.get_by_role("dialog", name="End chat?").get_by_role("button", name="Keep chatting").click()
     expect(p.get_by_role("dialog", name="End chat?")).to_be_hidden()
     expect(p.locator(f"{DIALOG} .live-dialog-input")).to_be_visible()
-    assert _ended == []
 
 
 def _end_chat_closes_the_dialog(p) -> None:
@@ -110,18 +99,24 @@ def _end_chat_closes_the_dialog(p) -> None:
     p.locator("[data-test='live-end-confirm']").click()
     expect(p.locator(DIALOG)).to_be_hidden()
     expect(p.locator("#toast-root")).to_contain_text("Chats tab")
-    assert _ended == ["user_stop"], _ended
+
+
+def _listed_in_chats_tab(p) -> None:
+    p.get_by_role("tab", name="Chats").click()
+    row = p.locator(".live-history-row").first
+    expect(row.locator(".ts")).to_have_text("just now")
+    row.click()
+    detail = p.locator(".live-history-detail").first
+    expect(detail).to_contain_text(QUESTION)
+    expect(detail).to_contain_text(CHAT_FRAME_ANSWER)
 
 
 def run(wt):
-    wt.step("Stand in for the server's Gemini answers", _stand_in_for_the_server)
     wt.step("Open the clip from the list", _open_clip)
     wt.step("Start a chat from the ⋯ menu: Gemini greets", _start_chat)
-    wt.step("Send frame and End chat sit in the dialog, not the header", _controls_in_dialog)
+    wt.step("The dialog stays on screen, with Send frame and End chat in it", _dialog_on_screen)
     wt.step("Type a question and get the answer in the dialog", _type_question)
     wt.step("Send frame: Gemini describes the frame", _send_frame)
     wt.step("End chat asks first; Keep chatting leaves the chat open", _end_chat_asks_first)
-    wt.step(
-        "End chat, confirmed: the dialog closes; the chat is in the Chats tab",
-        _end_chat_closes_the_dialog,
-    )
+    wt.step("End chat, confirmed: the dialog closes", _end_chat_closes_the_dialog)
+    wt.step("The chat is listed in the Chats tab as just now", _listed_in_chats_tab)

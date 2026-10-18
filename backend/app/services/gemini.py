@@ -106,6 +106,8 @@ class GeminiService:
         config = types.GenerateContentConfig(
             system_instruction=system_instruction,
             tools=[types.Tool(google_search=types.GoogleSearch())] if google_search else None,
+            # A chat reply should come in seconds; the default thinking is slower.
+            thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.LOW),
         )
         try:
             response = await self._client.aio.models.generate_content(

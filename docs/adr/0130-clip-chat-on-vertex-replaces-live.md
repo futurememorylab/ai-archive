@@ -71,6 +71,11 @@ Annotation, by contrast, runs on Vertex AI with the app's service account.
   migration and churn for no user benefit.
 - Older databases keep the Live-era prompt row `live.system_instruction.cs`.
   It is unused and stays hidden from the annotation pickers.
+- Deploy: no migration. Startup seeds `chat.system_instruction.cs` when it
+  is missing, so each server gets it on its first boot of this version.
+  Seeding only inserts: later edits to the seed file never reach a database
+  that already has the prompt (edit it on the Prompts page), and edits made
+  to the old Live prompt are not carried over; copy them by hand if wanted.
 - The Secret Manager secret `gemini-api-key` is no longer used. The owner
   can delete it; the app and deploy no longer read it.
 - `docs/gemini-live-lessons.md` stays as history in case voice comes back.

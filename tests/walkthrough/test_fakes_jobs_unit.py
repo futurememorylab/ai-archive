@@ -56,3 +56,24 @@ def test_gemini_blocks_while_held_then_releases():
 def test_gemini_fake_singleton_is_stable():
     """app_server injects the singleton; scenarios reach the SAME instance."""
     assert gemini_fake() is gemini_fake()
+
+
+async def test_gemini_chat_answers_by_kind_of_turn():
+    """chat() greets the opening cue, describes a sent frame, answers a typed
+    question, and records every call for the clip-chat walkthrough."""
+    from backend.app.services.live_sessions import FRAME_CUE_CS, OPENING_CUE_CS
+    from tests.walkthrough.fakes import CHAT_ANSWER, CHAT_FRAME_ANSWER, CHAT_GREETING
+
+    g = FakeGemini()
+    opening = [{"role": "user", "text": OPENING_CUE_CS}]
+    greeted = [*opening, {"role": "model", "text": CHAT_GREETING}]
+    frame = [*greeted, {"role": "user", "text": FRAME_CUE_CS}]
+    typed = [*greeted, {"role": "user", "text": "Kdy?"}]
+
+    async def ask(turns):
+        return (await g.chat(model="m", system_instruction="s", turns=turns))["text"]
+
+    assert await ask(opening) == CHAT_GREETING
+    assert await ask(frame) == CHAT_FRAME_ANSWER
+    assert await ask(typed) == CHAT_ANSWER
+    assert len(g.chat_calls) == 3

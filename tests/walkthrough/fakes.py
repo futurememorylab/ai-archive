@@ -22,11 +22,18 @@ from backend.app.archive.model import (
     MediaRef,
     Timecode,
 )
+from backend.app.services.live_sessions import FRAME_CUE_CS, OPENING_CUE_CS
 
 CLIP_ID = 101
 CLIP_NAME = "archive_30s"
 DECADE_IDENT = "pragafilm.dekáda.natočení"
 PUBLISHED_DECADE = "30.léta"
+
+# The clip-chat walkthrough's Gemini answers (FakeGemini.chat).
+CHAT_GREETING = "Dobrý den, vidím zahradu."
+CHAT_ANSWER = "Podle oblečení spíš třicátá léta."
+CHAT_FRAME_ANSWER = "Na snímku jsou dvě děti u plotu."
+CHAT_SUMMARY = "Rozhovor o zahradě ze třicátých let."
 
 # The catalog the app lists against. Must match CATDV_CATALOG_ID in the app's
 # boot env (app_server) and the catalog_id the seed writes into clip_list_cache,
@@ -367,7 +374,7 @@ _HOLD_TIMEOUT_SECS = 30.0
 
 
 class FakeGemini:
-    """Offline Gemini double for the job-start / cancel walkthroughs.
+    """Offline Gemini double for the job-start / cancel and clip-chat walkthroughs.
 
     `annotate` is invoked by the annotator via ``asyncio.to_thread`` (Vertex's
     client is synchronous), so it runs on the app's executor thread. By default
@@ -388,6 +395,7 @@ class FakeGemini:
         self._gate = threading.Event()
         self._gate.set()  # released by default → instant
         self._entered = threading.Event()
+        self.chat_calls: list[dict] = []
 
     def hold(self) -> None:
         """Make the next annotate() block until release() is called."""
@@ -415,6 +423,22 @@ class FakeGemini:
             "scenes": [{"name": "Harbour wide", "in": {"secs": 0.0}, "out": {"secs": 2.0}}],
         }
         return {"text": json.dumps(payload), "raw": {}}
+
+    async def chat(self, *, model, system_instruction, turns, google_search=True):
+        """Clip-chat answers for the clip-chat walkthrough: a greeting for the
+        opening cue, a frame description for Send frame, a fixed answer for a
+        typed question. Every call is kept in `chat_calls` for assertions."""
+        self.chat_calls.append({"turns": turns, "google_search": google_search})
+        last = turns[-1]["text"]
+        if len(turns) == 1 and last == OPENING_CUE_CS:
+            text = CHAT_GREETING
+        elif last == FRAME_CUE_CS:
+            text = CHAT_FRAME_ANSWER
+        elif last.startswith("PŘEPIS:"):
+            text = CHAT_SUMMARY
+        else:
+            text = CHAT_ANSWER
+        return {"text": text, "raw": {}}
 
 
 # Process-wide singleton: app_server injects THIS instance into the LiveCtx, and

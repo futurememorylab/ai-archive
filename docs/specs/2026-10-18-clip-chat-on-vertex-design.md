@@ -47,12 +47,15 @@ Routes keep the Live-era prefix `/api/live`:
 - Each turn is answered by `GeminiService.chat`
   (`backend/app/services/gemini.py`) on Vertex, with the app's service
   account. Model: `GEMINI_CHAT_MODEL`, default `gemini-3.8-flash`. Google
-  Search grounding is on.
+  Search grounding is on, and the thinking level is low so answers come quickly.
 - The system instruction is the prompt `chat.system_instruction.cs` (seeded
   from `backend/seeds/chat_system_instruction_cs.json`, editable on the
   Prompts page, hidden from the annotation pickers) plus the clip's Czech
-  context: published annotations and the draft. It is rebuilt on every
-  turn.
+  context: the archive's details and every clip field, the published
+  annotations, and the draft. It is rebuilt on every turn.
+- On deploy there is no migration: startup inserts the chat prompt when it
+  is missing. It never overwrites an existing one, and edits made to the
+  old Live prompt (`live.system_instruction.cs`) are not copied over.
 - The summary uses `GEMINI_MODEL`, also through Vertex.
 - 3.8 Flash is not served in `europe-west3` alone. Deployments use
   `GCP_LOCATION=global` (local `.env` and prod already do).
