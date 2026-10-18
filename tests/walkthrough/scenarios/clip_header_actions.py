@@ -3,7 +3,7 @@
 The top bar no longer shows the spend pill, the "N to review" pill or an idle
 "✓ Synced" chip. The clip header drops its duplicate timecode readout and puts
 its actions on the right: Annotate, plus a ⋯ menu holding the cache control
-(Cache / Delete) and Chat with Gemini.
+(Cache / Delete) and Chat with AI.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ TITLE = "Clip actions on the right: Annotate and the ⋯ menu"
 DESCRIPTION = (
     "An operator opens a clip: the top bar carries no spend, review or synced "
     "pills, and the header shows Annotate plus a ⋯ menu on the right. The menu "
-    "holds the cache control and Chat with Gemini."
+    "holds the cache control and Chat with AI."
 )
 
 MORE = '[data-test="clip-more"]'
@@ -52,7 +52,7 @@ def _open_more(p) -> None:
     expect(panel.locator('[data-test="cache-status"]')).to_be_visible()
     # Every action is a menu row, not a page button.
     expect(panel.locator(".btn")).to_have_count(0)
-    expect(panel.get_by_role("button", name="Chat with Gemini")).to_be_visible()
+    expect(panel.get_by_role("button", name="Chat with AI")).to_be_visible()
 
 
 def _close_more(p) -> None:
@@ -65,5 +65,5 @@ def run(wt):
     wt.step("The top bar has no spend, review or synced pills", _quiet_topbar)
     wt.step("The header has no duplicate timecode readout", _no_header_timecode)
     wt.step("Annotate sits on the right of the header", _annotate_on_the_right)
-    wt.step("The ⋯ menu lists a Video file section and Chat with Gemini as menu rows", _open_more)
+    wt.step("The ⋯ menu lists a Video file section and Chat with AI as menu rows", _open_more)
     wt.step("Escape closes the menu", _close_more)

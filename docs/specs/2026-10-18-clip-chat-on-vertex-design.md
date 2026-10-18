@@ -12,7 +12,7 @@ same features minus voice.
 
 ## User flow
 
-1. On the clip page, open ⋯ and choose **Chat with Gemini**.
+1. On the clip page, open ⋯ and choose **Chat with AI**.
 2. A dialog opens under the video. Gemini greets in Czech and describes the
    frame on screen. Answers stream in: the bubble first says "Thinking…",
    then "Thinking: <step>…" for each step Gemini reports (in English), then

@@ -26,7 +26,7 @@ from tests.walkthrough.fakes import (
 
 SLUG = "clip-chat"
 TOPIC = "Clip page"
-TITLE = "Chat with Gemini about a clip, under the video"
+TITLE = "Chat with AI about a clip, under the video"
 DESCRIPTION = (
     "An operator starts a chat from the ⋯ menu. Gemini greets and describes "
     "the frame, then answers a typed question (showing what it is thinking "
@@ -60,7 +60,7 @@ def _open_clip(p) -> None:
 
 def _start_chat(p) -> None:
     p.locator(MORE).get_by_role("button", name="More actions").click()
-    p.locator(MORE).get_by_role("button", name="Chat with Gemini").click()
+    p.locator(MORE).get_by_role("button", name="Chat with AI").click()
     expect(p.locator(DIALOG)).to_contain_text(CHAT_GREETING)
     assert gemini_fake().chat_calls[-1]["google_search"] is False
 

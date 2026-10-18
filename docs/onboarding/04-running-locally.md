@@ -164,9 +164,9 @@ automatically**. The header chip turns yellow and offers a manual
 reconnect. See
 [ADR 0015](../adr/0015-offline-fallback-auto-degrade-manual-reconnect.md).
 
-## Chat with Gemini about a clip
+## Chat with AI about a clip
 
-On a clip whose video is ready, ⋯ → **Chat with Gemini** opens a text chat
+On a clip whose video is ready, ⋯ → **Chat with AI** opens a text chat
 under the video. It runs on Vertex with the same service account as
 annotation, so there is no extra setup and no API key. The model
 (`GEMINI_CHAT_MODEL`, default `gemini-3.8-flash`) must be served in your

@@ -36,7 +36,7 @@ Annotation, by contrast, runs on Vertex AI with the app's service account.
 
 ## Decision
 
-- The clip page's ⋯ menu offers **Chat with Gemini**: a text chat about the
+- The clip page's ⋯ menu offers **Chat with AI**: a text chat about the
   clip, in the dialog under the video. There is no voice in or out.
 - The browser holds no Google credentials. It calls the app
   (`POST /api/live/sessions`, `.../turns`, `.../end`), and the server answers

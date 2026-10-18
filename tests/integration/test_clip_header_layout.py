@@ -5,7 +5,7 @@ idle "✓ Synced" chip; the sync chip only shows while writes are publishing or
 failed, so the Sync drawer stays reachable when it matters. The clip header
 drops its duplicate timecode readout (the player HUD and transport keep one)
 and puts its actions on the right: an Annotate button plus a ⋯ menu holding
-the cache control (Cache / Delete) and Chat with Gemini.
+the cache control (Cache / Delete) and Chat with AI.
 """
 
 from fastapi.testclient import TestClient
@@ -41,12 +41,12 @@ def test_clip_header_actions_on_the_right_with_overflow_menu(monkeypatch, tmp_pa
     assert 'data-test="clip-more"' in right
     more = right.split('data-test="clip-more"', 1)[1]
     assert "cache-ctl" in more  # Cache / Delete lives in the ⋯ menu
-    assert "liveSession.start()" in more  # Chat with Gemini too
+    assert "liveSession.start()" in more  # Chat with AI too
 
 
 def test_overflow_menu_rows_share_the_menu_style(monkeypatch, tmp_path):
     """The ⋯ menu reads as one list: a Cache section (status row + Cache/Purge
-    rows) and Chat with Gemini below a separator, all menu rows, not page buttons."""
+    rows) and Chat with AI below a separator, all menu rows, not page buttons."""
     html = _page(monkeypatch, tmp_path)
     more = html.split('data-test="clip-more"', 1)[1].split("</header>", 1)[0]
     cache = more.split('class="cache-ctl', 1)[1].split('class="menu-sep"', 1)[0]
@@ -57,4 +57,4 @@ def test_overflow_menu_rows_share_the_menu_style(monkeypatch, tmp_path):
     assert 'class="btn' not in cache
     chat = more.split('class="menu-sep"', 1)[1]
     assert "liveSession.start()" in chat
-    assert "Chat with Gemini" in chat
+    assert "Chat with AI" in chat

@@ -159,9 +159,9 @@ Notes:
   (`review_items.decision`, `write_queue`) and will land in a follow-up.
 - If no prompt has a production version, the dropdown links to `/prompts`.
 
-## Chat with Gemini about a clip
+## Chat with AI about a clip
 
-On a clip whose video is ready, ⋯ → **Chat with Gemini** opens a text chat
+On a clip whose video is ready, ⋯ → **Chat with AI** opens a text chat
 under the video. Gemini greets in Czech and describes the frame on screen;
 each question you type goes with the current frame, and **Send frame** asks
 about the frame you are on. Answers come back as text after a few seconds.
