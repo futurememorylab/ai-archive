@@ -98,8 +98,6 @@
           ● REC <span x-text="liveSession.elapsedFmt">0:00</span>
         </span>
         <span class="meta" x-show="liveSession.state === 'active' && !liveSession.micOn">Typing only</span>
-        <button type="button" class="btn danger"
-                @click="liveSession.close('user_stop')">■ Stop</button>
       </div>
     </template>
   </header>
@@ -214,6 +212,18 @@
       </div>
     </div>
   </aside>
+
+  {# ── End chat confirm dialog (Live): a stray click must not end the session ── #}
+  {% call ui.modal('liveSession.confirmEnd', label='End chat?', card_cls='sm') %}
+    <div class="modal-body">
+      <p>This ends the Live session. The transcript stays under the video.</p>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" @click="liveSession.confirmEnd = false">Keep talking</button>
+      <button type="button" class="btn danger" data-test="live-end-confirm"
+              @click="liveSession.close('user_stop')">End chat</button>
+    </div>
+  {% endcall %}
 
   {# ── Re-run confirm dialog (opened only while the draft has proposals) ──── #}
   {% call ui.modal('rerunConfirmOpen', label='Re-run annotation?', card_cls='sm') %}

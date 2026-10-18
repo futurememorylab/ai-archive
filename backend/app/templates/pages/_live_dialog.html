@@ -1,6 +1,6 @@
 {#- Live dialog under the video: the running transcript (kept on screen after
     Stop, earlier sessions on this page above a divider) and, while a session
-    runs, the input row with Send frame and a box for typed questions.
+    runs, the input row with Send frame, End chat and a box for typed questions.
     Rendered inside clip_detail's x-data; state lives in liveSession.js. -#}
 <div class="live-dialog" data-test="live-dialog" x-cloak
      x-show="liveSession.state !== 'idle' || liveSession.transcript.length || liveSession.earlier.length">
@@ -36,6 +36,9 @@
         <circle cx="12" cy="12" r="3"/>
       </svg>
       Send frame</button>
+    <button type="button" class="btn danger" data-test="live-end"
+            :disabled="liveSession.state === 'closing'"
+            @click="liveSession.confirmEnd = true">End chat</button>
     <input class="txt" type="text" data-test="live-text" x-model="liveSession.draftText"
            :disabled="liveSession.state !== 'active'"
            @input="liveSession._resetInactivity()"

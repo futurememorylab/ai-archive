@@ -5,8 +5,9 @@ walkthrough is offline, so the scenario stands in for both ends: it answers
 `/api/live/*` itself and plays Gemini on a routed WebSocket (setupComplete,
 then a transcribed reply per turn). The page has no microphone, so the
 session starts in typing mode. The dialog sits under the video with Send
-frame and the text box, a connection Google ends (goAway) resumes with the
-latest handle, and the transcript stays after Stop.
+frame, End chat (with a confirmation) and the text box; a connection Google
+ends (goAway) resumes with the latest handle; the transcript stays after the
+chat ends.
 """
 
 from __future__ import annotations
@@ -23,7 +24,8 @@ TITLE = "Live without a microphone: type questions under the video"
 DESCRIPTION = (
     "An operator without a microphone starts Live. The dialog opens under the "
     "video, says to type instead, and answers a typed question. Send frame "
-    "sits next to the text box, and the transcript stays after Stop."
+    "and End chat sit next to the text box; End chat asks first, and the "
+    "transcript stays after the chat ends."
 )
 
 MORE = '[data-test="clip-more"]'
@@ -96,9 +98,11 @@ def _start_live(p) -> None:
     expect(p.locator(".live-bar")).to_contain_text("Typing only")
 
 
-def _send_frame_in_dialog(p) -> None:
+def _controls_in_dialog(p) -> None:
     expect(p.locator(f"{DIALOG} [data-test='live-send-frame']")).to_be_visible()
+    expect(p.locator(f"{DIALOG} [data-test='live-end']")).to_have_text("End chat")
     expect(p.locator(".detail-hdr").get_by_text("Send frame")).to_have_count(0)
+    expect(p.locator(".detail-hdr").get_by_role("button")).to_have_count(0)
 
 
 def _type_question(p) -> None:
@@ -119,8 +123,16 @@ def _resume_after_go_away(p) -> None:
     assert _setups[-1].get("sessionResumption") == {"handle": "h1"}, _setups
 
 
-def _stop_keeps_transcript(p) -> None:
-    p.locator(".live-bar").get_by_role("button", name="Stop").click()
+def _end_chat_asks_first(p) -> None:
+    p.locator(f"{DIALOG} [data-test='live-end']").click()
+    p.get_by_role("dialog", name="End chat?").get_by_role("button", name="Keep talking").click()
+    expect(p.get_by_role("dialog", name="End chat?")).to_be_hidden()
+    expect(p.locator(f"{DIALOG} .live-dialog-input")).to_be_visible()
+
+
+def _end_chat_keeps_transcript(p) -> None:
+    p.locator(f"{DIALOG} [data-test='live-end']").click()
+    p.locator("[data-test='live-end-confirm']").click()
     dialog = p.locator(DIALOG)
     expect(dialog).to_contain_text(ANSWER)
     expect(dialog.locator(".live-dialog-input")).to_be_hidden()
@@ -130,7 +142,8 @@ def run(wt):
     wt.step("Stand in for Gemini; this operator has no microphone", _stand_in_for_google)
     wt.step("Open the clip from the list", _open_clip)
     wt.step("Start Live from the ⋯ menu: it opens in typing mode", _start_live)
-    wt.step("Send frame sits in the dialog, not the header", _send_frame_in_dialog)
+    wt.step("Send frame and End chat sit in the dialog, not the header", _controls_in_dialog)
     wt.step("Type a question and get the answer in the dialog", _type_question)
     wt.step("Google ends the connection: Live resumes and keeps going", _resume_after_go_away)
-    wt.step("Stop: the transcript stays under the video", _stop_keeps_transcript)
+    wt.step("End chat asks first; Keep talking leaves the session running", _end_chat_asks_first)
+    wt.step("End chat, confirmed: the transcript stays under the video", _end_chat_keeps_transcript)

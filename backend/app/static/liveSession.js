@@ -16,6 +16,7 @@ function liveSession(clipId, config) {
     earlier: [],                    // earlier sessions on this page, kept on screen
     draftText: "",                  // the typed question being written
     micOn: false,                   // false → typing only (no mic, or blocked)
+    confirmEnd: false,              // the "End chat?" dialog is open
     elapsedFmt: "0:00",
     sessionId: null,
     inactivityS: (config && config.inactivityS) || 60,
@@ -76,6 +77,7 @@ function liveSession(clipId, config) {
     },
 
     async close(reason) {
+      this.confirmEnd = false;
       if (this.state === "idle" || this.state === "closing") return;
       this.state = "closing";
       this._endReason = reason || this._endReason || "user_stop";

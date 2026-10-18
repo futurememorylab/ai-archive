@@ -18,7 +18,7 @@ all, and Send frame sat in the header, away from the conversation.
    connection after about 10 minutes. See ADR 0130.
 2. **Dialog under the video.** One panel below the player shows the whole
    conversation: your words on the right, Gemini's on the left, notes in the
-   middle. It scrolls to the latest line and stays after Stop. Earlier
+   middle. It scrolls to the latest line and stays after the chat ends. Earlier
    sessions on the same page stay above a "New session" divider, dimmed.
    Saved transcripts are still listed in the History tab.
 3. **Typed questions.** While a session runs, the panel has a text box and
@@ -26,8 +26,10 @@ all, and Send frame sat in the header, away from the conversation.
    same Live session, so talking and typing can be mixed. If the browser has
    no mic or blocks it, the session starts anyway, with a "No microphone
    available" note and a "Typing only" label in the header.
-4. **Send frame** moves from the header into the panel, next to the text
-   box. The header keeps the REC timer and Stop.
+4. **Send frame and End chat** move from the header into the panel, next to
+   the text box. Stop is renamed **End chat** and asks for confirmation
+   ("End chat?" with Keep talking / End chat) so a stray click doesn't end
+   the session. The header keeps only the REC timer (and "Typing only").
 5. **Pause sends the frame.** The pause handler (`liveSession.init`) was
    never called, so it was dead code. It is wired up now: pausing the video
    during a session sends the current frame, as the original spec intended.
@@ -50,8 +52,10 @@ audio; the transcript carries the text), and a rate card for Live models.
 5. Keep the session going past 2 minutes, sending at least one frame. It
    doesn't drop. If you can, keep it past 10 minutes: the dialog carries on
    with no error.
-6. Press **Stop**. The text box goes away, the transcript stays under the
-   video, and the session appears in the History tab with a summary.
+6. Press **End chat** in the panel. A dialog asks "End chat?". Press
+   **Keep talking**: nothing changes. Press **End chat** again and confirm:
+   the text box goes away, the transcript stays under the video, and the
+   session appears in the History tab with a summary.
 7. Start Live again on the same page. The earlier lines stay above a "New
    session" divider.
 8. Block the mic for the site (or use a machine without one) and start
