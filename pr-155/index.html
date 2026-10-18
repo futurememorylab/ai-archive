@@ -66,8 +66,8 @@
       <li class="nav-topic"><a href="#topic-clip-page">Clip page</a>
         <ul>
           <li><a href="#video-clip-annotate-seek-draft">Jump to a fresh draft marker right after annotating</a></li>
+          <li><a href="#video-clip-chat">Chat with Gemini about a clip, under the video</a></li>
           <li><a href="#video-clip-header-actions">Clip actions on the right: Annotate and the ⋯ menu</a></li>
-          <li><a href="#video-live-typed-dialog">Live without a microphone: type questions under the video</a></li>
           <li><a href="#video-review-edit-annotation">Review an AI draft and publish it</a></li>
         </ul>
       </li>
@@ -172,15 +172,15 @@
         <p>An operator opens a clip that isn&#x27;t cached yet and presses play, which fails. They annotate it (which caches it), then click the new draft marker: the player fetches the proxy again and jumps to the marker without a page reload.</p>
         <video controls preload="metadata" src="clip-annotate-seek-draft.webm"></video>
       </article>
+      <article class="card" id="video-clip-chat">
+        <h3>Chat with Gemini about a clip, under the video</h3>
+        <p>An operator starts a chat from the ⋯ menu. Gemini greets and describes the frame, then answers a typed question and a sent frame. Send frame and End chat sit next to the text box; End chat asks first, and the transcript stays after the chat ends.</p>
+        <video controls preload="metadata" src="clip-chat.webm"></video>
+      </article>
       <article class="card" id="video-clip-header-actions">
         <h3>Clip actions on the right: Annotate and the ⋯ menu</h3>
-        <p>An operator opens a clip: the top bar carries no spend, review or synced pills, and the header shows Annotate plus a ⋯ menu on the right. The menu holds the cache control and Live.</p>
+        <p>An operator opens a clip: the top bar carries no spend, review or synced pills, and the header shows Annotate plus a ⋯ menu on the right. The menu holds the cache control and Chat with Gemini.</p>
         <video controls preload="metadata" src="clip-header-actions.webm"></video>
-      </article>
-      <article class="card" id="video-live-typed-dialog">
-        <h3>Live without a microphone: type questions under the video</h3>
-        <p>An operator without a microphone starts Live. The dialog opens under the video, says to type instead, and answers a typed question. Send frame and End chat sit next to the text box; End chat asks first, and the transcript stays after the chat ends.</p>
-        <video controls preload="metadata" src="live-typed-dialog.webm"></video>
       </article>
       <article class="card" id="video-review-edit-annotation">
         <h3>Review an AI draft and publish it</h3>
