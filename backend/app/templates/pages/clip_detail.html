@@ -204,12 +204,12 @@
   {# ── End chat confirm dialog: a stray click must not end the chat ── #}
   {% call ui.modal('liveSession.confirmEnd', label='End chat?', card_cls='sm') %}
     <div class="modal-body">
-      <p>This ends the chat. The transcript stays under the video.</p>
+      <p>This ends the chat. You'll find it later in the Chats tab on the right.</p>
     </div>
     <div class="modal-actions">
       <button type="button" class="btn ghost" @click="liveSession.confirmEnd = false">Keep chatting</button>
       <button type="button" class="btn danger" data-test="live-end-confirm"
-              @click="liveSession.close('user_stop')">End chat</button>
+              @click="liveSession.close('user_stop').then(() => { historyLoaded = false; if (tab === 'history') loadHistory() })">End chat</button>
     </div>
   {% endcall %}
 

@@ -22,6 +22,27 @@
     const n = Number(x);
     return "$" + (n < 0.1 ? n.toFixed(3) : n.toFixed(2));
   }
+  // When something happened, in words: "just now", "5 min ago", "3 h ago"
+  // today, "yesterday 14:05", then a plain date ("12 Oct", with the year
+  // when it isn't this year). Local time, so "yesterday" is the user's.
+  function fmtWhen(iso) {
+    const d = new Date(iso);
+    if (!iso || isNaN(d)) return "—";
+    const now = new Date();
+    const mins = Math.floor((now - d) / 60000);
+    const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate());
+    const days = Math.round((day(now) - day(d)) / 86400000);
+    if (days === 0) {
+      if (mins < 1) return "just now";
+      if (mins < 60) return `${mins} min ago`;
+      return `${Math.floor(mins / 60)} h ago`;
+    }
+    if (days === 1) return `yesterday ${time}`;
+    const opts = { day: "numeric", month: "short" };
+    if (d.getFullYear() !== now.getFullYear()) opts.year = "numeric";
+    return d.toLocaleDateString([], opts);
+  }
   function autosize(el) {
     if (!el) return;
     el.style.height = "auto";
@@ -94,6 +115,7 @@
   }
 
   window.fmtTimecode = fmtTimecode;
+  window.fmtWhen = fmtWhen;
   window.defaultBatchName = defaultBatchName;
   window.cacheProgressForClip = cacheProgressForClip;
   window.elapsedTimer = elapsedTimer;

@@ -7,6 +7,7 @@ and ADR 0130). The routes keep their Live-era `/api/live` prefix.
 import base64
 import binascii
 import json
+import logging
 import time
 import uuid
 from datetime import UTC, datetime
@@ -32,6 +33,7 @@ from backend.app.services.live_sessions import (
 )
 
 router = APIRouter(prefix="/api/live", tags=["live"])
+log = logging.getLogger(__name__)
 
 # A 1280x720 JPEG frame is ~150 KB; anything far bigger is not a frame.
 _MAX_FRAME_BYTES = 4_000_000
@@ -90,6 +92,13 @@ async def _answer(
             google_search=google_search,
         )
     except GeminiError as exc:
+        log.warning(
+            "chat %s failed after %.1fs (session %s): %s",
+            call,
+            time.monotonic() - started,
+            session.id,
+            humanise(exc),
+        )
         raise HTTPException(502, detail=f"Gemini didn't answer: {humanise(exc)}") from exc
     await record_live_usage(
         ctx.db,

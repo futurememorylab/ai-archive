@@ -42,17 +42,41 @@ def _render_marker(m: dict) -> str:
     range_ = f"{m.get('in_smpte', '')} – {m.get('out_smpte', '')}"
     label = f'„{name}"' if name else ""
     suffix = f" — {desc}" if desc else ""
-    return f"- {range_}  {label}{suffix}".rstrip()
+    return f"- {range_}  {_category(m)}{label}{suffix}".rstrip()
+
+
+def _category(m: dict) -> str:
+    return f"[{m['category']}] " if m.get("category") else ""
+
+
+def _render_info(clip: dict) -> list[str]:
+    info = {k: v for k, v in (clip.get("archive_info") or {}).items() if _ne(v)}
+    if not info:
+        return []
+    return ["Údaje z archivu:", *(f"- {k}: {_v(v)}" for k, v in info.items())]
+
+
+def _render_fields(clip: dict) -> list[str]:
+    """Every non-empty field, under the archive's name when it has one."""
+    fields = {k: v for k, v in (clip.get("fields") or {}).items() if _ne(v)}
+    if not fields:
+        return []
+    names = clip.get("field_names") or {}
+    lines = ["Pole klipu:"]
+    for k, v in fields.items():
+        label = f"{names[k]} ({k})" if names.get(k) and names[k] != k else k
+        lines.append(f"- {label}: {_v(v)}")
+    return lines
 
 
 def _render_published(clip: dict) -> str:
     lines = ["=== Publikované anotace (z CatDV) ==="]
     lines.append(
         f"Název klipu: {_fix(clip.get('name', '') or '') or ''}\n"
-        f"Formát: {_fix(clip.get('format', '') or '') or ''}   "
         f"FPS: {clip.get('fps', '')}   "
         f"Délka: {clip.get('duration_smpte', '')}"
     )
+    lines.extend(_render_info(clip))
     notes = clip.get("notes")
     if _ne(notes):
         lines.append("Poznámky:")
@@ -65,11 +89,7 @@ def _render_published(clip: dict) -> str:
     if markers:
         lines.append("Markery (čas → popis):")
         lines.extend(_render_marker(m) for m in markers)
-    fields = {k: v for k, v in (clip.get("fields") or {}).items() if _ne(v)}
-    if fields:
-        lines.append("Vlastní pole (pragafilm.*):")
-        for k, v in fields.items():
-            lines.append(f"- {k}: {_v(v)}")
+    lines.extend(_render_fields(clip))
     return "\n".join(lines)
 
 

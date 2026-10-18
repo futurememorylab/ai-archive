@@ -3,7 +3,7 @@
 The chat goes through our server to Gemini on Vertex. The walkthrough is
 offline, so the scenario answers the `/api/live/sessions*` calls itself.
 The dialog sits under the video with Send frame, End chat (with a
-confirmation) and the text box; the transcript stays after the chat ends.
+confirmation) and the text box; ending the chat closes the dialog.
 """
 
 from __future__ import annotations
@@ -20,8 +20,8 @@ TITLE = "Chat with Gemini about a clip, under the video"
 DESCRIPTION = (
     "An operator starts a chat from the ⋯ menu. Gemini greets and describes "
     "the frame, then answers a typed question and a sent frame. Send frame "
-    "and End chat sit next to the text box; End chat asks first, and the "
-    "transcript stays after the chat ends."
+    "and End chat sit next to the text box; End chat asks first, then closes "
+    "the dialog and points to the Chats tab."
 )
 
 MORE = '[data-test="clip-more"]'
@@ -105,12 +105,11 @@ def _end_chat_asks_first(p) -> None:
     assert _ended == []
 
 
-def _end_chat_keeps_transcript(p) -> None:
+def _end_chat_closes_the_dialog(p) -> None:
     p.locator(f"{DIALOG} [data-test='live-end']").click()
     p.locator("[data-test='live-end-confirm']").click()
-    dialog = p.locator(DIALOG)
-    expect(dialog.locator(".live-dialog-input")).to_be_hidden()
-    expect(dialog).to_contain_text(ANSWER)
+    expect(p.locator(DIALOG)).to_be_hidden()
+    expect(p.locator("#toast-root")).to_contain_text("Chats tab")
     assert _ended == ["user_stop"], _ended
 
 
@@ -122,4 +121,7 @@ def run(wt):
     wt.step("Type a question and get the answer in the dialog", _type_question)
     wt.step("Send frame: Gemini describes the frame", _send_frame)
     wt.step("End chat asks first; Keep chatting leaves the chat open", _end_chat_asks_first)
-    wt.step("End chat, confirmed: the transcript stays under the video", _end_chat_keeps_transcript)
+    wt.step(
+        "End chat, confirmed: the dialog closes; the chat is in the Chats tab",
+        _end_chat_closes_the_dialog,
+    )

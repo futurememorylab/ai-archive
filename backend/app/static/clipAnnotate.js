@@ -230,7 +230,7 @@ function clipAnnotate(clipId, clipKind) {
       const r = await fetch(`/clips/${clipId}/live-history`);
       this.historyHtml = r.ok
         ? await r.text()
-        : "<p class='error'>Selhalo načtení.</p>";
+        : "<p class='error'>Couldn't load the chats.</p>";
     },
 
     async toggleOpen() {

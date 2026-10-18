@@ -536,11 +536,49 @@ async def _build_draft_for_clip(ctx, clip_id: int) -> dict:
     )
 
 
+# Top-level archive record keys the chat context skips: shown elsewhere in it
+# (name, notes, fps, duration, markers, fields) or plumbing (ids, media
+# handles, history) that tells Gemini nothing about the footage.
+_LIVE_SKIPPED_CLIP_KEYS = frozenset(
+    {
+        "ID",
+        "name",
+        "notes",
+        "bigNotes",
+        "fps",
+        "duration",
+        "markers",
+        "fields",
+        "format",
+        "media",
+        "thumbnailIDs",
+        "posterID",
+        "history",
+        "importSource",
+    }
+)
+
+
+def _archive_info(provider_data: dict) -> dict:
+    """The clip record's own scalar details (dates, tape, status…), plus its
+    format line, for the chat context."""
+    from backend.app.ui.view_models import _format_summary
+
+    info: dict = {"Formát": _format_summary(provider_data)}
+    for key, value in provider_data.items():
+        if key in _LIVE_SKIPPED_CLIP_KEYS or key.endswith(("ID", "Id")):
+            continue
+        if isinstance(value, (str, int, float)) and not isinstance(value, bool):
+            info[key] = value
+    return info
+
+
 async def _build_clip_view_model_for_live(ctx, clip_id: int) -> dict:
     """Reshape a CanonicalClip into the dict shape `build_context_text` expects:
-    `fields` as identifier→raw-value dict, `markers` carrying smpte timestamps.
+    every published field (identifier→raw value, with the archive's field
+    names), markers carrying smpte timestamps, and the record's own details.
     """
-    from backend.app.ui.view_models import _PRAGAFILM_PREFIX, _fix
+    from backend.app.ui.view_models import _fix
 
     clip = await ctx.archive.get_clip(str(clip_id))
     fps = clip.fps or 25.0
@@ -559,20 +597,20 @@ async def _build_clip_view_model_for_live(ctx, clip_id: int) -> dict:
                 "category": m.category,
             }
         )
-    fields = {
-        ident: fv.value for ident, fv in clip.fields.items() if ident.startswith(_PRAGAFILM_PREFIX)
-    }
+    field_defs = await ctx.field_def_cache_repo.list_for_provider(ctx.db, provider_id=clip.key[0])
+    provider_data = clip.provider_data or {}
     return {
         "id": int(clip.key[1]),
         "name": clip.name,
         "fps": fps,
         "duration_secs": clip.duration_secs,
         "duration_smpte": secs_to_smpte(clip.duration_secs or 0, fps),
-        "format": "",  # purely cosmetic in the context block; raw provider data unparsed
-        "notes": clip.provider_data.get("notes") if clip.provider_data else None,
-        "big_notes": clip.provider_data.get("bigNotes") if clip.provider_data else None,
+        "notes": provider_data.get("notes"),
+        "big_notes": provider_data.get("bigNotes"),
         "markers": markers,
-        "fields": fields,
+        "fields": {ident: fv.value for ident, fv in clip.fields.items()},
+        "field_names": {fd.identifier: fd.name for fd in field_defs},
+        "archive_info": _archive_info(provider_data),
     }
 
 

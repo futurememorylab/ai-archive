@@ -44,5 +44,7 @@ async def test_clip_live_history_partial_renders(tmp_path):
         assert r.status_code == 200
         html = r.text
         assert "abc" in html or "Krátké shrnutí." in html
-        assert "user_stop" in html
+        # The time reads in words in the browser (fmtWhen); no raw end reason.
+        assert "fmtWhen(" in html
+        assert "user_stop" not in html
     await conn.close()

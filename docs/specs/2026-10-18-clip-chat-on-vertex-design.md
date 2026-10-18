@@ -21,11 +21,14 @@ same features minus voice.
    what you are looking at.
 5. **Send frame** adds "Frame at 0:12" to the transcript and asks Gemini to
    describe that frame.
-6. **End chat** asks "End chat?" with **Keep chatting** / **End chat**. After
-   ending, the transcript stays under the video and the Chats tab lists
-   the chat with a short summary.
-7. Starting another chat on the same page keeps the earlier one above a
-   "New chat" divider, greyed.
+6. **End chat** asks "End chat?" with **Keep chatting** / **End chat** and
+   says the chat will be in the Chats tab. Ending closes the dialog, a toast
+   points to the Chats tab, and that tab lists the chat with a short
+   summary. Times there read in words: "5 min ago", "3 h ago", "yesterday
+   14:05", then a date.
+7. Gemini gets every published field of the clip (with the archive's field
+   names), notes, markers with their categories, the clip record's own
+   details (format, dates…) and the unsaved draft.
 8. Leaving or reloading the page mid-chat ends the chat (reason `navigate`).
    The transcript is already saved.
 
@@ -107,15 +110,15 @@ Vertex, so it works on staging too.
 4. Press **End chat**. A dialog asks "End chat?". Press **Keep chatting**:
    the dialog closes and the chat carries on (ask another question to
    check).
-5. Press **End chat** again and confirm with **End chat**. The input row
-   goes away and the transcript stays under the video. Open the Chats
-   tab: the chat is listed with a short Czech summary.
-6. Choose **Chat with Gemini** again on the same page. The earlier chat
-   stays above a "New chat" divider, greyed, and a new greeting appears
-   below it.
+5. Press **End chat** again and confirm with **End chat**. The dialog
+   closes and a toast says the chat is in the Chats tab. Open the Chats
+   tab: the chat is listed as "just now" with a short Czech summary (open
+   it to read the transcript).
+6. Ask Gemini "Jaká pole a údaje o klipu znáš?" in a new chat. It lists
+   the clip's fields by their archive names (not only the pragafilm ones)
+   and details such as the format.
 7. Make Vertex fail in a running chat: turn off the machine's network (or
    the server's), then ask a question. A toast shows the error, your
    question stays in the transcript and the chat stays open. Turn the
    network back on and ask again: Gemini answers.
-8. Start a chat, then reload the page. In the Chats tab the chat is
-   listed with reason `navigate`.
+8. Start a chat, then reload the page. The Chats tab lists that chat.

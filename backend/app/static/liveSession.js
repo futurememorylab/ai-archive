@@ -9,7 +9,6 @@ function liveSession(clipId) {
     state: "idle",                  // idle | starting | active | closing
     busy: false,                    // a question is waiting for its answer
     transcript: [],                 // this chat: [{role, text, ts, kind}]
-    earlier: [],                    // earlier chats on this page, kept on screen
     draftText: "",                  // the question being typed
     confirmEnd: false,              // the "End chat?" dialog is open
     sessionId: null,
@@ -17,9 +16,6 @@ function liveSession(clipId) {
     // ── public API ───────────────────────────────────────────────────────
     async start() {
       if (this.state !== "idle") return;
-      if (this.transcript.length) {
-        this.earlier.push(...this.transcript, { role: "system", text: "New chat", kind: "divider" });
-      }
       this.transcript = [];
       this.draftText = "";
       this.sessionId = null;
@@ -34,14 +30,21 @@ function liveSession(clipId) {
       this.state = "active";
     },
 
+    // Ends the chat and closes the dialog; the chat stays in the clip's
+    // Chats tab (the page reloads that list when this resolves).
     async close(reason) {
       this.confirmEnd = false;
       if (this.state !== "active") return;
       this.state = "closing";
-      await this._post(`/api/live/sessions/${this.sessionId}/end`,
-                       { end_reason: reason || "user_stop" });
+      const ended = await this._post(`/api/live/sessions/${this.sessionId}/end`,
+                                     { end_reason: reason || "user_stop" });
       this._summarize();
+      this.transcript = [];
       this.state = "idle";
+      if (ended) {
+        Alpine.store("toast").push("Chat saved. Find it in the Chats tab on the right.",
+                                   { level: "success" });
+      }
     },
 
     init() {
