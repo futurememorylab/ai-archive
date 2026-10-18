@@ -4,16 +4,19 @@ Each turn is answered here through Vertex Gemini (see services/live_sessions.py
 and ADR 0130). The routes keep their Live-era `/api/live` prefix.
 """
 
+import asyncio
 import base64
 import binascii
 import json
 import logging
 import time
 import uuid
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from backend.app.auth.guards import require_permission
@@ -76,44 +79,90 @@ async def _system_instruction(ctx: Any, clip_id: int, prompt_version: int | None
     return build_system_instruction(prompt_body=version.body, clip=clip, draft=draft)
 
 
-async def _answer(
-    ctx: Any, session: LiveSession, turns: list[ChatTurn], *, call: str, google_search: bool = True
-) -> str:
-    """Ask Gemini, record the call's cost, and return the reply text. A
-    failed call is a 502 carrying the reason the toast shows."""
+# An answer streams for as long as Gemini thinks, searches and writes (one
+# took 27 s). The stream ends with the answer, so it can't idle like the job
+# event streams that #131 capped; this only stops a call that never ends.
+_ANSWER_TIMEOUT_S = 120
+
+# What an answer adds to its transcript entry when Gemini searched the web.
+_GROUNDING_KEYS = ("searches", "sources")
+
+SaveAnswer = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
+
+
+def _line(event: dict[str, Any]) -> bytes:
+    return (json.dumps(event, ensure_ascii=False) + "\n").encode()
+
+
+async def _stream_answer(
+    ctx: Any,
+    session: LiveSession,
+    turns: list[ChatTurn],
+    *,
+    call: str,
+    save: SaveAnswer,
+    on_error: Callable[[], Awaitable[None]] | None = None,
+    google_search: bool = True,
+) -> StreamingResponse:
+    """Stream Gemini's answer to the page as NDJSON lines: "thinking" and
+    "text" events as they come, then "done" (the answer and what `save`
+    returns) or "error" (the reason the toast shows). The answer is saved
+    and its cost recorded before "done" goes out."""
     model = ctx.settings.gemini_chat_model
     system_instruction = await _system_instruction(ctx, session.clip_id, session.prompt_version)
-    started = time.monotonic()
-    try:
-        result = await ctx.gemini.chat(
+
+    async def body() -> AsyncIterator[bytes]:
+        started = time.monotonic()
+        final: dict[str, Any] = {}
+        try:
+            async with asyncio.timeout(_ANSWER_TIMEOUT_S):
+                async for event in ctx.gemini.chat_stream(
+                    model=model,
+                    system_instruction=system_instruction,
+                    turns=turns,
+                    google_search=google_search,
+                ):
+                    if event["type"] == "done":
+                        final = event
+                    else:
+                        yield _line(event)
+        except (GeminiError, TimeoutError) as exc:
+            reason = humanise(exc) if isinstance(exc, GeminiError) else "it took too long"
+            log.warning(
+                "chat %s failed after %.1fs (session %s): %s",
+                call,
+                time.monotonic() - started,
+                session.id,
+                reason,
+            )
+            if on_error is not None:
+                await on_error()
+            yield _line({"type": "error", "detail": f"Gemini didn't answer: {reason}"})
+            return
+        await record_live_usage(
+            ctx.db,
+            ctx.run_telemetry_repo,
+            ctx.telemetry_ctx,
+            session=session,
+            call=call,
             model=model,
-            system_instruction=system_instruction,
-            turns=turns,
-            google_search=google_search,
+            raw=final.get("raw"),
+            duration_s=time.monotonic() - started,
+            attrs={"with_frame": bool(turns[-1].get("image_jpeg"))},
         )
-    except GeminiError as exc:
-        log.warning(
-            "chat %s failed after %.1fs (session %s): %s",
-            call,
-            time.monotonic() - started,
-            session.id,
-            humanise(exc),
-        )
-        raise HTTPException(502, detail=f"Gemini didn't answer: {humanise(exc)}") from exc
-    await record_live_usage(
-        ctx.db,
-        ctx.run_telemetry_repo,
-        ctx.telemetry_ctx,
-        session=session,
-        call=call,
-        model=model,
-        raw=result["raw"],
-        duration_s=time.monotonic() - started,
-        attrs={"with_frame": bool(turns[-1].get("image_jpeg"))},
-    )
-    if not result["text"]:
-        raise HTTPException(502, detail="Gemini returned an empty answer. Try asking again.")
-    return result["text"]
+        if not final.get("text"):
+            if on_error is not None:
+                await on_error()
+            yield _line(
+                {"type": "error", "detail": "Gemini returned an empty answer. Try asking again."}
+            )
+            return
+        entry = {"role": "model", "text": final["text"], "ts": _now_ms()}
+        entry.update({k: final[k] for k in _GROUNDING_KEYS if final.get(k)})
+        extra = await save(entry)
+        yield _line({"type": "done", "reply": entry, **extra})
+
+    return StreamingResponse(body(), media_type="application/x-ndjson")
 
 
 def _now_ms() -> int:
@@ -126,8 +175,9 @@ class StartPayload(BaseModel):
 
 
 @router.post("/sessions")
-async def start_session(request: Request, body: StartPayload) -> dict:
-    """Start a chat: Gemini greets and describes the frame on screen."""
+async def start_session(request: Request, body: StartPayload) -> StreamingResponse:
+    """Start a chat: Gemini greets and describes the frame on screen,
+    streamed; the "done" line carries the new chat's session_id."""
     require_permission(request, "run")
     ctx = get_live_ctx(request)
     frame = _decode_frame(body.frame_b64)
@@ -145,20 +195,33 @@ async def start_session(request: Request, body: StartPayload) -> dict:
     await repo.mark_active(ctx.db, session_id)
     session = await repo.get(ctx.db, session_id)
     opening: list[ChatTurn] = [{"role": "user", "text": OPENING_CUE_CS, "image_jpeg": frame}]
+
+    async def save(entry: dict[str, Any]) -> dict[str, Any]:
+        await repo.save_transcript(
+            ctx.db,
+            session_id,
+            transcript_json=json.dumps([entry], ensure_ascii=False),
+            frame_count=1 if frame else 0,
+        )
+        return {"session_id": session_id}
+
+    async def failed() -> None:
+        await repo.mark_ended(ctx.db, session_id, end_reason="error")
+
     try:
         # The greeting only describes the frame; it needs no web search.
-        reply = await _answer(ctx, session, opening, call="chat_open", google_search=False)
+        return await _stream_answer(
+            ctx,
+            session,
+            opening,
+            call="chat_open",
+            save=save,
+            on_error=failed,
+            google_search=False,
+        )
     except HTTPException:
-        await repo.mark_ended(ctx.db, session_id, end_reason="error")
+        await failed()
         raise
-    transcript = [{"role": "model", "text": reply, "ts": _now_ms()}]
-    await repo.save_transcript(
-        ctx.db,
-        session_id,
-        transcript_json=json.dumps(transcript, ensure_ascii=False),
-        frame_count=1 if frame else 0,
-    )
-    return {"session_id": session_id, "reply": reply}
 
 
 class TurnPayload(BaseModel):
@@ -169,8 +232,9 @@ class TurnPayload(BaseModel):
 
 
 @router.post("/sessions/{session_id}/turns")
-async def post_turn(request: Request, session_id: str, body: TurnPayload) -> dict:
-    """One question (typed, or a sent frame) and Gemini's answer."""
+async def post_turn(request: Request, session_id: str, body: TurnPayload) -> StreamingResponse:
+    """One question (typed, or a sent frame) and Gemini's answer, streamed.
+    A failed answer leaves the question unsaved; the chat stays usable."""
     require_permission(request, "run")
     ctx = get_live_ctx(request)
     repo = LiveSessionsRepo()
@@ -184,15 +248,17 @@ async def post_turn(request: Request, session_id: str, body: TurnPayload) -> dic
     transcript = json.loads(session.transcript_json or "[]")
     transcript.append({"role": "user", "text": text, "ts": _now_ms(), "kind": body.kind})
     turns = conversation_turns(transcript, image_jpeg=frame)
-    reply = await _answer(ctx, session, turns, call="chat_turn")
-    transcript.append({"role": "model", "text": reply, "ts": _now_ms()})
-    await repo.save_transcript(
-        ctx.db,
-        session_id,
-        transcript_json=json.dumps(transcript, ensure_ascii=False),
-        frame_count=session.frame_count + (1 if frame else 0),
-    )
-    return {"reply": reply}
+
+    async def save(entry: dict[str, Any]) -> dict[str, Any]:
+        await repo.save_transcript(
+            ctx.db,
+            session_id,
+            transcript_json=json.dumps([*transcript, entry], ensure_ascii=False),
+            frame_count=session.frame_count + (1 if frame else 0),
+        )
+        return {}
+
+    return await _stream_answer(ctx, session, turns, call="chat_turn", save=save)
 
 
 class EndPayload(BaseModel):

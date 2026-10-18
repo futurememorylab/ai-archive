@@ -319,8 +319,11 @@ proxies) rather than a lazy ephemeral fetch.
 
 **25. Clip chat goes through the server to Vertex.** The browser holds no
 Google credentials: no API key, no token. It sends each turn to the app,
-and the server answers it through `GeminiService.chat` on Vertex, with the
-same service account and bill as annotation. The server stores the
+and the server answers it through `GeminiService.chat_stream` on Vertex,
+with the same service account and bill as annotation, streaming the answer
+back as NDJSON lines (thinking, text, then done or error). The stream ends
+with the answer and has a hard timeout, so it can't idle like the job
+event streams. The server stores the
 transcript turn by turn (`live_sessions.transcript_json`) and rebuilds the
 conversation from it; the system instruction and clip context are rebuilt
 on every turn. Each turn's tokens and cost go to `run_telemetry`.

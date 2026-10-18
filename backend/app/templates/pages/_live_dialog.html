@@ -4,16 +4,11 @@
     state lives in liveSession.js. -#}
 <div class="live-dialog" data-test="live-dialog" x-cloak x-show="liveSession.state !== 'idle'">
   <div class="live-dialog-lines live-chat"
-       x-effect="liveSession.transcript.length; liveSession.busy;
+       x-effect="liveSession.transcript.map((l) => l.text + l.status).join();
                  $nextTick(() => { $el.scrollTop = $el.scrollHeight })">
     <template x-for="(line, i) in liveSession.transcript" :key="'t' + i">
-      <div class="chat-msg" :class="'chat-' + line.role">
-        <span class="chat-bubble" x-text="line.text"></span>
-      </div>
+      <div>{% include "pages/_chat_message.html" %}</div>
     </template>
-    <div class="chat-msg chat-system" x-show="liveSession.busy">
-      <span class="chat-bubble">Gemini is answering…</span>
-    </div>
   </div>
   <form class="live-dialog-input" @submit.prevent="liveSession.sendText()">
     <button type="button" class="btn" data-test="live-send-frame"

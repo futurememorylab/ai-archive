@@ -33,3 +33,10 @@ def test_one_question_at_a_time():
     # server never sees two turns of one chat at once.
     can_send = JS.split("canSend()")[1].split("},")[0]
     assert "!this.busy" in can_send
+
+
+def test_answers_stream_with_a_status_line():
+    # The page reads the server's NDJSON stream so the bubble can say what
+    # Gemini is doing ("Thinking: …") before the whole answer is in.
+    assert "getReader()" in JS
+    assert "Thinking: " in JS

@@ -35,9 +35,7 @@
                 </div>
                 <div class="live-transcript live-chat">
                   <template x-for="(line, i) in detail.transcript" :key="i">
-                    <div class="chat-msg" :class="'chat-' + line.role">
-                      <span class="chat-bubble" x-text="line.text"></span>
-                    </div>
+                    <div>{% include "pages/_chat_message.html" %}</div>
                   </template>
                 </div>
               </div>

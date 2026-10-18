@@ -40,8 +40,12 @@ Annotation, by contrast, runs on Vertex AI with the app's service account.
   clip, in the dialog under the video. There is no voice in or out.
 - The browser holds no Google credentials. It calls the app
   (`POST /api/live/sessions`, `.../turns`, `.../end`), and the server answers
-  each turn through `GeminiService.chat` on Vertex, with the same service
-  account as annotation.
+  each turn through `GeminiService.chat_stream` on Vertex, with the same
+  service account as annotation. The answer streams back as NDJSON lines:
+  Gemini's thinking headlines, the text as it is written, then the saved
+  answer with any web searches and sources (Vertex reports searches only
+  at the end). The stream ends with the answer and is cut off after 120 s,
+  so it does not reopen the idle-stream problem of #131.
 - Model: `GEMINI_CHAT_MODEL`, default `gemini-3.8-flash`, with Google Search
   grounding. 3.8 Flash is not served in `europe-west3` alone, so deployments
   set `GCP_LOCATION=global` (local `.env` and prod already do). Checked on

@@ -14,7 +14,9 @@ same features minus voice.
 
 1. On the clip page, open ⋯ and choose **Chat with Gemini**.
 2. A dialog opens under the video. Gemini greets in Czech and describes the
-   frame on screen. "Gemini is answering…" shows while it waits.
+   frame on screen. Answers stream in: the bubble first says "Thinking…",
+   then "Thinking: <step>…" for each step Gemini reports (in English), then
+   the answer appears as it is written.
 3. The input row has **Send frame**, **End chat**, a text box ("Ask about
    this clip…") and **Send**. Enter sends.
 4. A typed question goes with the frame on screen, so "what is this?" means
@@ -26,10 +28,13 @@ same features minus voice.
    points to the Chats tab, and that tab lists the chat with a short
    summary. Times there read in words: "5 min ago", "3 h ago", "yesterday
    14:05", then a date.
-7. Gemini gets every published field of the clip (with the archive's field
+7. When Gemini searched the web, the answer ends with "Searched: …" and
+   links to the pages it used. Vertex reports searches only with the
+   answer, never while it searches. The Chats tab shows them too.
+8. Gemini gets every published field of the clip (with the archive's field
    names), notes, markers with their categories, the clip record's own
    details (format, dates…) and the unsaved draft.
-8. Leaving or reloading the page mid-chat ends the chat (reason `navigate`).
+9. Leaving or reloading the page mid-chat ends the chat (reason `navigate`).
    The transcript is already saved.
 
 ## Backend
@@ -38,16 +43,26 @@ Routes keep the Live-era prefix `/api/live`:
 
 | Route | Body | Returns |
 |---|---|---|
-| `POST /api/live/sessions` | `{clip_id, frame_b64?}` | `{session_id, reply}`: the greeting about the frame |
-| `POST /api/live/sessions/{id}/turns` | `{kind: "typed" \| "frame", text, frame_b64?}` | `{reply}` |
+| `POST /api/live/sessions` | `{clip_id, frame_b64?}` | stream: the greeting about the frame; `done` carries `session_id` |
+| `POST /api/live/sessions/{id}/turns` | `{kind: "typed" \| "frame", text, frame_b64?}` | stream: the answer |
 | `POST /api/live/sessions/{id}/end` | `{end_reason: user_stop \| navigate \| error}` | |
 | `POST /api/live/sessions/{id}/summarize` | | Czech summary, 2–4 sentences |
 | `GET` history endpoints | | unchanged |
 
-- Each turn is answered by `GeminiService.chat`
+- The two answering routes return `application/x-ndjson`, one JSON event
+  per line: `{"type": "thinking", "text": headline}`, `{"type": "text",
+  "text": piece}`, then `{"type": "done", "reply": {role, text, ts,
+  searches?, sources?}}` or `{"type": "error", "detail": reason}`. The
+  answer is saved and its cost recorded before `done` goes out. Requests
+  rejected up front (409 ended chat, 422 bad input, 404) stay plain HTTP
+  errors. A turn is cut off after 120 s; it ends with the answer, so it
+  can't idle like the job event streams capped in #131.
+- Each turn is answered by `GeminiService.chat_stream`
   (`backend/app/services/gemini.py`) on Vertex, with the app's service
   account. Model: `GEMINI_CHAT_MODEL`, default `gemini-3.8-flash`. Google
-  Search grounding is on, and the thinking level is low so answers come quickly.
+  Search grounding is on, the thinking level is low so answers come
+  quickly, and thought summaries are on (`include_thoughts`) for the
+  status line. Source links are kept only when they are http(s).
 - The system instruction is the prompt `chat.system_instruction.cs` (seeded
   from `backend/seeds/chat_system_instruction_cs.json`, editable on the
   Prompts page, hidden from the annotation pickers) plus the clip's Czech
@@ -103,25 +118,30 @@ Vertex, so it works on staging too.
 ## Manual acceptance flows
 
 1. Open a clip whose video is ready. Open ⋯ and choose **Chat with
-   Gemini**. The dialog appears under the video, shows "Gemini is
-   answering…", then a Czech greeting that describes the frame on screen.
-2. Type a question in the box and press Enter. It appears on the right, the
-   box empties, and Gemini's answer appears on the left after a few seconds.
-3. Move the video to another shot and press **Send frame**. The video
+   Gemini**. The dialog appears under the video, shows "Thinking…", then a
+   Czech greeting that describes the frame on screen, written in as it
+   comes.
+2. Type a question in the box and press Enter. It appears on the right and
+   the box empties. On the left the bubble says "Thinking: …" (Gemini's
+   current step, in English), then the answer appears as it is written.
+3. Ask something that needs the web, e.g. "Kdy byla otevřena filmová
+   studia Barrandov?". Under the answer, "Searched: …" lists the searches
+   and links to the pages used; a link opens in a new tab.
+4. Move the video to another shot and press **Send frame**. The video
    flashes, "Frame at …" (the current time) appears in the transcript, and
    Gemini describes that frame.
-4. Press **End chat**. A dialog asks "End chat?". Press **Keep chatting**:
+5. Press **End chat**. A dialog asks "End chat?". Press **Keep chatting**:
    the dialog closes and the chat carries on (ask another question to
    check).
-5. Press **End chat** again and confirm with **End chat**. The dialog
+6. Press **End chat** again and confirm with **End chat**. The dialog
    closes and a toast says the chat is in the Chats tab. Open the Chats
    tab: the chat is listed as "just now" with a short Czech summary (open
-   it to read the transcript).
-6. Ask Gemini "Jaká pole a údaje o klipu znáš?" in a new chat. It lists
+   it to read the transcript, with the searches and links of step 3).
+7. Ask Gemini "Jaká pole a údaje o klipu znáš?" in a new chat. It lists
    the clip's fields by their archive names (not only the pragafilm ones)
    and details such as the format.
-7. Make Vertex fail in a running chat: turn off the machine's network (or
+8. Make Vertex fail in a running chat: turn off the machine's network (or
    the server's), then ask a question. A toast shows the error, your
    question stays in the transcript and the chat stays open. Turn the
    network back on and ask again: Gemini answers.
-8. Start a chat, then reload the page. The Chats tab lists that chat.
+9. Start a chat, then reload the page. The Chats tab lists that chat.

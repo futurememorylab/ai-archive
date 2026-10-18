@@ -25,21 +25,41 @@ SEEDS = Path(__file__).resolve().parents[2] / "backend" / "seeds"
 FRAME = base64.b64encode(b"\xff\xd8jpeg").decode()
 
 
+_USAGE = {"usageMetadata": {"promptTokenCount": 100, "candidatesTokenCount": 20}}
+
+
 class _FakeGemini:
-    """Answers each chat call with the next reply; records what it was sent."""
+    """Answers each chat call with the next reply; records what it was sent.
+    chat_stream thinks once, writes the reply in two pieces, then reports
+    `searches` / `sources` like Vertex does: only at the end."""
 
     def __init__(self) -> None:
         self.replies = ["Dobrý den, vidím zahradu.", "Spíš třicátá léta.", "Auto."]
         self.calls: list[dict] = []
         self.fail: Exception | None = None
+        self.searches: list[str] = []
+        self.sources: list[dict] = []
 
     async def chat(self, **kwargs):
         if self.fail:
             raise self.fail
         self.calls.append(kwargs)
-        return {
-            "text": self.replies.pop(0),
-            "raw": {"usageMetadata": {"promptTokenCount": 100, "candidatesTokenCount": 20}},
+        return {"text": self.replies.pop(0), "raw": _USAGE}
+
+    async def chat_stream(self, **kwargs):
+        if self.fail:
+            raise self.fail
+        self.calls.append(kwargs)
+        text = self.replies.pop(0)
+        yield {"type": "thinking", "text": "Looking at the frame"}
+        yield {"type": "text", "text": text[:5]}
+        yield {"type": "text", "text": text[5:]}
+        yield {
+            "type": "done",
+            "text": text,
+            "raw": _USAGE,
+            "searches": self.searches,
+            "sources": self.sources,
         }
 
 
@@ -87,10 +107,22 @@ async def chat(tmp_path, monkeypatch):
     await conn.close()
 
 
+def _events(r) -> list[dict]:
+    """The NDJSON lines of a streamed answer."""
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"].startswith("application/x-ndjson")
+    return [json.loads(line) for line in r.text.splitlines() if line.strip()]
+
+
+def _last(r) -> dict:
+    return _events(r)[-1]
+
+
 async def _start(ac) -> str:
     r = await ac.post("/api/live/sessions", json={"clip_id": 42, "frame_b64": FRAME})
-    assert r.status_code == 200, r.text
-    return r.json()["session_id"]
+    done = _last(r)
+    assert done["type"] == "done", done
+    return done["session_id"]
 
 
 async def _telemetry(conn):
@@ -102,8 +134,8 @@ async def _telemetry(conn):
 async def test_start_greets_about_the_frame_on_screen(chat):
     ac, conn, gemini = chat
     r = await ac.post("/api/live/sessions", json={"clip_id": 42, "frame_b64": FRAME})
-    assert r.status_code == 200, r.text
-    assert r.json()["reply"] == "Dobrý den, vidím zahradu."
+    done = _last(r)
+    assert done["reply"]["text"] == "Dobrý den, vidím zahradu."
     (call,) = gemini.calls
     assert call["model"] == "gemini-3.8-flash"
     assert call["google_search"] is False  # the greeting needs no web search
@@ -112,7 +144,7 @@ async def test_start_greets_about_the_frame_on_screen(chat):
     assert call["turns"] == [
         {"role": "user", "text": OPENING_CUE_CS, "image_jpeg": b"\xff\xd8jpeg"}
     ]
-    session = await LiveSessionsRepo().get(conn, r.json()["session_id"])
+    session = await LiveSessionsRepo().get(conn, done["session_id"])
     assert session.state == "active"
     assert session.frame_count == 1
     assert json.loads(session.transcript_json or "[]")[0]["text"] == "Dobrý den, vidím zahradu."
@@ -126,8 +158,7 @@ async def test_a_question_carries_the_conversation_and_is_saved(chat):
         f"/api/live/sessions/{sid}/turns",
         json={"kind": "typed", "text": "Z kterého je to desetiletí?", "frame_b64": FRAME},
     )
-    assert r.status_code == 200, r.text
-    assert r.json()["reply"] == "Spíš třicátá léta."
+    assert _last(r)["reply"]["text"] == "Spíš třicátá léta."
     turns = gemini.calls[-1]["turns"]
     assert [t["text"] for t in turns] == [
         OPENING_CUE_CS,
@@ -153,7 +184,7 @@ async def test_send_frame_asks_about_the_frame_and_shows_its_label(chat):
         f"/api/live/sessions/{sid}/turns",
         json={"kind": "frame", "text": "Frame at 0:12", "frame_b64": FRAME},
     )
-    assert r.status_code == 200, r.text
+    assert _last(r)["type"] == "done"
     assert gemini.calls[-1]["turns"][-1]["text"] == FRAME_CUE_CS
     transcript = json.loads((await LiveSessionsRepo().get(conn, sid)).transcript_json or "[]")
     assert transcript[1] == {**transcript[1], "text": "Frame at 0:12", "kind": "frame"}
@@ -170,13 +201,40 @@ async def test_each_answer_records_its_cost(chat):
 
 
 @pytest.mark.asyncio
-async def test_gemini_failure_is_a_502_with_the_reason(chat):
+async def test_the_answer_streams_thinking_then_text_then_done(chat):
+    ac, _, _ = chat
+    sid = await _start(ac)
+    r = await ac.post(f"/api/live/sessions/{sid}/turns", json={"text": "A kde?"})
+    events = _events(r)
+    assert [e["type"] for e in events] == ["thinking", "text", "text", "done"]
+    assert events[0]["text"] == "Looking at the frame"
+    assert "".join(e["text"] for e in events[1:3]) == events[-1]["reply"]["text"]
+
+
+@pytest.mark.asyncio
+async def test_web_searches_and_sources_are_kept_with_the_answer(chat):
+    ac, conn, gemini = chat
+    sid = await _start(ac)
+    gemini.searches = ["barrandov otevření"]
+    gemini.sources = [{"title": "cs.wikipedia.org", "uri": "https://example.test/a"}]
+    r = await ac.post(f"/api/live/sessions/{sid}/turns", json={"text": "Kdy?"})
+    reply = _last(r)["reply"]
+    assert reply["searches"] == ["barrandov otevření"]
+    assert reply["sources"][0]["uri"] == "https://example.test/a"
+    transcript = json.loads((await LiveSessionsRepo().get(conn, sid)).transcript_json or "[]")
+    assert transcript[-1]["searches"] == ["barrandov otevření"]
+    assert "searches" not in transcript[0]  # the greeting didn't search
+
+
+@pytest.mark.asyncio
+async def test_gemini_failure_ends_the_stream_with_the_reason(chat):
     ac, conn, gemini = chat
     sid = await _start(ac)
     gemini.fail = GeminiQuotaError("429 resource exhausted")
     r = await ac.post(f"/api/live/sessions/{sid}/turns", json={"text": "A kde?"})
-    assert r.status_code == 502
-    assert "resource exhausted" in r.json()["detail"]
+    error = _last(r)
+    assert error["type"] == "error"
+    assert "resource exhausted" in error["detail"]
     # The failed question is not saved; the chat stays usable.
     session = await LiveSessionsRepo().get(conn, sid)
     assert session.state == "active"
@@ -188,7 +246,7 @@ async def test_a_failed_start_ends_the_session(chat):
     ac, conn, gemini = chat
     gemini.fail = GeminiQuotaError("429 resource exhausted")
     r = await ac.post("/api/live/sessions", json={"clip_id": 42})
-    assert r.status_code == 502
+    assert _last(r)["type"] == "error"
     (session,) = await LiveSessionsRepo().list_by_clip(conn, 42)
     assert (session.state, session.end_reason) == ("ended", "error")
 

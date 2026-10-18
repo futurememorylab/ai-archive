@@ -1,0 +1,16 @@
+{#- One chat message, inside an x-for over `line`: the bubble (a status line
+    while Gemini is still thinking) and, under an answer, the web searches it
+    ran and the pages it used. Shared by the chat dialog and the Chats tab. -#}
+<div class="chat-msg" :class="'chat-' + line.role">
+  <span class="chat-bubble">
+    <span class="chat-status" x-show="line.pending && !line.text" x-text="line.status"></span>
+    <span x-text="line.text"></span>
+  </span>
+</div>
+<div class="chat-sources" x-show="line.searches?.length || line.sources?.length">
+  <span x-show="line.searches?.length">Searched: <span x-text="(line.searches || []).join(' · ')"></span></span>
+  <template x-for="(source, j) in line.sources || []" :key="j">
+    <a class="chat-source" :href="source.uri" target="_blank" rel="noopener noreferrer"
+       x-text="source.title"></a>
+  </template>
+</div>

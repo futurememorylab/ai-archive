@@ -3,6 +3,8 @@ for the annotator. Classifies provider errors into quota / safety /
 permission variants for the caller's retry policy."""
 
 import asyncio
+import re
+from collections.abc import AsyncIterator
 from typing import Any, NotRequired, TypedDict
 
 from google import genai  # type: ignore[import-not-found]
@@ -96,26 +98,110 @@ class GeminiService:
 
         Each turn is {"role": "user"|"model", "text": str, "image_jpeg":
         bytes | None}; only the turns that carry an image send one."""
-        contents: list[types.ContentUnion] = []
-        for t in turns:
-            parts = [types.Part.from_text(text=t["text"])]
-            image = t.get("image_jpeg")
-            if image:
-                parts.append(types.Part.from_bytes(data=image, mime_type="image/jpeg"))
-            contents.append(types.Content(role=t["role"], parts=parts))
-        config = types.GenerateContentConfig(
-            system_instruction=system_instruction,
-            tools=[types.Tool(google_search=types.GoogleSearch())] if google_search else None,
-            # A chat reply should come in seconds; the default thinking is slower.
-            thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.LOW),
-        )
+        config = _chat_config(system_instruction, google_search, include_thoughts=False)
         try:
             response = await self._client.aio.models.generate_content(
-                model=model, contents=contents, config=config
+                model=model, contents=_chat_contents(turns), config=config
             )
         except Exception as exc:  # noqa: BLE001
             raise _classify(exc) from exc
         return {"text": (response.text or "").strip(), "raw": response.model_dump()}
+
+    async def chat_stream(
+        self,
+        *,
+        model: str,
+        system_instruction: str,
+        turns: list[ChatTurn],
+        google_search: bool = True,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """`chat`, streamed: yields {"type": "thinking", "text": headline} while
+        Gemini thinks, {"type": "text", "text": piece} as the answer is
+        written, then one {"type": "done", "text", "raw", "searches",
+        "sources"}. Searches and sources come only at the end: Vertex sends
+        no signal while it searches."""
+        config = _chat_config(system_instruction, google_search, include_thoughts=True)
+        answer: list[str] = []
+        last: Any = None
+        try:
+            stream = await self._client.aio.models.generate_content_stream(
+                model=model, contents=_chat_contents(turns), config=config
+            )
+            async for chunk in stream:
+                last = chunk
+                for part in _chunk_parts(chunk):
+                    if not part.text:
+                        continue
+                    if part.thought:
+                        yield {"type": "thinking", "text": thought_headline(part.text)}
+                    else:
+                        answer.append(part.text)
+                        yield {"type": "text", "text": part.text}
+        except Exception as exc:  # noqa: BLE001
+            raise _classify(exc) from exc
+        searches, sources = _grounding(last)
+        yield {
+            "type": "done",
+            "text": "".join(answer).strip(),
+            "raw": last.model_dump() if last is not None else {},
+            "searches": searches,
+            "sources": sources,
+        }
+
+
+def _chat_contents(turns: list[ChatTurn]) -> list[types.ContentUnion]:
+    contents: list[types.ContentUnion] = []
+    for t in turns:
+        parts = [types.Part.from_text(text=t["text"])]
+        image = t.get("image_jpeg")
+        if image:
+            parts.append(types.Part.from_bytes(data=image, mime_type="image/jpeg"))
+        contents.append(types.Content(role=t["role"], parts=parts))
+    return contents
+
+
+def _chat_config(
+    system_instruction: str, google_search: bool, *, include_thoughts: bool
+) -> types.GenerateContentConfig:
+    return types.GenerateContentConfig(
+        system_instruction=system_instruction,
+        tools=[types.Tool(google_search=types.GoogleSearch())] if google_search else None,
+        # A chat reply should come in seconds; the default thinking is slower.
+        thinking_config=types.ThinkingConfig(
+            thinking_level=types.ThinkingLevel.LOW, include_thoughts=include_thoughts
+        ),
+    )
+
+
+def _chunk_parts(chunk: Any) -> list[Any]:
+    candidates = getattr(chunk, "candidates", None) or []
+    content = getattr(candidates[0], "content", None) if candidates else None
+    return list(getattr(content, "parts", None) or [])
+
+
+def thought_headline(text: str) -> str:
+    """A thought summary opens with a bold headline ("**Recalling the
+    studio's history**"); fall back to its first line."""
+    match = re.search(r"\*\*(.+?)\*\*", text)
+    if match:
+        return match.group(1).strip()[:80]
+    lines = text.strip().splitlines()
+    return lines[0].strip()[:80] if lines else ""
+
+
+def _grounding(chunk: Any) -> tuple[list[str], list[dict[str, str]]]:
+    """The web searches Gemini ran and the pages it used (http(s) links only)."""
+    candidates = getattr(chunk, "candidates", None) or []
+    meta = getattr(candidates[0], "grounding_metadata", None) if candidates else None
+    if meta is None:
+        return [], []
+    searches = [q for q in (meta.web_search_queries or []) if q]
+    sources: list[dict[str, str]] = []
+    for g in meta.grounding_chunks or []:
+        web = g.web
+        if web and web.uri and web.uri.startswith(("https://", "http://")):
+            sources.append({"title": web.title or web.domain or web.uri, "uri": web.uri})
+    return searches, sources
 
 
 async def annotate_with_retry(

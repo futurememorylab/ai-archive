@@ -4,7 +4,9 @@ The chat goes through our server's `/api/live/sessions*` routes, which the
 walkthrough answers with the offline FakeGemini (no network, no archive
 seat). The dialog sits under the video with Send frame, End chat (with a
 confirmation) and the text box; it stays on screen once a full-size video
-has loaded. Ending the chat closes the dialog and lists it in the Chats tab.
+has loaded. Answers stream in: "Thinking: …" first, then the text, then the
+web searches Gemini ran. Ending the chat closes the dialog and lists it in
+the Chats tab.
 """
 
 from __future__ import annotations
@@ -15,6 +17,9 @@ from tests.walkthrough.fakes import (
     CHAT_ANSWER,
     CHAT_FRAME_ANSWER,
     CHAT_GREETING,
+    CHAT_SEARCH,
+    CHAT_SOURCE_TITLE,
+    CHAT_THINKING,
     CLIP_NAME,
     gemini_fake,
 )
@@ -24,7 +29,8 @@ TOPIC = "Clip page"
 TITLE = "Chat with Gemini about a clip, under the video"
 DESCRIPTION = (
     "An operator starts a chat from the ⋯ menu. Gemini greets and describes "
-    "the frame, then answers a typed question and a sent frame. Send frame "
+    "the frame, then answers a typed question (showing what it is thinking "
+    "and what it searched) and a sent frame. Send frame "
     "and End chat sit next to the text box; End chat asks first, then closes "
     "the dialog, and the chat is listed in the Chats tab."
 )
@@ -73,7 +79,12 @@ def _type_question(p) -> None:
     p.locator(f"{DIALOG} [data-test='live-send-text']").click()
     dialog = p.locator(DIALOG)
     expect(dialog.locator(".chat-user")).to_contain_text(QUESTION)
+    # While Gemini thinks, its answer bubble says what it is thinking about.
+    expect(dialog.locator(".chat-status").last).to_have_text(f"Thinking: {CHAT_THINKING}…")
     expect(dialog.locator(".chat-model").last).to_contain_text(CHAT_ANSWER)
+    sources = dialog.locator(".chat-sources").last
+    expect(sources).to_contain_text(f"Searched: {CHAT_SEARCH}")
+    expect(sources.get_by_role("link", name=CHAT_SOURCE_TITLE)).to_be_visible()
     expect(p.locator(f"{DIALOG} [data-test='live-text']")).to_have_value("")
     # The server rebuilt the whole conversation: cue, greeting, the question.
     texts = [t["text"] for t in gemini_fake().chat_calls[-1]["turns"]]
@@ -109,13 +120,17 @@ def _listed_in_chats_tab(p) -> None:
     detail = p.locator(".live-history-detail").first
     expect(detail).to_contain_text(QUESTION)
     expect(detail).to_contain_text(CHAT_FRAME_ANSWER)
+    expect(detail.locator(".chat-sources", has_text=CHAT_SEARCH)).to_be_visible()
 
 
 def run(wt):
     wt.step("Open the clip from the list", _open_clip)
     wt.step("Start a chat from the ⋯ menu: Gemini greets", _start_chat)
     wt.step("The dialog stays on screen, with Send frame and End chat in it", _dialog_on_screen)
-    wt.step("Type a question and get the answer in the dialog", _type_question)
+    wt.step(
+        "Type a question: Gemini shows what it's thinking, answers, and lists its searches",
+        _type_question,
+    )
     wt.step("Send frame: Gemini describes the frame", _send_frame)
     wt.step("End chat asks first; Keep chatting leaves the chat open", _end_chat_asks_first)
     wt.step("End chat, confirmed: the dialog closes", _end_chat_closes_the_dialog)

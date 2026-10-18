@@ -7,6 +7,7 @@ provider cannot supply. These are injected via install_live_ctx.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import threading
 from datetime import UTC, datetime
@@ -34,6 +35,10 @@ CHAT_GREETING = "Dobrý den, vidím zahradu."
 CHAT_ANSWER = "Podle oblečení spíš třicátá léta."
 CHAT_FRAME_ANSWER = "Na snímku jsou dvě děti u plotu."
 CHAT_SUMMARY = "Rozhovor o zahradě ze třicátých let."
+CHAT_THINKING = "Comparing clothing styles"
+CHAT_SEARCH = "móda třicátých let"
+CHAT_SOURCE_TITLE = "example.test"
+_CHAT_THINKING_SECS = 1.5
 
 # The catalog the app lists against. Must match CATDV_CATALOG_ID in the app's
 # boot env (app_server) and the catalog_id the seed writes into clip_list_cache,
@@ -439,6 +444,32 @@ class FakeGemini:
         else:
             text = CHAT_ANSWER
         return {"text": text, "raw": {}}
+
+    async def chat_stream(self, *, model, system_instruction, turns, google_search=True):
+        """`chat`, streamed like Vertex: a thinking step (held a moment so the
+        walkthrough sees the status), the answer in two pieces, then "done".
+        A typed question also reports a web search and its source."""
+        result = await self.chat(
+            model=model,
+            system_instruction=system_instruction,
+            turns=turns,
+            google_search=google_search,
+        )
+        text = result["text"]
+        typed = text == CHAT_ANSWER
+        yield {"type": "thinking", "text": CHAT_THINKING}
+        await asyncio.sleep(_CHAT_THINKING_SECS if typed else 0)
+        yield {"type": "text", "text": text[:10]}
+        yield {"type": "text", "text": text[10:]}
+        yield {
+            "type": "done",
+            "text": text,
+            "raw": {},
+            "searches": [CHAT_SEARCH] if typed else [],
+            "sources": [{"title": CHAT_SOURCE_TITLE, "uri": "https://example.test/"}]
+            if typed
+            else [],
+        }
 
 
 # Process-wide singleton: app_server injects THIS instance into the LiveCtx, and

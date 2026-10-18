@@ -1460,6 +1460,14 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
   font-size: 11px; font-style: italic; padding: .1rem .3rem;
 }
 
+.chat-status { color: var(--text-3); font-style: italic; }
+.chat-sources {
+  display: flex; flex-wrap: wrap; gap: .1rem .6rem;
+  margin: .15rem 0 0 .3rem; max-width: 82%;
+  color: var(--text-3); font-size: 11px;
+}
+.chat-source { color: var(--accent); }
+
 /* History tab */
 .live-history-list { list-style: none; padding: 0; margin: 0; }
 .live-history-item { border-bottom: 1px solid var(--surface-2, #2a2a2a); }

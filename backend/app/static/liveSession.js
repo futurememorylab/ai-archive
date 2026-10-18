@@ -20,13 +20,10 @@ function liveSession(clipId) {
       this.draftText = "";
       this.sessionId = null;
       this.state = "starting";
-      this.busy = true;
-      const reply = await this._post("/api/live/sessions",
-                                     { clip_id: clipId, frame_b64: this._frame() });
-      this.busy = false;
-      if (!reply) { this.state = "idle"; return; }
-      this.sessionId = reply.session_id;
-      this.transcript.push({ role: "model", text: reply.reply, ts: Date.now() });
+      const done = await this._answer("/api/live/sessions",
+                                      { clip_id: clipId, frame_b64: this._frame() });
+      if (!done) { this.state = "idle"; return; }
+      this.sessionId = done.session_id;
       this.state = "active";
     },
 
@@ -82,11 +79,62 @@ function liveSession(clipId) {
     async _ask({ kind, text }) {
       const frame = this._frame();
       this.transcript.push({ role: "user", text, ts: Date.now(), kind });
+      await this._answer(`/api/live/sessions/${this.sessionId}/turns`,
+                         { kind, text, frame_b64: frame });
+    },
+
+    // POST a question and show Gemini's answer as it streams in: a status
+    // line while it thinks, then the text, then the searches it ran. Returns
+    // the server's "done" event, or null (toasted) when there's no answer.
+    async _answer(url, body) {
+      this.transcript.push({ role: "model", text: "", status: "Thinking…", pending: true });
+      const line = this.transcript[this.transcript.length - 1];  // Alpine's reactive copy
       this.busy = true;
-      const reply = await this._post(`/api/live/sessions/${this.sessionId}/turns`,
-                                     { kind, text, frame_b64: frame });
-      this.busy = false;
-      if (reply) this.transcript.push({ role: "model", text: reply.reply, ts: Date.now() });
+      try {
+        const done = await this._stream(url, body, (event) => {
+          if (event.type === "thinking") line.status = `Thinking: ${event.text}…`;
+          if (event.type === "text") line.text += event.text;
+        });
+        Object.assign(line, done.reply, { pending: false });
+        return done;
+      } catch (e) {
+        this.transcript.splice(this.transcript.indexOf(line), 1);
+        Alpine.store("toast").push(`Chat: ${e.message || e}`, { level: "error" });
+        return null;
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    // Read the server's NDJSON lines, passing each progress event to
+    // onEvent; resolves with the "done" event, throws on "error".
+    async _stream(url, body, onEvent) {
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}));
+        throw new Error(data.detail || `The server answered ${r.status}.`);
+      }
+      const reader = r.body.getReader();
+      const decoder = new TextDecoder();
+      let buffered = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        buffered += decoder.decode(value || new Uint8Array(), { stream: !done });
+        const lines = buffered.split("\n");
+        buffered = done ? "" : lines.pop();
+        for (const raw of lines) {
+          if (!raw.trim()) continue;
+          const event = JSON.parse(raw);
+          if (event.type === "error") throw new Error(event.detail);
+          if (event.type === "done") return event;
+          onEvent(event);
+        }
+        if (done) throw new Error("The answer was cut off. Try asking again.");
+      }
     },
 
     // POST JSON; on failure, toast the server's reason and return null.
