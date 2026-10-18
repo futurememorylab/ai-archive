@@ -74,6 +74,22 @@ def _dialog_on_screen(p) -> None:
     expect(p.locator(".detail-hdr").get_by_text("Send frame")).to_have_count(0)
 
 
+def _drag_chat_taller(p) -> None:
+    dialog = p.locator(DIALOG)
+    before = dialog.bounding_box()
+    grip = p.locator("[data-test='live-resizer']").bounding_box()
+    assert before and grip, (before, grip)
+    x, y = grip["x"] + grip["width"] / 2, grip["y"] + grip["height"] / 2
+    p.mouse.move(x, y)
+    p.mouse.down()
+    p.mouse.move(x, y - 120, steps=5)
+    p.mouse.up()
+    after = dialog.bounding_box()
+    assert after and after["height"] > before["height"] + 100, (before, after)
+    saved = p.evaluate("JSON.parse(localStorage.getItem('catdv:detailLayout') || '{}')")
+    assert saved.get("chatH"), saved
+
+
 def _type_question(p) -> None:
     p.locator(f"{DIALOG} [data-test='live-text']").fill(QUESTION)
     p.locator(f"{DIALOG} [data-test='live-send-text']").click()
@@ -129,6 +145,7 @@ def run(wt):
     wt.step("Open the clip from the list", _open_clip)
     wt.step("Start a chat from the ⋯ menu: Gemini greets", _start_chat)
     wt.step("The dialog stays on screen, with Send frame and End chat in it", _dialog_on_screen)
+    wt.step("Drag the border above the chat to make it taller", _drag_chat_taller)
     wt.step(
         "Type a question: Gemini shows what it's thinking, answers, and lists its searches",
         _type_question,

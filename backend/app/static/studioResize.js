@@ -14,6 +14,9 @@
 //     - horizontal drag → --detail-side-w (px) sizing the RIGHT (anno) column
 //       [col-resize]; reuses the same component so the clip page doesn't grow
 //       a second resizer.
+//   detail-chat divider → on .detail (clip-detail page, top of the chat):
+//     - vertical drag → --detail-chat-h (px) sizing the chat dialog under
+//       the video [row-resize].
 //
 // One delegated `pointerdown` listener on `document` matches `.studio-resizer`,
 // so dividers that are HTMX-injected or CSS-toggled need no re-wiring. We use
@@ -22,8 +25,9 @@
 //
 // Studio sizes round-trip through Alpine.store('studio') (playerH / playerW /
 // cmpCur + saveResize()) → localStorage['studio.layoutPrefs']. The clip-detail
-// divider has no studio store, so it persists straight to
-// localStorage['catdv:detailLayout'] (restored by an inline script on the page).
+// dividers have no studio store, so they persist straight to
+// localStorage['catdv:detailLayout'] as {sideW, chatH} (restored by an inline
+// script on the page).
 
 // Pure helper: new size = (start + delta) clamped to [lo, hi]. Mirror of
 // tests/unit/test_studio_resize_clamp.py::clamp_size — keep the two in sync.
@@ -40,81 +44,114 @@ function clampSize(start, delta, lo, hi) {
   const PLAYER_MAX_FRAC = 0.7; // ≤ 70% of the container
   const CMP_MIN_PCT = 20;
   const CMP_MAX_PCT = 80;
+  const CHAT_MIN_PX = 120;   // the chat input row plus a line or two
+  const VIDEO_KEEP_PX = 200; // video + transport left above the chat
+  const DETAIL_LAYOUT_KEY = "catdv:detailLayout";
 
-  let drag = null; // { kind, el, container, axis, startVar, startPx, startPct, ... }
+  let drag = null; // { el, container, axis, startPx | startPct, cssVar, ... }
 
   function store() {
     return window.Alpine?.store?.("studio") ?? null;
   }
 
+  // One descriptor builder per divider kind: (el, evt) → drag state, or null
+  // when the divider isn't inside its container.
+  function playerDrag(el, evt) {
+    const container = el.closest(".studio-right");
+    if (!container) return null;
+    // `right` resizes the player column (width); `under` the player row
+    // (height). Same descriptor, parameterized by axis/dimension.
+    const horizontal = (store()?.layout || "under") === "right";
+    const dim = horizontal ? "width" : "height";
+    const slot = container.querySelector(".studio-player-slot");
+    return {
+      container,
+      axis: horizontal ? "x" : "y",
+      startPx: slot ? slot.getBoundingClientRect()[dim] : 320,
+      containerSize: container.getBoundingClientRect()[dim],
+      startClient: horizontal ? evt.clientX : evt.clientY,
+      cssVar: horizontal ? "--studio-player-w" : "--studio-player-h",
+      storeField: horizontal ? "playerW" : "playerH",
+    };
+  }
+
+  function cmpDrag(el, evt) {
+    const container = el.closest(".studio-compare-row");
+    if (!container) return null;
+    const cur = container.querySelector('.studio-prompt-card[data-side="cur"]');
+    const rowW = container.getBoundingClientRect().width || 1;
+    return {
+      container,
+      axis: "x",
+      startPct: cur ? (cur.getBoundingClientRect().width / rowW) * 100 : 50,
+      containerSize: rowW,
+      startClient: evt.clientX,
+      cssVar: "--studio-cmp-cur",
+      storeField: "cmpCur",
+      isPct: true,
+    };
+  }
+
+  // Clip-detail page: divider between the player (left) and the annotation
+  // column (right). The CSS var sizes the RIGHT column, so dragging the
+  // divider left must WIDEN it → invert the delta.
+  function detailSideDrag(el, evt) {
+    const container = el.closest(".detail");
+    if (!container) return null;
+    const side = container.querySelector(".anno-col");
+    const containerW = container.getBoundingClientRect().width;
+    return {
+      container,
+      axis: "x",
+      startPx: side ? side.getBoundingClientRect().width : 400,
+      containerSize: containerW,
+      startClient: evt.clientX,
+      cssVar: "--detail-side-w",
+      layoutField: "sideW",
+      invert: true,
+      lo: 300,
+      hi: Math.max(300, containerW * 0.6),
+    };
+  }
+
+  // Clip-detail page: divider between the video and the chat dialog under
+  // it. The var sizes the dialog BELOW the divider, so dragging up widens
+  // it → invert. Capped so the video and its transport keep some room.
+  function detailChatDrag(el, evt) {
+    const container = el.closest(".detail");
+    const dialog = el.closest(".live-dialog");
+    const wrap = el.closest(".player-wrap");
+    if (!container || !dialog || !wrap) return null;
+    const wrapH = wrap.getBoundingClientRect().height;
+    return {
+      container,
+      axis: "y",
+      startPx: dialog.getBoundingClientRect().height,
+      containerSize: wrapH,
+      startClient: evt.clientY,
+      cssVar: "--detail-chat-h",
+      layoutField: "chatH",
+      invert: true,
+      lo: CHAT_MIN_PX,
+      hi: Math.max(CHAT_MIN_PX, wrapH - VIDEO_KEEP_PX),
+    };
+  }
+
+  const KINDS = {
+    player: playerDrag,
+    cmp: cmpDrag,
+    "detail-side": detailSideDrag,
+    "detail-chat": detailChatDrag,
+  };
+
   function onPointerDown(evt) {
     if (drag) return;
     const el = evt.target.closest(".studio-resizer");
     if (!el) return;
-    const kind = el.dataset.studioResizer; // "player" | "cmp"
-    if (kind === "player") {
-      const container = el.closest(".studio-right");
-      if (!container) return;
-      // `right` resizes the player column (width); `under` the player row
-      // (height). Same descriptor, parameterized by axis/dimension.
-      const horizontal = (store()?.layout || "under") === "right";
-      const dim = horizontal ? "width" : "height";
-      const slot = container.querySelector(".studio-player-slot");
-      drag = {
-        kind,
-        el,
-        container,
-        axis: horizontal ? "x" : "y",
-        startPx: slot ? slot.getBoundingClientRect()[dim] : 320,
-        containerSize: container.getBoundingClientRect()[dim],
-        startClient: horizontal ? evt.clientX : evt.clientY,
-        cssVar: horizontal ? "--studio-player-w" : "--studio-player-h",
-        storeField: horizontal ? "playerW" : "playerH",
-      };
-    } else if (kind === "cmp") {
-      const container = el.closest(".studio-compare-row");
-      if (!container) return;
-      const cur = container.querySelector('.studio-prompt-card[data-side="cur"]');
-      const rowW = container.getBoundingClientRect().width || 1;
-      const startPct = cur
-        ? (cur.getBoundingClientRect().width / rowW) * 100
-        : 50;
-      drag = {
-        kind,
-        el,
-        container,
-        axis: "x",
-        startPct,
-        containerSize: rowW,
-        startClient: evt.clientX,
-        cssVar: "--studio-cmp-cur",
-        storeField: "cmpCur",
-        isPct: true,
-      };
-    } else if (kind === "detail-side") {
-      // Clip-detail page: divider between the player (left) and the annotation
-      // column (right). The CSS var sizes the RIGHT column, so dragging the
-      // divider left must WIDEN it → invert the delta. Persists to localStorage.
-      const container = el.closest(".detail");
-      if (!container) return;
-      const side = container.querySelector(".anno-col");
-      const containerW = container.getBoundingClientRect().width;
-      drag = {
-        kind,
-        el,
-        container,
-        axis: "x",
-        startPx: side ? side.getBoundingClientRect().width : 400,
-        containerSize: containerW,
-        startClient: evt.clientX,
-        cssVar: "--detail-side-w",
-        invert: true,
-        lo: 300,
-        hi: Math.max(300, containerW * 0.6),
-      };
-    } else {
-      return;
-    }
+    const build = KINDS[el.dataset.studioResizer];
+    const state = build ? build(el, evt) : null;
+    if (!state) return;
+    drag = { el, ...state };
 
     try {
       el.setPointerCapture(evt.pointerId);
@@ -159,14 +196,14 @@ function clampSize(start, delta, lo, hi) {
       /* already released */
     }
     document.body.classList.remove("studio-resizing");
-    if (drag.kind === "detail-side") {
-      // No studio store on the clip page — persist directly.
+    if (drag.layoutField) {
+      // Clip-detail dividers have no studio store: persist straight to
+      // localStorage, merged so each divider keeps the other's size.
       try {
         if (drag.lastValue != null) {
-          localStorage.setItem(
-            "catdv:detailLayout",
-            JSON.stringify({ sideW: drag.lastValue }),
-          );
+          const prefs = JSON.parse(localStorage.getItem(DETAIL_LAYOUT_KEY) || "{}");
+          prefs[drag.layoutField] = drag.lastValue;
+          localStorage.setItem(DETAIL_LAYOUT_KEY, JSON.stringify(prefs));
         }
       } catch (e) {
         /* localStorage unavailable — the size still applies for this session */
