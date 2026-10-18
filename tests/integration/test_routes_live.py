@@ -92,7 +92,7 @@ async def chat(tmp_path, monkeypatch):
             (),
             {
                 "gemini_chat_model": "gemini-3.8-flash",
-                "gemini_model": "gemini-3.5-flash-lite",
+                "gemini_model": "gemini-2.5-pro",
                 # Read by the _attach_current_user middleware on every request.
                 "auth_backend": "dev",
                 "dev_user_email": "dev@localhost",
@@ -298,7 +298,7 @@ async def test_summarize_stores_the_summary_and_its_cost(chat):
     r = await ac.post(f"/api/live/sessions/{sid}/summarize")
     assert r.status_code == 200, r.text
     assert r.json()["summary_cs"] == "Krátké shrnutí."
-    assert gemini.calls[-1]["model"] == "gemini-3.5-flash-lite"
+    assert gemini.calls[-1]["model"] == "gemini-3.8-flash"
     rows = await _telemetry(conn)
     assert json.loads(rows[-1][3])["call"] == "summary"
     # Idempotent: a second summarize doesn't call Gemini again.
@@ -319,3 +319,30 @@ async def test_history_lists_and_shows_sessions(chat):
     assert r.json()[0]["end_reason"] == "user_stop"
     r = await ac.get(f"/api/live/sessions/{sid}")
     assert r.json()["transcript"][0]["text"] == "Dobrý den, vidím zahradu."
+
+
+@pytest.mark.asyncio
+async def test_send_frame_without_a_picture_is_refused(chat):
+    ac, _, gemini = chat
+    sid = await _start(ac)
+    calls = len(gemini.calls)
+    r = await ac.post(
+        f"/api/live/sessions/{sid}/turns", json={"kind": "frame", "text": "Frame at 0:01"}
+    )
+    assert r.status_code == 422
+    assert len(gemini.calls) == calls
+
+
+@pytest.mark.asyncio
+async def test_start_ends_the_session_when_the_clip_cant_be_read(chat, monkeypatch):
+    import backend.app.routes.live as live_routes
+
+    async def archive_down(ctx, clip_id):
+        raise ConnectionError("archive unreachable")
+
+    monkeypatch.setattr(live_routes, "load_clip_for_live", archive_down)
+    ac, conn, _ = chat
+    with pytest.raises(ConnectionError):
+        await ac.post("/api/live/sessions", json={"clip_id": 42})
+    (session,) = await LiveSessionsRepo().list_by_clip(conn, 42)
+    assert (session.state, session.end_reason) == ("ended", "error")

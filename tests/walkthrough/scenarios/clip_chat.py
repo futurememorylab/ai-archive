@@ -15,7 +15,6 @@ from playwright.sync_api import expect
 
 from tests.walkthrough.fakes import (
     CHAT_ANSWER,
-    CHAT_FRAME_ANSWER,
     CHAT_GREETING,
     CHAT_SEARCH,
     CHAT_SOURCE_TITLE,
@@ -30,8 +29,8 @@ TITLE = "Chat with AI about a clip, under the video"
 DESCRIPTION = (
     "An operator starts a chat from the ⋯ menu. Gemini greets and describes "
     "the frame, then answers a typed question (showing what it is thinking "
-    "and what it searched) and a sent frame. Send frame "
-    "and End chat sit next to the text box; End chat asks first, then closes "
+    "and what it searched). Send frame says when the video has no picture "
+    "yet. Send frame and End chat sit next to the text box; End chat asks first, then closes "
     "the dialog, and the chat is listed in the Chats tab."
 )
 
@@ -109,11 +108,15 @@ def _type_question(p) -> None:
     assert texts[1:] == [CHAT_GREETING, QUESTION], texts
 
 
-def _send_frame(p) -> None:
+def _send_frame_needs_a_picture(p) -> None:
+    # The walkthrough's video never decodes a picture (no playback offline),
+    # so there is no frame to send: the page says so and drops the question.
+    # Sending a real frame is covered by tests/integration/test_routes_live.py.
     p.locator(f"{DIALOG} [data-test='live-send-frame']").click()
+    expect(p.locator("#toast-root")).to_contain_text("no picture yet")
     dialog = p.locator(DIALOG)
-    expect(dialog.locator(".chat-user").last).to_contain_text("Frame at")
-    expect(dialog.locator(".chat-model").last).to_contain_text(CHAT_FRAME_ANSWER)
+    expect(dialog.locator(".chat-user", has_text="Frame at")).to_have_count(0)
+    expect(dialog.locator("[data-test='live-send-frame']")).to_be_enabled()
 
 
 def _end_chat_asks_first(p) -> None:
@@ -137,7 +140,6 @@ def _listed_in_chats_tab(p) -> None:
     row.click()
     detail = p.locator(".live-history-detail").first
     expect(detail).to_contain_text(QUESTION)
-    expect(detail).to_contain_text(CHAT_FRAME_ANSWER)
     expect(detail.locator(".chat-sources", has_text=CHAT_SEARCH)).to_be_visible()
 
 
@@ -150,7 +152,7 @@ def run(wt):
         "Type a question: Gemini shows what it's thinking, answers, and lists its searches",
         _type_question,
     )
-    wt.step("Send frame: Gemini describes the frame", _send_frame)
+    wt.step("Send frame with no picture yet: the page says so", _send_frame_needs_a_picture)
     wt.step("End chat asks first; Keep chatting leaves the chat open", _end_chat_asks_first)
     wt.step("End chat, confirmed: the dialog closes", _end_chat_closes_the_dialog)
     wt.step("The chat is listed in the Chats tab as just now", _listed_in_chats_tab)

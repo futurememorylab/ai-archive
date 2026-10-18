@@ -114,18 +114,24 @@ async def _stream_answer(
     async def body() -> AsyncIterator[bytes]:
         started = time.monotonic()
         final: dict[str, Any] = {}
+        events = ctx.gemini.chat_stream(
+            model=model,
+            system_instruction=system_instruction,
+            turns=turns,
+            google_search=google_search,
+        )
+        # The deadline covers waiting on Gemini only, not sending to the page.
+        deadline = asyncio.get_running_loop().time() + _ANSWER_TIMEOUT_S
         try:
-            async with asyncio.timeout(_ANSWER_TIMEOUT_S):
-                async for event in ctx.gemini.chat_stream(
-                    model=model,
-                    system_instruction=system_instruction,
-                    turns=turns,
-                    google_search=google_search,
-                ):
-                    if event["type"] == "done":
-                        final = event
-                    else:
-                        yield _line(event)
+            while True:
+                async with asyncio.timeout_at(deadline):
+                    event = await anext(events, None)
+                if event is None:
+                    break
+                if event["type"] == "done":
+                    final = event
+                else:
+                    yield _line(event)
         except (GeminiError, TimeoutError) as exc:
             reason = humanise(exc) if isinstance(exc, GeminiError) else "it took too long"
             log.warning(
@@ -219,7 +225,9 @@ async def start_session(request: Request, body: StartPayload) -> StreamingRespon
             on_error=failed,
             google_search=False,
         )
-    except HTTPException:
+    except Exception:
+        # The stream never started (e.g. the archive didn't answer): the
+        # browser has no session id to end, so end it here.
         await failed()
         raise
 
@@ -245,6 +253,10 @@ async def post_turn(request: Request, session_id: str, body: TurnPayload) -> Str
     if not text:
         raise HTTPException(422, detail="question is empty")
     frame = _decode_frame(body.frame_b64)
+    if body.kind == "frame" and frame is None:
+        raise HTTPException(
+            422, detail="The video has no picture yet. Play it, then send the frame."
+        )
     transcript = json.loads(session.transcript_json or "[]")
     transcript.append({"role": "user", "text": text, "ts": _now_ms(), "kind": body.kind})
     turns = conversation_turns(transcript, image_jpeg=frame)
@@ -292,7 +304,8 @@ async def post_summarize(request: Request, session_id: str) -> dict:
             ctx.db,
             session_id=session_id,
             gemini=ctx.gemini,
-            model=ctx.settings.gemini_model,
+            # The chat's own model: it is what's being summarised.
+            model=ctx.settings.gemini_chat_model,
             run_telemetry_repo=ctx.run_telemetry_repo,
             telemetry_ctx=ctx.telemetry_ctx,
         )

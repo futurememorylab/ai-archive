@@ -76,11 +76,24 @@ function liveSession(clipId) {
     },
 
     // ── internals ────────────────────────────────────────────────────────
+    // A question whose answer failed isn't saved on the server, so it leaves
+    // the transcript too; a typed one goes back in the box to send again.
     async _ask({ kind, text }) {
       const frame = this._frame();
       this.transcript.push({ role: "user", text, ts: Date.now(), kind });
-      await this._answer(`/api/live/sessions/${this.sessionId}/turns`,
-                         { kind, text, frame_b64: frame });
+      const question = this.transcript[this.transcript.length - 1];
+      const done = await this._answer(`/api/live/sessions/${this.sessionId}/turns`,
+                                      { kind, text, frame_b64: frame });
+      if (done) return;
+      this._drop(question);
+      if (kind === "typed" && !this.draftText) this.draftText = text;
+    },
+
+    // Remove a line if it is still in this chat's transcript (a new chat may
+    // have replaced the list meanwhile).
+    _drop(line) {
+      const i = this.transcript.indexOf(line);
+      if (i >= 0) this.transcript.splice(i, 1);
     },
 
     // POST a question and show Gemini's answer as it streams in: a status
@@ -98,7 +111,7 @@ function liveSession(clipId) {
         Object.assign(line, done.reply, { pending: false });
         return done;
       } catch (e) {
-        this.transcript.splice(this.transcript.indexOf(line), 1);
+        this._drop(line);
         Alpine.store("toast").push(`Chat: ${e.message || e}`, { level: "error" });
         return null;
       } finally {

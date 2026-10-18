@@ -38,7 +38,7 @@ def _svc() -> tuple[GeminiService, _FakeAioModels]:
 async def test_chat_thinks_briefly_so_answers_come_fast():
     svc, models = _svc()
     turns: list[ChatTurn] = [{"role": "user", "text": "q"}]
-    result = await svc.chat(model="m", system_instruction="s", turns=turns)
+    result = await svc.chat(model="gemini-3.8-flash", system_instruction="s", turns=turns)
     config = models.last_config
     assert config.thinking_config.thinking_level == types.ThinkingLevel.LOW
     assert result["text"] == "Dobrý den."
@@ -110,3 +110,11 @@ async def test_chat_stream_reports_thinking_text_then_searches_and_sources():
 def test_thought_headline_falls_back_to_the_first_line():
     assert thought_headline("Checking dates\nmore") == "Checking dates"
     assert thought_headline("") == ""
+
+
+async def test_older_models_get_no_thinking_level():
+    """gemini-2.5-pro rejects thinking_level with a 400 (seen on End chat)."""
+    svc, models = _svc()
+    turns: list[ChatTurn] = [{"role": "user", "text": "q"}]
+    await svc.chat(model="gemini-2.5-pro", system_instruction="s", turns=turns)
+    assert models.last_config.thinking_config.thinking_level is None

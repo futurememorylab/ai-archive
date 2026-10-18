@@ -30,7 +30,7 @@
       </svg>
       Send frame</button>
     <button type="button" class="btn danger" data-test="live-end"
-            :disabled="liveSession.state === 'closing'"
+            :disabled="liveSession.state !== 'active' || liveSession.busy"
             @click="liveSession.confirmEnd = true">End chat</button>
     <input class="txt" type="text" data-test="live-text" x-model="liveSession.draftText"
            :disabled="liveSession.state !== 'active'"

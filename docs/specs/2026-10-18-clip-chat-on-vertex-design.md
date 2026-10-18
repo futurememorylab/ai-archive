@@ -71,7 +71,9 @@ Routes keep the Live-era prefix `/api/live`:
 - On deploy there is no migration: startup inserts the chat prompt when it
   is missing. It never overwrites an existing one, and edits made to the
   old Live prompt (`live.system_instruction.cs`) are not copied over.
-- The summary uses `GEMINI_MODEL`, also through Vertex.
+- The summary uses the chat's own model (`GEMINI_CHAT_MODEL`). The low
+  thinking level is sent only to Gemini 3 and later models; older ones
+  reject it.
 - 3.8 Flash is not served in `europe-west3` alone. Deployments use
   `GCP_LOCATION=global` (local `.env` and prod already do).
 
@@ -142,6 +144,7 @@ Vertex, so it works on staging too.
    and details such as the format.
 8. Make Vertex fail in a running chat: turn off the machine's network (or
    the server's), then ask a question. A toast shows the error, your
-   question stays in the transcript and the chat stays open. Turn the
+   question leaves the transcript and goes back into the text box (it was
+   not saved), and the chat stays open. Turn the
    network back on and ask again: Gemini answers.
 9. Start a chat, then reload the page. The Chats tab lists that chat.

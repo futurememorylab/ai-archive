@@ -98,7 +98,7 @@ class GeminiService:
 
         Each turn is {"role": "user"|"model", "text": str, "image_jpeg":
         bytes | None}; only the turns that carry an image send one."""
-        config = _chat_config(system_instruction, google_search, include_thoughts=False)
+        config = _chat_config(model, system_instruction, google_search, include_thoughts=False)
         try:
             response = await self._client.aio.models.generate_content(
                 model=model, contents=_chat_contents(turns), config=config
@@ -120,7 +120,7 @@ class GeminiService:
         written, then one {"type": "done", "text", "raw", "searches",
         "sources"}. Searches and sources come only at the end: Vertex sends
         no signal while it searches."""
-        config = _chat_config(system_instruction, google_search, include_thoughts=True)
+        config = _chat_config(model, system_instruction, google_search, include_thoughts=True)
         answer: list[str] = []
         last: Any = None
         try:
@@ -161,16 +161,24 @@ def _chat_contents(turns: list[ChatTurn]) -> list[types.ContentUnion]:
 
 
 def _chat_config(
-    system_instruction: str, google_search: bool, *, include_thoughts: bool
+    model: str, system_instruction: str, google_search: bool, *, include_thoughts: bool
 ) -> types.GenerateContentConfig:
+    # A chat reply should come in seconds; the default thinking is slower.
+    # thinking_level exists only on Gemini 3 and later; older models 400 on it.
+    level = types.ThinkingLevel.LOW if _gemini_generation(model) >= 3 else None
     return types.GenerateContentConfig(
         system_instruction=system_instruction,
         tools=[types.Tool(google_search=types.GoogleSearch())] if google_search else None,
-        # A chat reply should come in seconds; the default thinking is slower.
         thinking_config=types.ThinkingConfig(
-            thinking_level=types.ThinkingLevel.LOW, include_thoughts=include_thoughts
+            thinking_level=level, include_thoughts=include_thoughts
         ),
     )
+
+
+def _gemini_generation(model: str) -> int:
+    """3 for "gemini-3.8-flash", 2 for "gemini-2.5-pro"; 0 when unknown."""
+    match = re.match(r"gemini-(\d+)", model)
+    return int(match.group(1)) if match else 0
 
 
 def _chunk_parts(chunk: Any) -> list[Any]:
