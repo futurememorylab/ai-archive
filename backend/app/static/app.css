@@ -489,7 +489,9 @@ a { color: inherit; text-decoration: none; }
 .detail {
   display: grid;
   grid-template-columns: 1fr 6px var(--detail-side-w, 400px);
-  grid-template-rows: 44px 1fr;
+  /* minmax(0, …): a plain 1fr row grows to the video's natural height and
+     pushes the chat dialog under the video off the bottom of the window. */
+  grid-template-rows: 44px minmax(0, 1fr);
   grid-template-areas:
     "hdr   hdr  hdr"
     "play  rez  side";
