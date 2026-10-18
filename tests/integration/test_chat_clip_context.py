@@ -10,9 +10,8 @@ from backend.app.routes.pages.clips import _build_clip_view_model_for_live
 from tests.integration.test_clip_detail_draft import FakeArchive, _canonical
 
 
-class _FieldDefs:
-    async def list_for_provider(self, conn, *, provider_id):
-        assert provider_id == "catdv"
+class _Archive(FakeArchive):
+    async def list_field_definitions(self):
         return [
             FieldDef(
                 identifier="pragafilm.dekáda.natočení",
@@ -47,8 +46,7 @@ async def test_context_has_all_fields_names_and_record_details():
 
     class _Ctx:
         db = None
-        archive = FakeArchive((clip,))
-        field_def_cache_repo = _FieldDefs()
+        archive = _Archive((clip,))
 
     out = await _build_clip_view_model_for_live(_Ctx(), 101)
     assert out["fields"] == {"pragafilm.dekáda.natočení": "20.léta", "catdv.tape": "Kazeta 7"}

@@ -1442,9 +1442,11 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
   padding: .28rem .55rem;
   border-radius: var(--r-3);
   line-height: 1.35;
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* Only the text keeps Gemini's line breaks; the template's own whitespace
+   around it must not show. */
+.chat-bubble > .chat-text { white-space: pre-wrap; }
 .chat-user { justify-content: flex-end; }
 .chat-user .chat-bubble {
   background: var(--accent); color: var(--accent-fg);

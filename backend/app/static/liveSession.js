@@ -35,7 +35,7 @@ function liveSession(clipId) {
       this.state = "closing";
       const ended = await this._post(`/api/live/sessions/${this.sessionId}/end`,
                                      { end_reason: reason || "user_stop" });
-      this._summarize();
+      this._post(`/api/live/sessions/${this.sessionId}/summarize`, {});
       this.transcript = [];
       this.state = "idle";
       if (ended) {
@@ -122,15 +122,7 @@ function liveSession(clipId) {
     // Read the server's NDJSON lines, passing each progress event to
     // onEvent; resolves with the "done" event, throws on "error".
     async _stream(url, body, onEvent) {
-      const r = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!r.ok) {
-        const data = await r.json().catch(() => ({}));
-        throw new Error(data.detail || `The server answered ${r.status}.`);
-      }
+      const r = await this._fetch(url, body);
       const reader = r.body.getReader();
       const decoder = new TextDecoder();
       let buffered = "";
@@ -150,25 +142,26 @@ function liveSession(clipId) {
       }
     },
 
+    // POST JSON; resolves with the ok response, throws the server's reason.
+    async _fetch(url, body) {
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (r.ok) return r;
+      const data = await r.json().catch(() => ({}));
+      throw new Error(data.detail || `The server answered ${r.status}.`);
+    },
+
     // POST JSON; on failure, toast the server's reason and return null.
     async _post(url, body) {
       try {
-        const r = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const data = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(data.detail || `The server answered ${r.status}.`);
-        return data;
+        return await (await this._fetch(url, body)).json().catch(() => ({}));
       } catch (e) {
         Alpine.store("toast").push(`Chat: ${e.message || e}`, { level: "error" });
         return null;
       }
-    },
-
-    _summarize() {
-      this._post(`/api/live/sessions/${this.sessionId}/summarize`, {});
     },
 
     // The frame on screen as base64 JPEG (null when the video has no picture

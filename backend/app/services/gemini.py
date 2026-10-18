@@ -181,9 +181,13 @@ def _gemini_generation(model: str) -> int:
     return int(match.group(1)) if match else 0
 
 
-def _chunk_parts(chunk: Any) -> list[Any]:
+def _first_candidate(chunk: Any) -> Any:
     candidates = getattr(chunk, "candidates", None) or []
-    content = getattr(candidates[0], "content", None) if candidates else None
+    return candidates[0] if candidates else None
+
+
+def _chunk_parts(chunk: Any) -> list[Any]:
+    content = getattr(_first_candidate(chunk), "content", None)
     return list(getattr(content, "parts", None) or [])
 
 
@@ -199,8 +203,7 @@ def thought_headline(text: str) -> str:
 
 def _grounding(chunk: Any) -> tuple[list[str], list[dict[str, str]]]:
     """The web searches Gemini ran and the pages it used (http(s) links only)."""
-    candidates = getattr(chunk, "candidates", None) or []
-    meta = getattr(candidates[0], "grounding_metadata", None) if candidates else None
+    meta = getattr(_first_candidate(chunk), "grounding_metadata", None)
     if meta is None:
         return [], []
     searches = [q for q in (meta.web_search_queries or []) if q]

@@ -11,7 +11,7 @@ import json
 import logging
 import time
 import uuid
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -74,8 +74,9 @@ async def _system_instruction(ctx: Any, clip_id: int, prompt_version: int | None
         version = await PromptsRepo().get_version(ctx.db, prompt_version or 0)
     except LookupError:
         raise HTTPException(500, detail="chat system instruction missing") from None
-    clip = await load_clip_for_live(ctx, clip_id)
-    draft = await load_draft_for_live(ctx, clip_id)
+    clip, draft = await asyncio.gather(
+        load_clip_for_live(ctx, clip_id), load_draft_for_live(ctx, clip_id)
+    )
     return build_system_instruction(prompt_body=version.body, clip=clip, draft=draft)
 
 
@@ -86,8 +87,6 @@ _ANSWER_TIMEOUT_S = 120
 
 # What an answer adds to its transcript entry when Gemini searched the web.
 _GROUNDING_KEYS = ("searches", "sources")
-
-SaveAnswer = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
 
 
 def _line(event: dict[str, Any]) -> bytes:
@@ -100,16 +99,25 @@ async def _stream_answer(
     turns: list[ChatTurn],
     *,
     call: str,
-    save: SaveAnswer,
-    on_error: Callable[[], Awaitable[None]] | None = None,
+    transcript: list[dict[str, Any]],
+    frame_count: int,
+    done_extra: dict[str, Any] | None = None,
+    end_on_error: bool = False,
     google_search: bool = True,
 ) -> StreamingResponse:
     """Stream Gemini's answer to the page as NDJSON lines: "thinking" and
-    "text" events as they come, then "done" (the answer and what `save`
-    returns) or "error" (the reason the toast shows). The answer is saved
-    and its cost recorded before "done" goes out."""
+    "text" events as they come, then "done" or "error" (the reason the toast
+    shows). Before "done" the answer is appended to `transcript` and saved,
+    and its cost recorded. `end_on_error` ends the chat when there is no
+    answer (the opening turn: the page has no chat to go back to)."""
     model = ctx.settings.gemini_chat_model
     system_instruction = await _system_instruction(ctx, session.clip_id, session.prompt_version)
+    repo = LiveSessionsRepo()
+
+    async def error(detail: str) -> bytes:
+        if end_on_error:
+            await repo.mark_ended(ctx.db, session.id, end_reason="error")
+        return _line({"type": "error", "detail": detail})
 
     async def body() -> AsyncIterator[bytes]:
         started = time.monotonic()
@@ -141,9 +149,7 @@ async def _stream_answer(
                 session.id,
                 reason,
             )
-            if on_error is not None:
-                await on_error()
-            yield _line({"type": "error", "detail": f"Gemini didn't answer: {reason}"})
+            yield await error(f"Gemini didn't answer: {reason}")
             return
         await record_live_usage(
             ctx.db,
@@ -157,16 +163,17 @@ async def _stream_answer(
             attrs={"with_frame": bool(turns[-1].get("image_jpeg"))},
         )
         if not final.get("text"):
-            if on_error is not None:
-                await on_error()
-            yield _line(
-                {"type": "error", "detail": "Gemini returned an empty answer. Try asking again."}
-            )
+            yield await error("Gemini returned an empty answer. Try asking again.")
             return
         entry = {"role": "model", "text": final["text"], "ts": _now_ms()}
         entry.update({k: final[k] for k in _GROUNDING_KEYS if final.get(k)})
-        extra = await save(entry)
-        yield _line({"type": "done", "reply": entry, **extra})
+        await repo.save_transcript(
+            ctx.db,
+            session.id,
+            transcript_json=json.dumps([*transcript, entry], ensure_ascii=False),
+            frame_count=frame_count,
+        )
+        yield _line({"type": "done", "reply": entry, **(done_extra or {})})
 
     return StreamingResponse(body(), media_type="application/x-ndjson")
 
@@ -201,19 +208,6 @@ async def start_session(request: Request, body: StartPayload) -> StreamingRespon
     await repo.mark_active(ctx.db, session_id)
     session = await repo.get(ctx.db, session_id)
     opening: list[ChatTurn] = [{"role": "user", "text": OPENING_CUE_CS, "image_jpeg": frame}]
-
-    async def save(entry: dict[str, Any]) -> dict[str, Any]:
-        await repo.save_transcript(
-            ctx.db,
-            session_id,
-            transcript_json=json.dumps([entry], ensure_ascii=False),
-            frame_count=1 if frame else 0,
-        )
-        return {"session_id": session_id}
-
-    async def failed() -> None:
-        await repo.mark_ended(ctx.db, session_id, end_reason="error")
-
     try:
         # The greeting only describes the frame; it needs no web search.
         return await _stream_answer(
@@ -221,14 +215,16 @@ async def start_session(request: Request, body: StartPayload) -> StreamingRespon
             session,
             opening,
             call="chat_open",
-            save=save,
-            on_error=failed,
+            transcript=[],
+            frame_count=1 if frame else 0,
+            done_extra={"session_id": session_id},
+            end_on_error=True,
             google_search=False,
         )
     except Exception:
         # The stream never started (e.g. the archive didn't answer): the
         # browser has no session id to end, so end it here.
-        await failed()
+        await repo.mark_ended(ctx.db, session_id, end_reason="error")
         raise
 
 
@@ -245,7 +241,6 @@ async def post_turn(request: Request, session_id: str, body: TurnPayload) -> Str
     A failed answer leaves the question unsaved; the chat stays usable."""
     require_permission(request, "run")
     ctx = get_live_ctx(request)
-    repo = LiveSessionsRepo()
     session = await _get_session(ctx, session_id)
     if session.state != "active":
         raise HTTPException(409, detail="This chat has ended. Start a new one.")
@@ -260,17 +255,14 @@ async def post_turn(request: Request, session_id: str, body: TurnPayload) -> Str
     transcript = json.loads(session.transcript_json or "[]")
     transcript.append({"role": "user", "text": text, "ts": _now_ms(), "kind": body.kind})
     turns = conversation_turns(transcript, image_jpeg=frame)
-
-    async def save(entry: dict[str, Any]) -> dict[str, Any]:
-        await repo.save_transcript(
-            ctx.db,
-            session_id,
-            transcript_json=json.dumps([*transcript, entry], ensure_ascii=False),
-            frame_count=session.frame_count + (1 if frame else 0),
-        )
-        return {}
-
-    return await _stream_answer(ctx, session, turns, call="chat_turn", save=save)
+    return await _stream_answer(
+        ctx,
+        session,
+        turns,
+        call="chat_turn",
+        transcript=transcript,
+        frame_count=session.frame_count + (1 if frame else 0),
+    )
 
 
 class EndPayload(BaseModel):
@@ -350,11 +342,7 @@ async def list_sessions(request: Request, clip_id: int) -> list[dict]:
 @router.get("/sessions/{session_id}")
 async def get_session(request: Request, session_id: str) -> dict:
     ctx = get_core_ctx(request)
-    repo = LiveSessionsRepo()
-    try:
-        s = await repo.get(ctx.db, session_id)
-    except LookupError:
-        raise HTTPException(404, detail="session not found") from None
+    s = await _get_session(ctx, session_id)
     return {
         "id": s.id,
         "clip_id": s.clip_id,

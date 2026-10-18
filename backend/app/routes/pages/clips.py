@@ -597,7 +597,12 @@ async def _build_clip_view_model_for_live(ctx, clip_id: int) -> dict:
                 "category": m.category,
             }
         )
-    field_defs = await ctx.field_def_cache_repo.list_for_provider(ctx.db, provider_id=clip.key[0])
+    try:
+        # Through the provider, which caches them and falls back when stale.
+        field_defs = await ctx.archive.list_field_definitions()
+    except Exception:  # noqa: BLE001 — names are a nicety; identifiers still work
+        logger.warning("chat context: field names unavailable for clip %s", clip_id, exc_info=True)
+        field_defs = []
     provider_data = clip.provider_data or {}
     return {
         "id": int(clip.key[1]),

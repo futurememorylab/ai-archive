@@ -9,7 +9,8 @@
        data-test="live-resizer" role="separator" aria-orientation="horizontal"
        aria-label="Resize the chat"></div>
   <div class="live-dialog-lines live-chat"
-       x-effect="liveSession.transcript.map((l) => l.text + l.status).join();
+       x-effect="const last = liveSession.transcript.at(-1);
+                 liveSession.transcript.length; last && last.text + last.status;
                  $nextTick(() => { $el.scrollTop = $el.scrollHeight })">
     <template x-for="(line, i) in liveSession.transcript" :key="'t' + i">
       <div>{% include "pages/_chat_message.html" %}</div>
