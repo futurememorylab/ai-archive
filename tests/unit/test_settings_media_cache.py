@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 from pydantic import ValidationError
 
@@ -5,7 +7,7 @@ from backend.app.settings import Settings
 
 
 def _minimal(**over):
-    base = dict(
+    base: dict[str, Any] = dict(
         catdv_base_url="http://x",
         catdv_catalog_id=1,
         gcp_project_id="p",

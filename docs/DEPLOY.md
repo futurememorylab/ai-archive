@@ -65,9 +65,11 @@ echo "GOOGLE_APPLICATION_CREDENTIALS=$HOME/.gcp/catdv-annotator-key.json" >> .en
 
 Keys are sensitive: keep them outside the repo, `chmod 600`, never
 commit. Cloud Run does **not** use these keys — it authenticates as the
-runtime SA via Application Default Credentials. To enable the optional
-Gemini Live assistant, run `deploy/enable-gemini-live.sh` (see the
-top-level `README.md`).
+runtime SA via Application Default Credentials. The clip chat ("Chat
+with Gemini") runs on Vertex with the same credentials as annotation and
+needs no extra setup or API key; set `GCP_LOCATION=global` so
+`gemini-3.8-flash` is served. The old `gemini-api-key` secret from Gemini
+Live is no longer used.
 
 ## Prod (CatDV server)
 

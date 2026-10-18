@@ -74,10 +74,10 @@ gcloud iam service-accounts add-iam-policy-binding $RUNTIME_SA \
 # 5. Secrets (values piped from stdin — never on the command line)
 printf '%s' "$CATDV_PASSWORD_VALUE" | gcloud secrets create catdv-password \
   --data-file=- --replication-policy=automatic --project=$PROJECT_ID
-printf '%s' "$GEMINI_API_KEY_VALUE" | gcloud secrets create gemini-api-key \
-  --data-file=- --replication-policy=automatic --project=$PROJECT_ID
 # wg-private-key is created in the WireGuard section below.
-for s in catdv-password gemini-api-key; do
+# The clip chat runs on Vertex as the runtime SA, so it needs no secret.
+# An older `gemini-api-key` secret (from Gemini Live) is no longer used.
+for s in catdv-password; do
   gcloud secrets add-iam-policy-binding $s \
     --member=serviceAccount:$RUNTIME_SA \
     --role=roles/secretmanager.secretAccessor --project=$PROJECT_ID
@@ -171,8 +171,8 @@ push to main ─▶ test ─▶ deploy ─▶ verify /api/health
    - `gcloud run deploy` with the load-bearing flags
      `--min-instances=1 --max-instances=1 --no-cpu-throttling`,
      non-secret config from `--env-vars-file=deploy/cloudrun.env.yaml`, and
-     secrets from `--set-secrets` (`catdv-password`, `gemini-api-key`,
-     `wg-private-key` from Secret Manager).
+     secrets from `--set-secrets` (`catdv-password` and `wg-private-key`
+     from Secret Manager).
 3. **verify** — fetches the service URL, mints an identity token, and
    `curl -fsS` the private `/api/health` endpoint. A non-200 fails the run.
 
@@ -295,11 +295,12 @@ Injected via `--set-secrets` from Secret Manager — never in
 | Env var | Secret Manager id |
 |---|---|
 | `CATDV_PASSWORD` | `catdv-password` |
-| `GEMINI_API_KEY` | `gemini-api-key` |
 | `WG_PRIVATE_KEY` | `wg-private-key` |
 
-Locally these live in `.env` (`CATDV_PASSWORD`, optional `GEMINI_API_KEY`);
-there is no local WireGuard, so `WG_PRIVATE_KEY` stays unset.
+Locally `CATDV_PASSWORD` lives in `.env`; there is no local WireGuard, so
+`WG_PRIVATE_KEY` stays unset. The clip chat uses Vertex with the runtime SA,
+like annotation, so there is no Gemini API key. The old `gemini-api-key`
+secret is no longer used; the owner can delete it.
 
 ## Staging (`catdv-annotator-staging`)
 

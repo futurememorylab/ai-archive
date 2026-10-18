@@ -1,7 +1,7 @@
 # 0112. Gemini Live: ephemeral tokens replace the browser-exposed key
 
 **Date:** 2026-06-22
-**Status:** Accepted — supersedes [0043](./0043-gemini-live-api-key-exposure-accepted-risk.md)
+**Status:** Accepted — supersedes [0043](./0043-gemini-live-api-key-exposure-accepted-risk.md); Superseded by [0130](./0130-clip-chat-on-vertex-replaces-live.md)
 **Lifespan:** Invariant
 
 ## Context

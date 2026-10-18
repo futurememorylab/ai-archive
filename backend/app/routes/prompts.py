@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from backend.app.deps import get_core_ctx
 from backend.app.models.prompt import (
-    LIVE_SYSTEM_PROMPT_NAME,
+    SYSTEM_PROMPT_NAMES,
     Prompt,
     PromptVersion,
     TargetMap,
@@ -101,8 +101,8 @@ async def list_prompts(request: Request, archived: int = 0):
     results: list[dict[str, Any]] = []
     for p in rows:
         # The pickers (clip Annotate, bulk annotate, New batch) build on this
-        # list; the Live system instruction is not an annotation prompt.
-        if p.name == LIVE_SYSTEM_PROMPT_NAME:
+        # list; the chat system instructions are not annotation prompts.
+        if p.name in SYSTEM_PROMPT_NAMES:
             continue
         _, versions = await ctx.prompts_repo.get_with_versions(ctx.db, p.id)
         prod = next((v for v in versions if v.state == "production"), None)

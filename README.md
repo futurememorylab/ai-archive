@@ -96,25 +96,14 @@ successfully reconnects.
 This is a local app with a deliberately narrow threat model: **single
 operator, on the operator's own laptop, behind the project VPN**.
 
-- `GEMINI_API_KEY` is **never shipped to the browser**. The Live-session
-  flow mints a short-lived, single-use, config-bound **ephemeral token**
-  server-side (`auth_tokens.create`, v1alpha) and the browser presents
-  *that* token via `?access_token=` against the
-  `BidiGenerateContentConstrained` endpoint. The raw key only ever
-  authenticates the server→Google mint call. The model, voice, system
-  prompt, and tool declarations are bound into the token, so the browser
-  cannot change them — and the proprietary system prompt + tool
-  declarations are withheld from the browser entirely. See ADR 0111
-  (supersedes ADR 0043; the earlier "1007 / key not valid" failure was a
-  wrong endpoint+version+param combination, not a Google limitation).
-- The boot log confirms the ephemeral-token mode at `INFO` when the key
-  is configured, and `WARNING`s if the key is missing (Live unavailable).
+- The browser holds no Google credentials. The clip chat sends each
+  question to the app, and the server asks Gemini on Vertex with the same
+  service account as annotation (ADR 0130). There is no Gemini API key.
 - CatDV credentials (`CATDV_PASSWORD`) live in `.env` and are read
   server-side only; they are NOT exposed to the browser.
 
-The ephemeral-token flow removes the browser key exposure that previously
-constrained where this app could run; the rest of the threat model (CatDV
-seat limits, VPN dependency) still applies.
+The rest of the threat model (CatDV seat limits, VPN dependency) still
+applies.
 
 ## Architecture & orientation
 
@@ -141,7 +130,7 @@ New to the codebase? Read these two first:
 - `docs/specs/` — design specs
 - `docs/plans/` — plans for in-flight work (deleted once merged)
 - `docs/DEPLOY.md` — local/on-prem deployment + one-time GCP bootstrap
-- `deploy/` — Cloud Run deployment (`deploy/README.md`), Gemini Live key script
+- `deploy/` — Cloud Run deployment (`deploy/README.md`)
 
 ## Annotating a clip
 
@@ -170,73 +159,35 @@ Notes:
   (`review_items.decision`, `write_queue`) and will land in a follow-up.
 - If no prompt has a production version, the dropdown links to `/prompts`.
 
-## Gemini Live clip assistant (optional)
+## Chat with AI about a clip
 
-Voice-driven Czech assistant on the clip-detail page. Browser opens a WebSocket
-directly to Google's Gemini Live API using ephemeral tokens minted by the
-backend; audio bytes never traverse our process.
+On a clip whose video is ready, ⋯ → **Chat with AI** opens a text chat
+under the video. Gemini greets in Czech and describes the frame on screen;
+each question you type goes with the current frame, and **Send frame** asks
+about the frame you are on. Answers come back as text after a few seconds.
+See `docs/specs/2026-10-18-clip-chat-on-vertex-design.md`.
 
-### Setup (one-shot)
+### Setup
 
-There's exactly one operator-run script. Everything else (SQLite migration
-`0010_live_sessions`, the Czech `live.system_instruction.cs` prompt seed,
-and the stale-pending session reaper) is wired into the FastAPI `lifespan`
-and runs automatically the next time you start the app.
-
-Prereqs:
-
-- `gcloud` CLI installed and `gcloud auth login` already done
-- `gcloud components install alpha` (the API-keys subcommand lives there)
-- The signed-in account has `roles/serviceusage.serviceUsageAdmin` and
-  `roles/serviceusage.apiKeysAdmin` on `$GCP_PROJECT_ID`
-- This is **separate** from the `GOOGLE_APPLICATION_CREDENTIALS` setup
-  (the one-time GCP bootstrap in `docs/DEPLOY.md`). Vertex / batch
-  annotation keeps using the service-account key; Live uses a Generative
-  Language API key.
-
-```bash
-# 1. Mint the API key (idempotent — re-uses an existing one if present)
-GCP_PROJECT_ID=<your-project> ./deploy/enable-gemini-live.sh
-
-# 2. The script prints the key value. Paste it into .env:
-echo 'GEMINI_API_KEY=<printed-key>' >> .env
-
-# 3. Restart the app. Migration + seed apply on lifespan start.
-./run.sh
-```
-
-Open any clip with `duration_secs > 0` while the app is in `online` mode —
-a `🎤 Live` button appears in the header next to *Annotate ▾*.
-
-If you skip step 1, the `GEMINI_API_KEY` is empty and the feature stays
-silent: schema and seed still apply on startup, but `🎤 Live` requests
-will get a `RuntimeError: GEMINI_API_KEY is not configured` from the
-session-config endpoint, so the button is gated to `mode == "online"`
-only and the operator never sees it without a key.
+None beyond the normal Vertex service account (the one-time GCP bootstrap
+in `docs/DEPLOY.md`). The chat runs on Vertex like annotation and shares
+its bill. The chat prompt (`chat.system_instruction.cs`) is seeded on
+startup and can be edited on the Prompts page.
 
 ### Env vars
 
-All four are optional. The Live button only appears when `GEMINI_API_KEY`
-is set; the other three have working defaults.
-
-- `GEMINI_API_KEY` — Generative Language API key (printed by the script
-  above). When unset, the Live feature is disabled.
-- `GEMINI_LIVE_MODEL` — default `gemini-3.1-flash-live-preview`.
-- `GEMINI_LIVE_VOICE` — default `Aoede` (speaks `cs-CZ` because
-  `speechConfig.languageCode` pins it).
-- `GEMINI_LIVE_INACTIVITY_S` — default `60`. Mutual-silence timeout
-  before the session auto-closes with `end_reason=inactivity`.
-
-`.env.example` ships with these four lines already, with the key blank;
-just paste the value the script prints.
+- `GEMINI_CHAT_MODEL` — default `gemini-3.8-flash`. It needs a
+  `GCP_LOCATION` that serves the model; 3.8 Flash is not in
+  `europe-west3`, so use `GCP_LOCATION=global`.
 
 ### What's stored
 
-Sessions land in the `live_sessions` SQLite table and surface as a
-**History** tab next to *Markers / Fields / Notes* on the clip page.
-The History panel is read-only — transcripts and Czech summaries are
-never auto-pushed into draft annotations. Audio bytes are not stored
-at all (only the transcripts that Gemini emits).
+Chats land in the `live_sessions` SQLite table (it keeps its Live-era
+name), saved turn by turn, and show in the **History** tab next to
+*Markers / Fields / Notes* on the clip page. The History panel is
+read-only: transcripts and Czech summaries are never pushed into draft
+annotations. Each turn's tokens and cost are recorded with the other
+Gemini runs.
 
 ## License
 

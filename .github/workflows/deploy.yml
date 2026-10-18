@@ -65,9 +65,9 @@ jobs:
       - name: Deploy staging
         # Mirrors deploy/deploy-staging.sh. VPN/CatDV is enabled on staging
         # (ADR 0104), so it needs the WireGuard key + CatDV password — staging
-        # reuses PROD'S wg-private-key + catdv-password secrets. GEMINI is left
-        # out (annotation runs would fail without it; add gemini-api-key:latest
-        # if you want end-to-end AI in staging). --no-cpu-throttling so
+        # reuses PROD'S wg-private-key + catdv-password secrets. Gemini
+        # (annotation and the clip chat) goes through Vertex with the service
+        # account, so it needs no secret. --no-cpu-throttling so
         # Litestream flushes between requests and on SIGTERM teardown — staging
         # now persists its DB to its own replica path (ADR 0105/0077). --iap is
         # idempotent and keeps IAP enforced on every deploy. See
@@ -130,7 +130,7 @@ jobs:
             --min-instances=0 --max-instances=1 --min=0 --max=1 --no-cpu-throttling \
             --memory=2Gi --cpu=1 \
             --env-vars-file=deploy/cloudrun.env.yaml \
-            --set-secrets="CATDV_PASSWORD=catdv-password:latest,GEMINI_API_KEY=gemini-api-key:latest,WG_PRIVATE_KEY=wg-private-key:latest"
+            --set-secrets="CATDV_PASSWORD=catdv-password:latest,WG_PRIVATE_KEY=wg-private-key:latest"
         # No external /api/health curl: once --iap fronts the URL, an outside
         # caller would need an IAP-authorized token (undocumented audience), so
         # we rely on Cloud Run's own revision-readiness gate instead. The deploy

@@ -1,112 +1,179 @@
-// Alpine component for the Gemini Live clip assistant.
+// Alpine component for the clip chat with Gemini.
 // Composes into clip_detail.html's existing x-data alongside player() and clipAnnotate().
-// Audio bytes flow browser ↔ Google directly via WSS; this component only
-// talks to our backend for token minting and post-session persistence.
+// Every question goes to our backend, which asks Gemini on Vertex and keeps
+// the transcript; the browser holds no Google credentials. See ADR 0130.
 
-function liveSession(clipId, config) {
+function liveSession(clipId) {
   return {
     // ── state ────────────────────────────────────────────────────────────
-    state: "idle",                  // idle | connecting | active | closing
-    transcript: [],                 // [{role, text, ts, kind}]
-    elapsedFmt: "0:00",
-    expanded: false,
-    error: null,
+    state: "idle",                  // idle | starting | active | closing
+    busy: false,                    // a question is waiting for its answer
+    transcript: [],                 // this chat: [{role, text, ts, kind}]
+    draftText: "",                  // the question being typed
+    confirmEnd: false,              // the "End chat?" dialog is open
     sessionId: null,
-    inactivityS: (config && config.inactivityS) || 60,
-
-    // ── internals ────────────────────────────────────────────────────────
-    _ws: null,
-    _audioCtxIn: null,
-    _audioCtxOut: null,
-    _workletNode: null,
-    _mediaStream: null,
-    _frameCount: 0,
-    _usage: { summed: {}, last: null, messages: 0 },
-    _startedAt: 0,
-    _elapsedTimer: null,
-    _inactivityTimer: null,
-    _endReason: null,
-    _setupPayload: null,
-    _initialTurn: null,
-    _setupComplete: false,          // gate: no content/audio until server ACKs setup
-    _playing: [],                   // scheduled output BufferSources (for barge-in flush)
-    _nextPlayAt: 0,
 
     // ── public API ───────────────────────────────────────────────────────
     async start() {
       if (this.state !== "idle") return;
-      // Unlock output audio HERE, synchronously, inside the Live-button gesture.
-      // WebKit/Safari only lets an AudioContext leave the suspended state when
-      // resumed during a user gesture; doing it later (in the WS callback that
-      // receives Gemini's audio) is ignored → silent voice, and reliably silent
-      // on the 2nd session once the original gesture is stale. Must run before
-      // the first `await` below, or the gesture is already spent. See ADR 0110.
-      this._ensureOutputAudio();
-      this.error = null;
       this.transcript = [];
-      this._frameCount = 0;
-      this._usage = { summed: {}, last: null, messages: 0 };
-      this._setupComplete = false;
-      this._endReason = null;
-      this.state = "connecting";
-      try {
-        const config = await this._fetchConfig();
-        this.sessionId = config.session_id;
-        this._setupPayload = config.setup_payload;
-        this._initialTurn = config.initial_context_turn;
-        await this._openMic();
-        this._openWs(config.ws_url);
-      } catch (e) {
-        this.error = String(e);
-        this.state = "idle";
-        await this._teardown();
-      }
+      this.draftText = "";
+      this.sessionId = null;
+      this.state = "starting";
+      const done = await this._answer("/api/live/sessions",
+                                      { clip_id: clipId, frame_b64: this._frame() });
+      if (!done) { this.state = "idle"; return; }
+      this.sessionId = done.session_id;
+      this.state = "active";
     },
 
+    // Ends the chat and closes the dialog; the chat stays in the clip's
+    // Chats tab (the page reloads that list when this resolves).
     async close(reason) {
-      if (this.state === "idle" || this.state === "closing") return;
+      this.confirmEnd = false;
+      if (this.state !== "active") return;
       this.state = "closing";
-      this._endReason = reason || this._endReason || "user_stop";
-      try { if (this._ws && this._ws.readyState === 1) this._ws.close(); } catch {}
-      await this._persistAndSummarize();
-      await this._teardown();
+      const ended = await this._post(`/api/live/sessions/${this.sessionId}/end`,
+                                     { end_reason: reason || "user_stop" });
+      this._post(`/api/live/sessions/${this.sessionId}/summarize`, {});
+      this.transcript = [];
       this.state = "idle";
+      if (ended) {
+        Alpine.store("toast").push("Chat saved. Find it in the Chats tab on the right.",
+                                   { level: "success" });
+      }
     },
 
     init() {
-      // Auto-send frame on player pause while session is active.
-      const v = document.querySelector("video.video");
-      if (v) {
-        v.addEventListener("pause", () => {
-          if (this.state === "active") this.sendFrame();
-        });
-      }
-      // Persist transcript on navigation away mid-session.
+      // End the chat when the page goes away mid-chat. A beacon survives the
+      // unload; the transcript is already saved turn by turn.
       window.addEventListener("beforeunload", () => {
-        if (this.state === "active") {
-          this._endReason = "navigate";
-          this._persistAndSummarize();
-        }
+        if (this.state !== "active") return;
+        const blob = new Blob([JSON.stringify({ end_reason: "navigate" })],
+                              { type: "application/json" });
+        navigator.sendBeacon(`/api/live/sessions/${this.sessionId}/end`, blob);
       });
     },
 
-    sendFrame() {
-      if (this.state !== "active" || !this._ws) return;
-      const b64 = this._captureFrameJpegB64();
-      if (!b64) return;
-      this._ws.send(JSON.stringify({
-        realtimeInput: {
-          video: { mimeType: "image/jpeg", data: b64 },
-        },
-      }));
-      this._frameCount += 1;
-      this._flashFrameSent();
-      this._resetInactivity();
+    canSend() {
+      return this.state === "active" && !this.busy;
     },
 
-    // Pulse the player's camera-flash overlay to confirm the current frame was
-    // captured + sent to Gemini. Re-trigger by removing the class, forcing a
-    // reflow, then re-adding — so rapid successive sends each flash.
+    // A typed question goes with the frame on screen, so "what is this?"
+    // means what the operator is looking at.
+    sendText() {
+      const text = this.draftText.trim();
+      if (!text || !this.canSend()) return;
+      this.draftText = "";
+      this._ask({ kind: "typed", text });
+    },
+
+    sendFrame() {
+      if (!this.canSend()) return;
+      const v = document.querySelector("video.video");
+      const at = window.fmtTimecode(Math.floor(v ? v.currentTime : 0));
+      this._ask({ kind: "frame", text: `Frame at ${at}` });
+    },
+
+    // ── internals ────────────────────────────────────────────────────────
+    // A question whose answer failed isn't saved on the server, so it leaves
+    // the transcript too; a typed one goes back in the box to send again.
+    async _ask({ kind, text }) {
+      const frame = this._frame();
+      this.transcript.push({ role: "user", text, ts: Date.now(), kind });
+      const question = this.transcript[this.transcript.length - 1];
+      const done = await this._answer(`/api/live/sessions/${this.sessionId}/turns`,
+                                      { kind, text, frame_b64: frame });
+      if (done) return;
+      this._drop(question);
+      if (kind === "typed" && !this.draftText) this.draftText = text;
+    },
+
+    // Remove a line if it is still in this chat's transcript (a new chat may
+    // have replaced the list meanwhile).
+    _drop(line) {
+      const i = this.transcript.indexOf(line);
+      if (i >= 0) this.transcript.splice(i, 1);
+    },
+
+    // POST a question and show Gemini's answer as it streams in: a status
+    // line while it thinks, then the text, then the searches it ran. Returns
+    // the server's "done" event, or null (toasted) when there's no answer.
+    async _answer(url, body) {
+      this.transcript.push({ role: "model", text: "", status: "Thinking…", pending: true });
+      const line = this.transcript[this.transcript.length - 1];  // Alpine's reactive copy
+      this.busy = true;
+      try {
+        const done = await this._stream(url, body, (event) => {
+          if (event.type === "thinking") line.status = `Thinking: ${event.text}…`;
+          if (event.type === "text") line.text += event.text;
+        });
+        Object.assign(line, done.reply, { pending: false });
+        return done;
+      } catch (e) {
+        this._drop(line);
+        Alpine.store("toast").push(`Chat: ${e.message || e}`, { level: "error" });
+        return null;
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    // Read the server's NDJSON lines, passing each progress event to
+    // onEvent; resolves with the "done" event, throws on "error".
+    async _stream(url, body, onEvent) {
+      const r = await this._fetch(url, body);
+      const reader = r.body.getReader();
+      const decoder = new TextDecoder();
+      let buffered = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        buffered += decoder.decode(value || new Uint8Array(), { stream: !done });
+        const lines = buffered.split("\n");
+        buffered = done ? "" : lines.pop();
+        for (const raw of lines) {
+          if (!raw.trim()) continue;
+          const event = JSON.parse(raw);
+          if (event.type === "error") throw new Error(event.detail);
+          if (event.type === "done") return event;
+          onEvent(event);
+        }
+        if (done) throw new Error("The answer was cut off. Try asking again.");
+      }
+    },
+
+    // POST JSON; resolves with the ok response, throws the server's reason.
+    async _fetch(url, body) {
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (r.ok) return r;
+      const data = await r.json().catch(() => ({}));
+      throw new Error(data.detail || `The server answered ${r.status}.`);
+    },
+
+    // POST JSON; on failure, toast the server's reason and return null.
+    async _post(url, body) {
+      try {
+        return await (await this._fetch(url, body)).json().catch(() => ({}));
+      } catch (e) {
+        Alpine.store("toast").push(`Chat: ${e.message || e}`, { level: "error" });
+        return null;
+      }
+    },
+
+    // The frame on screen as base64 JPEG (null when the video has no picture
+    // yet), with the player's camera-flash to show it was sent.
+    _frame() {
+      const b64 = this._captureFrameJpegB64();
+      if (b64) this._flashFrameSent();
+      return b64;
+    },
+
+    // Pulse the player's camera-flash overlay. Re-trigger by removing the
+    // class, forcing a reflow, then re-adding, so rapid sends each flash.
     _flashFrameSent() {
       const el = document.querySelector(".frame-flash");
       if (!el) return;
@@ -132,327 +199,6 @@ function liveSession(clipId, config) {
       canvas.getContext("2d").drawImage(v, 0, 0, w, h);
       const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
       return dataUrl.substring(dataUrl.indexOf(",") + 1);
-    },
-
-    // ── helpers (stubs filled in later tasks) ────────────────────────────
-    async _fetchConfig() {
-      const r = await fetch(`/api/live/session-config?clip_id=${clipId}`);
-      if (!r.ok) throw new Error(`session-config HTTP ${r.status}`);
-      return r.json();
-    },
-
-    async _openMic() {
-      this._mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
-        video: false,
-      });
-      this._audioCtxIn = new AudioContext();
-      await this._audioCtxIn.audioWorklet.addModule("/static/audio-worklet-recorder.js");
-      const src = this._audioCtxIn.createMediaStreamSource(this._mediaStream);
-      this._workletNode = new AudioWorkletNode(this._audioCtxIn, "recorder-processor");
-      src.connect(this._workletNode);
-      // Do NOT connect to destination — we don't want to hear ourselves.
-      this._workletNode.port.onmessage = (e) => this._onCaptureChunk(e.data);
-      this._workletNode.port.postMessage({ type: "start" });
-    },
-
-    _onCaptureChunk(arrayBuffer) {
-      // Drop chunks until the WSS is open AND the server has ACKed `setup`.
-      // Streaming realtimeInput before `setupComplete` is the race that made
-      // sessions flaky (Gemini closes with 1007/1008). See docs/decisions.md.
-      if (!this._ws || this._ws.readyState !== 1 || !this._setupComplete) return;
-      // Live API current shape: realtimeInput.audio is a single Blob,
-      // not the deprecated mediaChunks array. Same for .video / .text.
-      const b64 = this._b64FromBuffer(arrayBuffer);
-      this._ws.send(JSON.stringify({
-        realtimeInput: {
-          audio: { mimeType: "audio/pcm;rate=16000", data: b64 },
-        },
-      }));
-      this._resetInactivity();
-    },
-
-    _b64FromBuffer(buf) {
-      const bytes = new Uint8Array(buf);
-      let bin = "";
-      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-      return btoa(bin);
-    },
-
-    _b64ToBytes(b64) {
-      const bin = atob(b64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      return bytes;
-    },
-
-    _openWs(url) {
-      console.log("[live] WSS opening:", url.replace(/(access_token|key)=[^&]+/, "$1=…"));
-      const ws = new WebSocket(url);
-      this._ws = ws;
-      ws.binaryType = "arraybuffer";
-      ws.onopen = () => {
-        // Send ONLY the setup frame and wait. The session does not become
-        // active and no content/audio is sent until the server replies with
-        // `setupComplete` (handled in _onSetupComplete). Sending content here
-        // was the flakiness race. setup_payload is already the pure setup —
-        // the initial turn arrives as its own field (config.initial_context_turn).
-        console.log("[live] WSS open. Sending setup:", JSON.stringify(this._setupPayload, null, 2));
-        ws.send(JSON.stringify({ setup: this._setupPayload }));
-      };
-      ws.onmessage = (evt) => {
-        // Live API actually delivers JSON over BINARY WebSocket frames
-        // (arrayBuffer because we set ws.binaryType="arraybuffer"). Decode
-        // here so the rest of the pipeline sees text.
-        const text = typeof evt.data === "string"
-          ? evt.data
-          : new TextDecoder("utf-8").decode(new Uint8Array(evt.data));
-        console.log("[live] WSS msg:", text.length > 600
-          ? text.slice(0, 600) + "…(+" + (text.length - 600) + " bytes)"
-          : text);
-        this._onWsMessage({ data: text });
-      };
-      ws.onerror = (e) => {
-        console.warn("[live] WSS error event:", e);
-        this._endReason = "error";
-        this.error = "WebSocket error — viz konzole.";
-      };
-      ws.onclose = (e) => {
-        console.warn("[live] WSS close:",
-          "code=" + e.code,
-          "wasClean=" + e.wasClean,
-          "reason=" + JSON.stringify(e.reason || ""));
-        if (!this.error && !e.wasClean) {
-          this.error = `WSS uzavřeno (code=${e.code}${e.reason ? ", " + e.reason : ""})`;
-        }
-        if (this.state === "active") {
-          this.close(this._endReason || "error");
-        } else if (this.state === "connecting") {
-          // Closed while still connecting (before onopen, or after setup but
-          // before setupComplete — e.g. a rejected setup). Leave connecting so
-          // the user sees the error rather than a stuck spinner.
-          this.state = "idle";
-          this._teardown();
-        }
-      };
-    },
-
-    _sendInitialClientContent(initialTurn) {
-      // Append a short Czech greeting cue so the model speaks immediately on
-      // session start — useful for verifying voice output is wired before
-      // the operator says anything. Set turnComplete: true so Gemini
-      // responds right away instead of waiting for more user content.
-      const parts = [...(initialTurn?.parts || [])];
-      const frame = this._captureFrameJpegB64();
-      if (frame) parts.push({ inlineData: { mimeType: "image/jpeg", data: frame } });
-      parts.push({ text:
-        'Pozdrav mě prosím krátce česky („Dobrý den") a v jedné větě popiš, '
-        + 'co vidíš na aktuálním snímku. Pak počkej na moji další otázku.' });
-      const msg = { clientContent: { turns: [{ role: "user", parts }], turnComplete: true } };
-      try { this._ws.send(JSON.stringify(msg)); } catch {}
-      this._frameCount += frame ? 1 : 0;
-      if (frame) this._flashFrameSent(); // conversation start sent the current frame
-    },
-
-    _tickElapsed() {
-      const s = Math.floor((Date.now() - this._startedAt) / 1000);
-      this.elapsedFmt = window.fmtTimecode(s);
-    },
-
-    _onWsMessage(evt) {
-      let msg;
-      try { msg = JSON.parse(evt.data); } catch { return; }
-      if (msg.setupComplete) this._onSetupComplete();
-      if (msg.serverContent) this._handleServerContent(msg.serverContent);
-      if (msg.toolCall) this._handleToolCall(msg.toolCall);
-      if (msg.usageMetadata) this._addUsage(msg.usageMetadata);
-      this._resetInactivity();
-    },
-
-    // Sum the usageMetadata Gemini sends on Live messages so the session's
-    // token spend can be recorded server-side (the audio never passes through
-    // our server). Numeric counts add up; *TokensDetails lists add up per
-    // modality. The last message's own copy is kept too, so the record stays
-    // correct whichever way Gemini meant the counts (per turn or running).
-    _addUsage(u) {
-      const acc = this._usage.summed;
-      for (const [k, v] of Object.entries(u)) {
-        if (typeof v === "number") acc[k] = (acc[k] || 0) + v;
-        else if (Array.isArray(v)) {
-          const byMod = Object.fromEntries((acc[k] || []).map(d => [d.modality, d]));
-          for (const d of v) {
-            const cur = byMod[d.modality] || (byMod[d.modality] = { modality: d.modality, tokenCount: 0 });
-            cur.tokenCount += d.tokenCount || 0;
-          }
-          acc[k] = Object.values(byMod);
-        }
-      }
-      this._usage.last = u;
-      this._usage.messages += 1;
-    },
-
-    _onSetupComplete() {
-      // Server ACKed the setup frame — only NOW is it safe to send content and
-      // let mic audio flow. Guard against duplicate ACKs / late arrival.
-      if (this._setupComplete || this.state !== "connecting") return;
-      this._setupComplete = true;
-      this._sendInitialClientContent(this._initialTurn);
-      this.state = "active";
-      this._startedAt = Date.now();
-      this._elapsedTimer = setInterval(() => this._tickElapsed(), 1000);
-      this._resetInactivity();
-    },
-
-    _handleServerContent(sc) {
-      // Barge-in: when the operator interrupts, Gemini sends interrupted:true
-      // and stops generating. Flush already-queued playback so the model goes
-      // quiet immediately instead of talking over the operator.
-      if (sc.interrupted) this._flushPlayback();
-      // Gemini streams transcription as many tiny deltas. Appending consecutive
-      // same-role speech into ONE bubble (rather than one push per delta) is what
-      // turns "one word per line" into a readable dialog. A turn boundary closes
-      // the open bubble so the next delta starts a fresh one.
-      if (sc.outputTranscription?.text) this._appendSpeech("model", sc.outputTranscription.text);
-      if (sc.inputTranscription?.text) this._appendSpeech("user", sc.inputTranscription.text);
-      if (sc.turnComplete || sc.generationComplete) {
-        const last = this.transcript[this.transcript.length - 1];
-        if (last && last.kind === "speech") last.done = true;
-      }
-      const turns = sc.modelTurn?.parts || [];
-      for (const part of turns) {
-        if (part.inlineData && part.inlineData.mimeType?.startsWith("audio/pcm")) {
-          this._enqueueAudio(part.inlineData.data);
-        }
-      }
-    },
-
-    // Append a transcription delta to the open same-role bubble, or start a new
-    // one. Mutating last.text is reactive (Alpine proxies array elements), so
-    // the on-screen bubble grows in place instead of spawning a line per word.
-    _appendSpeech(role, text) {
-      const last = this.transcript[this.transcript.length - 1];
-      if (last && last.role === role && last.kind === "speech" && !last.done) {
-        last.text += text;
-      } else {
-        this.transcript.push({ role, text, ts: Date.now(), kind: "speech", done: false });
-      }
-    },
-
-    // Create / resume / prime the OUTPUT AudioContext. Called from start()
-    // inside the user gesture (the only context in which WebKit will actually
-    // start it), and defensively from _enqueueAudio. The context is REUSED
-    // across sessions — teardown suspends it, it is never closed — so a 2nd
-    // session inherits an already-unlocked context instead of a fresh suspended
-    // one. Gemini streams 24 kHz PCM, hence the fixed sampleRate.
-    _ensureOutputAudio() {
-      if (!this._audioCtxOut) {
-        this._audioCtxOut = new AudioContext({ sampleRate: 24000 });
-      }
-      if (this._audioCtxOut.state === "suspended") this._audioCtxOut.resume();
-      // Prime with a 1-sample silent buffer so older WebKit unlocks playback.
-      try {
-        const b = this._audioCtxOut.createBuffer(1, 1, 24000);
-        const s = this._audioCtxOut.createBufferSource();
-        s.buffer = b;
-        s.connect(this._audioCtxOut.destination);
-        s.start(0);
-      } catch {}
-      return this._audioCtxOut;
-    },
-
-    _enqueueAudio(b64) {
-      // Defensive: start() already unlocked this within the gesture; resume
-      // again in case the context auto-suspended between sessions.
-      if (!this._audioCtxOut || this._audioCtxOut.state !== "running") {
-        this._ensureOutputAudio();
-      }
-      const bytes = this._b64ToBytes(b64);
-      const view = new DataView(bytes.buffer);
-      const sampleCount = bytes.length / 2;
-      const buf = this._audioCtxOut.createBuffer(1, sampleCount, 24000);
-      const channel = buf.getChannelData(0);
-      for (let i = 0; i < sampleCount; i++) {
-        channel[i] = view.getInt16(i * 2, true) / 0x8000;
-      }
-      const node = this._audioCtxOut.createBufferSource();
-      node.buffer = buf;
-      node.connect(this._audioCtxOut.destination);
-      const startAt = Math.max(this._audioCtxOut.currentTime, this._nextPlayAt);
-      node.start(startAt);
-      this._nextPlayAt = startAt + buf.duration;
-      this._playing.push(node);
-      node.onended = () => {
-        const i = this._playing.indexOf(node);
-        if (i >= 0) this._playing.splice(i, 1);
-      };
-    },
-
-    _flushPlayback() {
-      for (const node of this._playing) { try { node.stop(); } catch {} }
-      this._playing = [];
-      this._nextPlayAt = 0;
-    },
-
-    _handleToolCall(tc) {
-      const calls = tc.functionCalls || [];
-      for (const c of calls) {
-        if (c.name === "end_session") {
-          this.transcript.push({ role: "system", text: `Konec: ${c.args?.reason || ""}`, ts: Date.now(), kind: "function_call" });
-          this.close("voice_stop");
-        }
-      }
-    },
-    _resetInactivity() {
-      clearTimeout(this._inactivityTimer);
-      const ms = (this.inactivityS || 60) * 1000;
-      this._inactivityTimer = setTimeout(() => {
-        if (this.state === "active") this.close("inactivity");
-      }, ms);
-    },
-
-    async _persistAndSummarize() {
-      if (!this.sessionId) return;
-      const body = {
-        end_reason: this._endReason || "user_stop",
-        transcript: this.transcript,
-        frame_count: this._frameCount,
-        usage: this._usage.messages ? this._usage : null,
-      };
-      try {
-        const blob = new Blob([JSON.stringify(body)], { type: "application/json" });
-        if (navigator.sendBeacon) {
-          navigator.sendBeacon(`/api/live/sessions/${this.sessionId}/transcript`, blob);
-        } else {
-          await fetch(`/api/live/sessions/${this.sessionId}/transcript`,
-                      { method: "POST", body: blob });
-        }
-        fetch(`/api/live/sessions/${this.sessionId}/summarize`,
-              { method: "POST" }).catch(err => {
-          Alpine.store('toast').push(
-            `Session summary failed: ${err.message || String(err)}`,
-            { level: 'error' },
-          );
-        });
-      } catch {}
-    },
-
-    async _teardown() {
-      this._flushPlayback();
-      try { this._workletNode?.disconnect(); } catch {}
-      try { if (this._mediaStream) this._mediaStream.getTracks().forEach(t => t.stop()); } catch {}
-      try { await this._audioCtxIn?.close(); } catch {}
-      // Do NOT close the output context — a closed AudioContext can never be
-      // reused, and re-creating one in the next session's WS callback is exactly
-      // what left Safari silent. Suspend it (frees the audio device) and keep
-      // the reference so the next start() can resume the already-unlocked one.
-      try { await this._audioCtxOut?.suspend(); } catch {}
-      this._workletNode = null;
-      this._mediaStream = null;
-      this._audioCtxIn = null;
-      this._ws = null;
-      this._setupComplete = false;
-      clearInterval(this._elapsedTimer);
-      clearTimeout(this._inactivityTimer);
     },
   };
 }

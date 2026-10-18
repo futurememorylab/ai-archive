@@ -92,10 +92,10 @@ four others, the missing definition probably belongs here.
 - **Review Item** — one proposed marker / field / note edit, awaiting
   user accept/reject; once accepted and "applied," it becomes one
   or more `ChangeOp`s on the write queue.
-- **Live Session** — a single browser-direct Gemini Live conversation
-  about one clip; audio bytes go straight from the browser to
-  Google over WSS (no backend bridge), and we persist a row in
-  `live_sessions` plus a transcript JSON when the session ends.
+- **Live Session** — one text chat with Gemini about one clip ("Chat
+  with Gemini"). The server answers each turn on Vertex and saves the
+  transcript turn by turn in `live_sessions`. The name is left over from
+  the retired voice mode (ADR 0130).
 
 ## Caches, evictions, and prefetch
 

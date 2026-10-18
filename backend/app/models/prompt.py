@@ -12,10 +12,13 @@ from pydantic import BaseModel, ConfigDict, RootModel, model_validator
 PromptVersionState = Literal["draft", "production", "archived"]
 PROMPT_VERSION_STATES: tuple[str, ...] = get_args(PromptVersionState)
 
-# The Gemini Live system instruction is stored as a Prompt so it can be edited
+# The clip chat's system instruction is stored as a Prompt so it can be edited
 # on the Prompts page, but it is a chat system prompt, not an annotation
-# prompt: the annotation pickers must never offer it.
+# prompt: the annotation pickers must never offer it. The Live-era voice
+# prompt stays in older databases, unused and hidden the same way (ADR 0130).
+CHAT_SYSTEM_PROMPT_NAME = "chat.system_instruction.cs"
 LIVE_SYSTEM_PROMPT_NAME = "live.system_instruction.cs"
+SYSTEM_PROMPT_NAMES = (CHAT_SYSTEM_PROMPT_NAME, LIVE_SYSTEM_PROMPT_NAME)
 
 
 class TargetEntry(BaseModel):

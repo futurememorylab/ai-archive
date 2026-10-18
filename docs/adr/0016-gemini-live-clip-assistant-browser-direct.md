@@ -1,7 +1,7 @@
 # 0016. Gemini Live clip assistant: browser-direct + Developer API
 
 - **Date:** 2026-05-23
-- **Status:** Accepted
+- **Status:** Accepted — Superseded by [0130](./0130-clip-chat-on-vertex-replaces-live.md)
 - **Lifespan:** Invariant
 
 ## Context

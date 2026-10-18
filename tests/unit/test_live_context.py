@@ -91,7 +91,7 @@ def test_omits_empty_published_block():
     assert _published_block_present(out)
     assert "Poznámky:" not in out
     assert "Markery" not in out
-    assert "Vlastní pole" not in out
+    assert "Pole klipu" not in out
     assert _draft_block_present(out)
 
 
@@ -148,3 +148,34 @@ def test_pragafilm_fields_only_listed_when_value_non_empty():
     assert "pragafilm.barva" not in out
     assert "pragafilm.rok.natočení" not in out
     assert "pragafilm.popis.materialu" not in out
+
+
+def test_every_field_is_listed_under_its_archive_name():
+    """All published fields go to Gemini, not only pragafilm.*, labelled with
+    the name the archive shows (identifier kept for disambiguation)."""
+    clip = _make_clip(
+        fields={"pragafilm.dekáda.natočení": "20.léta", "catdv.tape": "Kazeta 7"},
+        field_names={"pragafilm.dekáda.natočení": "Dekáda natočení"},
+    )
+    out = build_context_text(clip, {"markers": [], "fields": {}, "notes": ""})
+    assert "- Dekáda natočení (pragafilm.dekáda.natočení): 20.léta" in out
+    assert "- catdv.tape: Kazeta 7" in out
+
+
+def test_archive_details_and_marker_category_are_sent():
+    clip = _make_clip(
+        archive_info={"Formát": "video/quicktime · H.264 · 720×576", "modifyDate": "2026-05-18"},
+        markers=[
+            dict(
+                in_smpte="00:00:00:00",
+                out_smpte="00:00:10:00",
+                name="Otevírací záběr",
+                description="auto u domu",
+                category="Lidé",
+            )
+        ],
+    )
+    out = build_context_text(clip, {"markers": [], "fields": {}, "notes": ""})
+    assert "- Formát: video/quicktime · H.264 · 720×576" in out
+    assert "- modifyDate: 2026-05-18" in out
+    assert "[Lidé]" in out

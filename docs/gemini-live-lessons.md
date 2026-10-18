@@ -1,5 +1,10 @@
 # Gemini Live Integration — Lessons Learned
 
+> **Retired 2026-10-18.** Live (voice) was replaced by a text chat about
+> the clip on Vertex AI ([ADR 0130](./adr/0130-clip-chat-on-vertex-replaces-live.md)).
+> This page is kept as history in case voice comes back. The code it
+> describes is gone.
+
 What we wish we'd known on day one of wiring the Czech voice assistant
 into the clip-detail page. Each item below is grounded in an actual
 error message we hit; the commit hash next to it is the fix.
@@ -189,6 +194,20 @@ investigation pattern is:
 
 The Live API's error messages are good. Trust the close reason; don't
 re-derive from the docs.
+
+---
+
+## 11. October 2026: Live retired (ADR 0130)
+
+We first revived Live on the current v1beta API (`gemini-3.8-live`,
+context compression, session resumption). It then failed with close 1011
+"prepayment credits are depleted": AI Studio's Gemini API is going
+prepaid-only, while Vertex bills postpaid with annotation. Vertex has no
+ephemeral browser tokens, so Live there would need a server relay. We
+dropped voice and moved to a text chat on Vertex instead. See
+[ADR 0130](./adr/0130-clip-chat-on-vertex-replaces-live.md) and
+`docs/specs/2026-10-18-clip-chat-on-vertex-design.md`. If voice comes
+back, start from Google's current Live docs, not from this page.
 
 ---
 

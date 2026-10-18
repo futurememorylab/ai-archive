@@ -10,6 +10,7 @@ IAP/OAuth specifics" boundary is enforced by ``test_auth_seam_boundary.py``.
 """
 
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from starlette.requests import Request
@@ -19,7 +20,7 @@ from backend.app.settings import Settings
 
 
 def _settings(**over) -> Settings:
-    base = dict(
+    base: dict[str, Any] = dict(
         catdv_base_url="http://localhost:0",
         catdv_catalog_id=881507,
         gcp_project_id="p",

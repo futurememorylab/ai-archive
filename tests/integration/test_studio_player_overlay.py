@@ -117,8 +117,8 @@ def test_player_one_row_with_version(client):
     # One ranges row in the overlay (cur only), with two range divs.
     assert r.text.count('class="ranges range-cur"') == 1
     assert r.text.count('class="range"') >= 2
-    # Legend names the version.
-    assert "legend-range-cur" in r.text
+    # No scene-count legend under the timeline (removed for a consistent design).
+    assert "timeline-legend" not in r.text
 
 
 def _two_versions(client):
@@ -188,9 +188,6 @@ def test_player_two_rows_with_compare_id(client):
     # Two ranges rows.
     assert 'class="ranges range-cur"' in r.text
     assert 'class="ranges range-cmp"' in r.text
-    # Legend names both versions (both have non-empty scenes).
-    assert "legend-range-cur" in r.text
-    assert "legend-range-cmp" in r.text
 
 
 def test_player_two_rows_with_empty_cmp(client):
@@ -210,5 +207,3 @@ def test_player_two_rows_with_empty_cmp(client):
     assert 'class="ranges range-cur"' in r.text
     # range-cmp row container is still emitted (empty ranges list).
     assert 'class="ranges range-cmp"' in r.text
-    # Legend should NOT include the empty row (selectattr filter in template).
-    assert "legend-range-cmp" not in r.text

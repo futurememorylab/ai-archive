@@ -30,12 +30,12 @@ async def seed_default_prompt(conn: aiosqlite.Connection, *, seed_path: Path) ->
     )
 
 
-async def seed_live_system_instruction(
+async def seed_system_instruction(
     conn: aiosqlite.Connection,
     *,
     seed_path: Path,
 ) -> None:
-    """Insert the Czech Live system-instruction prompt + v1@production if missing."""
+    """Insert the Czech chat system-instruction prompt + v1@production if missing."""
     data = json.loads(seed_path.read_text())  # noqa: ASYNC240
     cur = await conn.execute("SELECT 1 FROM prompts WHERE name = ?", (data["name"],))
     if await cur.fetchone():

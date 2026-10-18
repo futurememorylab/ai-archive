@@ -164,26 +164,13 @@ automatically**. The header chip turns yellow and offers a manual
 reconnect. See
 [ADR 0015](../adr/0015-offline-fallback-auto-degrade-manual-reconnect.md).
 
-## Optional: Gemini Live clip assistant
+## Chat with AI about a clip
 
-A voice-driven Czech assistant on the clip-detail page. Browser opens a
-WebSocket straight to Google Live; audio bytes never traverse our
-process.
-
-```bash
-# One-shot setup — mints the Gemini Developer API key
-GCP_PROJECT_ID=<your-project> ./deploy/enable-gemini-live.sh
-
-# The script prints the key — paste it into .env
-echo 'GEMINI_API_KEY=<printed-key>' >> .env
-
-# Restart
-./run.sh
-```
-
-The `🎤 Live` button only appears on clips with `duration_secs > 0` and
-only when the app is in **`online`** mode. With `GEMINI_API_KEY`
-unset, the feature stays silent.
+On a clip whose video is ready, ⋯ → **Chat with AI** opens a text chat
+under the video. It runs on Vertex with the same service account as
+annotation, so there is no extra setup and no API key. The model
+(`GEMINI_CHAT_MODEL`, default `gemini-3.8-flash`) must be served in your
+`GCP_LOCATION`; use `GCP_LOCATION=global`.
 
 ## Tests
 
@@ -237,7 +224,7 @@ you'll touch most:
 | `MEDIA_CACHE_CAP_GB=50` | LRU eviction threshold for unpinned clips. |
 | `GCP_PROJECT_ID` / `GCS_BUCKET_NAME` / `GOOGLE_APPLICATION_CREDENTIALS` | Vertex + GCS plumbing. |
 | `GEMINI_MODEL` | Default `gemini-3.5-flash-lite`. |
-| `GEMINI_API_KEY` | Live assistant only — leave blank to disable. |
+| `GEMINI_CHAT_MODEL` | Clip chat model. Default `gemini-3.8-flash`; needs `GCP_LOCATION=global`. |
 | `APP_ENV` | `dev` or `prod`; in `dev` the external clients are bypassed when their creds are blank. |
 | `DEV_RELOAD=1` | Pass through to uvicorn's `--reload`. |
 

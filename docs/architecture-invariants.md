@@ -317,17 +317,18 @@ proxies) rather than a lazy ephemeral fetch.
 
 ## AI integration
 
-**25. Gemini Live is browser-direct with server-minted ephemeral tokens.**
-Audio bytes go straight from the browser to Google over WSS (no backend
-bridge). The browser never sees the raw `GEMINI_API_KEY`; the server mints
-a short-lived, single-use, config-bound ephemeral token
-(`v1alpha auth_tokens`) and the browser presents it via `?access_token=`.
-System prompt + tool declarations are bound into the token, withheld from
-the browser. Wait for the server's `setupComplete` before sending content
-(else the socket races closed); unlock the output `AudioContext`
-synchronously inside the user gesture and reuse one long-lived context.
-*Enforced by:* convention; `docs/gemini-live-lessons.md`.
-*ADRs:* 0016, 0018, 0109, 0110, 0112.
+**25. Clip chat goes through the server to Vertex.** The browser holds no
+Google credentials: no API key, no token. It sends each turn to the app,
+and the server answers it through `GeminiService.chat_stream` on Vertex,
+with the same service account and bill as annotation, streaming the answer
+back as NDJSON lines (thinking, text, then done or error). The stream ends
+with the answer and has a hard timeout, so it can't idle like the job
+event streams. The server stores the
+transcript turn by turn (`live_sessions.transcript_json`) and rebuilds the
+conversation from it; the system instruction and clip context are rebuilt
+on every turn. Each turn's tokens and cost go to `run_telemetry`.
+*Enforced by:* convention.
+*ADRs:* 0130.
 
 **26. Run telemetry is local-first.** Usage/cost is captured locally first
 with a deferred cloud pipeline; cost surfaces use total-spend semantics

@@ -23,7 +23,7 @@ ai-archive/
 │   ├── DEPLOY.md          ← production deployment
 │   └── decisions.md       ← ADR index
 ├── deploy/                ← Cloud Run deploy (README, Dockerfile bits, env,
-│                            entrypoint, Litestream) + Gemini Live key script
+│                            entrypoint, Litestream)
 ├── run.sh                 ← venv + uvicorn launcher
 ├── pyproject.toml         ← deps, ruff, pytest, basedpyright, interrogate
 ├── .importlinter          ← layer contracts
@@ -41,7 +41,7 @@ backend/app/
 ├── deps.py                ← FastAPI dependencies (get_ctx, etc.)
 ├── db.py                  ← aiosqlite open + pragmas
 ├── migrations_runner.py   ← apply_migrations() called from AppContext.build()
-├── seed.py                ← seed_default_prompt, seed_live_system_instruction
+├── seed.py                ← seed_default_prompt, seed_system_instruction
 ├── startup.py             ← run_startup_cleanup (stale-pending reaper, etc.)
 ├── secrets.py             ← Secret Manager wrapper (prod)
 ├── logging_setup.py       ← python-json-logger config
@@ -100,7 +100,7 @@ backend/app/
 │   ├── clip_list_filters.py
 │   ├── draft_view.py
 │   ├── target_map.py            ← prompt output → marker/field/note routing
-│   ├── live_sessions.py         ← Gemini Live session bookkeeping
+│   ├── live_sessions.py         ← clip chat: turns, transcript, summary
 │   ├── live_context.py
 │   └── events.py                ← in-process EventBus for SSE
 │
@@ -110,7 +110,7 @@ backend/app/
 │   ├── connection.py
 │   ├── events.py                ← SSE
 │   ├── jobs.py
-│   ├── live.py                  ← Gemini Live: ephemeral token mint + session log
+│   ├── live.py                  ← clip chat: start, turns, end, history
 │   ├── media.py
 │   ├── prompts.py
 │   ├── review.py
@@ -133,7 +133,7 @@ Copied here for convenience from
 |---|---|
 | Marker save returns 502 | `routes/catdv.py`, `services/write_queue.py`, `services/sync_engine.py` |
 | Proxy 404 / "unavailable" | `services/proxy_resolver.py`, `repositories/proxy_cache.py` |
-| Live session never starts | `routes/live.py` (browser opens WSS direct to Google — there is no backend bridge) |
+| Clip chat never answers | `routes/live.py`, `services/live_sessions.py`, `GeminiService.chat` (Vertex; check `GEMINI_CHAT_MODEL` / `GCP_LOCATION`) |
 | Sync stuck in `in_flight` | `repositories/pending_operations.py` + the crash-recovery branch in `context.build()` |
 | Connection pill stays red | `services/connection_monitor.py`, `routes/connection.py` |
 | Workspace prep stalls on a clip | `services/workspace_manager.py`, `services/proxy_resolver.py` |
@@ -175,7 +175,7 @@ In order, with target durations:
    - [`../fs-archive-format.md`](../fs-archive-format.md) only if
      you'll work on the FS provider.
    - [`../gemini-live-lessons.md`](../gemini-live-lessons.md) only if
-     you'll work on the Live assistant.
+     voice comes back (Live was retired for the clip chat, ADR 0130).
 
 ## When you ship your first change
 

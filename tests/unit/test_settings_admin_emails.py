@@ -2,6 +2,8 @@
 (lowercased, trimmed, de-duped) — the deploy-time root of trust for the first
 admins (spec 2026-06-14-iap-roles-admin-console-design.md)."""
 
+from typing import Any
+
 import pytest
 from pydantic import ValidationError
 
@@ -9,7 +11,7 @@ from backend.app.settings import Settings
 
 
 def _settings(**over) -> Settings:
-    base = dict(
+    base: dict[str, Any] = dict(
         catdv_base_url="http://localhost:0",
         catdv_catalog_id=881507,
         gcp_project_id="p",
