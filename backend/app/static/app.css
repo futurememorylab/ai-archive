@@ -2290,7 +2290,6 @@ body.studio-resizing {
 .timeline .range.range-st-changed   { border-color: var(--changed); }
 .timeline .range.range-st-added     { border-color: var(--good); }
 .timeline .range.range-st-removed   { border-color: var(--bad); }
-.timeline-legend { display: flex; gap: 12px; padding: 4px 8px; font-size: 11px; }
 /* Studio compare timeline (two tracks present): give both rows an identical,
    taller band so the scene-name labels fit without overflowing. Scoped via
    :has(.range-cmp) so the single-version studio timeline and clip_detail's
@@ -2330,8 +2329,6 @@ body.studio-resizing {
   border-radius: 6px; padding: 10px; }
 .sct-notes { white-space: pre-wrap; padding: 10px; border: 1px solid var(--surface-2);
   border-radius: 8px; }
-.legend-range-cur { color: var(--info); }
-.legend-range-cmp { color: var(--accent); }
 
 /* === Studio: focus-visible outlines ================================= */
 .pc-vchip .btn:focus-visible,

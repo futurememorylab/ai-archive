@@ -17,9 +17,6 @@
                         - alpine_list (optional): Alpine expression for active-highlighting
                                                   (e.g. "markers"); when None, no highlight
      duration_smpte   — pre-formatted SMPTE string for the far-right tc label
-     show_legend      — optional bool; when truthy, renders a legend strip
-                        below the timeline. Default False. clip_detail
-                        leaves it unset; studio passes True.
 #}
 {% if duration_secs %}
 <div class="timeline" @click="seekFromEvent($event)">
@@ -98,13 +95,4 @@
     <span x-text="quintileTc(4)">{{ duration_smpte or '' }}</span>
   </div>
 </div>
-{% if show_legend is defined and show_legend and rows|selectattr('ranges')|list %}
-<div class="timeline-legend mono-cell muted">
-  {% for row in rows %}
-    {% if row.ranges %}
-      <span class="legend-{{ row.cls }}">● {{ row.key }} · {{ row.ranges|length }} scenes</span>
-    {% endif %}
-  {% endfor %}
-</div>
-{% endif %}
 {% endif %}
