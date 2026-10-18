@@ -82,6 +82,8 @@ def _type_question(p) -> None:
     # While Gemini thinks, its answer bubble says what it is thinking about.
     expect(dialog.locator(".chat-status").last).to_have_text(f"Thinking: {CHAT_THINKING}…")
     expect(dialog.locator(".chat-model").last).to_contain_text(CHAT_ANSWER)
+    # The bubble shows just the answer: no blank lines or indent around it.
+    assert dialog.locator(".chat-model .chat-bubble").last.inner_text() == CHAT_ANSWER
     sources = dialog.locator(".chat-sources").last
     expect(sources).to_contain_text(f"Searched: {CHAT_SEARCH}")
     expect(sources.get_by_role("link", name=CHAT_SOURCE_TITLE)).to_be_visible()

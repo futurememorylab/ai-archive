@@ -1,11 +1,10 @@
 {#- One chat message, inside an x-for over `line`: the bubble (a status line
     while Gemini is still thinking) and, under an answer, the web searches it
-    ran and the pages it used. Shared by the chat dialog and the Chats tab. -#}
+    ran and the pages it used. Shared by the chat dialog and the Chats tab.
+    The bubble keeps its children on one line: it is white-space: pre-wrap,
+    so any newline or indent between them would show as empty space. -#}
 <div class="chat-msg" :class="'chat-' + line.role">
-  <span class="chat-bubble">
-    <span class="chat-status" x-show="line.pending && !line.text" x-text="line.status"></span>
-    <span x-text="line.text"></span>
-  </span>
+  <span class="chat-bubble"><span class="chat-status" x-show="line.pending && !line.text" x-text="line.status"></span><span x-text="line.text"></span></span>
 </div>
 <div class="chat-sources" x-show="line.searches?.length || line.sources?.length">
   <span x-show="line.searches?.length">Searched: <span x-text="(line.searches || []).join(' · ')"></span></span>

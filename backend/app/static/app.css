@@ -1357,9 +1357,6 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 .pill.origin-human { color: var(--text-3);
   border-color: color-mix(in oklab, var(--text-3) 35%, transparent); }
 .pill.origin-human .led { background: var(--text-3); }
-.provenance-legend .legend-human { color: var(--text-3); }
-.provenance-legend .legend-ai { color: var(--accent); }
-.provenance-legend .legend-draft { color: var(--info); }
 /* Suggestion rows (shared fields the app never writes): a soft note under the
    value, visually quieter than a real review row. */
 .ri-suggestion .ri-suggestion-note { font-size: 10.5px; margin: 2px 0 0; }

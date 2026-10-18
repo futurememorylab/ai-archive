@@ -45,8 +45,8 @@ def _open_clip(p) -> None:
     # The play button is server-rendered, so it is visible before Alpine has
     # bound its @click. Under a loaded parallel run the click landed on a
     # dead button, no media request went out and the error wait timed out.
-    # The legend is x-cloak'd until Alpine initialises the page scope.
-    expect(p.locator(".provenance-legend")).to_be_visible()
+    # The tab panels are x-cloak'd until Alpine initialises the page scope.
+    expect(p.locator(".anno-section[role='tabpanel']").first).to_be_visible()
 
 
 def _play_fails(p) -> None:

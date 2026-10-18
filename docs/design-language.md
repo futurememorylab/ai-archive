@@ -205,8 +205,9 @@ below for the chip, and the matching token for the timeline band:
 | **AI · suggestion** | `status_pill('AI · suggestion', 'info')` | `--info` (blue) | A shared field the app never writes — offered with a Copy button, no keep checkbox. |
 
 The published timeline band splits by origin: human bands add
-`.range.origin-human` (grey); AI bands keep the row's orange. The legend reads
-`● Human N · ● AI in archive N · ● AI draft N`. See ADR 0127.
+`.range.origin-human` (grey); AI bands keep the row's orange. There is no
+count legend under the player (removed 2026-10-18: it took space and told
+users nothing the bands don't). See ADR 0127.
 
 ### Prompt state chip
 

@@ -119,13 +119,6 @@
       %}
       {% include "pages/_player.html" %}
     {% endwith %}
-    {# Provenance legend (#123): counts the three timeline bands live from the
-       Alpine scope so it tracks publishes/edits without a reload. #}
-    <div class="timeline-legend provenance-legend mono-cell muted" x-cloak>
-      <span class="legend-human">● Human <span x-text="markers.filter(m => m.origin === 'human').length">0</span></span>
-      <span class="legend-ai">● AI in archive <span x-text="markers.filter(m => m.origin === 'ai').length">0</span></span>
-      <span class="legend-draft" x-show="scope === 'draft'">● AI draft <span x-text="draftMarkers.length">0</span></span>
-    </div>
     {% include "pages/_live_dialog.html" %}
   </section>
 
