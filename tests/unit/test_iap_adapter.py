@@ -10,6 +10,8 @@ here — the *live* audience string is confirmed against the deployed token, not
 asserted in a unit test.
 """
 
+from typing import Any
+
 import pytest
 from starlette.requests import Request
 
@@ -23,7 +25,7 @@ _AUD = "/projects/204842536530/locations/europe-west3/services/catdv-annotator"
 
 
 def _settings(**over) -> Settings:
-    base = dict(
+    base: dict[str, Any] = dict(
         catdv_base_url="http://localhost:0",
         catdv_catalog_id=881507,
         gcp_project_id="p",
