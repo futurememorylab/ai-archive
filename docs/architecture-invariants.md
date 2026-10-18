@@ -361,5 +361,8 @@ define the quality gates (baselines, the erosion and frontend size gates,
 improves a measured value lowers its baseline in the same PR; raising a
 baseline or threshold is a reviewed human decision, never part of a
 feature PR.
-*Enforced by:* `.github/CODEOWNERS` + Code Owner review on `main`.
+*Enforced by:* `.claude/hooks/protect_gate_files.py`, which blocks agent
+edits to every path in `.github/CODEOWNERS` until Peter OKs them. Code
+Owner review on `main` is off: agent PRs are opened under Peter's account,
+and GitHub doesn't let an author approve their own PR.
 *ADRs:* 0129.

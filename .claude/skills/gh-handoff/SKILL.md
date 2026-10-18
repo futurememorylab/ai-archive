@@ -79,8 +79,8 @@ diagnostic dispatch before switching — don't assume the doc string alone.
    }
    ```
    Prompt (`events[0].data.message.content`). Keep the live routine in sync
-   with this text; as of 2026-10-17 the live copy matches it except the
-   `/simplify` step in 5), which Peter adds by hand (agents can't edit it):
+   with this text; as of 2026-10-18 the live copy matches it. Agents can't
+   edit the live routine, so Peter applies any change by hand:
    > You are implementing a pre-written plan. Read the run context `text`
    > field (e.g. `issue=#<N> branch=<branch>`) for the issue number and
    > intended branch.
@@ -100,8 +100,9 @@ diagnostic dispatch before switching — don't assume the doc string alone.
    > After EACH task: commit (tests green first), push (explicit
    > refspec: `git push origin HEAD:<branch>`), then tick that task's box in
    > the PR body. Push after every task, not at the end.
-   > 5) When all tasks pass, run `/simplify` on the whole diff against
-   > main, commit and push its fixes, then run the plan's full-suite gate,
+   > 5) When all tasks pass, run /code-review and /security-review on the
+   > whole diff against main and fix what they find, then run /simplify,
+   > commit and push its fixes, then run the plan's full-suite gate,
    > paste the result into the PR body, and mark the PR "Ready for review".
    > 6) Comment the PR URL on issue #<N>, stating the actual head branch
    > and "N/N tasks green — ready for Test".

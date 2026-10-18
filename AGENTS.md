@@ -100,9 +100,12 @@ comes back. When one fails, read its docstring; it explains the rule.
 - Run the slice you're touching while iterating; run `-n auto` once
   before committing.
 - When the work is done, before opening the PR (or marking it ready),
-  run `/simplify` on the whole diff and apply its fixes, then re-run the
-  tests. `/code-review` catches bugs; `/simplify` catches reuse and
-  cleanup.
+  run `/code-review` and `/security-review` on the whole diff and fix
+  what they find, then `/simplify` and apply its fixes, then re-run the
+  tests. This holds for every change, including a small fix made
+  directly in a session, not only `implement-issue` runs.
+- Fill in the PR template. Every PR gets an independent Claude review;
+  fix or answer each finding (merging needs every conversation resolved).
 - UI changes (a page template, an Alpine component, a page route, a user
   flow) update the matching Playwright walkthrough in `tests/walkthrough/`
   in the same PR and pass `/e2e` in assert mode. Walkthroughs run offline

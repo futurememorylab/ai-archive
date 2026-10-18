@@ -7,8 +7,10 @@ unreviewed code and lost design intent. The agent-facing rules are in
 
 ## Lifecycle at a glance
 
-A CI failure or a review change request loops back into the build loop; a
-clean pass squash-merges to `main` and the branch is deleted.
+A CI failure or a review finding loops back into the build loop; a clean
+pass squash-merges to `main` and the branch is deleted. The same loop applies
+to every change, whether it comes from the `implement-issue` routine or a
+small fix made directly in a Claude Code session.
 
 ```mermaid
 flowchart LR
@@ -17,9 +19,11 @@ flowchart LR
     L --> P["Push, open PR"]
     P --> CI{"CI green?"}
     CI -- no --> L
-    CI -- yes --> R{"Human<br/>approval?"}
+    CI -- yes --> CR{"Claude review:<br/>findings resolved?"}
+    CR -- no --> L
+    CR -- yes --> R{"Peter<br/>merges?"}
     R -- changes --> L
-    R -- approved --> S["Squash-merge<br/>to main"]
+    R -- yes --> S["Squash-merge<br/>to main"]
     S --> X["Delete branch"]
 ```
 
@@ -34,9 +38,11 @@ flowchart LR
   disguise — it defers all integration to one merge and re-creates big-bang
   integration. Don't.
 - `main` is protected by a ruleset: no direct pushes, merge only via PR with
-  green `lint` and `test` checks and at least one human approval. Files that
-  define the quality gates are listed in `.github/CODEOWNERS` and need Peter's
-  review (ADR 0129).
+  green `lint` and `test` checks and every review conversation resolved.
+  Files that define the quality gates are listed in `.github/CODEOWNERS`;
+  agent hooks block edits to them unless Peter asks (ADR 0129). "Require
+  review from Code Owners" is off: agent PRs are opened under Peter's GitHub
+  account and GitHub doesn't let an author approve their own PR.
 - Branch naming: `<issue>-<short-desc>` for board issues (what `gh-design`
   creates), `chore/<short-desc>` otherwise. Agent sessions may use their own
   `claude/...` branch names.
@@ -62,12 +68,14 @@ flowchart LR
 2. **Build test-first.** A failing test, then the change. Granular commits
    are fine; they get squashed at merge.
 3. **Review your own diff.** When the work is done, run `/code-review`
-   (bugs) and `/simplify` (reuse and cleanup) on the whole diff and apply
-   the fixes before asking a human. This is hygiene, not a
-   substitute for human review.
+   (bugs) and `/security-review` on the whole diff and fix what they find,
+   then `/simplify` (reuse and cleanup) and apply its fixes. Small changes
+   made on the fly in a session get the same steps. This is hygiene, not a
+   substitute for the independent review on the PR.
 4. **Run the gates locally.** `pre-commit run --all-files` and
    `pytest -n auto`; CI runs the same checks.
-5. **Push and open the PR.**
+5. **Push and open the PR**, filling in the PR template. Then fix or
+   answer every finding the Claude review posts.
 
 Parallel work in isolated worktrees is fine and invisible to the rest of
 the team; one worktree maps to one branch.
@@ -180,8 +188,10 @@ develop on trunk.
   against stated intent. Review the intent, not just the lines.
 - AI self-review covers mechanical issues — dead code, missed edge cases, test
   gaps. Humans own architecture, security, and "is this the right thing".
-- One human approval minimum. Do not rubber-stamp: when AI multiplies output,
-  human review becomes the real bottleneck.
+- Peter decides whether the change is the right thing and reads the
+  evidence (CI, the review summary, the PR template); he doesn't need to
+  read the code. If he can't tell what the checks would miss, he asks for
+  an explainer instead of merging.
 - If parallel worktrees flood the review queue, apply a WIP limit on open PRs
   per author.
 
@@ -211,14 +221,15 @@ its model.
 - [ ] Branch cut from the current `main`
 - [ ] Scoped to one issue or one slice of its plan
 - [ ] Tests written and passing locally
-- [ ] `/code-review` and `/simplify` run on the diff
+- [ ] `/code-review`, `/security-review` and `/simplify` run on the diff
 - [ ] Walkthrough scenario updated if the UI changed
 - [ ] Rebased onto the latest `origin/main`
 
 **Before merging**
 
 - [ ] Green CI
-- [ ] One human approval
+- [ ] Every Claude review finding fixed or answered (conversations resolved)
+- [ ] Peter merges (High risk: after reading the explainer)
 - [ ] Plan checkboxes ticked (or the plan deleted)
 - [ ] Feature flag in place if the work is not yet user-ready
 
