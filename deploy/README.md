@@ -59,6 +59,10 @@ gcloud artifacts repositories create $REPO --repository-format=docker \
 # 3. Buckets
 gsutil mb -p $PROJECT_ID -l $REGION gs://catdv-proxies        # AI-store media cache
 gsutil mb -p $PROJECT_ID -l $REGION gs://catdv-annotator-db   # Litestream replica
+# The player loads media from signed URLs with crossorigin="anonymous", so the
+# chat can read video frames; without this the videos don't play. Add every
+# new app URL (another service, a custom domain) to the file first.
+gcloud storage buckets update gs://catdv-proxies --cors-file=deploy/gcs-cors.json
 
 # 4. Runtime service account + roles
 gcloud iam service-accounts create catdv-annotator --project=$PROJECT_ID

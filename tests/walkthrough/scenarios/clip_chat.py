@@ -30,7 +30,8 @@ DESCRIPTION = (
     "An operator starts a chat from the ⋯ menu. Gemini greets and describes "
     "the frame, then answers a typed question (showing what it is thinking "
     "and what it searched). Send frame says when the video has no picture "
-    "yet. Send frame and End chat sit next to the text box; End chat asks first, then closes "
+    "yet, or when the browser won't let it read the picture. Send frame and "
+    "End chat sit next to the text box; End chat asks first, then closes "
     "the dialog, and the chat is listed in the Chats tab."
 )
 
@@ -119,6 +120,38 @@ def _send_frame_needs_a_picture(p) -> None:
     expect(dialog.locator("[data-test='live-send-frame']")).to_be_enabled()
 
 
+# What Chrome does with a video from another site that sends no CORS
+# headers: the canvas is "tainted" and reading it throws a SecurityError.
+_BLOCK_PICTURE = """() => {
+  const v = document.querySelector("video.video");
+  Object.defineProperty(v, "videoWidth", { configurable: true, value: 1920 });
+  Object.defineProperty(v, "videoHeight", { configurable: true, value: 1080 });
+  window.__toDataURL = HTMLCanvasElement.prototype.toDataURL;
+  HTMLCanvasElement.prototype.toDataURL = () => {
+    throw new DOMException("The canvas has been tainted", "SecurityError");
+  };
+}"""
+_UNBLOCK_PICTURE = """() => {
+  const v = document.querySelector("video.video");
+  delete v.videoWidth; delete v.videoHeight;
+  HTMLCanvasElement.prototype.toDataURL = window.__toDataURL;
+}"""
+
+
+def _blocked_picture_keeps_the_chat_going(p) -> None:
+    p.evaluate(_BLOCK_PICTURE)
+    try:
+        p.locator(f"{DIALOG} [data-test='live-send-frame']").click()
+        expect(p.locator("#toast-root")).to_contain_text("won't let the app read")
+        # A typed question still gets its answer, just without the frame.
+        p.locator(f"{DIALOG} [data-test='live-text']").fill(QUESTION)
+        p.locator(f"{DIALOG} [data-test='live-send-text']").click()
+        expect(p.locator(f"{DIALOG} .chat-model")).to_have_count(3)
+        assert not gemini_fake().chat_calls[-1]["turns"][-1].get("image_jpeg")
+    finally:
+        p.evaluate(_UNBLOCK_PICTURE)
+
+
 def _end_chat_asks_first(p) -> None:
     p.locator(f"{DIALOG} [data-test='live-end']").click()
     p.get_by_role("dialog", name="End chat?").get_by_role("button", name="Keep chatting").click()
@@ -140,7 +173,7 @@ def _listed_in_chats_tab(p) -> None:
     row.click()
     detail = p.locator(".live-history-detail").first
     expect(detail).to_contain_text(QUESTION)
-    expect(detail.locator(".chat-sources", has_text=CHAT_SEARCH)).to_be_visible()
+    expect(detail.locator(".chat-sources", has_text=CHAT_SEARCH).first).to_be_visible()
 
 
 def run(wt):
@@ -153,6 +186,11 @@ def run(wt):
         _type_question,
     )
     wt.step("Send frame with no picture yet: the page says so", _send_frame_needs_a_picture)
+    wt.step(
+        "When the browser won't let the app read the picture, the page says so "
+        "and questions still get answers",
+        _blocked_picture_keeps_the_chat_going,
+    )
     wt.step("End chat asks first; Keep chatting leaves the chat open", _end_chat_asks_first)
     wt.step("End chat, confirmed: the dialog closes", _end_chat_closes_the_dialog)
     wt.step("The chat is listed in the Chats tab as just now", _listed_in_chats_tab)

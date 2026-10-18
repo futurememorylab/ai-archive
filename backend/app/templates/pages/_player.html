@@ -25,9 +25,14 @@
        @dblclick="$el.requestFullscreen && $el.requestFullscreen()">
   {% else %}
   {# preload="none": don't fetch the proxy just for opening the clip — the
-     timeline duration is server-provided, so the video only loads on play. #}
+     timeline duration is server-provided, so the video only loads on play.
+     crossorigin: the cloud media URL redirects to signed storage on another
+     site; fetched with CORS (the bucket allows the app's origins) the chat
+     can read the frame instead of getting a tainted canvas. Same-origin
+     requests still carry cookies in this mode. #}
   <video x-ref="video"
          class="video"
+         crossorigin="anonymous"
          src="{{ media_url }}"
          preload="none"
          @dblclick="$refs.video.requestFullscreen && $refs.video.requestFullscreen()"></video>

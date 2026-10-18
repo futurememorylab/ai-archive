@@ -28,9 +28,11 @@ from backend.app.services.telemetry_capture import extract_finish_reason, extrac
 log = logging.getLogger(__name__)
 
 # The first user turn of every chat: greet and describe the opening frame.
+# The page may have no picture to send (video not loaded, or the browser
+# won't read it), so the cue only asks for a description when there is one.
 OPENING_CUE_CS = (
-    'Pozdrav mě prosím krátce česky („Dobrý den") a v jedné větě popiš, '
-    "co vidíš na aktuálním snímku. Pak počkej na moji další otázku."
+    'Pozdrav mě prosím krátce česky („Dobrý den"). Pokud máš snímek, popiš '
+    "v jedné větě, co na něm vidíš. Pak počkej na moji další otázku."
 )
 # What a "Send frame" turn asks; the transcript shows "Frame at 0:12" instead.
 FRAME_CUE_CS = "Popiš, co vidíš na tomto snímku."
