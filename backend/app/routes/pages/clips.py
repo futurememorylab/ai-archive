@@ -669,15 +669,7 @@ async def clip_detail_page(request: Request, clip_id: int, review: int | None = 
     ctx_dict["host_local_proxies"] = getattr(
         getattr(ctx, "proxy_resolver", None), "is_host_local", False
     )
-    ctx_dict["gemini_live_inactivity_s"] = getattr(
-        ctx.settings,
-        "gemini_live_inactivity_s",
-        60,
-    )
     ctx_dict["review_mode"] = bool(review)
-    # Live (audio assistant) needs a Gemini API key; hide its tab and menu
-    # entry when there is none, rather than offering a feature that can't start.
-    ctx_dict["live_available"] = bool(getattr(ctx.settings, "gemini_api_key", None))
 
     return templates.TemplateResponse(request, "pages/clip_detail.html", ctx_dict)
 
@@ -718,10 +710,7 @@ async def clip_published_partial(request: Request, clip_id: int):
     return templates.TemplateResponse(
         request,
         "pages/_published_refreshable.html",
-        {
-            "clip": ctx_dict["clip"],
-            "live_available": bool(getattr(ctx.settings, "gemini_api_key", None)),
-        },
+        {"clip": ctx_dict["clip"]},
     )
 
 

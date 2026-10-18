@@ -38,10 +38,10 @@ from backend.app.routes.sync import router as sync_router
 from backend.app.routes.ui import router as ui_router
 from backend.app.routes.vpn import router as vpn_router
 from backend.app.routes.workspaces import router as workspaces_router
-from backend.app.seed import seed_default_prompt, seed_live_system_instruction
+from backend.app.seed import seed_default_prompt, seed_system_instruction
 from backend.app.services.connection_monitor import ConnectionState
 from backend.app.settings import Settings
-from backend.app.startup import log_live_token_mode, run_startup_cleanup
+from backend.app.startup import run_startup_cleanup
 
 SEEDS = Path(__file__).resolve().parents[1] / "seeds"
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -65,7 +65,6 @@ def _real_external_enabled(s: Settings) -> bool:
 async def lifespan(app: FastAPI):
     configure_logging()
     settings = Settings()
-    log_live_token_mode(settings)
     init_external = settings.app_env == "prod" or _real_external_enabled(settings)
     core, live = await build_context(settings, init_external=init_external)
     app.state.core_ctx = core
@@ -82,9 +81,9 @@ async def lifespan(app: FastAPI):
     image_seed = SEEDS / "image_template.json"
     if image_seed.exists():
         await seed_default_prompt(core.db, seed_path=image_seed)
-    live_seed = SEEDS / "live_system_instruction_cs.json"
-    if live_seed.exists():
-        await seed_live_system_instruction(core.db, seed_path=live_seed)
+    chat_seed = SEEDS / "chat_system_instruction_cs.json"
+    if chat_seed.exists():
+        await seed_system_instruction(core.db, seed_path=chat_seed)
     await run_startup_cleanup(core.db)
     if live is not None:
         if live.vpn_supervisor is not None:

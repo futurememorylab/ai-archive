@@ -5002,16 +5002,6 @@
                 }
             }
         ],
-        "./tests/integration/test_routes_live.py": [
-            {
-                "code": "reportArgumentType",
-                "range": {
-                    "startColumn": 22,
-                    "endColumn": 39,
-                    "lineCount": 1
-                }
-            }
-        ],
         "./tests/integration/test_routes_pages.py": [
             {
                 "code": "reportOptionalMemberAccess",
@@ -5858,16 +5848,6 @@
                 "range": {
                     "startColumn": 32,
                     "endColumn": 36,
-                    "lineCount": 1
-                }
-            }
-        ],
-        "./tests/integration/test_seed_live_prompt.py": [
-            {
-                "code": "reportOptionalSubscript",
-                "range": {
-                    "startColumn": 15,
-                    "endColumn": 37,
                     "lineCount": 1
                 }
             }

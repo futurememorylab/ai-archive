@@ -63,7 +63,7 @@ routes. Run `.venv/bin/lint-imports` to check locally.
 |---|---|
 | Marker save 502 | `routes/catdv.py`, `services/write_queue.py`, `services/sync_engine.py` |
 | Proxy 404 / "unavailable" | `services/proxy_resolver.py`, `repositories/proxy_cache.py` |
-| Live session never starts | `routes/live.py`, browser-direct WSS (no backend bridge) |
+| Clip chat never answers | `routes/live.py`, `services/live_sessions.py`, `GeminiService.chat` on Vertex |
 | Sync stuck "in_flight" | `repositories/pending_operations.py` + crash-recovery in `context.build()` |
 | Connection pill stays red | `services/connection_monitor.py`, `routes/connection.py` |
 | Workspace prep stalls on a clip | `services/workspace_manager.py`, `services/proxy_resolver.py` |
@@ -84,4 +84,4 @@ routes. Run `.venv/bin/lint-imports` to check locally.
   (older plans are in git history; see `docs/plans/README.md`).
 - `docs/DEPLOY.md` — production deployment guide.
 - `docs/fs-archive-format.md` — sidecar layout for the FS provider.
-- `docs/gemini-live-lessons.md` — what we learned wiring Live.
+- `docs/gemini-live-lessons.md` — what we learned wiring Live (retired; history).

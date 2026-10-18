@@ -93,7 +93,7 @@ output. The richest JS in the app is the vanilla-JS video player widget
 | **HTMX** | Most interactivity — POSTs return HTML fragments swapped into the DOM. |
 | **Alpine.js** | Small bits of stateful interactivity (segmented controls, dropdowns). |
 | **Tailwind CSS** | All styling, generated via the standalone CLI. |
-| **Vanilla JS** | Player widget; Gemini Live WebSocket client (browser opens WSS straight to Google — see [ADR 0018](../adr/0018-gemini-live-clip-assistant-wss-view-model.md)). |
+| **Vanilla JS** | Player widget; clip chat client (plain `fetch` to our own `/api/live` routes — see [ADR 0130](../adr/0130-clip-chat-on-vertex-replaces-live.md)). |
 
 ## External services
 

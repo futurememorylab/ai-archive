@@ -2,7 +2,7 @@
 
 State transitions:
   pending  ──(mark_active)──▶  active  ──(mark_ended)──▶  ended
-                  └────────(mark_ended)────────────────▶  ended  (mic denied, etc.)
+                  └────────(mark_ended)────────────────▶  ended  (opening turn failed)
 
 `set_summary` is idempotent — once non-null it never overwrites.
 """
@@ -69,13 +69,26 @@ class LiveSessionsRepo:
         id: str,
         *,
         end_reason: str,
-        transcript_json: str,
-        frame_count: int = 0,
+        transcript_json: str | None = None,
+        frame_count: int | None = None,
     ) -> None:
+        """End the session; a transcript / frame count left as None keeps the
+        one already saved turn by turn."""
         await conn.execute(
             "UPDATE live_sessions SET state='ended', ended_at=?, end_reason=?, "
-            "transcript_json=?, frame_count=? WHERE id=?",
+            "transcript_json=COALESCE(?, transcript_json), "
+            "frame_count=COALESCE(?, frame_count) WHERE id=?",
             (_now_iso(), end_reason, transcript_json, frame_count, id),
+        )
+        await conn.commit()
+
+    async def save_transcript(
+        self, conn: aiosqlite.Connection, id: str, *, transcript_json: str, frame_count: int
+    ) -> None:
+        """Store the running transcript after each chat turn."""
+        await conn.execute(
+            "UPDATE live_sessions SET transcript_json=?, frame_count=? WHERE id=?",
+            (transcript_json, frame_count, id),
         )
         await conn.commit()
 

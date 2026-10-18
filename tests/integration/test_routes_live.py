@@ -1,414 +1,261 @@
+"""Clip chat routes: start, ask, end, summarize, history.
+
+Gemini is a fake standing in for GeminiService.chat (Vertex); nothing here
+talks to Google."""
+
+import base64
 import json
 from pathlib import Path
 
 import aiosqlite
 import pytest
-import respx
-from httpx import ASGITransport, AsyncClient, Response
+from httpx import ASGITransport, AsyncClient
 
 from backend.app.main import app
 from backend.app.migrations_runner import apply_migrations
 from backend.app.models.telemetry import TelemetryCtx
 from backend.app.repositories.live_sessions import LiveSessionsRepo
 from backend.app.repositories.run_telemetry import RunTelemetryRepo
-from backend.app.seed import seed_live_system_instruction
+from backend.app.seed import seed_system_instruction
+from backend.app.services.gemini import GeminiQuotaError
+from backend.app.services.live_sessions import FRAME_CUE_CS, OPENING_CUE_CS
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "backend" / "migrations"
 SEEDS = Path(__file__).resolve().parents[2] / "backend" / "seeds"
+FRAME = base64.b64encode(b"\xff\xd8jpeg").decode()
+
+
+class _FakeGemini:
+    """Answers each chat call with the next reply; records what it was sent."""
+
+    def __init__(self) -> None:
+        self.replies = ["Dobrý den, vidím zahradu.", "Spíš třicátá léta.", "Auto."]
+        self.calls: list[dict] = []
+        self.fail: Exception | None = None
+
+    async def chat(self, **kwargs):
+        if self.fail:
+            raise self.fail
+        self.calls.append(kwargs)
+        return {
+            "text": self.replies.pop(0),
+            "raw": {"usageMetadata": {"promptTokenCount": 100, "candidatesTokenCount": 20}},
+        }
 
 
 @pytest.fixture
-async def client_and_db(tmp_path):
-    """Spin up the FastAPI app with a fresh sqlite db + a stub ctx."""
-    db_path = tmp_path / "t.db"
-    conn = await aiosqlite.connect(db_path)
+async def chat(tmp_path, monkeypatch):
+    """The app with a fresh sqlite db, the chat prompt seeded and a fake Gemini."""
+    import backend.app.routes.live as live_routes
+
+    conn = await aiosqlite.connect(tmp_path / "t.db")
     await apply_migrations(conn, MIGRATIONS)
-    # Seed the live system-instruction prompt so session-config can find it.
-    await seed_live_system_instruction(
-        conn,
-        seed_path=SEEDS / "live_system_instruction_cs.json",
-    )
+    await seed_system_instruction(conn, seed_path=SEEDS / "chat_system_instruction_cs.json")
+
+    async def fake_load_clip(ctx, clip_id):
+        return dict(id=clip_id, name="P1010001", notes="rodinný výlet", markers=[], fields={})
+
+    async def fake_load_draft(ctx, clip_id):
+        return dict(markers=[], fields={}, notes="")
+
+    monkeypatch.setattr(live_routes, "load_clip_for_live", fake_load_clip)
+    monkeypatch.setattr(live_routes, "load_draft_for_live", fake_load_draft)
 
     class _Ctx:
         db = conn
         mode = "online"
+        gemini = _FakeGemini()
         run_telemetry_repo = RunTelemetryRepo()
         telemetry_ctx = TelemetryCtx(install_id="inst-test")
         settings = type(
             "S",
             (),
             {
-                "gemini_api_key": "test-key",
-                "gemini_live_model": "gemini-2.5-flash-native-audio-latest",
-                "gemini_live_voice": "Aoede",
-                "gemini_live_inactivity_s": 60,
-                "gemini_model": "gemini-2.5-flash-lite",
+                "gemini_chat_model": "gemini-3.8-flash",
+                "gemini_model": "gemini-3.5-flash-lite",
                 # Read by the _attach_current_user middleware on every request.
                 "auth_backend": "dev",
                 "dev_user_email": "dev@localhost",
             },
         )()
 
-    _ctx = _Ctx()
-    app.state.core_ctx = _ctx
-    app.state.live_ctx = _ctx
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac, conn
+    ctx = _Ctx()
+    app.state.core_ctx = ctx
+    app.state.live_ctx = ctx
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac, conn, ctx.gemini
     await conn.close()
 
 
-@pytest.mark.asyncio
-@respx.mock
-async def test_session_config_returns_token_and_setup(client_and_db, monkeypatch):
-    ac, conn = client_and_db
-    import backend.app.routes.live as live_routes
-
-    async def fake_load_clip(ctx, clip_id):
-        return dict(
-            id=clip_id,
-            name="P1010001",
-            format="9,5 mm",
-            fps=25,
-            duration_secs=120.0,
-            duration_smpte="00:02:00:00",
-            notes="rodinný výlet",
-            big_notes="",
-            markers=[],
-            fields={},
-        )
-
-    async def fake_load_draft(ctx, clip_id):
-        return dict(markers=[], fields={}, notes="")
-
-    monkeypatch.setattr(live_routes, "load_clip_for_live", fake_load_clip)
-    monkeypatch.setattr(live_routes, "load_draft_for_live", fake_load_draft)
-
-    # Live now mints a short-lived, config-bound ephemeral token server-side.
-    # The raw GEMINI_API_KEY authenticates THIS mint call (server→Google) and
-    # never reaches the browser. See ADR 0112 (supersedes 0043).
-    mint = respx.post("https://generativelanguage.googleapis.com/v1beta/auth_tokens").mock(
-        return_value=Response(200, json={"name": "auth_tokens/ephemeral-XYZ"})
-    )
-
-    r = await ac.get("/api/live/session-config", params={"clip_id": 42})
+async def _start(ac) -> str:
+    r = await ac.post("/api/live/sessions", json={"clip_id": 42, "frame_b64": FRAME})
     assert r.status_code == 200, r.text
-    data = r.json()
-    assert mint.called
-    assert data["session_id"]
-    assert data["ws_url"].startswith("wss://generativelanguage.googleapis.com/ws/")
-    # Browser authenticates with the ephemeral token via ?access_token=, against
-    # the v1beta Constrained endpoint — NOT the raw key, NOT ?key=.
-    assert "access_token=auth_tokens/ephemeral-XYZ" in data["ws_url"]
-    assert "v1beta.GenerativeService.BidiGenerateContentConstrained" in data["ws_url"]
-    assert "key=test-key" not in data["ws_url"]
-    assert "test-key" not in r.text  # the real key never appears in the response
-    assert data["setup_payload"]["model"].endswith("native-audio-latest")
-    # Hardening: the proprietary system prompt + tool/function declarations are
-    # bound into the token server-side and must NOT be shipped to the browser.
-    assert "systemInstruction" not in data["setup_payload"]
-    assert "tools" not in data["setup_payload"]
-    # The API key is not duplicated as a bare `token`.
-    assert "token" not in data
-    # inactivity_s is a server-rendered template arg, not part of this response.
-    assert "inactivity_s" not in data
-    # The initial context turn is a separate top-level field, NOT smuggled
-    # inside setup_payload (which must be a pure BidiGenerateContentSetup so
-    # the browser can send it verbatim as the `setup` frame).
-    assert "initial_context_turn" not in data["setup_payload"]
-    assert data["initial_context_turn"]["parts"][0]["text"].startswith("=== Publikované anotace")
-    repo = LiveSessionsRepo()
-    row = await repo.get(conn, data["session_id"])
-    assert row.state == "pending"
+    return r.json()["session_id"]
 
 
-@pytest.mark.asyncio
-@respx.mock
-async def test_session_config_works_offline_when_clip_cached(client_and_db, monkeypatch):
-    """Mirrors annotate-button visibility: when CatDV is offline but the
-    clip's proxy is cached locally, the Live route still works. Audio is
-    browser↔Google direct (Gemini Developer API, not VPN-dependent) and the
-    clip view-model is served from clip_cache by the offline-fallback path.
-    """
-    ac, conn = client_and_db
-    app.state.core_ctx.mode = "offline"
-
-    import backend.app.routes.live as live_routes
-
-    async def fake_load_clip(ctx, clip_id):
-        return dict(
-            id=clip_id,
-            name="P1010001",
-            format="9,5 mm",
-            fps=25,
-            duration_secs=120.0,
-            duration_smpte="00:02:00:00",
-            notes="rodinný výlet",
-            big_notes="",
-            markers=[],
-            fields={},
-        )
-
-    async def fake_load_draft(ctx, clip_id):
-        return dict(markers=[], fields={}, notes="")
-
-    monkeypatch.setattr(live_routes, "load_clip_for_live", fake_load_clip)
-    monkeypatch.setattr(live_routes, "load_draft_for_live", fake_load_draft)
-
-    # Minting the ephemeral token is a Google Developer API call (browser↔Google
-    # direct, not VPN-dependent), so Live works even while CatDV is offline.
-    respx.post("https://generativelanguage.googleapis.com/v1beta/auth_tokens").mock(
-        return_value=Response(200, json={"name": "auth_tokens/ephemeral-OFF"})
-    )
-
-    r = await ac.get("/api/live/session-config", params={"clip_id": 42})
-    assert r.status_code == 200, r.text
-    ws_url = r.json()["ws_url"]
-    assert "access_token=auth_tokens/ephemeral-OFF" in ws_url
-    assert "test-key" not in ws_url
-
-
-@pytest.mark.asyncio
-async def test_transcript_persist_happy_path(client_and_db):
-    ac, conn = client_and_db
-    repo = LiveSessionsRepo()
-    await repo.insert_pending(conn, id="abc", clip_id=42, prompt_version=None)
-    await repo.mark_active(conn, "abc")
-
-    payload = {
-        "end_reason": "user_stop",
-        "transcript": [
-            {"role": "user", "text": "ahoj", "ts": 1, "kind": "speech"},
-            {"role": "model", "text": "dobrý den", "ts": 2, "kind": "speech"},
-        ],
-        "frame_count": 3,
-    }
-    r = await ac.post("/api/live/sessions/abc/transcript", json=payload)
-    assert r.status_code == 200, r.text
-    s = await repo.get(conn, "abc")
-    assert s.state == "ended"
-    assert s.end_reason == "user_stop"
-    assert s.frame_count == 3
-    assert json.loads(s.transcript_json) == payload["transcript"]
-
-
-@pytest.mark.asyncio
-async def test_transcript_invalid_end_reason_rejected(client_and_db):
-    ac, conn = client_and_db
-    repo = LiveSessionsRepo()
-    await repo.insert_pending(conn, id="abc", clip_id=42, prompt_version=None)
-    r = await ac.post(
-        "/api/live/sessions/abc/transcript",
-        json={"end_reason": "nonsense", "transcript": []},
-    )
-    assert r.status_code == 422
-
-
-@pytest.mark.asyncio
-async def test_transcript_unknown_session_404(client_and_db):
-    ac, _ = client_and_db
-    r = await ac.post(
-        "/api/live/sessions/missing/transcript",
-        json={"end_reason": "user_stop", "transcript": []},
-    )
-    assert r.status_code == 404
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_summarize_route_happy_path(client_and_db):
-    ac, conn = client_and_db
-    repo = LiveSessionsRepo()
-    await repo.insert_pending(conn, id="abc", clip_id=42, prompt_version=None)
-    await repo.mark_active(conn, "abc")
-    await repo.mark_ended(
-        conn,
-        "abc",
-        end_reason="user_stop",
-        transcript_json=json.dumps(
-            [
-                {"role": "user", "text": "co je to za auto?", "ts": 1},
-                {"role": "model", "text": "Škoda 30. léta.", "ts": 2},
-            ],
-            ensure_ascii=False,
-        ),
-    )
-    respx.post(
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        "gemini-2.5-flash-lite:generateContent"
-    ).mock(
-        return_value=Response(
-            200,
-            json={
-                "candidates": [
-                    {"content": {"parts": [{"text": "Škoda z 30. let na rodinném záběru."}]}}
-                ]
-            },
-        )
-    )
-    r = await ac.post("/api/live/sessions/abc/summarize")
-    assert r.status_code == 200, r.text
-    assert r.json()["summary_cs"] == "Škoda z 30. let na rodinném záběru."
-    assert (await repo.get(conn, "abc")).summary_cs == "Škoda z 30. let na rodinném záběru."
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_summarize_route_idempotent(client_and_db):
-    ac, conn = client_and_db
-    repo = LiveSessionsRepo()
-    await repo.insert_pending(conn, id="abc", clip_id=42, prompt_version=None)
-    await repo.mark_active(conn, "abc")
-    await repo.mark_ended(
-        conn,
-        "abc",
-        end_reason="user_stop",
-        transcript_json=json.dumps([{"role": "user", "text": "x", "ts": 1}]),
-    )
-    await repo.set_summary(conn, "abc", "Existující.")
-    r = await ac.post("/api/live/sessions/abc/summarize")
-    assert r.status_code == 200
-    assert r.json()["summary_cs"] == "Existující."
-
-
-@pytest.mark.asyncio
-async def test_list_by_clip(client_and_db):
-    ac, conn = client_and_db
-    repo = LiveSessionsRepo()
-    await repo.insert_pending(conn, id="a", clip_id=42, prompt_version=None)
-    await repo.mark_active(conn, "a")
-    await repo.mark_ended(
-        conn,
-        "a",
-        end_reason="user_stop",
-        transcript_json=json.dumps([{"role": "u", "text": "x", "ts": 1}]),
-    )
-    await repo.insert_pending(conn, id="b", clip_id=99, prompt_version=None)
-    r = await ac.get("/api/live/sessions", params={"clip_id": 42})
-    assert r.status_code == 200
-    data = r.json()
-    assert len(data) == 1
-    assert data[0]["id"] == "a"
-    assert data[0]["end_reason"] == "user_stop"
-    assert "has_summary" in data[0]
-    assert data[0]["has_summary"] is False
-
-
-@pytest.mark.asyncio
-async def test_get_detail(client_and_db):
-    ac, conn = client_and_db
-    repo = LiveSessionsRepo()
-    await repo.insert_pending(conn, id="abc", clip_id=42, prompt_version=None)
-    await repo.mark_active(conn, "abc")
-    await repo.mark_ended(
-        conn,
-        "abc",
-        end_reason="user_stop",
-        transcript_json=json.dumps([{"role": "u", "text": "hi", "ts": 1}]),
-    )
-    await repo.set_summary(conn, "abc", "Shrnutí.")
-    r = await ac.get("/api/live/sessions/abc")
-    assert r.status_code == 200
-    data = r.json()
-    assert data["id"] == "abc"
-    assert data["summary_cs"] == "Shrnutí."
-    assert data["transcript"] == [{"role": "u", "text": "hi", "ts": 1}]
-
-
-@pytest.mark.asyncio
-async def test_get_detail_404(client_and_db):
-    ac, _ = client_and_db
-    r = await ac.get("/api/live/sessions/no-such")
-    assert r.status_code == 404
-
-
-async def _live_rows(conn):
-    cur = await conn.execute(
-        "SELECT kind, status, clip_id, model, tokens_in, tokens_in_audio, tokens_out, "
-        "prompt_version_id, media_kind, duration_s, attrs FROM run_telemetry"
-    )
+async def _telemetry(conn):
+    cur = await conn.execute("SELECT kind, model, tokens_in, attrs FROM run_telemetry")
     return await cur.fetchall()
 
 
 @pytest.mark.asyncio
-async def test_transcript_records_live_session_usage_once(client_and_db):
-    ac, conn = client_and_db
-    repo = LiveSessionsRepo()
-    await repo.insert_pending(conn, id="abc", clip_id=42, prompt_version=None)
-    await repo.mark_active(conn, "abc")
-    usage = {
-        "summed": {
-            "promptTokenCount": 5000,
-            "responseTokenCount": 300,
-            "promptTokensDetails": [
-                {"modality": "AUDIO", "tokenCount": 4000},
-                {"modality": "TEXT", "tokenCount": 1000},
-            ],
-        },
-        "last": {"promptTokenCount": 2600, "responseTokenCount": 120},
-        "messages": 2,
-    }
-    payload = {"end_reason": "user_stop", "transcript": [], "frame_count": 1, "usage": usage}
-
-    r = await ac.post("/api/live/sessions/abc/transcript", json=payload)
+async def test_start_greets_about_the_frame_on_screen(chat):
+    ac, conn, gemini = chat
+    r = await ac.post("/api/live/sessions", json={"clip_id": 42, "frame_b64": FRAME})
     assert r.status_code == 200, r.text
-    # A second post (navigate beacon + stop) must not double-count the session.
-    r = await ac.post("/api/live/sessions/abc/transcript", json=payload)
-    assert r.status_code == 200, r.text
-
-    [row] = await _live_rows(conn)
-    kind, status, clip_id, model, t_in, t_audio, t_out, pv, media_kind, dur, attrs = row
-    assert (kind, status, clip_id) == ("live", "ok", 42)
-    assert model == "gemini-2.5-flash-native-audio-latest"
-    assert (t_in, t_audio, t_out) == (5000, 4000, 300)
-    # Kept out of the annotation estimator, which keys on both.
-    assert pv is None and media_kind is None
-    assert dur is not None and dur >= 0
-    a = json.loads(attrs)
-    assert a["call"] == "audio_session" and a["live_session_id"] == "abc"
-    assert a["usage_messages"] == 2 and a["last_usage"]["promptTokenCount"] == 2600
+    assert r.json()["reply"] == "Dobrý den, vidím zahradu."
+    (call,) = gemini.calls
+    assert call["model"] == "gemini-3.8-flash"
+    # The system prompt carries the clip's context; the opening turn the frame.
+    assert "rodinný výlet" in call["system_instruction"]
+    assert call["turns"] == [
+        {"role": "user", "text": OPENING_CUE_CS, "image_jpeg": b"\xff\xd8jpeg"}
+    ]
+    session = await LiveSessionsRepo().get(conn, r.json()["session_id"])
+    assert session.state == "active"
+    assert session.frame_count == 1
+    assert json.loads(session.transcript_json or "[]")[0]["text"] == "Dobrý den, vidím zahradu."
 
 
 @pytest.mark.asyncio
-async def test_transcript_without_usage_records_nothing(client_and_db):
-    ac, conn = client_and_db
-    repo = LiveSessionsRepo()
-    await repo.insert_pending(conn, id="abc", clip_id=42, prompt_version=None)
+async def test_a_question_carries_the_conversation_and_is_saved(chat):
+    ac, conn, gemini = chat
+    sid = await _start(ac)
     r = await ac.post(
-        "/api/live/sessions/abc/transcript", json={"end_reason": "user_stop", "transcript": []}
+        f"/api/live/sessions/{sid}/turns",
+        json={"kind": "typed", "text": "Z kterého je to desetiletí?", "frame_b64": FRAME},
     )
-    assert r.status_code == 200
-    assert await _live_rows(conn) == []
+    assert r.status_code == 200, r.text
+    assert r.json()["reply"] == "Spíš třicátá léta."
+    turns = gemini.calls[-1]["turns"]
+    assert [t["text"] for t in turns] == [
+        OPENING_CUE_CS,
+        "Dobrý den, vidím zahradu.",
+        "Z kterého je to desetiletí?",
+    ]
+    assert turns[-1]["image_jpeg"] == b"\xff\xd8jpeg"
+    session = await LiveSessionsRepo().get(conn, sid)
+    transcript = json.loads(session.transcript_json or "[]")
+    assert [(t["role"], t["text"]) for t in transcript[1:]] == [
+        ("user", "Z kterého je to desetiletí?"),
+        ("model", "Spíš třicátá léta."),
+    ]
+    assert session.frame_count == 2
 
 
 @pytest.mark.asyncio
-@respx.mock
-async def test_summarize_records_its_token_usage(client_and_db):
-    ac, conn = client_and_db
-    repo = LiveSessionsRepo()
-    await repo.insert_pending(conn, id="abc", clip_id=42, prompt_version=None)
-    await repo.mark_active(conn, "abc")
-    await repo.mark_ended(
-        conn,
-        "abc",
-        end_reason="user_stop",
-        transcript_json=json.dumps([{"role": "user", "text": "x", "ts": 1}]),
+async def test_send_frame_asks_about_the_frame_and_shows_its_label(chat):
+    ac, conn, gemini = chat
+    sid = await _start(ac)
+    r = await ac.post(
+        f"/api/live/sessions/{sid}/turns",
+        json={"kind": "frame", "text": "Frame at 0:12", "frame_b64": FRAME},
     )
-    respx.post(
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        "gemini-2.5-flash-lite:generateContent"
-    ).mock(
-        return_value=Response(
-            200,
-            json={
-                "candidates": [{"content": {"parts": [{"text": "Shrnutí."}]}}],
-                "usageMetadata": {"promptTokenCount": 120, "candidatesTokenCount": 30},
-            },
-        )
-    )
-    r = await ac.post("/api/live/sessions/abc/summarize")
     assert r.status_code == 200, r.text
+    assert gemini.calls[-1]["turns"][-1]["text"] == FRAME_CUE_CS
+    transcript = json.loads((await LiveSessionsRepo().get(conn, sid)).transcript_json or "[]")
+    assert transcript[1] == {**transcript[1], "text": "Frame at 0:12", "kind": "frame"}
 
-    [row] = await _live_rows(conn)
-    assert row[:7] == ("live", "ok", 42, "gemini-2.5-flash-lite", 120, 0, 30)
-    assert json.loads(row[10])["call"] == "summary"
+
+@pytest.mark.asyncio
+async def test_each_answer_records_its_cost(chat):
+    ac, conn, _ = chat
+    sid = await _start(ac)
+    await ac.post(f"/api/live/sessions/{sid}/turns", json={"text": "A kde?"})
+    rows = await _telemetry(conn)
+    assert [json.loads(r[3])["call"] for r in rows] == ["chat_open", "chat_turn"]
+    assert all(r[0] == "live" and r[1] == "gemini-3.8-flash" and r[2] == 100 for r in rows)
+
+
+@pytest.mark.asyncio
+async def test_gemini_failure_is_a_502_with_the_reason(chat):
+    ac, conn, gemini = chat
+    sid = await _start(ac)
+    gemini.fail = GeminiQuotaError("429 resource exhausted")
+    r = await ac.post(f"/api/live/sessions/{sid}/turns", json={"text": "A kde?"})
+    assert r.status_code == 502
+    assert "resource exhausted" in r.json()["detail"]
+    # The failed question is not saved; the chat stays usable.
+    session = await LiveSessionsRepo().get(conn, sid)
+    assert session.state == "active"
+    assert len(json.loads(session.transcript_json or "[]")) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_failed_start_ends_the_session(chat):
+    ac, conn, gemini = chat
+    gemini.fail = GeminiQuotaError("429 resource exhausted")
+    r = await ac.post("/api/live/sessions", json={"clip_id": 42})
+    assert r.status_code == 502
+    (session,) = await LiveSessionsRepo().list_by_clip(conn, 42)
+    assert (session.state, session.end_reason) == ("ended", "error")
+
+
+@pytest.mark.asyncio
+async def test_bad_frame_and_empty_question_are_rejected(chat):
+    ac, _, _ = chat
+    sid = await _start(ac)
+    r = await ac.post(
+        f"/api/live/sessions/{sid}/turns", json={"text": "x", "frame_b64": "not base64!"}
+    )
+    assert r.status_code == 422
+    r = await ac.post(f"/api/live/sessions/{sid}/turns", json={"text": "  "})
+    assert r.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_end_keeps_the_transcript_and_refuses_more_questions(chat):
+    ac, conn, _ = chat
+    sid = await _start(ac)
+    r = await ac.post(f"/api/live/sessions/{sid}/end", json={"end_reason": "user_stop"})
+    assert r.status_code == 200
+    # A navigate beacon after End chat changes nothing.
+    await ac.post(f"/api/live/sessions/{sid}/end", json={"end_reason": "navigate"})
+    session = await LiveSessionsRepo().get(conn, sid)
+    assert (session.state, session.end_reason) == ("ended", "user_stop")
+    assert json.loads(session.transcript_json or "[]")[0]["role"] == "model"
+    r = await ac.post(f"/api/live/sessions/{sid}/turns", json={"text": "Ještě?"})
+    assert r.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_unknown_session_404(chat):
+    ac, _, _ = chat
+    r = await ac.post("/api/live/sessions/no-such/turns", json={"text": "x"})
+    assert r.status_code == 404
+    r = await ac.post("/api/live/sessions/no-such/end", json={})
+    assert r.status_code == 404
+    r = await ac.get("/api/live/sessions/no-such")
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_summarize_stores_the_summary_and_its_cost(chat):
+    ac, conn, gemini = chat
+    sid = await _start(ac)
+    await ac.post(f"/api/live/sessions/{sid}/end", json={})
+    gemini.replies = ["Krátké shrnutí."]
+    r = await ac.post(f"/api/live/sessions/{sid}/summarize")
+    assert r.status_code == 200, r.text
+    assert r.json()["summary_cs"] == "Krátké shrnutí."
+    assert gemini.calls[-1]["model"] == "gemini-3.5-flash-lite"
+    rows = await _telemetry(conn)
+    assert json.loads(rows[-1][3])["call"] == "summary"
+    # Idempotent: a second summarize doesn't call Gemini again.
+    calls = len(gemini.calls)
+    r = await ac.post(f"/api/live/sessions/{sid}/summarize")
+    assert r.json()["summary_cs"] == "Krátké shrnutí."
+    assert len(gemini.calls) == calls
+
+
+@pytest.mark.asyncio
+async def test_history_lists_and_shows_sessions(chat):
+    ac, conn, _ = chat
+    sid = await _start(ac)
+    await ac.post(f"/api/live/sessions/{sid}/end", json={})
+    await LiveSessionsRepo().insert_pending(conn, id="other", clip_id=99, prompt_version=None)
+    r = await ac.get("/api/live/sessions", params={"clip_id": 42})
+    assert [s["id"] for s in r.json()] == [sid]
+    assert r.json()[0]["end_reason"] == "user_stop"
+    r = await ac.get(f"/api/live/sessions/{sid}")
+    assert r.json()["transcript"][0]["text"] == "Dobrý den, vidím zahradu."

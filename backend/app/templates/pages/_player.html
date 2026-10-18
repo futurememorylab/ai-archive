@@ -57,8 +57,8 @@
     <span class="player-offline-hint">This clip isn’t cached for offline playback.</span>
   </div>
   {# Camera-flash overlay — pulsed by liveSession._flashFrameSent() whenever the
-     current frame is captured + sent to Gemini (conversation start, playhead
-     move, or Send-frame). pointer-events:none so it never blocks the player. #}
+     current frame is captured + sent to Gemini (chat start, a question, or
+     Send frame). pointer-events:none so it never blocks the player. #}
   <div class="frame-flash" aria-hidden="true"></div>
   {% endif %}
 </div>

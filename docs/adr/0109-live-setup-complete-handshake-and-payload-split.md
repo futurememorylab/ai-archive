@@ -1,7 +1,7 @@
 # 0109. Gemini Live: respect the setupComplete handshake; split the initial turn out of the setup frame
 
 **Date:** 2026-06-22
-**Status:** Accepted
+**Status:** Accepted — Superseded by [0130](./0130-clip-chat-on-vertex-replaces-live.md)
 **Lifespan:** Lesson
 
 ## Context

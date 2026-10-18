@@ -228,13 +228,15 @@ def test_promote_archived_returns_409(client):
     assert r.json()["error_code"] == "version_immutable"
 
 
-def test_list_hides_the_live_system_instruction(client):
-    """The lifespan seeds the Gemini Live system instruction as a Prompt (so it
-    is editable on the Prompts page). It is a chat system prompt, not an
-    annotation prompt: the clip Annotate menu, bulk annotate and the New batch
-    picker all build on this list, so it must not be offered there."""
-    from backend.app.models.prompt import LIVE_SYSTEM_PROMPT_NAME
+def test_list_hides_the_chat_system_instructions(client):
+    """The lifespan seeds the clip chat's system instruction as a Prompt (so it
+    is editable on the Prompts page); older databases also hold the Live-era
+    voice one. Both are chat system prompts, not annotation prompts: the clip
+    Annotate menu, bulk annotate and the New batch picker all build on this
+    list, so they must not be offered there."""
+    from backend.app.models.prompt import CHAT_SYSTEM_PROMPT_NAME, SYSTEM_PROMPT_NAMES
 
     names = {p["name"] for p in client.get("/api/prompts?archived=0").json()}
-    assert LIVE_SYSTEM_PROMPT_NAME not in names
+    assert CHAT_SYSTEM_PROMPT_NAME in SYSTEM_PROMPT_NAMES
+    assert not names & set(SYSTEM_PROMPT_NAMES)
     assert names, "the seeded annotation prompts are still listed"

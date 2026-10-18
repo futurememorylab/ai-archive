@@ -65,26 +65,3 @@ async def run_checks(
             result.failures.append(f"Proxy resolver failed for clip {sample_clip_id}: {exc}")
 
     return result
-
-
-def log_live_token_mode(settings) -> None:
-    """Log how Live audio authenticates, at boot.
-
-    The raw GEMINI_API_KEY is no longer sent to the browser:
-    live_sessions.mint_ephemeral_token now mints a short-lived, config-bound
-    ephemeral token server-side, which the browser presents as `?access_token=`
-    (see ADR 0112, supersedes 0043). When the key is present we log the secure
-    posture at INFO; when it is missing we warn that Live audio is unavailable.
-    """
-    log = logging.getLogger(__name__)
-    if getattr(settings, "gemini_api_key", None):
-        log.info(
-            "Live audio authenticates with short-lived, config-bound ephemeral "
-            "tokens (auth_tokens.create); the GEMINI_API_KEY stays server-side and "
-            "is never sent to the browser (ADR 0112)."
-        )
-    else:
-        log.warning(
-            "GEMINI_API_KEY is not configured; Live audio will be unavailable "
-            "(cannot mint ephemeral tokens)."
-        )

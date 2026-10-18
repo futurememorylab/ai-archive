@@ -1,7 +1,7 @@
 # 0110. Live output AudioContext: unlock in the gesture, reuse across sessions
 
 **Date:** 2026-06-22
-**Status:** Accepted
+**Status:** Accepted — Superseded by [0130](./0130-clip-chat-on-vertex-replaces-live.md)
 **Lifespan:** Lesson
 
 ## Context

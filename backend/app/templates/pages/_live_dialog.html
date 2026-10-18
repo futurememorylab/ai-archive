@@ -1,11 +1,11 @@
-{#- Live dialog under the video: the running transcript (kept on screen after
-    Stop, earlier sessions on this page above a divider) and, while a session
-    runs, the input row with Send frame, End chat and a box for typed questions.
+{#- Chat dialog under the video: the running transcript (kept on screen after
+    End chat, earlier chats on this page above a divider) and, while a chat
+    runs, the input row with Send frame, End chat and a box for questions.
     Rendered inside clip_detail's x-data; state lives in liveSession.js. -#}
 <div class="live-dialog" data-test="live-dialog" x-cloak
      x-show="liveSession.state !== 'idle' || liveSession.transcript.length || liveSession.earlier.length">
   <div class="live-dialog-lines live-chat"
-       x-effect="liveSession.transcript.length; liveSession.transcript.at(-1)?.text;
+       x-effect="liveSession.transcript.length; liveSession.busy;
                  $nextTick(() => { $el.scrollTop = $el.scrollHeight })">
     <template x-for="(line, i) in liveSession.earlier" :key="'e' + i">
       <div class="chat-msg is-earlier" :class="'chat-' + line.role">
@@ -17,8 +17,8 @@
         <span class="chat-bubble" x-text="line.text"></span>
       </div>
     </template>
-    <div class="chat-msg chat-system" x-show="liveSession.state === 'connecting'">
-      <span class="chat-bubble">Connecting…</span>
+    <div class="chat-msg chat-system" x-show="liveSession.busy">
+      <span class="chat-bubble">Gemini is answering…</span>
     </div>
   </div>
   <form class="live-dialog-input" x-show="liveSession.state !== 'idle'"
@@ -26,9 +26,9 @@
     <button type="button" class="btn" data-test="live-send-frame"
             :disabled="!liveSession.canSend()"
             @click="liveSession.sendFrame()"
-            title="Show Gemini the frame you are looking at">
+            title="Ask Gemini about the frame you are looking at">
       {#- Eye icon: "send what I'm looking at" to Gemini. currentColor + the
-          .btn flex gap handle colour/spacing, same as the Live star. -#}
+          .btn flex gap handle colour/spacing, same as the chat star. -#}
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
            stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
            stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -41,9 +41,8 @@
             @click="liveSession.confirmEnd = true">End chat</button>
     <input class="txt" type="text" data-test="live-text" x-model="liveSession.draftText"
            :disabled="liveSession.state !== 'active'"
-           @input="liveSession._resetInactivity()"
-           :placeholder="liveSession.micOn ? 'Talk, or type a question…' : 'Type a question…'"
-           aria-label="Type a question">
+           placeholder="Ask about this clip…"
+           aria-label="Ask about this clip">
     <button type="submit" class="btn primary" data-test="live-send-text"
             :disabled="!liveSession.canSend() || !liveSession.draftText.trim()">Send</button>
   </form>

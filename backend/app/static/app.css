@@ -1407,16 +1407,9 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 .ca-spinner-inline { margin-right: 4px; }
 @keyframes ca-spin { to { transform: rotate(360deg); } }
 
-/* Gemini Live clip assistant */
+/* Clip chat with Gemini */
 .detail-hdr .detail-hdr-row { display: flex; align-items: center; gap: .6rem; width: 100%; }
-.detail-hdr .live-bar { display: flex; align-items: center; gap: .6rem; width: 100%; }
-.live-bar .rec-pill {
-  background: #400; color: #f88; padding: .15rem .5rem;
-  border-radius: 999px; font-family: monospace; font-size: 12px;
-}
-.live-bar .rec-pill.pulsing { animation: live-pulse 1.2s infinite; }
-@keyframes live-pulse { 0%, 100% { opacity: 1 } 50% { opacity: .55 } }
-/* Live dialog under the video: transcript on top, input row below. It takes
+/* Chat dialog under the video: transcript on top, input row below. It takes
    a capped share of the player column; the viewer shrinks to make room. */
 .live-dialog {
   display: flex; flex-direction: column;

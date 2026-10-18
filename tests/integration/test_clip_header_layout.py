@@ -5,7 +5,7 @@ idle "✓ Synced" chip; the sync chip only shows while writes are publishing or
 failed, so the Sync drawer stays reachable when it matters. The clip header
 drops its duplicate timecode readout (the player HUD and transport keep one)
 and puts its actions on the right: an Annotate button plus a ⋯ menu holding
-the cache control (Cache / Delete) and Live.
+the cache control (Cache / Delete) and Chat with Gemini.
 """
 
 from fastapi.testclient import TestClient
@@ -15,8 +15,6 @@ from tests.integration.test_clip_detail_draft import FakeArchive, _canonical, _m
 
 
 def _page(monkeypatch, tmp_path) -> str:
-    # Live is only offered when a Gemini key is configured.
-    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     app = _make_app(monkeypatch, tmp_path)
     with TestClient(app) as client:
         install_live_ctx(client.app, archive=FakeArchive((_canonical(101),)))
@@ -36,26 +34,27 @@ def test_topbar_drops_spend_review_and_synced_pills(monkeypatch, tmp_path):
 
 def test_clip_header_actions_on_the_right_with_overflow_menu(monkeypatch, tmp_path):
     html = _page(monkeypatch, tmp_path)
-    row = html.split('class="detail-hdr-row"', 1)[1].split('class="live-bar"', 1)[0]
+    row = html.split('class="detail-hdr-row"', 1)[1].split("</header>", 1)[0]
     assert "tc-readout" not in row
     left, right = row.split('class="grow"', 1)
     assert "cache-ctl" not in left
     assert 'data-test="clip-more"' in right
     more = right.split('data-test="clip-more"', 1)[1]
     assert "cache-ctl" in more  # Cache / Delete lives in the ⋯ menu
-    assert "liveSession.start()" in more  # Live too
+    assert "liveSession.start()" in more  # Chat with Gemini too
 
 
 def test_overflow_menu_rows_share_the_menu_style(monkeypatch, tmp_path):
     """The ⋯ menu reads as one list: a Cache section (status row + Cache/Purge
-    rows) and Live below a separator, all menu rows, not page buttons."""
+    rows) and Chat with Gemini below a separator, all menu rows, not page buttons."""
     html = _page(monkeypatch, tmp_path)
-    more = html.split('data-test="clip-more"', 1)[1].split('class="live-bar"', 1)[0]
+    more = html.split('data-test="clip-more"', 1)[1].split("</header>", 1)[0]
     cache = more.split('class="cache-ctl', 1)[1].split('class="menu-sep"', 1)[0]
     assert '<div class="menu-header">Video file</div>' in cache
     assert 'data-test="cache-status"' in cache
     assert "Not downloaded" in cache
     assert 'class="menu-item" @click="cacheNow()"' in cache
     assert 'class="btn' not in cache
-    live = more.split('class="menu-sep"', 1)[1]
-    assert "liveSession.start()" in live
+    chat = more.split('class="menu-sep"', 1)[1]
+    assert "liveSession.start()" in chat
+    assert "Chat with Gemini" in chat

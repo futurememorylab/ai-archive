@@ -3,9 +3,10 @@ for the annotator. Classifies provider errors into quota / safety /
 permission variants for the caller's retry policy."""
 
 import asyncio
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 
 from google import genai  # type: ignore[import-not-found]
+from google.genai import types  # type: ignore[import-not-found]
 
 # Our 'low'|'medium'|'high' → the google-genai MediaResolution enum string.
 _SDK_MEDIA_RESOLUTION = {
@@ -13,6 +14,12 @@ _SDK_MEDIA_RESOLUTION = {
     "medium": "MEDIA_RESOLUTION_MEDIUM",
     "high": "MEDIA_RESOLUTION_HIGH",
 }
+
+
+class ChatTurn(TypedDict):
+    role: str
+    text: str
+    image_jpeg: NotRequired[bytes | None]
 
 
 class GeminiError(RuntimeError):
@@ -76,6 +83,37 @@ class GeminiService:
         text = getattr(response, "text", "")
         raw = response.model_dump() if hasattr(response, "model_dump") else {}
         return {"text": text, "raw": raw}
+
+    async def chat(
+        self,
+        *,
+        model: str,
+        system_instruction: str,
+        turns: list[ChatTurn],
+        google_search: bool = True,
+    ) -> dict[str, Any]:
+        """One clip-chat answer: the conversation so far in, the reply text out.
+
+        Each turn is {"role": "user"|"model", "text": str, "image_jpeg":
+        bytes | None}; only the turns that carry an image send one."""
+        contents: list[types.ContentUnion] = []
+        for t in turns:
+            parts = [types.Part.from_text(text=t["text"])]
+            image = t.get("image_jpeg")
+            if image:
+                parts.append(types.Part.from_bytes(data=image, mime_type="image/jpeg"))
+            contents.append(types.Content(role=t["role"], parts=parts))
+        config = types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            tools=[types.Tool(google_search=types.GoogleSearch())] if google_search else None,
+        )
+        try:
+            response = await self._client.aio.models.generate_content(
+                model=model, contents=contents, config=config
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise _classify(exc) from exc
+        return {"text": (response.text or "").strip(), "raw": response.model_dump()}
 
 
 async def annotate_with_retry(
