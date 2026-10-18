@@ -98,7 +98,7 @@ operator, on the operator's own laptop, behind the project VPN**.
 
 - `GEMINI_API_KEY` is **never shipped to the browser**. The Live-session
   flow mints a short-lived, single-use, config-bound **ephemeral token**
-  server-side (`auth_tokens.create`, v1alpha) and the browser presents
+  server-side (`auth_tokens.create`, v1beta) and the browser presents
   *that* token via `?access_token=` against the
   `BidiGenerateContentConstrained` endpoint. The raw key only ever
   authenticates the server→Google mint call. The model, voice, system
@@ -221,9 +221,12 @@ is set; the other three have working defaults.
 
 - `GEMINI_API_KEY` — Generative Language API key (printed by the script
   above). When unset, the Live feature is disabled.
-- `GEMINI_LIVE_MODEL` — default `gemini-3.1-flash-live-preview`.
-- `GEMINI_LIVE_VOICE` — default `Aoede` (speaks `cs-CZ` because
-  `speechConfig.languageCode` pins it).
+- `GEMINI_LIVE_MODEL` — default `gemini-3.8-live` (ADR 0130).
+- `GEMINI_LIVE_VOICE` — default `Aoede`. The Czech system prompt sets the
+  language.
+- `GEMINI_LIVE_LANGUAGE_CODE` — unset by default. Set `cs-CZ` only when
+  falling back to `gemini-3.1-flash-live-preview` (shuts down 2026-11-17),
+  which needs it; native-audio models reject it.
 - `GEMINI_LIVE_INACTIVITY_S` — default `60`. Mutual-silence timeout
   before the session auto-closes with `end_reason=inactivity`.
 

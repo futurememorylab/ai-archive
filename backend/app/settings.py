@@ -56,7 +56,9 @@ class Settings(BaseSettings):
     google_application_credentials: Path | None = None
     gemini_model: str = "gemini-3.5-flash-lite"
     gemini_api_key: str | None = None
-    gemini_live_model: str = "gemini-3.1-flash-live-preview"
+    # Language code only for the legacy 3.1 fallback; see ADR 0130.
+    gemini_live_model: str = "gemini-3.8-live"
+    gemini_live_language_code: str | None = None
     gemini_live_voice: str = "Aoede"
     gemini_live_inactivity_s: int = 60
 

@@ -48,13 +48,32 @@ def test_setup_payload_top_level_model_and_generation_config():
     assert p["model"] == "models/gemini-2.5-flash-native-audio-latest"
     gc = p["generationConfig"]
     assert gc["responseModalities"] == ["AUDIO"]
-    assert gc["speechConfig"]["languageCode"] == "cs-CZ"
+    # Native-audio models reject an explicit language code; the Czech system
+    # prompt sets the language instead.
+    assert "languageCode" not in gc["speechConfig"]
     assert gc["speechConfig"]["voiceConfig"]["prebuiltVoiceConfig"]["voiceName"] == "Aoede"
     assert p["outputAudioTranscription"] == {}
     assert p["inputAudioTranscription"] == {}
     # No legacy "config" wrapper — that was the shape Google rejected with
     # `Unknown name "config" at 'auth_token.bidi_generate_content_setup'`.
     assert "config" not in p
+
+
+def test_setup_payload_lifts_session_limits():
+    # Without compression Google cuts an audio+video session after 2 minutes;
+    # resumption makes it send handles for the ~10-minute reconnects.
+    p = assemble_setup_payload(clip=_clip(), draft=_draft(), prompt_body="x", settings=_Settings())
+    assert p["contextWindowCompression"] == {"slidingWindow": {}}
+    assert p["sessionResumption"] == {}
+
+
+def test_setup_payload_language_code_only_when_configured():
+    class _Legacy(_Settings):
+        gemini_live_model = "gemini-3.1-flash-live-preview"
+        gemini_live_language_code = "cs-CZ"
+
+    p = assemble_setup_payload(clip=_clip(), draft=_draft(), prompt_body="x", settings=_Legacy())
+    assert p["generationConfig"]["speechConfig"]["languageCode"] == "cs-CZ"
 
 
 def test_setup_payload_has_system_instruction_text():
@@ -103,16 +122,16 @@ class _SettingsWithKey(_Settings):
     gemini_api_key = "test-key-XYZ"
 
 
-AUTH_TOKENS_ENDPOINT = "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
+AUTH_TOKENS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/auth_tokens"
 
 
 @pytest.mark.asyncio
 @respx.mock
 async def test_mint_ephemeral_token_mints_bound_single_use_token():
     """The raw GEMINI_API_KEY never goes to the browser. mint_ephemeral_token
-    POSTs to v1alpha auth_tokens, binding the full `setup` into the token via
+    POSTs to v1beta auth_tokens, binding the full `setup` into the token via
     `bidiGenerateContentSetup`, and returns the short-lived token name (which
-    the browser presents as `?access_token=`). See ADR 0112 (supersedes 0043).
+    the browser presents as `?access_token=`). See ADR 0112 and ADR 0130.
     """
     route = respx.post(AUTH_TOKENS_ENDPOINT).mock(
         return_value=Response(200, json={"name": "auth_tokens/ephemeral-abc123"})
@@ -129,7 +148,8 @@ async def test_mint_ephemeral_token_mints_bound_single_use_token():
     assert route.called
     req = route.calls[0].request
     # The real key authenticates the MINT request (server→Google), not the browser.
-    assert "key=test-key-XYZ" in str(req.url)
+    assert req.headers["x-goog-api-key"] == "test-key-XYZ"
+    assert "test-key-XYZ" not in str(req.url)
     body = json.loads(req.content)
     assert body["uses"] == 1
     assert body["expireTime"] and body["newSessionExpireTime"]

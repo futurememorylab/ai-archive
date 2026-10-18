@@ -34,7 +34,7 @@
          liveSession: liveSession({{ clip.id }}, { inactivityS: {{ gemini_live_inactivity_s|default(60) }} })
        }
      )'
-     x-init="_reviewInit(); _annotateInit(); if (new URLSearchParams(location.search).get('scope') === 'draft') scope = 'draft'"
+     x-init="_reviewInit(); _annotateInit(); liveSession.init(); if (new URLSearchParams(location.search).get('scope') === 'draft') scope = 'draft'"
      @keydown.window="handleKey($event)">
   {# Restore the saved annotation-column width before the panes paint (set by
      the detail-side resizer; see studioResize.js). currentScript is the .detail
@@ -97,48 +97,12 @@
         <span class="rec-pill" :class="{ pulsing: liveSession.state === 'active' }">
           ● REC <span x-text="liveSession.elapsedFmt">0:00</span>
         </span>
-        <button type="button" class="btn"
-                :disabled="liveSession.state !== 'active'"
-                @click="liveSession.sendFrame()">
-          {#- Eye icon: "send what I'm looking at" to Gemini. currentColor + the
-              .btn flex gap handle colour/spacing, same as the Live star. -#}
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none"
-               stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
-               stroke-linejoin="round" aria-hidden="true" focusable="false">
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-            <circle cx="12" cy="12" r="3"/>
-          </svg>
-          Send frame</button>
+        <span class="meta" x-show="liveSession.state === 'active' && !liveSession.micOn">Typing only</span>
         <button type="button" class="btn danger"
                 @click="liveSession.close('user_stop')">■ Stop</button>
-        <span class="grow"></span>
-        <span class="live-error" x-show="liveSession.error" x-text="liveSession.error"></span>
       </div>
     </template>
   </header>
-
-  <div class="live-strip" x-show="liveSession.state !== 'idle'" x-cloak
-       :class="{ expanded: liveSession.expanded }">
-    <ul class="live-strip-lines live-chat">
-      <template x-for="(line, i) in liveSession.transcript.slice(-3)" :key="i">
-        <li class="chat-msg" :class="'chat-' + line.role">
-          <span class="chat-bubble" x-text="line.text"></span>
-        </li>
-      </template>
-    </ul>
-    <button type="button" class="live-expand"
-            @click="liveSession.expanded = !liveSession.expanded">
-      <span x-show="!liveSession.expanded">▾ expand</span>
-      <span x-show="liveSession.expanded">▴ collapse</span>
-    </button>
-    <div class="live-strip-full live-chat" x-show="liveSession.expanded" x-cloak>
-      <template x-for="(line, i) in liveSession.transcript" :key="i">
-        <div class="chat-msg" :class="'chat-' + line.role">
-          <span class="chat-bubble" x-text="line.text"></span>
-        </div>
-      </template>
-    </div>
-  </div>
 
   <section class="player-wrap">
     {% with
@@ -176,6 +140,7 @@
       <span class="legend-ai">● AI in archive <span x-text="markers.filter(m => m.origin === 'ai').length">0</span></span>
       <span class="legend-draft" x-show="scope === 'draft'">● AI draft <span x-text="draftMarkers.length">0</span></span>
     </div>
+    {% include "pages/_live_dialog.html" %}
   </section>
 
   {# Player ↔ annotations resizer — reuses the studio split-pane component

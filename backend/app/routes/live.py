@@ -24,12 +24,12 @@ router = APIRouter(prefix="/api/live", tags=["live"])
 
 WSS_URL_TEMPLATE = (
     # Browser-direct Live API authenticated by a short-lived EPHEMERAL TOKEN
-    # (not the raw key): presented via `?access_token=` against the v1alpha
+    # (not the raw key): presented via `?access_token=` against the
     # BidiGenerateContentConstrained endpoint, which is the endpoint bound
-    # tokens authenticate against. Verified empirically with
-    # gemini-3.1-flash-live-preview. See ADR 0112 (supersedes 0043).
+    # tokens authenticate against. Google documents tokens as v1beta-only;
+    # the v1alpha path ADR 0112 used stopped working. See ADR 0130.
     "wss://generativelanguage.googleapis.com/ws/"
-    "google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained"
+    "google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained"
     "?access_token={token}"
 )
 

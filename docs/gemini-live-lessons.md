@@ -192,6 +192,33 @@ re-derive from the docs.
 
 ---
 
+## 11. October 2026: what changed while nobody looked (ADR 0130)
+
+Live sat unused over the summer and broke. Against Google's docs of
+2026-10-18:
+
+- Ephemeral tokens are **v1beta only** now (mint `v1beta/auth_tokens` with the
+  key in `x-goog-api-key`; connect to `v1beta…Constrained?access_token=`).
+- `gemini-3.1-flash-live-preview` shuts down 2026-11-17; the default is
+  `gemini-3.8-live`, a native-audio model that speaks Czech but **rejects
+  `speechConfig.languageCode`** (§4 no longer holds for 3.8). Set
+  `GEMINI_LIVE_LANGUAGE_CODE=cs-CZ` only when falling back to 3.1.
+- Sending a video frame makes it an audio+video session, capped at
+  **2 minutes** unless `contextWindowCompression` is set. Connections also
+  end after ~10 minutes (`goAway`); we resume with the handle from
+  `sessionResumptionUpdate`.
+- On 3.1 function calls are blocking: the model waits for a `toolResponse`.
+  `end_session` closes the socket, so we never answer it.
+- `.env.example` still named `gemini-2.5-flash-preview-native-audio-dialog`
+  (a model that never existed); check old `.env` files for it.
+
+The offline walkthrough `live-typed-dialog` plays Gemini on a routed
+WebSocket (Playwright `route_web_socket`), so the handshake, typed turns and
+resumption are tested without a key. It cannot prove Google accepts our
+setup: confirm that on staging.
+
+---
+
 ## 10. Future work (when motivated)
 
 - **Restore ephemeral tokens.** The security improvement is real;

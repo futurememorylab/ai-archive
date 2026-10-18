@@ -87,7 +87,7 @@ async def test_session_config_returns_token_and_setup(client_and_db, monkeypatch
     # Live now mints a short-lived, config-bound ephemeral token server-side.
     # The raw GEMINI_API_KEY authenticates THIS mint call (server→Google) and
     # never reaches the browser. See ADR 0112 (supersedes 0043).
-    mint = respx.post("https://generativelanguage.googleapis.com/v1alpha/auth_tokens").mock(
+    mint = respx.post("https://generativelanguage.googleapis.com/v1beta/auth_tokens").mock(
         return_value=Response(200, json={"name": "auth_tokens/ephemeral-XYZ"})
     )
 
@@ -98,9 +98,9 @@ async def test_session_config_returns_token_and_setup(client_and_db, monkeypatch
     assert data["session_id"]
     assert data["ws_url"].startswith("wss://generativelanguage.googleapis.com/ws/")
     # Browser authenticates with the ephemeral token via ?access_token=, against
-    # the v1alpha Constrained endpoint — NOT the raw key, NOT ?key=.
+    # the v1beta Constrained endpoint — NOT the raw key, NOT ?key=.
     assert "access_token=auth_tokens/ephemeral-XYZ" in data["ws_url"]
-    assert "v1alpha.GenerativeService.BidiGenerateContentConstrained" in data["ws_url"]
+    assert "v1beta.GenerativeService.BidiGenerateContentConstrained" in data["ws_url"]
     assert "key=test-key" not in data["ws_url"]
     assert "test-key" not in r.text  # the real key never appears in the response
     assert data["setup_payload"]["model"].endswith("native-audio-latest")
@@ -157,7 +157,7 @@ async def test_session_config_works_offline_when_clip_cached(client_and_db, monk
 
     # Minting the ephemeral token is a Google Developer API call (browser↔Google
     # direct, not VPN-dependent), so Live works even while CatDV is offline.
-    respx.post("https://generativelanguage.googleapis.com/v1alpha/auth_tokens").mock(
+    respx.post("https://generativelanguage.googleapis.com/v1beta/auth_tokens").mock(
         return_value=Response(200, json={"name": "auth_tokens/ephemeral-OFF"})
     )
 

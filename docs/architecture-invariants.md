@@ -321,13 +321,16 @@ proxies) rather than a lazy ephemeral fetch.
 Audio bytes go straight from the browser to Google over WSS (no backend
 bridge). The browser never sees the raw `GEMINI_API_KEY`; the server mints
 a short-lived, single-use, config-bound ephemeral token
-(`v1alpha auth_tokens`) and the browser presents it via `?access_token=`.
+(`v1beta auth_tokens`) and the browser presents it via `?access_token=`
+against the v1beta `…Constrained` endpoint. The setup turns on context
+compression and session resumption; the browser reconnects with the latest
+handle when Google ends a connection.
 System prompt + tool declarations are bound into the token, withheld from
 the browser. Wait for the server's `setupComplete` before sending content
 (else the socket races closed); unlock the output `AudioContext`
 synchronously inside the user gesture and reuse one long-lived context.
 *Enforced by:* convention; `docs/gemini-live-lessons.md`.
-*ADRs:* 0016, 0018, 0109, 0110, 0112.
+*ADRs:* 0016, 0018, 0109, 0110, 0112, 0130.
 
 **26. Run telemetry is local-first.** Usage/cost is captured locally first
 with a deferred cloud pipeline; cost surfaces use total-spend semantics

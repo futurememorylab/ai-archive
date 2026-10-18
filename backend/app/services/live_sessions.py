@@ -26,7 +26,9 @@ from backend.app.services.telemetry_capture import extract_finish_reason, extrac
 
 log = logging.getLogger(__name__)
 
-AUTH_TOKENS_URL = "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
+# v1beta: Google now documents ephemeral tokens as v1beta-only (the v1alpha
+# surface this used until 2026-10 stopped working). See ADR 0130.
+AUTH_TOKENS_URL = "https://generativelanguage.googleapis.com/v1beta/auth_tokens"
 # How long the minted token may keep an open session sending messages.
 TOKEN_TTL_MINUTES = 30
 # How long the browser has to OPEN the session after the token is minted.
@@ -39,6 +41,18 @@ SUMMARY_PROMPT_CS = (
     "Vrať pouze samotné shrnutí, žádný úvod ani závěr.\n\n"
     "PŘEPIS:\n"
 )
+
+
+def _speech_config(settings: Any) -> dict:
+    """The setup's speechConfig: the voice, plus a language code only when
+    configured (native-audio models reject one; see ADR 0130)."""
+    config: dict[str, Any] = {
+        "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": settings.gemini_live_voice}},
+    }
+    language_code = getattr(settings, "gemini_live_language_code", None)
+    if language_code:
+        config["languageCode"] = language_code
+    return config
 
 
 def assemble_setup_payload(
@@ -67,13 +81,14 @@ def assemble_setup_payload(
         "model": f"models/{settings.gemini_live_model}",
         "generationConfig": {
             "responseModalities": ["AUDIO"],
-            "speechConfig": {
-                "languageCode": "cs-CZ",
-                "voiceConfig": {
-                    "prebuiltVoiceConfig": {"voiceName": settings.gemini_live_voice},
-                },
-            },
+            "speechConfig": _speech_config(settings),
         },
+        # Without compression an audio+video session is cut off after 2
+        # minutes (15 for audio only); the sliding window lifts that cap.
+        "contextWindowCompression": {"slidingWindow": {}},
+        # Google drops every connection after ~10 minutes. Resumption makes
+        # it send handles the browser reconnects with (liveSession.js).
+        "sessionResumption": {},
         "outputAudioTranscription": {},
         "inputAudioTranscription": {},
         "systemInstruction": {"parts": [{"text": prompt_body}]},
@@ -115,14 +130,13 @@ async def mint_ephemeral_token(*, setup: dict, settings: Any) -> str:
     generationConfig, systemInstruction and tools — so the browser cannot
     change the model, voice, or system prompt, and only needs to send a
     minimal `setup` frame. The returned `name` is presented by the browser
-    as `?access_token=` against the v1alpha BidiGenerateContentConstrained
-    endpoint. `uses=1` makes it single-session.
+    as `?access_token=` against the BidiGenerateContentConstrained
+    endpoint. `uses=1` makes it single-session; Google still accepts the
+    same token for session-resumption reconnects within `expireTime`.
 
-    ADR 0043 wrongly concluded ephemeral tokens were unworkable: it sent the
-    token to the v1beta `BidiGenerateContent` endpoint via `?key=` (which
-    reads it as an API key → close code 1007 "API key not valid"). The
-    working combination is v1alpha + `...Constrained` + `?access_token=`,
-    verified empirically. See ADR 0112 (supersedes 0043).
+    The token goes to the v1beta `...Constrained` endpoint as
+    `?access_token=` (ADR 0112 found the triad; ADR 0130 moved it from
+    v1alpha to v1beta when Google retired the v1alpha path).
     """
     if not getattr(settings, "gemini_api_key", None):
         raise RuntimeError("GEMINI_API_KEY is not configured; Live audio cannot connect")
@@ -136,7 +150,7 @@ async def mint_ephemeral_token(*, setup: dict, settings: Any) -> str:
     async with httpx.AsyncClient(timeout=30.0) as client:
         r = await client.post(
             AUTH_TOKENS_URL,
-            params={"key": settings.gemini_api_key},
+            headers={"x-goog-api-key": settings.gemini_api_key},
             json=body,
         )
     if r.status_code != 200:
