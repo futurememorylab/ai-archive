@@ -65,21 +65,29 @@ function liveSession(clipId) {
       const text = this.draftText.trim();
       if (!text || !this.canSend()) return;
       this.draftText = "";
-      this._ask({ kind: "typed", text });
+      this._ask({ kind: "typed", text, frame: this._frame() });
     },
 
     sendFrame() {
       if (!this.canSend()) return;
+      const frame = this._frame();
       const v = document.querySelector("video.video");
+      if (!frame) {
+        // A video with a size but no frame means the browser refused to read it.
+        const msg = v && v.videoWidth
+          ? "The browser won't let the app read this video's picture, so Gemini can't see the frame."
+          : "The video has no picture yet. Play it, then send the frame.";
+        Alpine.store("toast").push(msg, { level: "error" });
+        return;
+      }
       const at = window.fmtTimecode(Math.floor(v ? v.currentTime : 0));
-      this._ask({ kind: "frame", text: `Frame at ${at}` });
+      this._ask({ kind: "frame", text: `Frame at ${at}`, frame });
     },
 
     // ── internals ────────────────────────────────────────────────────────
     // A question whose answer failed isn't saved on the server, so it leaves
     // the transcript too; a typed one goes back in the box to send again.
-    async _ask({ kind, text }) {
-      const frame = this._frame();
+    async _ask({ kind, text, frame }) {
       this.transcript.push({ role: "user", text, ts: Date.now(), kind });
       const question = this.transcript[this.transcript.length - 1];
       const done = await this._answer(`/api/live/sessions/${this.sessionId}/turns`,
@@ -164,10 +172,20 @@ function liveSession(clipId) {
       }
     },
 
-    // The frame on screen as base64 JPEG (null when the video has no picture
-    // yet), with the player's camera-flash to show it was sent.
+    // The frame on screen as base64 JPEG, with the player's camera-flash to
+    // show it was sent; null when there is no picture to send. The chat then
+    // carries on without one.
     _frame() {
-      const b64 = this._captureFrameJpegB64();
+      let b64 = null;
+      try {
+        b64 = this._captureFrameJpegB64();
+      } catch (e) {
+        // A video served from another site (signed storage URLs) without
+        // CORS taints the canvas, so the browser refuses to read it. A tainted
+        // canvas stays tainted, so the next capture starts on a fresh one.
+        this._frameCanvas = null;
+        console.warn("chat: can't read the video's picture", e);
+      }
       if (b64) this._flashFrameSent();
       return b64;
     },
