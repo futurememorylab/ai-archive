@@ -23,7 +23,7 @@ through a local proxy, and the local-vs-cloud environment variables.
 | Runtime SA | `catdv-annotator@catdav.iam.gserviceaccount.com` |
 | Deployer SA | `github-deployer@catdav.iam.gserviceaccount.com` (used by CI via WIF) |
 | Instances | pinned `min=max=1`, `--no-cpu-throttling` — **load-bearing, never change** |
-| Media bucket | `gs://catdv-proxies` (AI-store proxy cache) |
+| Media bucket | `gs://catdav-proxies` (AI-store proxy cache) |
 | DB bucket | `gs://catdv-annotator-db` (Litestream replica of SQLite) |
 
 The single-instance pin is correctness, not cost: **one** CatDV license
@@ -57,18 +57,21 @@ gcloud artifacts repositories create $REPO --repository-format=docker \
   --location=$REGION --project=$PROJECT_ID
 
 # 3. Buckets
-gsutil mb -p $PROJECT_ID -l $REGION gs://catdv-proxies        # AI-store media cache
+gsutil mb -p $PROJECT_ID -l $REGION gs://catdav-proxies       # AI-store media cache
 gsutil mb -p $PROJECT_ID -l $REGION gs://catdv-annotator-db   # Litestream replica
-# The player loads media from signed URLs with crossorigin="anonymous", so the
-# chat can read video frames; without this the videos don't play. Add every
-# new app URL (another service, a custom domain) to the file first.
-gcloud storage buckets update gs://catdv-proxies --cors-file=deploy/gcs-cors.json
+# CORS on the media bucket: the player
+# loads signed media URLs with crossorigin="anonymous", so the clip chat can
+# read video frames; without a matching CORS entry the videos don't play at
+# all. Add every new app URL (another service, a custom domain, a different
+# local port) to the file, re-run this, then check it:
+gcloud storage buckets update gs://catdav-proxies --cors-file=deploy/gcs-cors.json
+./deploy/check-media-cors.sh catdv-annotator-staging catdv-annotator
 
 # 4. Runtime service account + roles
 gcloud iam service-accounts create catdv-annotator --project=$PROJECT_ID
 gcloud projects add-iam-policy-binding $PROJECT_ID \
   --member=serviceAccount:$RUNTIME_SA --role=roles/aiplatform.user   # Vertex Gemini
-gsutil iam ch serviceAccount:${RUNTIME_SA}:roles/storage.objectAdmin gs://catdv-proxies
+gsutil iam ch serviceAccount:${RUNTIME_SA}:roles/storage.objectAdmin gs://catdav-proxies
 gsutil iam ch serviceAccount:${RUNTIME_SA}:roles/storage.objectAdmin gs://catdv-annotator-db
 # Signed URLs are minted via IAM signBlob: the SA signs as itself.
 gcloud iam service-accounts add-iam-policy-binding $RUNTIME_SA \
@@ -266,7 +269,7 @@ are read by `entrypoint.sh` / `litestream.yml`, not by pydantic Settings.
 | Variable | Local (`.env`) | Cloud (`cloudrun.env.yaml`) | Notes |
 |---|---|---|---|
 | `APP_ENV` | `dev` | `prod` | |
-| `INSTANCE_ID` | `local-dev` / per-dev | `prod` (staging: `staging`) | **Mandatory everywhere** (not cloud-only). Lowercase slug `[a-z0-9-]` unique per running instance. Namespaces uploaded-clip GCS keys (`instances/{INSTANCE_ID}/uploads/{clip_id}.mov`) so instances sharing the `catdv-proxies` bucket cannot overwrite each other's uploads; CatDV clips stay shared at `clips/{clip_id}.mov`. App fails to boot if unset. See issue #55 + `docs/specs/2026-06-15-uploads-multi-instance-storage-design.md`. |
+| `INSTANCE_ID` | `local-dev` / per-dev | `prod` (staging: `staging`) | **Mandatory everywhere** (not cloud-only). Lowercase slug `[a-z0-9-]` unique per running instance. Namespaces uploaded-clip GCS keys (`instances/{INSTANCE_ID}/uploads/{clip_id}.mov`) so instances sharing the `catdav-proxies` bucket cannot overwrite each other's uploads; CatDV clips stay shared at `clips/{clip_id}.mov`. App fails to boot if unset. See issue #55 + `docs/specs/2026-06-15-uploads-multi-instance-storage-design.md`. |
 | `DATA_DIR` | `./data` | `/data` | Cloud disk is **ephemeral** — durability comes from Litestream + GCS. |
 | `CATDV_BASE_URL` | `http://192.168.1.41:8080` | `http://127.0.0.1:18080` | Local: direct LAN. Cloud: onetun local forward into the WG tunnel. |
 | `MEDIA_CACHE` | `local` | `ai_store` | Local: disk proxy cache, GCS fallback. Cloud: GCS-only + signed-URL playback (ADR 0069). |
@@ -332,7 +335,7 @@ gcloud iap web add-iam-policy-binding --resource-type=cloud-run \
 - **No `LITESTREAM_REPLICA_URL`** — staging uses an ephemeral DB (resets on cold
   start). It must never point at prod's `gs://catdv-annotator-db` path: two
   Litestream writers on one path corrupts the DB.
-- Don't run jobs on staging that write blobs into prod's `gs://catdv-proxies`.
+- Don't run jobs on staging that write blobs into prod's `gs://catdav-proxies`.
 
 **Cost:** scales to zero → ~nothing when idle; per-deploy = one Cloud Build
 (same as a `main` deploy) + a few cents of image storage.

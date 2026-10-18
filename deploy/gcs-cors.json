@@ -5,7 +5,8 @@
       "https://catdv-annotator-cnxelo7pmq-ey.a.run.app",
       "https://catdv-annotator-staging-204842536530.europe-west3.run.app",
       "https://catdv-annotator-staging-cnxelo7pmq-ey.a.run.app",
-      "http://127.0.0.1:8765"
+      "http://127.0.0.1:8765",
+      "http://localhost:8765"
     ],
     "method": ["GET", "HEAD"],
     "responseHeader": ["Content-Type", "Content-Length", "Content-Range", "Accept-Ranges"],
