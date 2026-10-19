@@ -38,8 +38,6 @@ import aiosqlite
 
 from backend.app.archive.change_set_json import change_op_from_json
 from backend.app.archive.errors import (
-    AuthError,
-    FatalProviderError,
     ProviderError,
     RetryableError,
 )
@@ -67,6 +65,45 @@ def _parse_iso(s: str | None) -> datetime | None:
     if ts.tzinfo is None:
         ts = ts.replace(tzinfo=UTC)
     return ts
+
+
+def _backoff_elapsed(row: dict[str, Any], now: datetime, *, base_s: float, max_s: float) -> bool:
+    """True when a pending row may be attempted now (exponential backoff)."""
+    attempts = int(row.get("attempts") or 0)
+    if attempts == 0:
+        return True
+    attempted_at = _parse_iso(row.get("attempted_at"))
+    if attempted_at is None:
+        return True
+    delay = min(max_s, base_s * (2 ** (attempts - 1)))
+    return (now - attempted_at).total_seconds() >= delay
+
+
+def _group_by_clip(
+    rows: list[dict[str, Any]],
+) -> OrderedDict[tuple[str, str], list[dict[str, Any]]]:
+    """Group pending rows by (provider_id, provider_clip_id), preserving order."""
+    groups: OrderedDict[tuple[str, str], list[dict[str, Any]]] = OrderedDict()
+    for r in rows:
+        key = (r["provider_id"], r["provider_clip_id"])
+        groups.setdefault(key, []).append(r)
+    return groups
+
+
+def _change_set_for(provider_id: str, clip_id: str, rows: list[dict[str, Any]]) -> ChangeSet:
+    """Merge one clip's pending rows (oldest first) into a single ChangeSet."""
+    ops = [change_op_from_json(r["op_json"]) for r in rows]
+    # Rows are ordered oldest-first; when several apply batches for one
+    # clip are merged into a single ChangeSet, the conflict check must
+    # use the FRESHEST snapshot the user saw (the last-enqueued batch),
+    # not the oldest. Using rows[0] would let a stale older batch
+    # spuriously flag (or mask) a conflict. See ADR 0091.
+    expected_etag = rows[-1].get("expected_etag")
+    return ChangeSet(
+        clip_key=(provider_id, clip_id),
+        ops=tuple(ops),
+        expected_etag=expected_etag,
+    )
 
 
 class SyncEngine:
@@ -157,120 +194,116 @@ class SyncEngine:
 
         # filter out rows whose backoff hasn't elapsed
         now = self._clock()
-        eligible: list[dict[str, Any]] = []
-        for r in pending:
-            attempts = int(r.get("attempts") or 0)
-            if attempts == 0:
-                eligible.append(r)
-                continue
-            attempted_at = _parse_iso(r.get("attempted_at"))
-            if attempted_at is None:
-                eligible.append(r)
-                continue
-            delay = min(self._retry_max_s, self._retry_base_s * (2 ** (attempts - 1)))
-            if (now - attempted_at).total_seconds() >= delay:
-                eligible.append(r)
+        eligible = [
+            r
+            for r in pending
+            if _backoff_elapsed(r, now, base_s=self._retry_base_s, max_s=self._retry_max_s)
+        ]
         if not eligible:
             return 0
 
-        # group by (provider_id, provider_clip_id) preserving order
-        groups: OrderedDict[tuple[str, str], list[dict[str, Any]]] = OrderedDict()
-        for r in eligible:
-            key = (r["provider_id"], r["provider_clip_id"])
-            groups.setdefault(key, []).append(r)
-
         processed = 0
-        for (provider_id, clip_id), rows in groups.items():
+        for (provider_id, clip_id), rows in _group_by_clip(eligible).items():
             if provider_id != getattr(self._provider, "id", "catdv"):
                 # Foreign provider; skip silently.
                 continue
-            op_ids = [r["id"] for r in rows]
-            ops = [change_op_from_json(r["op_json"]) for r in rows]
-            # Rows are ordered oldest-first; when several apply batches for one
-            # clip are merged into a single ChangeSet, the conflict check must
-            # use the FRESHEST snapshot the user saw (the last-enqueued batch),
-            # not the oldest. Using rows[0] would let a stale older batch
-            # spuriously flag (or mask) a conflict. See ADR 0091.
-            expected_etag = rows[-1].get("expected_etag")
-            change_set = ChangeSet(
-                clip_key=(provider_id, clip_id),
-                ops=tuple(ops),
-                expected_etag=expected_etag,
-            )
-
-            await self._pending.mark_in_flight(db, op_ids)
-
-            try:
-                result = await self._provider.apply_changes(change_set)
-            except RetryableError as exc:
-                # Explicit "try later" (server busy, transport blip). Bounded
-                # by the same ceiling as unknown errors so a permanently-
-                # erroring op can't retry forever and block the queue.
-                await self._retry_or_fail(db, op_ids, rows, error=str(exc))
-                continue
-            except (AuthError, FatalProviderError) as exc:
-                await self._pending.mark_failed(db, op_ids, error=str(exc))
-                await self._advance_versions(db, rows, state="failed", reason=str(exc))
-                continue
-            except ProviderError as exc:
-                await self._pending.mark_failed(db, op_ids, error=str(exc))
-                await self._advance_versions(db, rows, state="failed", reason=str(exc))
-                continue
-            except Exception as exc:  # noqa: BLE001 — unknown adapter bug
-                # Default to retryable: unknown exception is most often
-                # transient (transport bug, adapter glitch). See ADR 0042.
-                await self._retry_or_fail(db, op_ids, rows, error=f"{type(exc).__name__}: {exc}")
-                continue
-
-            try:
-                await self._handle_result(
-                    db,
-                    provider_id=provider_id,
-                    clip_id=clip_id,
-                    op_ids=op_ids,
-                    rows=rows,
-                    result=result,
-                )
-            except Exception as exc:  # noqa: BLE001 — SQLITE_BUSY / constraint / unexpected
-                # _handle_result raised (e.g. SQLITE_BUSY from Litestream
-                # checkpoint contention, a constraint error). See ADR 0126.
-                if result.status == "ok":
-                    # The write ALREADY landed upstream. Re-applying would
-                    # duplicate it on the seat-limited CatDV server, so an ok
-                    # result must NEVER route through _retry_or_fail. Finalize
-                    # the terminal 'applied' state best-effort (mark_applied is
-                    # idempotent); if even that fails, the op stays in_flight and
-                    # boot-time reset_in_flight_to_pending reconciles it.
-                    log.exception(
-                        "post-apply bookkeeping failed for ops %s; already applied "
-                        "upstream — not retrying (would duplicate the write)",
-                        op_ids,
-                    )
-                    try:
-                        await self._pending.mark_applied(db, op_ids)
-                    except Exception:  # noqa: BLE001
-                        log.exception(
-                            "could not finalize applied state for ops %s; "
-                            "boot recovery will reconcile",
-                            op_ids,
-                        )
-                    continue
-                # conflict / fatal / retryable bookkeeping failed — the write did
-                # not land upstream (or was explicitly retryable), so resetting
-                # for another attempt is safe.
-                await self._retry_or_fail(db, op_ids, rows, error=humanise(exc))
-                continue
-            processed += 1
-            if self._event_bus is not None:
-                await self._event_bus.publish(
-                    "sync",
-                    {
-                        "provider_id": provider_id,
-                        "provider_clip_id": clip_id,
-                        "status": result.status,
-                    },
-                )
+            if await self._sync_clip(db, provider_id, clip_id, rows):
+                processed += 1
         return processed
+
+    async def _sync_clip(
+        self,
+        db: aiosqlite.Connection,
+        provider_id: str,
+        clip_id: str,
+        rows: list[dict[str, Any]],
+    ) -> bool:
+        """Apply one clip's pending ops as a single ChangeSet.
+
+        Returns True when the result was fully handled; the tick then counts
+        and publishes it. False otherwise, including an ok result whose
+        bookkeeping raised (ADR 0126).
+        """
+        op_ids = [r["id"] for r in rows]
+        change_set = _change_set_for(provider_id, clip_id, rows)
+
+        await self._pending.mark_in_flight(db, op_ids)
+
+        try:
+            result = await self._provider.apply_changes(change_set)
+        except RetryableError as exc:
+            # Explicit "try later" (server busy, transport blip). Bounded
+            # by the same ceiling as unknown errors so a permanently-
+            # erroring op can't retry forever and block the queue.
+            await self._retry_or_fail(db, op_ids, rows, error=str(exc))
+            return False
+        except ProviderError as exc:
+            await self._pending.mark_failed(db, op_ids, error=str(exc))
+            await self._advance_versions(db, rows, state="failed", reason=str(exc))
+            return False
+        except Exception as exc:  # noqa: BLE001 — unknown adapter bug
+            # Default to retryable: unknown exception is most often
+            # transient (transport bug, adapter glitch). See ADR 0042.
+            await self._retry_or_fail(db, op_ids, rows, error=f"{type(exc).__name__}: {exc}")
+            return False
+
+        try:
+            await self._handle_result(
+                db,
+                provider_id=provider_id,
+                clip_id=clip_id,
+                op_ids=op_ids,
+                rows=rows,
+                result=result,
+            )
+        except Exception as exc:  # noqa: BLE001 — SQLITE_BUSY / constraint / unexpected
+            # _handle_result raised (e.g. SQLITE_BUSY from Litestream
+            # checkpoint contention, a constraint error). See ADR 0126.
+            if result.status == "ok":
+                # Already applied upstream; never re-apply (ADR 0126).
+                await self._finalize_applied_after_bookkeeping_failure(db, op_ids)
+                return False
+            # conflict / fatal / retryable bookkeeping failed — the write did
+            # not land upstream (or was explicitly retryable), so resetting
+            # for another attempt is safe.
+            await self._retry_or_fail(db, op_ids, rows, error=humanise(exc))
+            return False
+        if self._event_bus is not None:
+            await self._event_bus.publish(
+                "sync",
+                {
+                    "provider_id": provider_id,
+                    "provider_clip_id": clip_id,
+                    "status": result.status,
+                },
+            )
+        return True
+
+    async def _finalize_applied_after_bookkeeping_failure(
+        self, db: aiosqlite.Connection, op_ids: list[int]
+    ) -> None:
+        """Record an ok result whose bookkeeping raised, without re-applying it.
+
+        Call only from an `except` block: `log.exception` logs that traceback.
+        """
+        # The write ALREADY landed upstream. Re-applying would
+        # duplicate it on the seat-limited CatDV server, so an ok
+        # result must NEVER route through _retry_or_fail. Finalize
+        # the terminal 'applied' state best-effort (mark_applied is
+        # idempotent); if even that fails, the op stays in_flight and
+        # boot-time reset_in_flight_to_pending reconciles it.
+        log.exception(
+            "post-apply bookkeeping failed for ops %s; already applied "
+            "upstream — not retrying (would duplicate the write)",
+            op_ids,
+        )
+        try:
+            await self._pending.mark_applied(db, op_ids)
+        except Exception:  # noqa: BLE001
+            log.exception(
+                "could not finalize applied state for ops %s; boot recovery will reconcile",
+                op_ids,
+            )
 
     async def _retry_or_fail(
         self,
