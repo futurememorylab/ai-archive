@@ -9,6 +9,7 @@ ADR 0130.
 
 from __future__ import annotations
 
+import asyncio
 import json as _json
 import logging
 from datetime import UTC, datetime
@@ -26,6 +27,10 @@ from backend.app.services.pricing import compute_cost
 from backend.app.services.telemetry_capture import extract_finish_reason, extract_usage
 
 log = logging.getLogger(__name__)
+
+# The summary is one call with no stream; without a cap it once ran into
+# Cloud Run's 300 s request limit while Vertex never answered.
+SUMMARY_TIMEOUT_S = 60
 
 # The first user turn of every chat: greet and describe the opening frame.
 # The page may have no picture to send (video not loaded, or the browser
@@ -146,12 +151,15 @@ async def summarize(
     lines = [f"{t.get('role', '?')}: {t.get('text', '')}" for t in transcript if t.get("text")]
     if not lines:
         return False
-    result = await gemini.chat(
-        model=model,
-        system_instruction=SUMMARY_PROMPT_CS,
-        turns=[{"role": "user", "text": "PŘEPIS:\n" + "\n".join(lines)}],
-        google_search=False,
-    )
+    # Only the Gemini call is capped (TimeoutError): the writes below must
+    # not be cut off halfway on the shared connection.
+    async with asyncio.timeout(SUMMARY_TIMEOUT_S):
+        result = await gemini.chat(
+            model=model,
+            system_instruction=SUMMARY_PROMPT_CS,
+            turns=[{"role": "user", "text": "PŘEPIS:\n" + "\n".join(lines)}],
+            google_search=False,
+        )
     if run_telemetry_repo is not None and telemetry_ctx is not None:
         await record_live_usage(
             conn,
