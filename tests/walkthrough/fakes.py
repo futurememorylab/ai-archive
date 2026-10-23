@@ -10,11 +10,13 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 from backend.app.archive.errors import NotFoundError
 from backend.app.archive.model import (
+    AI_MARKER_CATEGORY,
     CanonicalClip,
     CatalogInfo,
     ClipPage,
@@ -75,6 +77,17 @@ ANNOTATE_SAFE_NAMES = (
 # so its batch row's status is not perturbed by the other job scenarios.
 BATCH_REVIEW_CLIP_ID = 107
 BATCH_REVIEW_CLIP_NAME = "Harbour cranes, reel 3"
+
+# A clip with a published AI annotation (two AI markers + the AI description)
+# next to a human marker and the human description. Only the remove-ai
+# scenario touches it: it removes the AI annotation and checks the human data
+# stays.
+REMOVE_AI_CLIP_ID = 112
+REMOVE_AI_CLIP_NAME = "Garden party, reel 5"
+REMOVE_AI_HUMAN_MARKER = "Speech by the mayor"
+REMOVE_AI_MARKERS = ("Guests arrive", "Fireworks")
+AI_DESCRIPTION_IDENT = "pragafilm.popis.ai"
+HUMAN_DESCRIPTION_IDENT = "pragafilm.popis.materialu"
 
 # (clip_id, name) for every extra clip. 101 is the canonical clip (build_clip)
 # and is added separately; none of these names contain SEARCH_TERM by accident.
@@ -185,13 +198,45 @@ SECOND_CATALOG_CLIP_NAMES = ("ARNOLD Bogdan Sis 02", "BENES Jana 01")
 _SECOND_CATALOG_CLIPS = ((201, SECOND_CATALOG_CLIP_NAMES[0]), (202, SECOND_CATALOG_CLIP_NAMES[1]))
 
 
+def build_remove_ai_clip(video_path: Path, fps: float = 25.0) -> CanonicalClip:
+    """The remove-ai scenario's clip: published AI next to human data."""
+    base = _list_clip(REMOVE_AI_CLIP_ID, REMOVE_AI_CLIP_NAME, video_path, fps=fps)
+    ai = tuple(
+        Marker(
+            name=f"[Scene] {name}",
+            in_=Timecode(secs=float(i * 3), fps=fps, frm=i * 3 * int(fps)),
+            out=None,
+            category=AI_MARKER_CATEGORY,
+        )
+        for i, name in enumerate(REMOVE_AI_MARKERS, start=1)
+    )
+    human = Marker(
+        name=REMOVE_AI_HUMAN_MARKER,
+        in_=Timecode(secs=1.0, fps=fps, frm=int(fps)),
+        out=None,
+        category="Rozhovor",
+    )
+    fields = {
+        ident: FieldValue(identifier=ident, value=value)
+        for ident, value in (
+            (HUMAN_DESCRIPTION_IDENT, "Zahradní slavnost, popis archiváře."),
+            (AI_DESCRIPTION_IDENT, "Hosté přicházejí do zahrady, večer ohňostroj."),
+        )
+    }
+    return replace(base, markers=(human, *ai), fields=fields)
+
+
 def build_second_catalog_clips(video_path: Path) -> tuple[CanonicalClip, ...]:
     return tuple(_list_clip(i, n, video_path) for i, n in _SECOND_CATALOG_CLIPS)
 
 
 def build_clips(video_path: Path) -> tuple[CanonicalClip, ...]:
     """The full in-memory catalog: the canonical clip 101 + the search extras."""
-    return (build_clip(video_path), *(_list_clip(i, n, video_path) for i, n in _EXTRA_CLIPS))
+    return (
+        build_clip(video_path),
+        *(_list_clip(i, n, video_path) for i, n in _EXTRA_CLIPS),
+        build_remove_ai_clip(video_path),
+    )
 
 
 class FakeArchive:
@@ -256,8 +301,6 @@ class FakeArchive:
         return WriteResult(status="ok", upstream_response={}, new_etag="fake-etag")
 
     def _apply_ownership(self, change_set) -> None:
-        from dataclasses import replace
-
         from backend.app.archive.model import (
             AI_MARKER_CATEGORY,
             AI_OWNED_FIELDS,

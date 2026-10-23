@@ -183,3 +183,22 @@ async def apply_clip(
             request, "pages/_anno_draft.html", {"draft": draft, "clip": None}
         )
     return {"version_id": version_id}
+
+
+@router.post("/clips/{clip_id}/remove-ai")
+async def remove_ai(request: Request, clip_id: int):
+    """Remove the clip's AI markers and AI description from the archive and
+    discard its draft, so it can be annotated again from scratch.
+
+    Only what the app owns is touched (AI-category markers and
+    `pragafilm.popis.ai`, ADR 0127); the write goes through the queue like a
+    publish. The clip reads "Not annotated" from now on, and again if
+    the write fails it shows "Couldn't save" until retried from Sync."""
+    ctx = get_core_ctx(request)
+    if ctx.write_queue is None:
+        raise HTTPException(503, "write queue not initialized")
+    version_id = await ctx.publish_service.remove_ai(
+        ctx.db, clip_id=clip_id, author=_author(request)
+    )
+    _notify_sync(request)
+    return {"version_id": version_id}
