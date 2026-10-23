@@ -24,6 +24,7 @@ from typing import Any
 
 import aiosqlite
 
+from backend.app.archive.model import AI_OWNED_FIELDS, ReplaceAIMarkers, ReplaceNote, SetField
 from backend.app.models.annotation import ClipVersion
 from backend.app.services.write_queue import (
     ai_marker_values,
@@ -108,6 +109,65 @@ class PublishService:
             fps=fps,
             clip_version_id=version_id,
         )
+        return version_id
+
+    async def remove_ai(
+        self,
+        conn: aiosqlite.Connection,
+        *,
+        clip_id: int,
+        author: str | None,
+    ) -> int:
+        """Remove the clip's AI annotations from the archive so it can be
+        annotated again from scratch. Returns the new version's id.
+
+        Queues the same owned-only write a publish uses, with nothing in it: an
+        empty ReplaceAIMarkers (the payload builder keeps every non-AI marker
+        byte-identical and drops only `category == "AI"` ones) and an empty
+        value for each AI_OWNED_FIELDS field (`""` clears a CatDV field,
+        verified live 2026-10-14). Human markers, the human description and
+        every other field are never in the write (ADR 0127).
+
+        The removal is recorded as a version with origin 'removed' so history
+        keeps it and the next publish starts from it; once it is live the clip
+        reads "Not annotated". The clip's unpublished draft is discarded too.
+        """
+        parent = await self._versions.live_for_clip(conn, clip_id)
+        base = dict(parent.snapshot) if parent is not None else await self._load_live(conn, clip_id)
+        fields = {k: v for k, v in (base.get("fields") or {}).items() if k not in AI_OWNED_FIELDS}
+        snapshot = {**base, "markers": [], "fields": fields}
+        annotations = await self._annotations.list_by_clip(conn, clip_id)
+
+        version_id = await self._versions.insert(
+            conn,
+            ClipVersion(
+                catdv_clip_id=clip_id,
+                version_num=await self._versions.next_version_num(conn, clip_id),
+                parent_version_id=parent.id if parent else None,
+                snapshot=snapshot,
+                diff=_diff(base, snapshot),
+                origin="removed",
+                # The newest run this removal clears: a later run ends the reset.
+                annotation_id=annotations[0].id if annotations else None,
+                author=author,
+                publish_state="publishing",
+            ),
+            commit=False,
+        )
+        ops: list = [ReplaceAIMarkers(desired=())]
+        # Both shapes the summary can have been written with: a field (SetField)
+        # or a note in replace mode. On CatDV both land in fields[target].
+        for target in AI_OWNED_FIELDS:
+            ops += [SetField(identifier=target, value=""), ReplaceNote(target=target, text="")]
+        await self._wq.enqueue_ops(
+            conn,
+            clip_key=("catdv", str(clip_id)),
+            ops=ops,
+            clip_version_id=version_id,
+            commit=False,
+        )
+        await self._review_items.discard_draft_for_clip(conn, clip_id, commit=False)
+        await conn.commit()
         return version_id
 
 

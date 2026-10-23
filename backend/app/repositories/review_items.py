@@ -161,6 +161,25 @@ class ReviewItemsRepo:
         await conn.commit()
         return cur.rowcount or 0
 
+    async def discard_draft_for_clip(
+        self, conn: aiosqlite.Connection, clip_id: int, *, commit: bool = True
+    ) -> int:
+        """Delete a clip's annotation draft: every annotation-bound item not
+        yet applied (undecided, accepted-not-applied or rejected).
+
+        Used when the clip's AI annotations are removed from the archive so it
+        can be annotated again from scratch. Applied items stay as the record of
+        what was written; Studio rows (no annotation) are never touched.
+        """
+        cur = await conn.execute(
+            "DELETE FROM review_items WHERE catdv_clip_id = ? "
+            "AND annotation_id IS NOT NULL AND applied_at IS NULL",
+            (clip_id,),
+        )
+        if commit:
+            await conn.commit()
+        return cur.rowcount or 0
+
     async def delete_for_studio_run(self, conn: aiosqlite.Connection, *, studio_run_id: int) -> int:
         """Delete all review_items linked to a studio_run. Used by the
         annotator's studio finalize to ensure a retry doesn't accumulate

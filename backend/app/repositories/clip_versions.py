@@ -176,7 +176,9 @@ class ClipVersionsRepo:
     ) -> dict[int, int]:
         """Batched: {clip_id: version_num} for the LIVE version per clip (clips
         with no live version are absent). Backs the 'Live vN' label without N+1;
-        the publishing/failed signal comes from pending_operations, not here."""
+        the publishing/failed signal comes from pending_operations, not here.
+        A live removal (origin 'removed') means nothing of ours is in the
+        archive, so that clip is absent too and reads "Not annotated"."""
         out: dict[int, int] = {}
         if not clip_ids:
             return out
@@ -186,6 +188,7 @@ class ClipVersionsRepo:
                 SELECT catdv_clip_id, MAX(version_num)
                   FROM clip_versions
                  WHERE provider_id = ? AND publish_state = 'live'
+                   AND origin != 'removed'
                    AND catdv_clip_id IN ({fragment})
                  GROUP BY catdv_clip_id
                 """,
@@ -194,6 +197,45 @@ class ClipVersionsRepo:
             for clip_id, num in await cur.fetchall():
                 out[int(clip_id)] = int(num)
         return out
+
+    async def reset_clip_ids(
+        self,
+        conn: aiosqlite.Connection,
+        *,
+        provider_id: str = "catdv",
+        clip_id: int | None = None,
+        ignore_newer_annotations: bool = False,
+    ) -> set[int]:
+        """Clips whose AI annotations were removed from the archive.
+
+        A clip is reset when its newest version is a removal (origin 'removed')
+        that is live or still being written, and no annotation has run on it
+        since (the removal row records the newest annotation it cleared). Such a
+        clip reads "Not annotated" again. With `ignore_newer_annotations` a new,
+        unpublished run does not end the reset: the archive still holds nothing
+        of ours until it is published. `clip_id` narrows it to one clip.
+        """
+        sql = """
+            SELECT v.catdv_clip_id
+              FROM clip_versions v
+             WHERE v.provider_id = ? AND v.origin = 'removed'
+               AND v.publish_state IN ('live', 'publishing')
+               AND v.version_num = (SELECT MAX(version_num) FROM clip_versions w
+                                     WHERE w.provider_id = v.provider_id
+                                       AND w.catdv_clip_id = v.catdv_clip_id)
+        """
+        params: list = [provider_id]
+        if not ignore_newer_annotations:
+            sql += """
+               AND NOT EXISTS (SELECT 1 FROM annotations a
+                                WHERE a.catdv_clip_id = v.catdv_clip_id
+                                  AND a.id > COALESCE(v.annotation_id, 0))
+            """
+        if clip_id is not None:
+            sql += " AND v.catdv_clip_id = ?"
+            params.append(clip_id)
+        cur = await conn.execute(sql, params)
+        return {int(r[0]) for r in await cur.fetchall()}
 
     @staticmethod
     def _row(row) -> ClipVersion:

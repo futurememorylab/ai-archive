@@ -15,6 +15,10 @@
     Accept & apply would write are still listed (suggestions, applied and
     deleted items don't count). Alpine keeps the flag live after an apply or a
     fresh run; the server value covers first paint. -#}
+{#- What "Remove AI annotations" would delete: only what the app owns, i.e.
+    AI-category markers and the AI description (ADR 0127). -#}
+{% set ai_marker_count = clip.markers|selectattr('origin', 'equalto', 'ai')|list|length %}
+{% set ai_description = clip.fields|selectattr('origin', 'equalto', 'ai')|selectattr('value')|list|length > 0 %}
 {% set open_draft = draft_arrays.markers|length
      + draft_arrays.fields|rejectattr('suggestion')|list|length
      + draft_arrays.notes|rejectattr('suggestion')|list|length %}
@@ -73,6 +77,13 @@
           <div class="popover-panel menu align-right clip-more-panel" x-show="moreOpen" x-cloak
                @click.outside="moreOpen = false" @keydown.escape.window="moreOpen = false">
             {% include "pages/_cache_actions.html" %}
+            {% if ai_marker_count or ai_description %}
+              {{ ui.menu_sep() }}
+              {{ ui.menu_item('Remove AI annotations', danger=True,
+                              desc='Delete AI markers and description from the archive',
+                              action='moreOpen = false; removeAiOpen = true',
+                              attrs='x-show="!aiRemoved" data-test="remove-ai"') }}
+            {% endif %}
             {% if media_ready and clip.duration_secs %}
               {{ ui.menu_sep() }}
               {%- set spark -%}
@@ -203,6 +214,23 @@
       <button type="button" class="btn ghost" @click="liveSession.confirmEnd = false">Keep chatting</button>
       <button type="button" class="btn danger" data-test="live-end-confirm"
               @click="liveSession.close('user_stop').then(() => { historyLoaded = false; if (tab === 'history') loadHistory() })">End chat</button>
+    </div>
+  {% endcall %}
+
+  {# ── Remove AI annotations confirm dialog: deletes from the archive ──── #}
+  {% call ui.modal('removeAiOpen', label='Remove AI annotations?', card_cls='sm') %}
+    <div class="modal-body">
+      {%- set _what = [] -%}
+      {%- if ai_marker_count %}{% set _ = _what.append(ai_marker_count ~ ' AI marker' ~ ('' if ai_marker_count == 1 else 's')) %}{% endif -%}
+      {%- if ai_description %}{% set _ = _what.append('the AI description') %}{% endif %}
+      <p>This deletes {{ _what|join(' and ') }} from the archive.</p>
+      <p>Human markers, the human description and all other metadata stay as they are.</p>
+      {% if open_draft %}<p>The AI draft waiting for review is discarded too.</p>{% endif %}
+      <p>The clip goes back to Not annotated, so you can annotate it again.</p>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" @click="removeAiOpen = false">Cancel</button>
+      <button type="button" class="btn danger" data-test="remove-ai-confirm" @click="removeAi()">Remove from archive</button>
     </div>
   {% endcall %}
 

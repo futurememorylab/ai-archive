@@ -12,10 +12,11 @@ import aiosqlite
 from backend.app.archive.model import CanonicalClip
 from backend.app.db import open_db
 from backend.app.migrations_runner import apply_migrations
-from backend.app.models.annotation import Annotation, ReviewItem
+from backend.app.models.annotation import Annotation, ClipVersion, ReviewItem
 from backend.app.repositories.annotations import AnnotationsRepo
 from backend.app.repositories.catalogs import CatalogsRepo
 from backend.app.repositories.clip_list_cache import ClipListCacheRepo
+from backend.app.repositories.clip_versions import ClipVersionsRepo
 from backend.app.repositories.prompts import PromptsRepo
 from backend.app.repositories.review_items import ReviewItemsRepo
 from tests.walkthrough.fakes import (
@@ -23,6 +24,9 @@ from tests.walkthrough.fakes import (
     CLIP_NAME,
     DECADE_IDENT,
     PRODUCTION_PROMPT_NAME,
+    REMOVE_AI_CLIP_ID,
+    REMOVE_AI_CLIP_NAME,
+    REMOVE_AI_MARKERS,
     REVIEW_FIXTURE_CLIP_ID,
     REVIEW_FIXTURE_CLIP_NAME,
 )
@@ -213,6 +217,61 @@ async def seed_for_review_fixture(db: aiosqlite.Connection) -> int:
     return aid
 
 
+async def seed_published_ai_clip(db: aiosqlite.Connection) -> None:
+    """Record the remove-ai clip's AI annotation as published: an annotation
+    whose marker proposals were accepted and applied, and a live version. The
+    archive side (AI markers + description) is in fakes.build_remove_ai_clip."""
+    _, vid = await PromptsRepo().create_with_initial_version(
+        db,
+        name="remove-ai-tagger",
+        description=None,
+        body="Describe the scenes.",
+        target_map={"scenes": {"kind": "markers"}},
+        output_schema={},
+        model="gemini-2.5-pro",
+    )
+    aid = await AnnotationsRepo().insert(
+        db,
+        Annotation(
+            catdv_clip_id=REMOVE_AI_CLIP_ID,
+            catdv_clip_name=REMOVE_AI_CLIP_NAME,
+            prompt_version_id=vid,
+            model="gemini-2.5-pro",
+            prompt_used="Describe the scenes.",
+            raw_response={},
+            structured_output={},
+            clip_snapshot={"ID": REMOVE_AI_CLIP_ID, "markers": [], "fields": {}},
+        ),
+    )
+    values = [
+        {"name": name, "category": "Scene", "in": {"secs": float(i * 3)}}
+        for i, name in enumerate(REMOVE_AI_MARKERS, start=1)
+    ]
+    items = ReviewItemsRepo()
+    inserted = await items.bulk_insert(
+        db,
+        [
+            ReviewItem(
+                annotation_id=aid, catdv_clip_id=REMOVE_AI_CLIP_ID, kind="marker", proposed_value=v
+            )
+            for v in values
+        ],
+    )
+    for it in inserted:
+        await items.set_decision(db, it.id, "accepted")
+    await items.mark_applied(db, [it.id for it in inserted])
+    await ClipVersionsRepo().insert(
+        db,
+        ClipVersion(
+            catdv_clip_id=REMOVE_AI_CLIP_ID,
+            version_num=1,
+            snapshot={"markers": values, "fields": {}, "notes": None, "bigNotes": None},
+            annotation_id=aid,
+            publish_state="live",
+        ),
+    )
+
+
 async def seed_production_prompt(db: aiosqlite.Connection) -> int:
     """Seed one prompt with a PRODUCTION version matching the video clips.
 
@@ -290,6 +349,7 @@ async def build_seed_db(
         await apply_migrations(conn, _MIGRATIONS_DIR)
         aid = await seed_draft(conn)
         await seed_for_review_fixture(conn)
+        await seed_published_ai_clip(conn)
         await seed_production_prompt(conn)
         if clips is not None and catalog_id is not None:
             await seed_clip_list_cache(conn, clips, catalog_id)

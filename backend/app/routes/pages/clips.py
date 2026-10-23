@@ -509,13 +509,22 @@ async def _hydrate_clip(ctx, clip_id: int) -> CanonicalClip | None:
         raise
 
 
+async def _draft_annotation(ctx, clip_id: int):
+    """The clip's newest annotation, or None when it has none or its AI
+    annotations were removed from the archive since (its applied items would
+    otherwise read as "applied to the archive")."""
+    annotations = await ctx.annotations_repo.list_by_clip(ctx.db, clip_id)
+    if not annotations or await ctx.clip_versions_repo.reset_clip_ids(ctx.db, clip_id=clip_id):
+        return None
+    return annotations[0]  # DESC order
+
+
 async def _build_draft_for_clip(ctx, clip_id: int) -> dict:
     from backend.app.services.draft_view import build_draft_view
 
-    annotations = await ctx.annotations_repo.list_by_clip(ctx.db, clip_id)
-    if not annotations:
+    latest = await _draft_annotation(ctx, clip_id)
+    if latest is None:
         return build_draft_view(annotation=None, review_items=[])
-    latest = annotations[0]  # DESC order
     all_items = await ctx.review_items_repo.list_by_clip(ctx.db, clip_id)
     items = [it for it in all_items if it.annotation_id == latest.id]
     prompt_name: str | None = None
