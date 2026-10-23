@@ -257,9 +257,10 @@ async def seed_published_ai_clip(db: aiosqlite.Connection) -> None:
             for v in values
         ],
     )
-    for it in inserted:
-        await items.set_decision(db, it.id, "accepted")
-    await items.mark_applied(db, [it.id for it in inserted])
+    ids = [it.id for it in inserted if it.id is not None]
+    for item_id in ids:
+        await items.set_decision(db, item_id, "accepted")
+    await items.mark_applied(db, ids)
     await ClipVersionsRepo().insert(
         db,
         ClipVersion(

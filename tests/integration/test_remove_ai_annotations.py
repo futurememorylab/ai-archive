@@ -5,8 +5,10 @@ Spec: docs/specs/2026-10-23-remove-ai-annotations-design.md."""
 import asyncio
 import importlib
 from datetime import UTC, datetime
+from typing import cast
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.app.archive.change_set_json import change_op_from_json
@@ -59,7 +61,15 @@ async def _undecided_item(db, aid: int) -> int:
             )
         ],
     )
+    assert item.id is not None
     return item.id
+
+
+async def _publish_live(svc, db) -> int:
+    version_id = await svc.publish(db, clip_id=1, author=None)
+    assert version_id is not None
+    await ClipVersionsRepo().mark_live(db, version_id)
+    return version_id
 
 
 @pytest.mark.asyncio
@@ -68,8 +78,7 @@ async def test_remove_queues_only_owned_clears_and_records_a_removal(db):
     svc = _svc()
     aid = await _seed_annotation(db, vid)
     await _accept_marker(db, aid, "a", 1.0)
-    v1 = await svc.publish(db, clip_id=1, author=None)
-    await ClipVersionsRepo().mark_live(db, v1)
+    await _publish_live(svc, db)
     draft_id = await _undecided_item(db, aid)
 
     version_id = await svc.remove_ai(db, clip_id=1, author="anna@example.com")
@@ -100,7 +109,7 @@ async def test_removed_clip_reads_not_annotated_until_it_is_annotated_again(db):
     svc = _svc()
     aid = await _seed_annotation(db, vid)
     await _accept_marker(db, aid, "a", 1.0)
-    await ClipVersionsRepo().mark_live(db, await svc.publish(db, clip_id=1, author=None))
+    await _publish_live(svc, db)
     repo = ClipVersionsRepo()
     assert await repo.live_version_num_by_clip(db, [1]) == {1: 1}
 
@@ -126,7 +135,7 @@ async def test_filters_treat_a_removed_clip_as_not_annotated(db):
     svc = _svc()
     aid = await _seed_annotation(db, vid)
     await _accept_marker(db, aid, "a", 1.0)
-    await ClipVersionsRepo().mark_live(db, await svc.publish(db, clip_id=1, author=None))
+    await _publish_live(svc, db)
 
     async def anno(value):
         return await resolve(db, provider_id=PROVIDER, catalog_id=CATALOG, cache="any", anno=value)
@@ -227,7 +236,7 @@ def test_clip_page_hides_removal_without_ai_in_the_archive(monkeypatch, tmp_path
 
 def test_remove_route_queues_the_removal_and_empties_the_draft(monkeypatch, tmp_path):
     with _client(monkeypatch, tmp_path) as client:
-        ctx = client.app.state.core_ctx
+        ctx = cast(FastAPI, client.app).state.core_ctx
 
         async def _seed():
             vid = await _seed_prompt_version(ctx.db)
