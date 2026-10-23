@@ -83,7 +83,6 @@ class _FakeGemini:
 async def chat(tmp_path, monkeypatch):
     """The app with a fresh sqlite db, the chat prompt seeded and a fake Gemini."""
     import backend.app.routes.live as live_routes
-    import backend.app.services.live_sessions as live_sessions
 
     conn = await aiosqlite.connect(tmp_path / "t.db")
     await apply_migrations(conn, MIGRATIONS)
@@ -99,7 +98,7 @@ async def chat(tmp_path, monkeypatch):
     monkeypatch.setattr(live_routes, "load_draft_for_live", fake_load_draft)
     # A stalled call is given up on at once here, not after real seconds.
     monkeypatch.setattr(live_routes, "_IDLE_TIMEOUT_S", 0.05)
-    monkeypatch.setattr(live_sessions, "SUMMARY_TIMEOUT_S", 0.05)
+    monkeypatch.setattr("backend.app.services.live_sessions.SUMMARY_TIMEOUT_S", 0.05)
 
     class _Ctx:
         db = conn
