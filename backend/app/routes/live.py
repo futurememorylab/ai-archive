@@ -11,7 +11,8 @@ import json
 import logging
 import time
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
+from contextlib import aclosing
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -84,6 +85,11 @@ async def _system_instruction(ctx: Any, clip_id: int, prompt_version: int | None
 # took 27 s). The stream ends with the answer, so it can't idle like the job
 # event streams that #131 capped; this only stops a call that never ends.
 _ANSWER_TIMEOUT_S = 120
+# Vertex sometimes goes silent mid-stream and never finishes (staging,
+# 2026-10-23); a second try usually answers in seconds. Thoughts arrive every
+# few seconds while it works and a web search sends nothing, so this is well
+# past the slowest whole answer seen (27 s).
+_IDLE_TIMEOUT_S = 45
 
 # What an answer adds to its transcript entry when Gemini searched the web.
 _GROUNDING_KEYS = ("searches", "sources")
@@ -122,26 +128,26 @@ async def _stream_answer(
     async def body() -> AsyncIterator[bytes]:
         started = time.monotonic()
         final: dict[str, Any] = {}
-        events = ctx.gemini.chat_stream(
-            model=model,
-            system_instruction=system_instruction,
-            turns=turns,
-            google_search=google_search,
+        events = _answer_events(
+            lambda: ctx.gemini.chat_stream(
+                model=model,
+                system_instruction=system_instruction,
+                turns=turns,
+                google_search=google_search,
+            ),
+            label=f"chat {call} (session {session.id})",
         )
-        # The deadline covers waiting on Gemini only, not sending to the page.
-        deadline = asyncio.get_running_loop().time() + _ANSWER_TIMEOUT_S
         try:
-            while True:
-                async with asyncio.timeout_at(deadline):
-                    event = await anext(events, None)
-                if event is None:
-                    break
-                if event["type"] == "done":
-                    final = event
-                else:
-                    yield _line(event)
+            # aclosing: a page that goes away closes the Gemini stream now.
+            async with aclosing(events):
+                async for event in events:
+                    if event["type"] == "done":
+                        final = event
+                    else:
+                        yield _line(event)
         except (GeminiError, TimeoutError) as exc:
-            reason = humanise(exc) if isinstance(exc, GeminiError) else "it took too long"
+            # A TimeoutError from _answer_events says why: silence or the cap.
+            reason = humanise(exc) if isinstance(exc, GeminiError) else str(exc)
             log.warning(
                 "chat %s failed after %.1fs (session %s): %s",
                 call,
@@ -176,6 +182,38 @@ async def _stream_answer(
         yield _line({"type": "done", "reply": entry, **(done_extra or {})})
 
     return StreamingResponse(body(), media_type="application/x-ndjson")
+
+
+async def _answer_events(
+    open_stream: Callable[[], AsyncGenerator[dict[str, Any]]], *, label: str
+) -> AsyncGenerator[dict[str, Any]]:
+    """The events of `open_stream()` (a Gemini chat_stream), opening it again
+    once when it goes silent for _IDLE_TIMEOUT_S before any answer text was
+    sent (the page shows only thoughts until then, so nothing is written
+    twice) and there is time left for a second try. Otherwise a silence, or
+    reaching _ANSWER_TIMEOUT_S, raises TimeoutError carrying the reason. The
+    retry's lost thinking is not in the cost: Vertex reports usage only at
+    the end of a stream."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + _ANSWER_TIMEOUT_S
+    for attempt in range(2):
+        wrote = False
+        async with aclosing(open_stream()) as events:
+            try:
+                while True:
+                    async with asyncio.timeout_at(min(deadline, loop.time() + _IDLE_TIMEOUT_S)):
+                        event = await anext(events, None)
+                    if event is None:
+                        return
+                    wrote = wrote or event["type"] == "text"
+                    yield event
+            except TimeoutError:
+                left = deadline - loop.time()
+                if left <= 0:
+                    raise TimeoutError("it took too long") from None
+                if wrote or attempt or left < _IDLE_TIMEOUT_S:
+                    raise TimeoutError("it went silent") from None
+        log.warning("%s went silent; asking Gemini again", label)
 
 
 def _now_ms() -> int:
@@ -291,20 +329,28 @@ async def _get_session(ctx: Any, session_id: str) -> LiveSession:
 async def post_summarize(request: Request, session_id: str) -> dict:
     ctx = get_live_ctx(request)
     await _get_session(ctx, session_id)
+    await _summarize(ctx, session_id)
+    session = await _get_session(ctx, session_id)
+    return {"summary_cs": session.summary_cs}
+
+
+async def _summarize(ctx: Any, session_id: str) -> None:
+    """`summarize` with the chat's own model (it is what's being summarised);
+    a failure, or Gemini taking too long, is the request's error."""
     try:
         await summarize(
             ctx.db,
             session_id=session_id,
             gemini=ctx.gemini,
-            # The chat's own model: it is what's being summarised.
             model=ctx.settings.gemini_chat_model,
             run_telemetry_repo=ctx.run_telemetry_repo,
             telemetry_ctx=ctx.telemetry_ctx,
         )
     except GeminiError as exc:
         raise HTTPException(502, detail=f"Summary failed: {humanise(exc)}") from exc
-    session = await _get_session(ctx, session_id)
-    return {"summary_cs": session.summary_cs}
+    except TimeoutError:
+        log.warning("chat summary timed out (session %s)", session_id)
+        raise HTTPException(504, detail="Summary failed: Gemini took too long.") from None
 
 
 @router.get("/sessions")
