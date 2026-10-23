@@ -257,16 +257,18 @@ function reviewMixin(clipId) {
       this.aiRemoved = true;
       Alpine.store("toast").push("Removing the AI annotations from the archive…", { level: "info" });
       await this.refreshDraft();
-      this._watchSync();
+      await this._watchSync();
+      // The write didn't land: offer the action again (Sync can retry it too).
+      if (this.syncState === "problem") this.aiRemoved = false;
     },
     // Hand off to the async writeback: poll until it reaches the archive, then
     // refresh Published.
     _watchSync() {
       this.syncState = "syncing";
-      this._pollSync();
       // Reflect the new queued writes in the topbar sync chip at once — it
       // otherwise only updates on its own ~10s heartbeat.
       window.htmx?.ajax("GET", "/ui/sync-chip", { target: "#sync-chip", swap: "innerHTML" });
+      return this._pollSync();
     },
     async refreshDraft() {
       try {

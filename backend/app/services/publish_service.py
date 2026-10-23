@@ -145,7 +145,13 @@ class PublishService:
                 version_num=await self._versions.next_version_num(conn, clip_id),
                 parent_version_id=parent.id if parent else None,
                 snapshot=snapshot,
-                diff=_diff(base, snapshot),
+                diff={
+                    **_diff(base, snapshot),
+                    "markers_removed": len(base.get("markers") or []),
+                    "fields_removed": [
+                        k for k in AI_OWNED_FIELDS if k in (base.get("fields") or {})
+                    ],
+                },
                 origin="removed",
                 # The newest run this removal clears: a later run ends the reset.
                 annotation_id=annotations[0].id if annotations else None,

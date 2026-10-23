@@ -255,3 +255,19 @@ def test_remove_route_queues_the_removal_and_empties_the_draft(monkeypatch, tmp_
         assert cv.origin == "removed"
         d = client.get("/api/review/clips/1/draft-data").json()
         assert d["markers"] == [] and d["applied_count"] == 0
+
+
+def test_clip_page_does_not_offer_a_second_removal_while_one_is_queued(monkeypatch, tmp_path):
+    with _client(monkeypatch, tmp_path) as client:
+        install_live_ctx(client.app, archive=_Archive(_clip(with_ai=True)))
+        assert client.post("/api/review/clips/1/remove-ai").status_code == 200
+        r = client.get("/clips/1")
+        assert "aiRemoved: true" in r.text
+
+
+def test_merged_changeset_keeps_the_conflict_check_of_a_queued_publish():
+    from backend.app.services.sync_engine import _freshest_etag
+
+    rows = [{"expected_etag": "old"}, {"expected_etag": "new"}, {"expected_etag": None}]
+    assert _freshest_etag(rows) == "new"
+    assert _freshest_etag([{"expected_etag": None}]) is None

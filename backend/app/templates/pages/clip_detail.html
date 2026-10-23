@@ -35,6 +35,7 @@
          draftDeleted: {{ draft_arrays.deleted|tojson }}, appliedCount: {{ draft_arrays.applied_count }},
          syncedCount: {{ draft_arrays.synced_count }},
          canPlay: {{ 'true' if can_play else 'false' }}, moreOpen: false,
+         aiRemoved: {{ 'true' if ai_removal_pending else 'false' }},
          liveSession: liveSession({{ clip.id }})
        }
      )'

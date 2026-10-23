@@ -57,6 +57,21 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+def _freshest_etag(rows: list[dict[str, Any]]) -> str | None:
+    """The etag a merged ChangeSet is checked against.
+
+    Rows are ordered oldest-first; when several apply batches for one clip are
+    merged into a single ChangeSet, the conflict check must use the FRESHEST
+    snapshot the user saw (the last-enqueued batch), not the oldest. Using
+    rows[0] would let a stale older batch spuriously flag (or mask) a conflict.
+    See ADR 0091. Rows without an etag (removing the AI annotations) need no
+    check of their own, so they must not switch off the check of a publish
+    still queued before them.
+    """
+    etags = [r["expected_etag"] for r in rows if r.get("expected_etag")]
+    return etags[-1] if etags else None
+
+
 def _parse_iso(s: str | None) -> datetime | None:
     if not s:
         return None
@@ -186,12 +201,7 @@ class SyncEngine:
                 continue
             op_ids = [r["id"] for r in rows]
             ops = [change_op_from_json(r["op_json"]) for r in rows]
-            # Rows are ordered oldest-first; when several apply batches for one
-            # clip are merged into a single ChangeSet, the conflict check must
-            # use the FRESHEST snapshot the user saw (the last-enqueued batch),
-            # not the oldest. Using rows[0] would let a stale older batch
-            # spuriously flag (or mask) a conflict. See ADR 0091.
-            expected_etag = rows[-1].get("expected_etag")
+            expected_etag = _freshest_etag(rows)
             change_set = ChangeSet(
                 clip_key=(provider_id, clip_id),
                 ops=tuple(ops),

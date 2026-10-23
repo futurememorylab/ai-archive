@@ -192,7 +192,8 @@ async def remove_ai(request: Request, clip_id: int):
 
     Only what the app owns is touched (AI-category markers and
     `pragafilm.popis.ai`, ADR 0127); the write goes through the queue like a
-    publish, and the clip reads "Not annotated" once it lands."""
+    publish. The clip reads "Not annotated" from now on, and again if
+    the write fails it shows "Couldn't save" until retried from Sync."""
     ctx = get_core_ctx(request)
     if ctx.write_queue is None:
         raise HTTPException(503, "write queue not initialized")

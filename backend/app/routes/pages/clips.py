@@ -722,6 +722,14 @@ async def clip_detail_page(request: Request, clip_id: int, review: int | None = 
         getattr(ctx, "proxy_resolver", None), "is_host_local", False
     )
     ctx_dict["review_mode"] = bool(review)
+    # Removed already (the write may still be on its way, so the archive can
+    # still show the AI data): offering "Remove AI annotations" again would
+    # only queue it twice.
+    ctx_dict["ai_removal_pending"] = bool(
+        await ctx.clip_versions_repo.reset_clip_ids(
+            ctx.db, clip_id=clip_id, ignore_newer_annotations=True
+        )
+    )
 
     return templates.TemplateResponse(request, "pages/clip_detail.html", ctx_dict)
 
