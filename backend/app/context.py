@@ -588,8 +588,6 @@ async def _build_archive_subsystem(
 
     if use_catdv and not forced_offline:
         catdv, login_failed = await _open_catdv(core, connect_mode)
-        # Manual mode: client is built but stays logged out until the
-        # operator clicks Connect (POST /api/connection/connect).
 
     is_online = _is_online_provider(forced_offline, monitor_holder)
     archive = build_archive_provider(
@@ -636,16 +634,17 @@ async def _build_archive_subsystem(
 
 
 def _bridge_google_credentials(settings: Settings) -> None:
-    """Copy GOOGLE_APPLICATION_CREDENTIALS from Settings into os.environ."""
-    # Bridge GOOGLE_APPLICATION_CREDENTIALS from the .env-loaded Settings
-    # object back into os.environ before constructing any Google client
-    # (GcsService and GeminiService both call google.auth.default()).
-    # pydantic-settings parses .env into the Settings instance only; the
-    # google-auth SDK reads ADC sources from os.environ directly. Without
-    # this bridge, ADC silently falls through to the user's gcloud creds
-    # at ~/.config/gcloud/application_default_credentials.json, whose
-    # OAuth refresh token expires hourly and then breaks every annotate
-    # call with `invalid_grant: Bad Request`.
+    """Bridge GOOGLE_APPLICATION_CREDENTIALS from Settings into os.environ.
+
+    Must run before constructing any Google client (GcsService and
+    GeminiService both call google.auth.default()). pydantic-settings
+    parses .env into the Settings instance only; the google-auth SDK reads
+    ADC sources from os.environ directly. Without this bridge, ADC silently
+    falls through to the user's gcloud creds at
+    ~/.config/gcloud/application_default_credentials.json, whose OAuth
+    refresh token expires hourly and then breaks every annotate call with
+    `invalid_grant: Bad Request`.
+    """
     if settings.google_application_credentials:
         os.environ.setdefault(
             "GOOGLE_APPLICATION_CREDENTIALS",
@@ -670,6 +669,8 @@ async def _open_catdv(core: CoreCtx, connect_mode: str) -> tuple[CatdvClient | N
     )
     await catdv.__aenter__()
     if connect_mode != "auto":
+        # Manual mode: client is built but stays logged out until the
+        # operator clicks Connect (POST /api/connection/connect).
         return catdv, False
     return await _startup_login(catdv, settings.catdv_startup_login_timeout_s)
 
@@ -730,15 +731,15 @@ async def _startup_login(catdv: CatdvClient, timeout_s: float) -> tuple[CatdvCli
 def _is_online_provider(
     forced_offline: bool, monitor_holder: dict[str, ConnectionMonitor | None]
 ) -> Callable[[], bool]:
-    """The is_online provider that archive, resolver and thumbnails read."""
+    """The is_online provider that the archive and thumbnail service read."""
 
     # The is_online provider reads the monitor's state once the sync
     # subsystem constructs it (via the shared holder). We delegate to the
     # monitor instead of latching `login_failed` here, so a successful
     # retry_now() (e.g. after a seat frees up) actually flips the app back
     # to online for routes and services.
-    def _is_online(forced=forced_offline):
-        if forced:
+    def _is_online() -> bool:
+        if forced_offline:
             return False
         monitor = monitor_holder["monitor"]
         if monitor is None:
@@ -757,11 +758,12 @@ async def _build_catdv_proxy_resolver(
     from backend.app.services.proxy_resolver import build_resolver
 
     settings = core.settings
+    cache_dir = settings.data_dir / "cache" / "proxies"
     if offline:
         return build_resolver(
             source="cache-only",
             catdv_client=None,
-            cache_dir=settings.data_dir / "cache" / "proxies",
+            cache_dir=cache_dir,
             proxy_cache_repo=core.proxy_cache_repo,
             db_provider=lambda: core.db,
         )
@@ -775,7 +777,7 @@ async def _build_catdv_proxy_resolver(
     return build_resolver(
         source=settings.proxy_source,
         catdv_client=catdv,
-        cache_dir=settings.data_dir / "cache" / "proxies",
+        cache_dir=cache_dir,
         archive=archive,
         media_store_map=media_store_map,
         proxy_cache_repo=core.proxy_cache_repo,
@@ -796,7 +798,7 @@ def _build_thumbnail_service(
     settings = core.settings
     # Thumbnail cache: plain JPEG files alongside the proxy cache. Pass the
     # CatDV client only when we actually have one (online or seat-recoverable);
-    # in cache-only / fs modes the service still serves already-cached files.
+    # in cache-only mode the service still serves already-cached files.
     # is_online_provider gates network fetches: when the connection monitor
     # reports offline, cache misses are terminal (no network attempts).
 
