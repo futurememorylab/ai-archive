@@ -16,6 +16,8 @@ function reviewMixin(clipId) {
     syncState: "idle",   // idle | syncing | synced | problem
     syncFailed: 0,       // ops that errored out — retry from the drawer
     syncConflicts: 0,    // ops whose clip changed upstream — resolve in drawer
+    removeAiOpen: false, // the "Remove AI annotations?" confirm dialog
+    aiRemoved: false,    // hides the menu action once the removal is queued
     _reviewInit() {
       try { this.reviewQueue = JSON.parse(sessionStorage.getItem("catdv:reviewQueue") || "[]"); }
       catch (e) { this.reviewQueue = []; }
@@ -233,18 +235,40 @@ function reviewMixin(clipId) {
         await this.refreshDraft();
         // Hand off to the async writeback: poll until it reaches CatDV, then
         // resolve the message + refresh Published. No-op if nothing enqueued.
-        if (queued > 0) {
-          this.syncState = "syncing";
-          this._pollSync();
-          // Reflect the new queued writes in the topbar sync chip at once — it
-          // otherwise only updates on its own ~10s heartbeat.
-          window.htmx?.ajax("GET", "/ui/sync-chip", { target: "#sync-chip", swap: "innerHTML" });
-        }
+        if (queued > 0) this._watchSync();
         return true;
       } catch (e) {
         Alpine.store("toast").push(`Apply failed: ${e.message || e}. Nothing was applied.`, { level: "error" });
         return false;
       }
+    },
+    // ── remove the AI annotations from the archive ───────────────
+    // Behind a confirm dialog (removeAiOpen). The server queues a write that
+    // drops only AI markers + the AI description and discards the draft.
+    async removeAi() {
+      this.removeAiOpen = false;
+      try {
+        const r = await fetch(`/api/review/clips/${clipId}/remove-ai`, { method: "POST" });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      } catch (e) {
+        Alpine.store("toast").push(`Couldn't remove the AI annotations: ${e.message || e}. Nothing was changed.`, { level: "error" });
+        return;
+      }
+      this.aiRemoved = true;
+      Alpine.store("toast").push("Removing the AI annotations from the archive…", { level: "info" });
+      await this.refreshDraft();
+      await this._watchSync();
+      // The write didn't land: offer the action again (Sync can retry it too).
+      if (this.syncState === "problem") this.aiRemoved = false;
+    },
+    // Hand off to the async writeback: poll until it reaches the archive, then
+    // refresh Published.
+    _watchSync() {
+      this.syncState = "syncing";
+      // Reflect the new queued writes in the topbar sync chip at once — it
+      // otherwise only updates on its own ~10s heartbeat.
+      window.htmx?.ajax("GET", "/ui/sync-chip", { target: "#sync-chip", swap: "innerHTML" });
+      return this._pollSync();
     },
     async refreshDraft() {
       try {

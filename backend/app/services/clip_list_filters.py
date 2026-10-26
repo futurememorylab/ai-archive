@@ -25,6 +25,7 @@ from typing import Literal
 
 import aiosqlite
 
+from backend.app.repositories.clip_versions import ClipVersionsRepo
 from backend.app.repositories.review_items import FOR_REVIEW_WHERE
 
 CacheFilter = Literal["any", "none", "local", "ai"]
@@ -108,6 +109,28 @@ async def _ids_in_jobs(db: aiosqlite.Connection, job_ids: list[int]) -> set[int]
 async def _ids_with_any_annotation(db: aiosqlite.Connection) -> set[int]:
     cur = await db.execute("SELECT DISTINCT catdv_clip_id FROM annotations")
     return {int(r[0]) for r in await cur.fetchall()}
+
+
+async def _anno_set(
+    db: aiosqlite.Connection, anno: AnnoFilter, *, provider_id: str, universe: set[int]
+) -> set[int]:
+    """Clip IDs matching one Annotation-status filter value (not "any").
+
+    A clip whose AI annotations were removed from the archive counts as not
+    annotated again (and not in the archive) until it is annotated anew.
+    """
+    if anno == "for_review":
+        return await _ids_with_annotation_review_state(db, applied=False)
+    versions = ClipVersionsRepo()
+    if anno == "applied":
+        applied = await _ids_with_annotation_review_state(db, applied=True)
+        return applied - await versions.reset_clip_ids(
+            db, provider_id=provider_id, ignore_newer_annotations=True
+        )
+    annotated = await _ids_with_any_annotation(db) - await versions.reset_clip_ids(
+        db, provider_id=provider_id
+    )
+    return annotated if anno == "has_any" else universe - annotated
 
 
 async def _catalog_membership(
@@ -195,15 +218,7 @@ async def resolve(
         candidate = cache_set
 
     if anno != "any":
-        if anno == "for_review":
-            anno_set = await _ids_with_annotation_review_state(db, applied=False)
-        elif anno == "applied":
-            anno_set = await _ids_with_annotation_review_state(db, applied=True)
-        elif anno == "has_any":
-            anno_set = await _ids_with_any_annotation(db)
-        else:  # "none"
-            ann = await _ids_with_any_annotation(db)
-            anno_set = universe - ann
+        anno_set = await _anno_set(db, anno, provider_id=provider_id, universe=universe)
         candidate = anno_set if candidate is None else candidate & anno_set
 
     if batch:

@@ -47,7 +47,7 @@ class ClipVersion(BaseModel):
     parent_version_id: int | None = None
     snapshot: dict[str, Any]
     diff: dict[str, Any] | None = None
-    origin: Literal["publish", "restore"] = "publish"
+    origin: Literal["publish", "restore", "removed"] = "publish"
     model: str | None = None
     prompt_version_id: int | None = None
     annotation_id: int | None = None

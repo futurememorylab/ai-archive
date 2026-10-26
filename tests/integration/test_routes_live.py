@@ -3,6 +3,7 @@
 Gemini is a fake standing in for GeminiService.chat (Vertex); nothing here
 talks to Google."""
 
+import asyncio
 import base64
 import json
 from pathlib import Path
@@ -39,20 +40,35 @@ class _FakeGemini:
         self.fail: Exception | None = None
         self.searches: list[str] = []
         self.sources: list[dict] = []
+        # How many of the next calls go silent, like Vertex sometimes does;
+        # `stall_after_text` makes them go silent after writing a first piece.
+        self.stalls = 0
+        self.stall_after_text = False
+
+    async def _stall(self) -> None:
+        self.stalls -= 1
+        await asyncio.Event().wait()
 
     async def chat(self, **kwargs):
         if self.fail:
             raise self.fail
         self.calls.append(kwargs)
+        if self.stalls:
+            await self._stall()
         return {"text": self.replies.pop(0), "raw": _USAGE}
 
     async def chat_stream(self, **kwargs):
         if self.fail:
             raise self.fail
         self.calls.append(kwargs)
-        text = self.replies.pop(0)
         yield {"type": "thinking", "text": "Looking at the frame"}
+        if self.stalls and not self.stall_after_text:
+            await self._stall()
+        text = self.replies[0]
         yield {"type": "text", "text": text[:5]}
+        if self.stalls:
+            await self._stall()
+        self.replies.pop(0)
         yield {"type": "text", "text": text[5:]}
         yield {
             "type": "done",
@@ -80,6 +96,9 @@ async def chat(tmp_path, monkeypatch):
 
     monkeypatch.setattr(live_routes, "load_clip_for_live", fake_load_clip)
     monkeypatch.setattr(live_routes, "load_draft_for_live", fake_load_draft)
+    # A stalled call is given up on at once here, not after real seconds.
+    monkeypatch.setattr(live_routes, "_IDLE_TIMEOUT_S", 0.05)
+    monkeypatch.setattr("backend.app.services.live_sessions.SUMMARY_TIMEOUT_S", 0.05)
 
     class _Ctx:
         db = conn
@@ -242,6 +261,61 @@ async def test_gemini_failure_ends_the_stream_with_the_reason(chat):
 
 
 @pytest.mark.asyncio
+async def test_an_answer_that_goes_silent_is_asked_again_once(chat):
+    ac, conn, gemini = chat
+    sid = await _start(ac)
+    calls = len(gemini.calls)
+    gemini.stalls = 1
+    r = await ac.post(f"/api/live/sessions/{sid}/turns", json={"text": "A kde?"})
+    events = _events(r)
+    assert [e["type"] for e in events] == ["thinking", "thinking", "text", "text", "done"]
+    assert events[-1]["reply"]["text"] == "Spíš třicátá léta."
+    assert len(gemini.calls) == calls + 2
+    assert gemini.calls[-1] == gemini.calls[-2]  # the same question again
+    transcript = json.loads((await LiveSessionsRepo().get(conn, sid)).transcript_json or "[]")
+    assert transcript[-1]["text"] == "Spíš třicátá léta."
+
+
+@pytest.mark.asyncio
+async def test_a_greeting_that_goes_silent_is_asked_again_once(chat):
+    ac, _, gemini = chat
+    gemini.stalls = 1
+    r = await ac.post("/api/live/sessions", json={"clip_id": 42, "frame_b64": FRAME})
+    done = _last(r)
+    assert done["type"] == "done", done
+    assert done["reply"]["text"] == "Dobrý den, vidím zahradu."
+
+
+@pytest.mark.asyncio
+async def test_an_answer_silent_twice_ends_with_a_reason(chat):
+    ac, conn, gemini = chat
+    sid = await _start(ac)
+    gemini.stalls = 2
+    r = await ac.post(f"/api/live/sessions/{sid}/turns", json={"text": "A kde?"})
+    error = _last(r)
+    assert error["type"] == "error"
+    assert "went silent" in error["detail"]
+    session = await LiveSessionsRepo().get(conn, sid)
+    assert session.state == "active"
+    assert len(json.loads(session.transcript_json or "[]")) == 1
+
+
+@pytest.mark.asyncio
+async def test_an_answer_silent_mid_text_is_not_asked_again(chat):
+    # The page already shows part of the answer; a second answer would be
+    # written after it, so the chat says what happened instead.
+    ac, _, gemini = chat
+    sid = await _start(ac)
+    calls = len(gemini.calls)
+    gemini.stalls = 1
+    gemini.stall_after_text = True
+    r = await ac.post(f"/api/live/sessions/{sid}/turns", json={"text": "A kde?"})
+    assert [e["type"] for e in _events(r)] == ["thinking", "text", "error"]
+    assert "went silent" in _last(r)["detail"]
+    assert len(gemini.calls) == calls + 1
+
+
+@pytest.mark.asyncio
 async def test_a_failed_start_ends_the_session(chat):
     ac, conn, gemini = chat
     gemini.fail = GeminiQuotaError("429 resource exhausted")
@@ -306,6 +380,18 @@ async def test_summarize_stores_the_summary_and_its_cost(chat):
     r = await ac.post(f"/api/live/sessions/{sid}/summarize")
     assert r.json()["summary_cs"] == "Krátké shrnutí."
     assert len(gemini.calls) == calls
+
+
+@pytest.mark.asyncio
+async def test_a_summary_that_goes_silent_fails_instead_of_hanging(chat):
+    ac, conn, gemini = chat
+    sid = await _start(ac)
+    await ac.post(f"/api/live/sessions/{sid}/end", json={})
+    gemini.stalls = 1
+    r = await ac.post(f"/api/live/sessions/{sid}/summarize")
+    assert r.status_code == 504, r.text
+    assert "took too long" in r.json()["detail"]
+    assert (await LiveSessionsRepo().get(conn, sid)).summary_cs is None
 
 
 @pytest.mark.asyncio

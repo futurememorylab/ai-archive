@@ -95,7 +95,6 @@ class WriteQueue:
         `extra_ops` (e.g. provenance SetField writes) are appended after the
         item-derived ops with an empty origin review-item list.
         """
-        provider_id, provider_clip_id = clip_key
         fresh_items = [it for it in items if it.applied_at is None and it.id is not None]
         ops_with_origin = _items_to_change_ops(
             fresh_items,
@@ -108,20 +107,17 @@ class WriteQueue:
         if not ops_with_origin:
             return []
 
-        rows = []
-        for op, origin_ids in ops_with_origin:
-            rows.append(
-                {
-                    "provider_id": provider_id,
-                    "provider_clip_id": provider_clip_id,
-                    "op_kind": type(op).__name__,
-                    "op_json": change_op_to_json(op),
-                    "origin_annotation_id": annotation_id,
-                    "origin_review_item_ids": origin_ids,
-                    "expected_etag": expected_etag,
-                    "origin_clip_version_id": clip_version_id,
-                }
+        rows = [
+            _op_row(
+                clip_key,
+                op,
+                origin_ids,
+                annotation_id=annotation_id,
+                expected_etag=expected_etag,
+                clip_version_id=clip_version_id,
             )
+            for op, origin_ids in ops_with_origin
+        ]
 
         # commit=False → the connection serializer (WriteSerializedConnection)
         # holds the write lock across this whole window until conn.commit(), so
@@ -137,6 +133,58 @@ class WriteQueue:
             await self._review_items.mark_applied(conn, item_ids, commit=False)
         await conn.commit()
         return op_ids
+
+    async def enqueue_ops(
+        self,
+        conn: aiosqlite.Connection,
+        *,
+        clip_key: ClipKey,
+        ops: list[ChangeOp],
+        clip_version_id: int | None,
+        commit: bool = True,
+    ) -> list[int]:
+        """Enqueue ChangeOps that come from no review item (e.g. removing the
+        AI annotations). No expected etag: the payload builder works from the
+        live clip and touches only what the app owns, so a human edit in the
+        archive meanwhile is not a conflict."""
+        rows = [
+            _op_row(
+                clip_key,
+                op,
+                [],
+                annotation_id=None,
+                expected_etag=None,
+                clip_version_id=clip_version_id,
+            )
+            for op in ops
+        ]
+        op_ids = await self._pending.insert_many(conn, rows=rows, commit=False)
+        if commit:
+            await conn.commit()
+        return op_ids
+
+
+def _op_row(
+    clip_key: ClipKey,
+    op: ChangeOp,
+    origin_ids: list[int],
+    *,
+    annotation_id: int | None,
+    expected_etag: str | None,
+    clip_version_id: int | None,
+) -> dict[str, Any]:
+    """One pending_operations row for `op` on `clip_key`."""
+    provider_id, provider_clip_id = clip_key
+    return {
+        "provider_id": provider_id,
+        "provider_clip_id": provider_clip_id,
+        "op_kind": type(op).__name__,
+        "op_json": change_op_to_json(op),
+        "origin_annotation_id": annotation_id,
+        "origin_review_item_ids": origin_ids,
+        "expected_etag": expected_etag,
+        "origin_clip_version_id": clip_version_id,
+    }
 
 
 # --- ops grouping (moved out of routes/review.py) -------------------------
