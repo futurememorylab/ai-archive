@@ -396,6 +396,14 @@ a { color: inherit; text-decoration: none; }
 .vlist tbody tr.vrow { cursor: default; }
 .vlist tbody tr.vrow[onclick] { cursor: pointer; }
 .vlist tbody tr.vrow:hover { background: var(--hover); }
+/* Clip pickers: the ↗ link opens the clip in a new tab. */
+.vlist .col-open { width: 36px; text-align: center; }
+.vlist .col-open .open-tab {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: var(--r-1);
+  color: var(--text-3); text-decoration: none;
+}
+.vlist .col-open .open-tab:hover { color: var(--accent); background: var(--surface-2); }
 /* Explicit widths (border-box, so they include the 12px cell padding).
    The Clip name column has no width — it absorbs the remaining space on
    both lists. All compact data columns share one width so the two lists
