@@ -1570,8 +1570,12 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 
 .studio-hdr .hdr-titles {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 8px;
+}
+.studio-hdr .hdr-label {
+  font-size: 13px;
+  color: var(--text-2);
 }
 
 .studio-hdr .grow {
@@ -2049,19 +2053,37 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   font-weight: 600;
   color: var(--text);
 }
+/* Outlined so it reads as a control: researchers didn't spot the old
+   borderless title as the place to change the prompt. */
 .studio-hdr .hdr-title-trigger {
   appearance: none;
-  background: transparent;
-  border: 0;
-  padding: 4px 8px;
-  border-radius: 4px;
-  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line-3);
+  min-height: var(--btn-h);
+  padding: 0 10px 0 12px;
+  border-radius: var(--r-2);
+  display: inline-flex; align-items: center; gap: 8px;
   cursor: pointer;
   color: inherit;
 }
-.studio-hdr .hdr-title-trigger:hover { background: var(--surface-2); }
-.studio-hdr .hdr-title-trigger.open { background: var(--surface-2); }
-.studio-hdr .hdr-title-trigger .caret { font-size: 11px; color: var(--text-3); }
+.studio-hdr .hdr-title-trigger:hover { background: var(--surface-2); border-color: var(--accent); }
+.studio-hdr .hdr-title-trigger.open { background: var(--surface-2); border-color: var(--accent); }
+.studio-hdr .hdr-title-trigger .caret { font-size: 12px; color: var(--text-2); }
+
+/* Version menus: a dot on versions that have results for the focused clip. */
+.pc-run-dot {
+  width: 7px; height: 7px; flex: none;
+  border-radius: 50%;
+  background: var(--info);
+  visibility: hidden;
+}
+.pc-run-dot.on { visibility: visible; }
+.pc-vlegend {
+  display: flex; align-items: center; gap: 6px;
+  padding: 2px 10px 6px;
+  font-size: 11px;
+  color: var(--text-3);
+}
 
 /* ── Studio: archive picker modal ──────────────────────────────────────── */
 

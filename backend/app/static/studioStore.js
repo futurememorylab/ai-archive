@@ -24,6 +24,26 @@ let _studioEstimateKey = '';
 // single CatDV seat and Gemini quota. See spec §5.
 const BULK_RUN_CONCURRENCY = 2;
 
+// Which version "+ Compare" opens. Candidates come from the cur card's
+// version menu, which is re-rendered with every card swap, so it includes a
+// draft made in the lab since the page loaded. Prefer the version most
+// recently run on this clip (so "run one version, run another, compare"
+// shows those two), then a draft, then production, then anything else.
+function _pickCompareVersion(curId, runVersionIds) {
+  const others = [...document.querySelectorAll(
+    '.studio-prompt-card[data-side="cur"] [data-version-pick]'
+  )].map(el => ({
+    id: Number(el.dataset.versionPick),
+    version_num: Number(el.dataset.versionNum),
+    state: el.dataset.state,
+  })).filter(v => v.id !== curId);
+  const byId = new Map(others.map(v => [v.id, v]));
+  return runVersionIds.map(id => byId.get(id)).find(Boolean)
+    || others.find(v => v.state === 'draft')
+    || others.find(v => v.state === 'production')
+    || others[0];
+}
+
 document.addEventListener('alpine:init', () => {
   Alpine.store('studio', {
     ...window.studioRunButton(),
@@ -318,19 +338,21 @@ document.addEventListener('alpine:init', () => {
           { level: 'success' },
         );
         this.pendingRunSwap++;  // nudge the focused-clip output to refresh
+        this.runsFinished++;
       } finally {
         this.bulkRunning = false;
       }
     },
 
     async openCompare() {
-      const versions = window.__studioVersions || [];
-      const cur = this.activeVersionId;
-      const drafts = versions.filter(v => v.id !== cur && v.state === 'draft');
-      const prods  = versions.filter(v => v.id !== cur && v.state === 'production');
-      const others = versions.filter(v => v.id !== cur);
-      const pick = (drafts[0] || prods[0] || others[0]);
-      if (!pick) return;
+      const pick = _pickCompareVersion(this.activeVersionId, this.runVersionIds);
+      if (!pick) {
+        Alpine.store('toast').push(
+          'This prompt has only one version. Make a new draft to compare.',
+          { level: 'info' },
+        );
+        return;
+      }
       this.compareVersionId = pick.id;
       this.compareVersionNum = pick.version_num;
       this.compareDiff = false;  // open in side-by-side; Diff is opt-in

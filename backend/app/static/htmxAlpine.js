@@ -43,8 +43,9 @@ window.htmxAlpine = {
   // innerHTML, so we still process() it; htmx.process is idempotent.
   //
   // Use this for injected content that HAS its own x-data root. Use reinit()
-  // for content with NO x-data root (hosted-mode directives bound to an
-  // ancestor scope) or for subtrees HTMX swapped via hx-swap.
+  // only for content with NO x-data root (hosted-mode directives bound to an
+  // ancestor scope). Never initTree() an x-data root that HTMX swapped in via
+  // hx-swap either: the observer already initializes it.
   wireHtmx(el) {
     if (!el) {
       console.warn('htmxAlpine.wireHtmx: null element');
@@ -93,12 +94,13 @@ document.body.addEventListener('htmx:afterSwap', (evt) => {
 
   const card = evt.target.closest('.studio-prompt-card');
   if (!card) return;
-  // Alpine v3's MutationObserver doesn't reliably re-init x-data subtrees
-  // swapped by HTMX hx-swap="outerHTML" — after a few cycles the card
-  // comes back un-initialized, then every directive in it
-  // (picker, close, diff-toggle, tab clicks) becomes a dead click.
-  // Initialize the swapped subtree explicitly to keep it alive.
-  window.Alpine?.initTree(card);
+  // No Alpine.initTree(card) here: the card has its own x-data, so Alpine's
+  // MutationObserver initializes the swapped-in card by itself. Calling
+  // initTree() as well (as this handler used to) initialized it TWICE, so
+  // every @click fired twice: after a version switch "+ Compare" opened the
+  // compare card twice and the cmp card's Diff toggle flipped on and straight
+  // back off (compare looked broken until a reload). Same fix as the
+  // connection chip and wireHtmx() above.
   const side = card.getAttribute('data-side');
   const vId  = parseInt(card.getAttribute('data-version-id'), 10);
   const vNum = parseInt(card.getAttribute('data-version-num'), 10);

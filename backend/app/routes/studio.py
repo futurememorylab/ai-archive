@@ -464,6 +464,15 @@ async def get_run(request: Request, run_id: int):
     return run.model_dump()
 
 
+@router.get("/clips/{clip_id}/run-versions")
+async def run_versions_for_clip(request: Request, clip_id: int) -> list[int]:
+    """Prompt version ids with a finished (ok) run on this clip, most recent
+    first. Drives the dots in the lab's version menus and which version
+    "+ Compare" opens."""
+    ctx = get_core_ctx(request)
+    return await ctx.studio_runs_repo.versions_run_on_clip(ctx.db, clip_id=clip_id)
+
+
 @router.get("/runs")
 async def latest_run(
     request: Request,
