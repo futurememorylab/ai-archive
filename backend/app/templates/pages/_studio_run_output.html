@@ -24,7 +24,7 @@
     <div class="run-error-msg">{{ run.error or 'unknown error' }}</div>
   </div>
 {% elif run.status in ('pending', 'running') %}
-  <div class="run-empty muted">⟳ Running…</div>
+  <div class="run-empty muted"><span class="spin-ring" aria-hidden="true"></span> Running…</div>
 {% else %}
   {% with show_history = False, review_mode = False %}
     {% include "pages/_anno_panels.html" %}

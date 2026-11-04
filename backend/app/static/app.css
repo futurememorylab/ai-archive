@@ -1204,6 +1204,18 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 .model-picker .btn .dot {
   width: 6px; height: 6px; border-radius: 50%; background: var(--info);
 }
+/* Read-only model chip on the compare card: looks like the picker, no menu. */
+.model-picker .btn[aria-disabled="true"] { cursor: default; }
+.model-picker .btn[aria-disabled="true"]:hover { background: transparent; color: var(--text-2); }
+
+/* Small running spinner sized to the text around it (Run button, run slot). */
+.spin-ring {
+  display: inline-block; flex: none; vertical-align: -2px;
+  width: 1em; height: 1em; box-sizing: border-box;
+  border: 2px solid currentColor; border-top-color: transparent;
+  border-radius: 50%;
+  animation: shutdown-spin 0.8s linear infinite;
+}
 
 
 /* ─── JSON editor + syntax ───────────────────────────────────────────── */

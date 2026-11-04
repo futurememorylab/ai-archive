@@ -67,6 +67,14 @@
               x-show="compareVersionId === null"
               @click="openCompare()">+ Compare</button>
     {% else %}
+      {# The compare version's model, read only (same chip as the cur side's
+         picker, minus the menu) so the two runs' models can be told apart. #}
+      <span class="model-picker" data-cmp-model title="Model this version runs with">
+        <span class="btn sm ghost" aria-disabled="true">
+          <span class="dot"></span>
+          <span>{{ active_version.model }}</span>
+        </span>
+      </span>
       <span class="grow"></span>
       {# Shared Diff toggle (store.compareDiff) — drives the Prompt word-diff
          and the Output aligned table alike, so both tabs read side-by-side by

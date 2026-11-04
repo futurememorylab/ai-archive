@@ -111,6 +111,9 @@ def _compare(p) -> None:
     p.locator(CUR).get_by_role("button", name="+ Compare").click()
     expect(p.locator(CMP)).to_have_count(1)
     expect(p.locator(CMP).locator(".pc-vlbl")).to_have_text("v2")
+    # The compare card names its model too (read only, no menu).
+    model = p.locator(CUR).locator('.model-picker [x-text="model"]').inner_text().strip()
+    expect(p.locator(CMP).locator("[data-cmp-model]")).to_contain_text(model)
     expect(p.locator(CMP).locator(".run-slot")).to_contain_text("Harbour wide")
     # Both versions' scenes sit on the timeline, one row each.
     expect(p.locator(".studio-player .range")).to_have_count(2)

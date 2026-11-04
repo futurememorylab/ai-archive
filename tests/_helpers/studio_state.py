@@ -27,11 +27,11 @@ def run_button_label(
     if cancelled_flash_until_ms and now_ms < cancelled_flash_until_ms:
         return "⊘ Cancelled"
     if cancelling:
-        return "⟳ Cancelling…"
+        return "Cancelling…"
     if bulk_running:
-        return f"⟳ Running… {bulk_done}/{bulk_total}"
+        return f"Running… {bulk_done}/{bulk_total}"
     if running:
-        return f"⟳ Running… {elapsed_label}"
+        return f"Running… {elapsed_label}"
     v = active_version_num if active_version_num is not None else "?"
     if selected_count > 0:
         s = "" if selected_count == 1 else "s"
