@@ -135,6 +135,20 @@ class StudioRunsRepo:
         )
         return [r[0] for r in await cur.fetchall()]
 
+    async def versions_run_on_clip_recent_first(
+        self, conn: aiosqlite.Connection, *, clip_id: int
+    ) -> list[int]:
+        """Like versions_run_on_clip, ordered by each version's latest
+        successful run on this clip, newest first (the lab's "+ Compare"
+        opens the most recently run other version)."""
+        cur = await conn.execute(
+            "SELECT prompt_version_id FROM studio_run WHERE clip_id = ? AND status = 'ok' "
+            "GROUP BY prompt_version_id "
+            "ORDER BY MAX(COALESCE(finished_at, started_at)) DESC, prompt_version_id DESC",
+            (clip_id,),
+        )
+        return [r[0] for r in await cur.fetchall()]
+
     async def find_latest_id_for_job_clip(
         self, conn: aiosqlite.Connection, *, job_id: int, clip_id: int
     ) -> int | None:

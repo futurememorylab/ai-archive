@@ -34,6 +34,9 @@ document.addEventListener('alpine:init', () => {
     // every HTMX version swap, since the swapped card re-inits) so "Run" uses
     // the version actually shown. cmp cards never own the run model.
     init() {
+      // Marks this card as initialized, so htmxAlpine's afterSwap fallback
+      // doesn't initialize it a second time (double-bound clicks).
+      this.$el.setAttribute('data-alpine-ready', '1');
       if (this.side === 'cur') {
         const p = this._page();
         if (p) p.activeModel = this.model;

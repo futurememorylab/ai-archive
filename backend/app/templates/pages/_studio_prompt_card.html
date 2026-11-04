@@ -21,6 +21,15 @@
   <div class="pc-hdr">
     {% include "pages/_studio_version_picker.html" %}
     {% if side == 'cur' %}
+      {# "New draft": copy the shown version into a new editable draft without
+         leaving the lab. The response is this card showing the new draft.
+         Disabled while there are unsaved edits, which the copy would miss. #}
+      <button type="button" class="btn sm" data-new-draft
+              hx-post="/studio/_new_draft?from_version_id={{ active_version.id }}"
+              hx-target="closest .studio-prompt-card" hx-swap="outerHTML"
+              hx-disabled-elt="this"
+              :disabled="hasChanges"
+              :title="hasChanges ? 'Save your changes first' : 'Make an editable copy of v{{ active_version.version_num }}'">+ New draft</button>
       {# Model picker — lives in the card's own scope (no nested x-data), so
          a change flows into the card's `hasChanges`/`save()` exactly like the
          prompt screen. Editable only for a draft (`canEdit`); picking a model

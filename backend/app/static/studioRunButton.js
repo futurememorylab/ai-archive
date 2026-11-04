@@ -17,7 +17,37 @@
    focusedClipId and activeModel.
 */
 
+// Non-reactive request counter for refreshRunVersions(), so a slow reply for
+// a previously focused clip can't overwrite a newer one.
+let _studioRunVersionsSeq = 0;
+
 window.studioRunButton = () => ({
+  // Version ids with results for the focused clip, most recently run first.
+  // Refreshed on clip focus and after each run (x-effect in the header).
+  // Drives the dots in the version menus and which version "+ Compare" opens.
+  runVersionIds: [],
+
+  async refreshRunVersions() {
+    const cid = this.focusedClipId;
+    const seq = ++_studioRunVersionsSeq;
+    if (!cid) { this.runVersionIds = []; return; }
+    try {
+      const r = await fetch(`/api/studio/clips/${cid}/run-versions`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const ids = await r.json();
+      if (seq === _studioRunVersionsSeq) this.runVersionIds = ids;
+    } catch (err) {
+      console.error('run-versions load failed', err);
+      if (seq !== _studioRunVersionsSeq) return;
+      // Don't leave the previous clip's dots up.
+      this.runVersionIds = [];
+      Alpine.store('toast').push(
+        'Could not check which versions have results for this clip.',
+        { level: 'error' },
+      );
+    }
+  },
+
   // ── Run-button state machine ─────────────────────────────────────
   running: false,
   cancelling: false,

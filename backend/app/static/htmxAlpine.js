@@ -93,12 +93,21 @@ document.body.addEventListener('htmx:afterSwap', (evt) => {
 
   const card = evt.target.closest('.studio-prompt-card');
   if (!card) return;
-  // Alpine v3's MutationObserver doesn't reliably re-init x-data subtrees
-  // swapped by HTMX hx-swap="outerHTML" — after a few cycles the card
-  // comes back un-initialized, then every directive in it
-  // (picker, close, diff-toggle, tab clicks) becomes a dead click.
-  // Initialize the swapped subtree explicitly to keep it alive.
-  window.Alpine?.initTree(card);
+  // Alpine v3's MutationObserver usually initializes the swapped-in card
+  // (it has its own x-data), but not reliably — after a few cycles it can
+  // come back un-initialized and every directive in it is a dead click.
+  // Calling initTree() unconditionally here, though, initialized the card
+  // TWICE whenever the observer did its job: every @click then fired twice,
+  // so after a version switch "+ Compare" opened the compare card twice and
+  // the cmp card's Diff toggle flipped on and back off (compare looked
+  // broken until a reload). So: let the observer go first (it runs in a
+  // microtask, before this timeout) and init only a card it skipped. The
+  // card's own init() stamps data-alpine-ready (studioPromptCard.js).
+  setTimeout(() => {
+    if (card.isConnected && !card.hasAttribute('data-alpine-ready')) {
+      window.Alpine?.initTree(card);
+    }
+  }, 0);
   const side = card.getAttribute('data-side');
   const vId  = parseInt(card.getAttribute('data-version-id'), 10);
   const vNum = parseInt(card.getAttribute('data-version-num'), 10);
