@@ -112,7 +112,7 @@ document.addEventListener("alpine:init", () => {
       // then fires `suspend` rather than `canplay`/`playing`, so a
       // loadstart-armed spinner would spin forever on a merely-selected clip.
       // The first-play case is instead armed explicitly in `_requestPlay()`.
-      const buffOn = () => { this.buffering = true; };
+      const buffOn = () => { if (!this._rev && !this._scrubbing) this.buffering = true; };
       const buffOff = () => { this.buffering = false; };
       v.addEventListener("waiting",   buffOn);  // stalled mid-playback, needs data
       v.addEventListener("seeking",   buffOn);  // jumped to a new point/marker
@@ -169,7 +169,7 @@ document.addEventListener("alpine:init", () => {
       if (!v || !this.canPlay) return;   // offline + uncached: nothing to play
       this._recoverMedia(v);
       if (v.readyState < 3) this.buffering = true;
-      v.play().catch(() => { this.buffering = false; });
+      v.play().catch(() => { this.buffering = false; this.shuttleRate = 0; });
     },
 
     togglePlay() {

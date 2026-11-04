@@ -28,15 +28,24 @@ function playerTimelineMixin() {
     },
     _draftItem(id) { return this.draftMarkers.find(m => m.item_id === id); },
 
-    // Follow the pointer until it is released: onMove(ev) per move, onUp() once.
+    // Follow the pointer until it is released or the browser cancels the
+    // gesture: onMove(ev) per move, onUp() exactly once.
     _trackPointer(onMove, onUp) {
       const up = () => {
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", up);
+        window.removeEventListener("pointercancel", up);
         onUp();
       };
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", up);
+      window.addEventListener("pointercancel", up);
+    },
+
+    // Move the drawn playhead without a reactive write per animation frame:
+    // same frame quantization as player.init()'s timeupdate handler.
+    _setCurrent(t) {
+      if (Math.abs(t - this.current) >= 0.5 / this.fps) this.current = t;
     },
 
     startMarkerDrag(e, id, mode) {
@@ -71,24 +80,46 @@ function playerTimelineMixin() {
     // ─── scrub: drag the playhead along the timeline ──────────────
     // A plain click still jumps there and plays (as before). A drag pauses,
     // follows the pointer (one seek per animation frame), and on release
-    // resumes only if the clip was playing when the drag began.
+    // resumes, at the shuttle speed it had, only if it was playing.
+    _scrubbing: false,
     startScrub(e) {
       if (e.button !== 0 || !this.duration) return;
       e.preventDefault();
       const v = this.$refs.video;
       const wasPlaying = this.playing;
+      const rate = this.shuttleRate > 0 ? this.shuttleRate : 1;
       let moved = false, raf = 0, x = e.clientX;
       this._setShuttle(0);
-      this.seek(this._xToSecs(x), { play: false });
-      const apply = () => { raf = 0; this.current = this._xToSecs(x); this.seek(this.current, { play: false }); };
+      this._scrubbing = true;
+      const apply = () => {
+        raf = 0;
+        const t = this._xToSecs(x);
+        this._setCurrent(t);
+        this.seek(t, { play: false });
+      };
+      apply();
       this._trackPointer((ev) => {
         if (Math.abs(ev.clientX - e.clientX) > 3) moved = true;
         x = ev.clientX;
         if (!raf) raf = requestAnimationFrame(apply);
       }, () => {
         if (raf) { cancelAnimationFrame(raf); apply(); }
-        if (v && (!moved || wasPlaying)) this._requestPlay();
+        this._scrubbing = false;
+        if (!v) return;
+        if (!moved) this._requestPlay();
+        else if (wasPlaying) this._setShuttle(rate);
+        else this._holdAt(v, this._xToSecs(x));
       });
+    },
+
+    // preload="none": until the media has loaded, a seek only moves our
+    // drawn playhead. Load it now (the user asked for that spot) and land
+    // the video there once the metadata is in.
+    _holdAt(v, t) {
+      if (v.readyState > 0 || !this.canPlay) return;
+      v.addEventListener("loadedmetadata", () => { v.currentTime = t; }, { once: true });
+      v.preload = "metadata";
+      v.load();
     },
 
     // ─── J/K/L shuttle ────────────────────────────────────────────
@@ -139,13 +170,21 @@ function playerTimelineMixin() {
       v.pause();
     },
 
+    // Each frame writes the playhead back by rate × elapsed time. If the
+    // video sits somewhere we didn't put it, something else moved it (a frame
+    // step, a marker jump, a click): stop and leave it there.
     _startReverse(v) {
       let last = performance.now();
       let t = v.currentTime;
+      let written = null;
       const tick = (now) => {
+        if (!v.seeking && written != null && Math.abs(v.currentTime - written) > 0.05) {
+          this._setShuttle(0);
+          return;
+        }
         t = Math.max(0, t - Math.abs(this.shuttleRate) * (now - last) / 1000);
         last = now;
-        if (!v.seeking) { v.currentTime = t; this.current = t; }
+        if (!v.seeking) { v.currentTime = t; written = t; this._setCurrent(t); }
         if (t <= 0) { this._setShuttle(0); return; }
         this._rev = requestAnimationFrame(tick);
       };

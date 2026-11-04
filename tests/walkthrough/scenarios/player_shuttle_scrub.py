@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from playwright.sync_api import Page, expect
 
-from tests.walkthrough.scenarios._player_support import TC, ZERO, open_clip
+from tests.walkthrough.scenarios._player_support import TC, ZERO, assert_held, open_clip
 
 SLUG = "player-shuttle-scrub"
 TOPIC = "Player"
@@ -29,6 +29,11 @@ SHUTTLE = '[data-test="player-shuttle"]'
 
 def _expect_shuttle(p: Page, label: str) -> None:
     expect(p.locator(SHUTTLE)).to_have_text(label)
+
+
+def _expect_moving(p: Page) -> None:
+    """The timecode advances, so the player really is playing."""
+    expect(p.locator(TC)).not_to_have_text(p.locator(TC).inner_text())
 
 
 def _drag_playhead(p: Page) -> None:
@@ -54,7 +59,7 @@ def run(wt):
     )
     wt.step(
         "L plays forward at normal speed",
-        lambda p: (p.keyboard.press("l"), _expect_shuttle(p, "1×")),
+        lambda p: (p.keyboard.press("l"), _expect_shuttle(p, "1×"), _expect_moving(p)),
     )
     wt.step(
         "L again doubles the speed",
@@ -70,5 +75,5 @@ def run(wt):
     )
     wt.step(
         "K stops and resets the speed",
-        lambda p: (p.keyboard.press("k"), _expect_shuttle(p, "1×")),
+        lambda p: (p.keyboard.press("k"), _expect_shuttle(p, "1×"), assert_held(p)),
     )

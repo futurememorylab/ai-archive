@@ -638,6 +638,7 @@ a { color: inherit; text-decoration: none; }
 
 .timeline {
   position: relative;
+  touch-action: none;   /* a drag on the timeline scrubs; don't let the browser pan */
   height: 36px;
   background: var(--bg-2);
   border: 1px solid var(--line);
