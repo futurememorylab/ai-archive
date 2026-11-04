@@ -81,6 +81,24 @@ def test_new_draft_button_only_on_the_cur_card(client):
     assert "data-new-draft" not in cmp
 
 
+def test_compare_card_shows_its_model_read_only(client):
+    _, v1 = _make_prompt(client)
+    cmp = client.get(f"/studio/_prompt_card?side=cmp&prompt_version_id={v1}").text
+    cur = client.get(f"/studio/_prompt_card?side=cur&prompt_version_id={v1}").text
+    assert "data-cmp-model" in cmp
+    chip = cmp.split("data-cmp-model", 1)[1].split("</span>\n      </span>", 1)[0]
+    assert "gemini-2.5-pro" in chip
+    assert "<button" not in chip  # no menu: the compare side can't change it
+    assert "data-cmp-model" not in cur
+
+
+def test_run_button_draws_its_spinner(client):
+    pid, _ = _make_prompt(client)
+    html = client.get(f"/studio?prompt_id={pid}").text
+    assert 'class="spin-ring"' in html
+    assert "\u27f3" not in html
+
+
 def test_version_menu_has_result_dots(client):
     _, v1 = _make_prompt(client)
     html = client.get(f"/studio/_prompt_card?side=cur&prompt_version_id={v1}").text

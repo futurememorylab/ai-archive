@@ -84,9 +84,9 @@ window.studioRunButton = () => ({
     const now = this._nowMs || performance.now();
     if (this.doneFlashUntilMs && now < this.doneFlashUntilMs) return '✓ Done';
     if (this.cancelledFlashUntilMs && now < this.cancelledFlashUntilMs) return '⊘ Cancelled';
-    if (this.cancelling) return '⟳ Cancelling…';
-    if (this.bulkRunning) return `⟳ Running… ${this.bulkDone}/${this.bulkTotal}`;
-    if (this.running) return `⟳ Running… ${this.runningElapsedLabel}`;
+    if (this.cancelling) return 'Cancelling…';
+    if (this.bulkRunning) return `Running… ${this.bulkDone}/${this.bulkTotal}`;
+    if (this.running) return `Running… ${this.runningElapsedLabel}`;
     const v = (this.activeVersionNum !== null && this.activeVersionNum !== undefined)
       ? this.activeVersionNum : '?';
     const n = this.selectedClipIds.length;

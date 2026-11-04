@@ -92,6 +92,10 @@
             :disabled="(!focusedClipId && $store.studio.selectedClipIds.length === 0) || cancelling || $store.studio.bulkRunning || doneFlashUntilMs > 0"
             @click="runOrCancel()"
             :title="(focusedClipId || $store.studio.selectedClipIds.length) ? '' : 'Click a clip to focus it, or check clips to run several'">
+      {# A drawn spinner, not a "⟳" glyph: the glyph rendered tiny next to
+         the text in some fonts. #}
+      <span class="spin-ring" aria-hidden="true" x-cloak
+            x-show="$store.studio.running || $store.studio.bulkRunning || $store.studio.cancelling"></span>
       <span x-text="runButtonLabel()">▶ Run on this clip · v{{ active_version.version_num }}</span>
     </button>
   {% else %}
