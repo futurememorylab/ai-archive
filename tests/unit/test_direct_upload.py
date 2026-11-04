@@ -70,6 +70,13 @@ async def test_complete_refuses_a_blob_of_another_size():
     repo.upsert.assert_not_awaited()
 
 
+async def test_complete_refuses_a_blob_of_another_type():
+    direct, _, repo, _ = _direct(BlobMeta(size=10, content_type="text/html", md5=None))
+    with pytest.raises(UploadNotReceived, match="text/html"):
+        await direct.complete(CLIP, mime="video/mp4", size_bytes=10)
+    repo.upsert.assert_not_awaited()
+
+
 async def test_discard_deletes_the_blob():
     direct, gcs, _, _ = _direct()
     await direct.discard(CLIP)

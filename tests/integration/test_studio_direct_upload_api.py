@@ -150,11 +150,14 @@ def test_complete_refuses_when_the_file_never_arrived(cloud):
     assert _ai_store_row(client, core, clip_id) is None
 
 
-def test_complete_refuses_a_file_of_another_size(cloud):
-    client, gcs, _ = cloud
+def test_complete_refuses_a_file_of_another_size_and_drops_it(cloud):
+    client, gcs, core = cloud
     clip_id = _start(client, size_bytes=1000).json()["clip_id"]
     gcs.receive(clip_id, BIG)  # bigger than announced (and than the cap allows)
     assert client.post(f"/api/studio/uploads/direct/{clip_id}/complete").status_code == 409
+    # Nothing is left behind: not the oversized blob, not the reserved clip.
+    assert gcs.deleted == [clip_id]
+    assert client.portal.call(core.uploaded_clips_repo.get, core.db, clip_id) is None
 
 
 def test_abort_drops_the_reserved_clip_and_partial_blob(cloud):

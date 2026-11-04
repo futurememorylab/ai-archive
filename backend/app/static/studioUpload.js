@@ -48,12 +48,13 @@
     const base = `/api/studio/uploads/direct/${start.clip_id}`;
     try {
       await put(start.upload_url, file, start.mime, onProgress);
+      await postForm(`${base}/complete`, withPoster(new FormData(), poster, setId));
     } catch (err) {
-      // Free the reserved clip; the caller reports the upload error itself.
+      // Free the reserved clip and any partial file (a finished clip answers
+      // 404 and stays); the caller reports the upload error itself.
       fetch(base, { method: 'DELETE' }).catch((e) => console.warn('upload abort failed', e));
       throw err;
     }
-    await postForm(`${base}/complete`, withPoster(new FormData(), poster, setId));
   }
 
   async function send(file, meta, poster, setId, onProgress) {

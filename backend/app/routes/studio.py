@@ -389,7 +389,8 @@ async def complete_direct_upload(
     try:
         await direct.complete(clip_id, mime=row["mime"], size_bytes=row["size_bytes"])
     except UploadNotReceived as exc:
-        raise HTTPException(409, f"Upload incomplete: {exc}") from exc
+        await _drop_pending(request, direct, clip_id)
+        raise HTTPException(409, f"Upload incomplete: {humanise(exc)}") from exc
     return await _finish_upload(
         request,
         clip_id=clip_id,
@@ -408,13 +409,18 @@ async def abort_direct_upload(request: Request, clip_id: int):
     if direct is None:
         raise HTTPException(409, "this app doesn't take direct uploads")
     await _pending_upload(request, clip_id)
+    await _drop_pending(request, direct, clip_id)
+    return Response(status_code=204)
+
+
+async def _drop_pending(request: Request, direct, clip_id: int) -> None:
+    """Delete a reserved upload: whatever reached the bucket, then its row."""
     ctx = get_core_ctx(request)
     try:
         await direct.discard(clip_id)
     except Exception:  # noqa: BLE001 — best-effort; the row still goes
         log.warning("could not delete the partial upload of clip %s", clip_id, exc_info=True)
     await ctx.uploaded_clips_repo.delete(ctx.db, clip_id)
-    return Response(status_code=204)
 
 
 # ── runs ────────────────────────────────────────────────────────────────────

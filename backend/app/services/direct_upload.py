@@ -63,6 +63,8 @@ class DirectUpload:
             raise UploadNotReceived(
                 f"storage holds {meta.size} bytes but {size_bytes} were expected"
             )
+        if meta.content_type and meta.content_type != mime:
+            raise UploadNotReceived(f"storage holds a {meta.content_type} file, not {mime}")
         await self._repo.upsert(
             self._db_provider(),
             store_id=self._store_id,
