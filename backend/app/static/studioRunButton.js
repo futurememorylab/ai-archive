@@ -156,6 +156,7 @@ window.studioRunButton = () => ({
       this.runJobId = null;
       this.pendingRunSwap++;
       this.runsFinished++;
+      this.refreshPlayer();  // the timeline shows the new run's scenes
       if (finalStatus === 'ok') {
         this.doneFlashUntilMs = performance.now() + 1200;
         // If the user had pressed Cancel but the server completed first,

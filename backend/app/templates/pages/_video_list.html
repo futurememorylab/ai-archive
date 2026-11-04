@@ -51,7 +51,12 @@
            onload="this.classList.add('thumb--ready');"
            onerror="this.classList.add('thumb--empty'); this.removeAttribute('src');">{% endset %}
     {% set name_block %}<span class="name-wrap">
-        <span class="name">{{ row.name }}</span>
+        {#- In a picker (row_select) a row click ticks the row, so the clip page
+            opens from a ↗ right after the name, in a new tab. stopPropagation
+            so that click doesn't also tick the row. -#}
+        {% if row_select and row.row_href %}<span class="name-line"><span class="name">{{ row.name }}</span><a class="open-tab" href="{{ row.row_href }}" target="_blank" rel="noopener"
+           onclick="event.stopPropagation()" title="Open clip in a new tab" aria-label="Open {{ row.name }} in a new tab">↗</a></span>
+        {%- else %}<span class="name">{{ row.name }}</span>{% endif %}
         {% if row.name_sub %}<span class="name-sub mono">{{ row.name_sub }}</span>{% endif %}
       </span>{% endset %}
     <tr class="vrow{% if row.row_class %} {{ row.row_class }}{% endif %}"

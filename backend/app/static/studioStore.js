@@ -256,15 +256,26 @@ document.addEventListener('alpine:init', () => {
     },
 
     refreshPlayer() {
+      // Re-render the player + its timeline rows. Called on clip focus,
+      // version / compare changes and when a run ends (so new scenes show
+      // without a reload). Same clip: keeps the playback position.
       const slot = document.querySelector('[data-studio-player-slot]');
       if (!slot || !this.focusedClipId) return;
+      const clipId = this.focusedClipId;
       const params = new URLSearchParams();
-      params.set('clip_id', this.focusedClipId);
+      params.set('clip_id', clipId);
       if (this.activeVersionId)  params.set('version_id', this.activeVersionId);
       if (this.compareVersionId) params.set('compare_id', this.compareVersionId);
       fetch(`/studio/_player?${params.toString()}`)
         .then(r => r.text())
-        .then(html => { slot.innerHTML = html; });
+        .then(html => {
+          const old = slot.querySelector('.studio-player');
+          const sameClip = old && Number(old.dataset.clipId) === clipId;
+          const at = sameClip ? old.querySelector('video')?.currentTime || 0 : 0;
+          slot.innerHTML = html;
+          // The new player's Alpine init runs on the observer's microtask.
+          if (at > 0) setTimeout(() => this.seekFocusedClip(at), 0);
+        });
     },
 
     seekFocusedClip(secs) {
@@ -339,6 +350,7 @@ document.addEventListener('alpine:init', () => {
         );
         this.pendingRunSwap++;  // nudge the focused-clip output to refresh
         this.runsFinished++;
+        this.refreshPlayer();
       } finally {
         this.bulkRunning = false;
       }

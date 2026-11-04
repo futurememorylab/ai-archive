@@ -87,7 +87,7 @@ def test_version_menu_has_result_dots(client):
     assert "data-run-dot" in html
     assert f"$store.studio.runVersionIds.includes({v1})" in html
     assert 'data-version-num="1"' in html
-    assert "has results for this clip" in html
+    assert "has results for this clip" not in html  # no legend, just the dots
 
 
 def test_run_versions_lists_versions_with_finished_runs(client):
