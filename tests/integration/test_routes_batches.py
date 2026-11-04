@@ -546,3 +546,17 @@ def test_batch_clips_caps_long_batches_with_a_search_link(monkeypatch, tmp_path)
         assert html.count('class="vrow"') == 50
         assert "Open all 60 in search" in html
         assert f'href="/?batch={jid}"' in html
+
+
+def test_batches_picker_row_click_selects_not_navigates(monkeypatch, tmp_path):
+    """The picker lives in a modal (lab, New batch, calibrate): clicking a row
+    ticks it instead of opening the clip in place of the page, and a small
+    link opens the clip in a new tab for a look first."""
+    with _make_client(monkeypatch, tmp_path) as client:
+        install_live_ctx(client.app, archive=_PickerArchive([_picker_clip()]))
+        r = client.get("/batches/picker")
+        assert r.status_code == 200
+        assert "location.href" not in r.text
+        assert "querySelector('.row-check').click()" in r.text
+        assert 'href="/clips/12041" target="_blank" rel="noopener"' in r.text
+        assert 'title="Open clip in a new tab"' in r.text

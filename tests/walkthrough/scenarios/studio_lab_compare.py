@@ -15,7 +15,7 @@ from urllib.parse import urljoin
 
 from playwright.sync_api import expect
 
-from tests.walkthrough.fakes import CLIP_ID, PRODUCTION_PROMPT_NAME
+from tests.walkthrough.fakes import CLIP_ID, CLIP_NAME, PRODUCTION_PROMPT_NAME
 
 SLUG = "studio-lab-compare"
 TOPIC = "Prompt lab"
@@ -36,12 +36,33 @@ def _open_lab(p) -> None:
     pid = next(x["id"] for x in prompts if x["name"] == PRODUCTION_PROMPT_NAME)
     r = p.request.post(urljoin(p.url, "/api/studio/sets?source=archive"), data={"name": "Lab"})
     set_id = r.json()["id"]
-    p.request.post(urljoin(p.url, f"/api/studio/sets/{set_id}/clips"), data={"clip_ids": [CLIP_ID]})
-    p.goto(urljoin(p.url, f"/studio?prompt_id={pid}&clip_id={CLIP_ID}&source=archive"))
+    p.goto(
+        urljoin(
+            p.url,
+            f"/studio?prompt_id={pid}&clip_id={CLIP_ID}&source=archive&open_set_id={set_id}",
+        )
+    )
     hdr = p.locator(".studio-hdr")
     expect(hdr.locator(".hdr-label")).to_have_text("Prompt:")
     expect(hdr.locator(".hdr-title-trigger")).to_contain_text(PRODUCTION_PROMPT_NAME)
     expect(p.locator(CUR).locator(".pc-vlbl")).to_have_text("v1")
+
+
+def _add_clip_from_archive(p) -> None:
+    lab_url = p.url
+    p.locator(".studio-add-from-archive").click()
+    modal = p.locator(".modal-card")
+    row = modal.locator("tr.vrow").filter(has=p.locator(".name").get_by_text(CLIP_NAME, exact=True))
+    # The ↗ link opens the clip in a new tab; the picker stays.
+    expect(row.locator("a.open-tab")).to_have_attribute("target", "_blank")
+    # Clicking the row ticks it instead of leaving the lab.
+    row.locator(".name").click()
+    expect(row.locator("input.row-check")).to_be_checked()
+    assert p.url == lab_url
+    modal.get_by_role("button", name="Add", exact=True).click()
+    card = p.locator(f'.studio-clip-card[data-clip-id="{CLIP_ID}"]')
+    expect(card).to_be_visible()
+    card.click()
 
 
 def _new_draft(p) -> None:
@@ -104,6 +125,7 @@ def _diff_after_switch(p) -> None:
 
 def run(wt):
     wt.step("Open the lab: the header says which prompt is loaded", _open_lab)
+    wt.step("Add a clip from the archive: clicking a row ticks it", _add_clip_from_archive)
     wt.step("+ New draft makes an editable copy without leaving the lab", _new_draft)
     wt.step("Run the new draft on the clip", _run)
     wt.step("Switch to the production version and run it too", _run_production)

@@ -1,3 +1,7 @@
 <td class="mono num col-year">{{ row.year or "—" }}</td>
 <td class="mono num col-dur">{{ "%d:%02d"|format((row.duration_secs|int)//60, (row.duration_secs|int)%60) }}</td>
 <td class="col-type mono">{{ row.kind }}</td>
+{# A look before picking: opens the clip in a new tab, leaving the picker as
+   it is. stopPropagation so the click doesn't also tick the row. #}
+<td class="col-open">{% if row.row_href %}<a class="open-tab" href="{{ row.row_href }}" target="_blank" rel="noopener"
+   onclick="event.stopPropagation()" title="Open clip in a new tab" aria-label="Open {{ row.name }} in a new tab">↗</a>{% endif %}</td>

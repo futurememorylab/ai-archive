@@ -165,8 +165,9 @@ async def batches_picker(
             "head_cells": "pages/_batch_picker_head.html",
             "row_cells": "pages/_batch_picker_cells.html",
             "cache_label": "Cache",
-            "colspan": 6,
+            "colspan": 7,
             "empty_msg": "No clips match.",
+            "row_select": True,
         },
     )
 
