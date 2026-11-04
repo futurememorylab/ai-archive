@@ -415,6 +415,48 @@ class FakeAIStore:
         return {"uri": "fake://" + "/".join(upload["key"])}
 
 
+class FakeBucket:
+    """Offline media bucket for Studio's direct uploads (services/direct_upload.py).
+
+    The app signs a URL on a fake storage host; the scenario routes the
+    browser's PUT there and calls `receive()` so `blob_meta()` sees the file,
+    as GCS would. Thread-safe enough for one scenario at a time: the app reads
+    it on its executor thread while Playwright's route handler writes it."""
+
+    bucket_name = "walkthrough"
+    UPLOAD_HOST = "https://storage.walkthrough.test"
+
+    def __init__(self) -> None:
+        self.blobs: dict[int, object] = {}
+        self.deleted: list[int] = []
+
+    def signed_upload_url(self, clip_id: int, mime: str, *, expires_s: int) -> str:
+        return f"{self.UPLOAD_HOST}/upload/{clip_id}"
+
+    def blob_meta(self, clip_id: int):
+        return self.blobs.get(clip_id)
+
+    def gs_uri(self, clip_id: int) -> str:
+        return f"gs://walkthrough/uploads/{clip_id}.mov"
+
+    def delete(self, clip_id: int) -> None:
+        self.deleted.append(clip_id)
+        self.blobs.pop(clip_id, None)
+
+    def receive(self, clip_id: int, size: int, content_type: str) -> None:
+        from backend.app.services.gcs import BlobMeta
+
+        self.blobs[clip_id] = BlobMeta(size=size, content_type=content_type, md5=None)
+
+
+_BUCKET = FakeBucket()
+
+
+def bucket_fake() -> FakeBucket:
+    """The FakeBucket the walkthrough app's direct uploads go to."""
+    return _BUCKET
+
+
 # Default release timeout: if a scenario forgets to release() a held annotate,
 # the executor thread unblocks after this many seconds rather than wedging the
 # app. Generous so a slow CI box never trips it during a legitimate hold.

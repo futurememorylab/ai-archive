@@ -62,7 +62,10 @@ gsutil mb -p $PROJECT_ID -l $REGION gs://catdv-annotator-db   # Litestream repli
 # CORS on the media bucket: the player
 # loads signed media URLs with crossorigin="anonymous", so the clip chat can
 # read video frames; without a matching CORS entry the videos don't play at
-# all. Add every new app URL (another service, a custom domain, a different
+# all. Prompt Studio uploads PUT straight to the bucket on a signed URL
+# (Cloud Run refuses requests over 32 MB), so the policy also allows PUT;
+# without it every upload fails with "the connection to storage failed".
+# Add every new app URL (another service, a custom domain, a different
 # local port) to the file, re-run this, then check it:
 gcloud storage buckets update gs://catdav-proxies --cors-file=deploy/gcs-cors.json
 ./deploy/check-media-cors.sh catdv-annotator-staging catdv-annotator
