@@ -6,7 +6,7 @@
 
    Required scope (from caller's x-data="player(...)"):
      current, fps, duration (via player init), pct(secs), seek(secs),
-     seekFromEvent(e), tc(secs), quintileTc(i), isMarkerActive(m), markers.
+     startScrub(e), tc(secs), quintileTc(i), isMarkerActive(m), markers.
 
    Template inputs:
      duration_secs    — server-known clip duration (truthy gates the entire block)
@@ -19,7 +19,7 @@
      duration_smpte   — pre-formatted SMPTE string for the far-right tc label
 #}
 {% if duration_secs %}
-<div class="timeline" @click="seekFromEvent($event)">
+<div class="timeline" @pointerdown="startScrub($event)">
   <div class="ticks"></div>
   {% for row in rows %}
     <div class="ranges {{ row.cls }}"

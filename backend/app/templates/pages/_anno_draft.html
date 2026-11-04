@@ -56,9 +56,11 @@
          @click="seek(m.in_secs)" title="Jump to marker and play">
       <div class="ri-card-top">
         <span class="kind marker-kind" x-text="m.out_secs != null ? 'Scene' : 'Shot'"></span>
+        {# Category is plain text, not a box: it labels the scene, it isn't a
+           control. No per-item "AI · draft" pill either: everything in this
+           panel is an AI draft and the Draft switch above already says so
+           (provenance #123; Šikl feedback 2026-11-04). #}
         <span class="cat" x-show="m.category" x-text="m.category"></span>
-        {# Provenance (#123): every draft proposal is AI · draft (blue). #}
-        <span class="pill info"><span class="led"></span>AI · draft</span>
         <span class="ri-tc" x-text="tc(m.in_secs) + (m.out_secs != null ? ' – ' + tc(m.out_secs) : '')"></span>
       </div>
       <div class="ri-name" x-show="editingItemId !== m.item_id" x-text="m.name"></div>
@@ -98,10 +100,9 @@
     <div class="ri-card" :class="{ editing: editingItemId === f.item_id, 'ri-suggestion': f.suggestion }">
       <div class="ri-card-top">
         {# Provenance (#123): a shared (non-owned) field is a suggestion the app
-           never writes — pill "AI · suggestion", copy-only; an owned field is a
-           normal "AI · draft" editable proposal. #}
-        <span class="pill info"><span class="led"></span><span
-              x-text="f.suggestion ? 'AI · suggestion' : 'AI · draft'"></span></span>
+           never writes — pill "AI · suggestion", copy-only. An owned field is a
+           normal editable draft and needs no pill (see the marker card above). #}
+        <span class="pill info" x-show="f.suggestion"><span class="led"></span>AI · suggestion</span>
         <span class="ident" x-text="f.identifier"></span>
       </div>
       <div class="ri-value" x-show="editingItemId !== f.item_id" x-text="f.value"></div>
@@ -146,8 +147,7 @@
   <template x-for="n in draftNotes" :key="n.item_id">
     <div class="ri-card ri-note-row" :class="{ editing: editingItemId === n.item_id, 'ri-suggestion': n.suggestion }">
       <div class="ri-card-top">
-        <span class="pill info"><span class="led"></span><span
-              x-text="n.suggestion ? 'AI · suggestion' : 'AI · draft'"></span></span>
+        <span class="pill info" x-show="n.suggestion"><span class="led"></span>AI · suggestion</span>
       </div>
       <div class="ri-note-text" x-show="editingItemId !== n.item_id" x-text="n.text"></div>
       <template x-if="n.suggestion">

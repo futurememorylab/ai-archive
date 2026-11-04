@@ -98,6 +98,7 @@ document.addEventListener("alpine:init", () => {
       // active marker re-centres, even if the user had scrolled away earlier.
       v.addEventListener("play",  () => { this.playing = true; this.followSuspended = false; });
       v.addEventListener("pause", () => { this.playing = false; });
+      this._shuttleInit(v);
 
       // Buffering spinner. Under preload="none" the first play (or a seek to a
       // point/marker the browser hasn't fetched yet — common on the cloud GCS
@@ -138,61 +139,8 @@ document.addEventListener("alpine:init", () => {
       }
     },
 
-    // ─── timeline marker drag (review draft markers, edit-activated) ─
-    // Draft markers carry item_id + in_secs/out_secs (see draft_view.py).
-    // Dragging mutates the Alpine model (the .range :style binds to it so
-    // the bar moves live); persisting happens on Save via reviewMixin.saveEdit().
-    _drag: null,
-    _timelineEl() { return this.$root.querySelector(".timeline"); },
-    _xToSecs(clientX) {
-      const el = this._timelineEl();
-      if (!el) return 0;
-      const r = el.getBoundingClientRect();
-      if (!r.width || !this.duration) return 0;
-      const frac = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
-      return frac * this.duration;
-    },
-    _draftItem(id) { return this.draftMarkers.find(m => m.item_id === id); },
-
-    startMarkerDrag(e, id, mode) {
-      e.preventDefault(); e.stopPropagation();
-      // Enter the buffered edit (snapshots for Cancel, auto-saves any other
-      // open edit). reviewMixin provides startEdit on the clip-detail page;
-      // fall back to the raw flag elsewhere.
-      if (typeof this.startEdit === "function") this.startEdit(id, { seek: false });
-      else this.editingItemId = id;
-      const m = this._draftItem(id); if (!m) return;
-      this._drag = { id, mode, t0: this._xToSecs(e.clientX), in0: m.in_secs, out0: m.out_secs };
-      if (e.target.setPointerCapture) e.target.setPointerCapture(e.pointerId);
-      const move = (ev) => this._onMarkerDrag(ev);
-      const up = () => {
-        this._endMarkerDrag();
-        window.removeEventListener("pointermove", move);
-        window.removeEventListener("pointerup", up);
-      };
-      window.addEventListener("pointermove", move);
-      window.addEventListener("pointerup", up);
-    },
-
-    _onMarkerDrag(e) {
-      const d = this._drag; if (!d) return;
-      const m = this._draftItem(d.id); if (!m) return;
-      const dt = this._xToSecs(e.clientX) - d.t0;
-      const dur = this.duration;
-      if (d.mode === "move") {
-        const len = (d.out0 != null ? d.out0 : d.in0) - d.in0;
-        m.in_secs = Math.max(0, Math.min(d.in0 + dt, dur - len));
-        if (d.out0 != null) m.out_secs = m.in_secs + len;
-      } else if (d.mode === "in") {
-        m.in_secs = Math.max(0, Math.min(d.in0 + dt, (m.out_secs != null ? m.out_secs : dur)));
-      } else if (d.mode === "out") {
-        m.out_secs = Math.min(dur, Math.max(d.out0 + dt, m.in_secs));
-      }
-    },
-
-    _endMarkerDrag() {
-      this._drag = null;
-    },
+    // Marker drag, playhead scrub and the J/K/L shuttle (playerTimeline.js).
+    ...playerTimelineMixin(),
 
     nudgeMarker(dir, fine) {
       if (this.editingItemId == null) return;
@@ -275,15 +223,6 @@ document.addEventListener("alpine:init", () => {
       const clamped = Math.max(0, Math.min(secs, v.duration || this.duration || secs));
       v.currentTime = clamped;
       if (play && this.canPlay) v.play().catch(() => {});
-    },
-
-    seekFromEvent(e) {
-      // Rect of the timeline itself, not e.target — clicks may land on
-      // .ticks/.ranges children whose offsetX is relative to those.
-      const rect = e.currentTarget.getBoundingClientRect();
-      if (!rect.width || !this.duration) return;
-      const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      this.seek(frac * this.duration);
     },
 
     _jumpMarker(direction) {
@@ -423,11 +362,11 @@ document.addEventListener("alpine:init", () => {
           if (this.activeMarkers().length) { e.preventDefault(); this.nextMarker(); }
           break;
         case "j": case "J":
-          e.preventDefault(); this.stepFrame(-1); break;
+          e.preventDefault(); this.shuttle(-1); break;
         case "k": case "K":
-          e.preventDefault(); this.pause(); break;
+          e.preventDefault(); this._setShuttle(0); break;
         case "l": case "L":
-          e.preventDefault(); this.play(); break;
+          e.preventDefault(); this.shuttle(1); break;
         case "Home":
           e.preventDefault(); this.seek(0); break;
         case "End":
