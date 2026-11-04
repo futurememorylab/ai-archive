@@ -80,6 +80,8 @@ def _run(p) -> None:
     expect(btn).to_contain_text("Done", timeout=20000)
     expect(btn).to_contain_text("Run on this clip", timeout=5000)
     expect(p.locator(CUR).locator(".run-slot")).to_contain_text("Harbour wide")
+    # The timeline under the player shows the new scenes without a reload.
+    expect(p.locator(".studio-player .range").first).to_contain_text("Harbour wide")
 
 
 def _pick_version(p, card: str, num: int) -> None:
@@ -110,6 +112,8 @@ def _compare(p) -> None:
     expect(p.locator(CMP)).to_have_count(1)
     expect(p.locator(CMP).locator(".pc-vlbl")).to_have_text("v2")
     expect(p.locator(CMP).locator(".run-slot")).to_contain_text("Harbour wide")
+    # Both versions' scenes sit on the timeline, one row each.
+    expect(p.locator(".studio-player .range")).to_have_count(2)
 
 
 def _diff_after_switch(p) -> None:

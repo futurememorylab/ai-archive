@@ -25,7 +25,6 @@
   </button>
   <div class="popover-panel menu" x-show="open" x-cloak>
     {{ ui.menu_header('versions') }}
-    <div class="pc-vlegend"><span class="pc-run-dot on"></span> has results for this clip</div>
     {% for v in versions %}
       <button type="button"
               class="menu-item{% if v.id == active_version.id %} is-current{% endif %}"
