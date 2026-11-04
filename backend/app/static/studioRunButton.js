@@ -23,29 +23,31 @@ let _studioRunVersionsSeq = 0;
 
 window.studioRunButton = () => ({
   // Version ids with results for the focused clip, most recently run first.
-  // Refreshed on clip focus and after each run (x-effect in the header).
+  // Refreshed on clip focus and whenever a run finishes (runsFinished; the
+  // x-effect is in the header).
   // Drives the dots in the version menus and which version "+ Compare" opens.
   runVersionIds: [],
 
   async refreshRunVersions() {
     const cid = this.focusedClipId;
     const seq = ++_studioRunVersionsSeq;
-    if (!cid) { this.runVersionIds = []; return; }
-    try {
-      const r = await fetch(`/api/studio/clips/${cid}/run-versions`);
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const ids = await r.json();
-      if (seq === _studioRunVersionsSeq) this.runVersionIds = ids;
-    } catch (err) {
-      console.error('run-versions load failed', err);
-      if (seq !== _studioRunVersionsSeq) return;
-      // Don't leave the previous clip's dots up.
-      this.runVersionIds = [];
-      Alpine.store('toast').push(
-        'Could not check which versions have results for this clip.',
-        { level: 'error' },
-      );
+    let ids = [];
+    if (cid) {
+      try {
+        const r = await fetch(`/api/studio/clips/${cid}/run-versions`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        ids = await r.json();
+      } catch (err) {
+        console.error('run-versions load failed', err);
+        Alpine.store('toast').push(
+          'Could not check which versions have results for this clip.',
+          { level: 'error' },
+        );
+      }
     }
+    // A reply for a previously focused clip must not overwrite a newer one;
+    // on error the list empties so the old clip's dots don't linger.
+    if (seq === _studioRunVersionsSeq) this.runVersionIds = ids;
   },
 
   // ── Run-button state machine ─────────────────────────────────────
@@ -60,6 +62,7 @@ window.studioRunButton = () => ({
   _cancelRequested: false,
   _nowMs: 0,   // bumped by the 1Hz ticker so runButtonLabel re-evaluates
   pendingRunSwap: 0,
+  runsFinished: 0,   // bumped when a single or bulk run ends
 
   // Called once a second by the ticker hydrate() starts in the store.
   _tickRunButton(now) {
@@ -152,6 +155,7 @@ window.studioRunButton = () => ({
       this.cancelling = false;
       this.runJobId = null;
       this.pendingRunSwap++;
+      this.runsFinished++;
       if (finalStatus === 'ok') {
         this.doneFlashUntilMs = performance.now() + 1200;
         // If the user had pressed Cancel but the server completed first,

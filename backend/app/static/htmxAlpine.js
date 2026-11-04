@@ -43,8 +43,9 @@ window.htmxAlpine = {
   // innerHTML, so we still process() it; htmx.process is idempotent.
   //
   // Use this for injected content that HAS its own x-data root. Use reinit()
-  // for content with NO x-data root (hosted-mode directives bound to an
-  // ancestor scope) or for subtrees HTMX swapped via hx-swap.
+  // only for content with NO x-data root (hosted-mode directives bound to an
+  // ancestor scope). Never initTree() an x-data root that HTMX swapped in via
+  // hx-swap either: the observer already initializes it.
   wireHtmx(el) {
     if (!el) {
       console.warn('htmxAlpine.wireHtmx: null element');
@@ -93,21 +94,13 @@ document.body.addEventListener('htmx:afterSwap', (evt) => {
 
   const card = evt.target.closest('.studio-prompt-card');
   if (!card) return;
-  // Alpine v3's MutationObserver usually initializes the swapped-in card
-  // (it has its own x-data), but not reliably — after a few cycles it can
-  // come back un-initialized and every directive in it is a dead click.
-  // Calling initTree() unconditionally here, though, initialized the card
-  // TWICE whenever the observer did its job: every @click then fired twice,
-  // so after a version switch "+ Compare" opened the compare card twice and
-  // the cmp card's Diff toggle flipped on and back off (compare looked
-  // broken until a reload). So: let the observer go first (it runs in a
-  // microtask, before this timeout) and init only a card it skipped. The
-  // card's own init() stamps data-alpine-ready (studioPromptCard.js).
-  setTimeout(() => {
-    if (card.isConnected && !card.hasAttribute('data-alpine-ready')) {
-      window.Alpine?.initTree(card);
-    }
-  }, 0);
+  // No Alpine.initTree(card) here: the card has its own x-data, so Alpine's
+  // MutationObserver initializes the swapped-in card by itself. Calling
+  // initTree() as well (as this handler used to) initialized it TWICE, so
+  // every @click fired twice: after a version switch "+ Compare" opened the
+  // compare card twice and the cmp card's Diff toggle flipped on and straight
+  // back off (compare looked broken until a reload). Same fix as the
+  // connection chip and wireHtmx() above.
   const side = card.getAttribute('data-side');
   const vId  = parseInt(card.getAttribute('data-version-id'), 10);
   const vNum = parseInt(card.getAttribute('data-version-num'), 10);

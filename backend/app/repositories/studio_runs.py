@@ -128,19 +128,9 @@ class StudioRunsRepo:
         return _row_to_run(row) if row else None
 
     async def versions_run_on_clip(self, conn: aiosqlite.Connection, *, clip_id: int) -> list[int]:
-        """Returns distinct prompt_version_ids that have a successful run on this clip."""
-        cur = await conn.execute(
-            "SELECT DISTINCT prompt_version_id FROM studio_run WHERE clip_id = ? AND status = 'ok'",
-            (clip_id,),
-        )
-        return [r[0] for r in await cur.fetchall()]
-
-    async def versions_run_on_clip_recent_first(
-        self, conn: aiosqlite.Connection, *, clip_id: int
-    ) -> list[int]:
-        """Like versions_run_on_clip, ordered by each version's latest
-        successful run on this clip, newest first (the lab's "+ Compare"
-        opens the most recently run other version)."""
+        """Returns distinct prompt_version_ids that have a successful run on this
+        clip, most recently run first (the lab's "+ Compare" opens the most
+        recently run other version)."""
         cur = await conn.execute(
             "SELECT prompt_version_id FROM studio_run WHERE clip_id = ? AND status = 'ok' "
             "GROUP BY prompt_version_id "

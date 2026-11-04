@@ -338,6 +338,7 @@ document.addEventListener('alpine:init', () => {
           { level: 'success' },
         );
         this.pendingRunSwap++;  // nudge the focused-clip output to refresh
+        this.runsFinished++;
       } finally {
         this.bulkRunning = false;
       }

@@ -21,7 +21,7 @@
      header also keeps the store's list of versions with results for the
      focused clip fresh (the dots in the version menus). #}
   <div class="hdr-titles"
-       x-effect="$store.studio.focusedClipId; $store.studio.pendingRunSwap;
+       x-effect="$store.studio.focusedClipId; $store.studio.runsFinished;
                  $store.studio.refreshRunVersions()">
     <span class="hdr-label">Prompt:</span>
     {% if selected_prompt %}

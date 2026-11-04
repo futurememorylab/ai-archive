@@ -137,7 +137,7 @@ async def test_versions_run_on_clip(db):
 
 
 @pytest.mark.asyncio
-async def test_versions_run_on_clip_recent_first(db):
+async def test_versions_run_on_clip_most_recent_first(db):
     """The lab's "+ Compare" opens the most recently run other version, so
     the list comes back newest run first (a re-run moves a version up)."""
     repo = StudioRunsRepo()
@@ -152,4 +152,4 @@ async def test_versions_run_on_clip_recent_first(db):
         "WHERE prompt_version_id = 11"
     )
     await db.commit()
-    assert await repo.versions_run_on_clip_recent_first(db, clip_id=7) == [11, 10]
+    assert await repo.versions_run_on_clip(db, clip_id=7) == [11, 10]
