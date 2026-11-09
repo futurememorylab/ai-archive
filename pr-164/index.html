@@ -78,6 +78,7 @@
           <li><a href="#video-player-marker-navigation">Jump between markers and back</a></li>
           <li><a href="#video-player-marker-playstate">Marker jumps keep the play state</a></li>
           <li><a href="#video-player-play-pause">Play and pause the proxy</a></li>
+          <li><a href="#video-player-shuttle-scrub">Shuttle with J/K/L and drag the playhead</a></li>
           <li><a href="#video-player-step-frames">Step the playhead frame by frame</a></li>
         </ul>
       </li>
@@ -88,6 +89,16 @@
           <li><a href="#video-search-filter-not-annotated">Filter to clips with no annotations</a></li>
           <li><a href="#video-search-no-results">Search with no matches</a></li>
           <li><a href="#video-search-restore-after-clear">Clear the search to restore the full list</a></li>
+        </ul>
+      </li>
+      <li class="nav-topic"><a href="#topic-prompt-lab">Prompt lab</a>
+        <ul>
+          <li><a href="#video-studio-lab-compare">Make a draft, run two versions and compare them</a></li>
+        </ul>
+      </li>
+      <li class="nav-topic"><a href="#topic-prompt-studio">Prompt Studio</a>
+        <ul>
+          <li><a href="#video-studio-upload-direct">Upload a video into a Studio set</a></li>
         </ul>
       </li>
       </ul>
@@ -190,7 +201,7 @@
       </article>
       <article class="card" id="video-review-edit-annotation">
         <h3>Review an AI draft and publish it</h3>
-        <p>An operator opens a clip with a pending AI draft, sees the proposals badged AI · draft and the shared decade field offered as a copy-only suggestion, then publishes — the new marker turns orange (AI (orange pill)) while the human and legacy markers stay grey and untouched.</p>
+        <p>An operator opens a clip with a pending AI draft, sees the AI proposals and the shared decade field offered as a copy-only suggestion, then publishes — the new marker turns orange (AI (orange pill)) while the human and legacy markers stay grey and untouched.</p>
         <video controls preload="metadata" src="review-edit-annotation.webm"></video>
       </article>
     </section>
@@ -215,6 +226,11 @@
         <h3>Play and pause the proxy</h3>
         <p>An operator opens a clip and uses the transport&#x27;s play button to start the proxy, watches the timecode advance, then pauses it — the playhead holds.</p>
         <video controls preload="metadata" src="player-play-pause.webm"></video>
+      </article>
+      <article class="card" id="video-player-shuttle-scrub">
+        <h3>Shuttle with J/K/L and drag the playhead</h3>
+        <p>An operator drags the playhead to the middle of the timeline, presses L twice to play at double speed, J to go backwards, and K to stop.</p>
+        <video controls preload="metadata" src="player-shuttle-scrub.webm"></video>
       </article>
       <article class="card" id="video-player-step-frames">
         <h3>Step the playhead frame by frame</h3>
@@ -248,6 +264,22 @@
         <h3>Clear the search to restore the full list</h3>
         <p>After narrowing the list with a search, the operator clears the search box and the full, unfiltered clip list returns.</p>
         <video controls preload="metadata" src="search-restore-after-clear.webm"></video>
+      </article>
+    </section>
+    <section class="topic" id="topic-prompt-lab">
+      <h2>Prompt lab</h2>
+      <article class="card" id="video-studio-lab-compare">
+        <h3>Make a draft, run two versions and compare them</h3>
+        <p>A researcher makes a new draft in the lab, runs it and the production version on one clip, sees dots on the versions that have results, and compares the two without reloading.</p>
+        <video controls preload="metadata" src="studio-lab-compare.webm"></video>
+      </article>
+    </section>
+    <section class="topic" id="topic-prompt-studio">
+      <h2>Prompt Studio</h2>
+      <article class="card" id="video-studio-upload-direct">
+        <h3>Upload a video into a Studio set</h3>
+        <p>A researcher drops a video into an uploaded set. It goes straight to storage, not through the app, so large files work on the cloud app; the clip card appears in the set. A transfer that fails says why.</p>
+        <video controls preload="metadata" src="studio-upload-direct.webm"></video>
       </article>
     </section>
     </main>
