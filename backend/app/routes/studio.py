@@ -23,6 +23,8 @@ from pydantic import BaseModel
 from backend.app.auth.guards import require_permission
 from backend.app.deps import get_core_ctx
 from backend.app.routes.pages.templates import templates
+from backend.app.services.direct_upload import UploadNotReceived
+from backend.app.services.errors import humanise
 from backend.app.services.upload_cleanup import UploadCleanup
 from backend.app.uploaded_ids import is_uploaded, to_clip_id
 
@@ -156,6 +158,22 @@ async def remove_set_clip(request: Request, set_id: int, clip_id: int):
 _EXT_BY_MIME = {"video/mp4": ".mp4", "video/webm": ".webm"}
 
 
+def _check_upload(s, mime: str | None, size_bytes: int) -> tuple[str, str]:
+    """Validate an upload's type and size; return (mime, ext). 415 / 413 otherwise."""
+    mime = (mime or "").split(";")[0].strip()
+    allowed = {m.strip() for m in s.studio_upload_allowed_mimes.split(",") if m.strip()}
+    ext = _EXT_BY_MIME.get(mime)
+    if mime not in allowed or ext is None:
+        raise HTTPException(
+            415, f"Unsupported format {mime or 'unknown'!r}; allowed: {sorted(allowed)}"
+        )
+    if size_bytes > int(s.studio_upload_max_mb) * 1024 * 1024:
+        raise HTTPException(
+            413, f"File too large ({size_bytes} bytes); max {s.studio_upload_max_mb} MB"
+        )
+    return mime, ext
+
+
 @router.post("/uploads", status_code=status.HTTP_201_CREATED)
 async def upload_clip(
     request: Request,
@@ -167,26 +185,12 @@ async def upload_clip(
     height: int | None = Form(None),
     hx_request: str | None = Header(None, alias="HX-Request"),
 ):
+    """Upload through the app (local runs; see /uploads/direct for the cloud)."""
     ctx = get_core_ctx(request)
     s = ctx.settings
 
-    mime = (file.content_type or "").split(";")[0].strip()
-    allowed = {m.strip() for m in s.studio_upload_allowed_mimes.split(",") if m.strip()}
-    ext = _EXT_BY_MIME.get(mime)
-    if mime not in allowed or ext is None:
-        raise HTTPException(
-            415, f"Unsupported format {mime or 'unknown'!r}; allowed: {sorted(allowed)}"
-        )
-
     data = await file.read()
-    max_bytes = int(s.studio_upload_max_mb) * 1024 * 1024
-    if len(data) > max_bytes:
-        raise HTTPException(
-            413, f"File too large ({len(data)} bytes); max {s.studio_upload_max_mb} MB"
-        )
-
-    if set_id is None:
-        set_id = await ctx.studio_sets_repo.get_or_create_default_uploaded_set(ctx.db)
+    mime, ext = _check_upload(s, file.content_type, len(data))
 
     pk = await ctx.uploaded_clips_repo.create(
         ctx.db,
@@ -241,6 +245,33 @@ async def upload_clip(
                 exc_info=True,
             )
 
+    return await _finish_upload(
+        request,
+        clip_id=clip_id,
+        set_id=set_id,
+        poster=poster,
+        name=file.filename or f"upload-{clip_id}",
+        duration_secs=duration_secs,
+        hx_request=hx_request,
+    )
+
+
+async def _finish_upload(
+    request: Request,
+    *,
+    clip_id: int,
+    set_id: int | None,
+    poster: UploadFile | None,
+    name: str,
+    duration_secs: float | None,
+    hx_request: str | None,
+):
+    """Store the poster, add the clip to its set and answer with its card."""
+    ctx = get_core_ctx(request)
+    s = ctx.settings
+    if set_id is None:
+        set_id = await ctx.studio_sets_repo.get_or_create_default_uploaded_set(ctx.db)
+
     if poster is not None:
         poster_bytes = await poster.read()
         thumbs_dir = s.data_dir / "cache" / "thumbs"
@@ -267,7 +298,7 @@ async def upload_clip(
     if hx_request == "true":
         c = {
             "clip_id": clip_id,
-            "name": file.filename or f"upload-{clip_id}",
+            "name": name,
             "duration_secs": duration_secs,
             "year": None,
             "fps": 25.0,
@@ -282,6 +313,114 @@ async def upload_clip(
             status_code=status.HTTP_201_CREATED,
         )
     return {"clip_id": clip_id, "set_id": set_id}
+
+
+# ── direct-to-bucket uploads (cloud) ─────────────────────────────────────────
+# Cloud Run refuses requests over 32 MiB, so in ai_store mode the browser
+# PUTs the file straight into the bucket: start → PUT to the signed URL →
+# complete (or abort on failure). See services/direct_upload.py.
+
+
+class DirectUploadStart(BaseModel):
+    filename: str
+    mime: str
+    size_bytes: int
+    duration_secs: float | None = None
+    width: int | None = None
+    height: int | None = None
+
+
+def _direct_upload(request: Request):
+    live = request.app.state.live_ctx
+    return live.direct_upload if live is not None else None
+
+
+@router.post("/uploads/direct")
+async def start_direct_upload(request: Request, body: DirectUploadStart):
+    """Reserve an uploaded clip and hand the browser a signed URL to PUT it to.
+    Answers {"direct": false} when this app uploads through itself (local runs)."""
+    direct = _direct_upload(request)
+    if direct is None:
+        return {"direct": False}
+    ctx = get_core_ctx(request)
+    mime, ext = _check_upload(ctx.settings, body.mime, body.size_bytes)
+    pk = await ctx.uploaded_clips_repo.create(
+        ctx.db,
+        original_filename=body.filename or "upload",
+        mime=mime,
+        size_bytes=body.size_bytes,
+        ext=ext,
+        duration_secs=body.duration_secs,
+        width=body.width,
+        height=body.height,
+    )
+    clip_id = to_clip_id(pk)
+    try:
+        url = await direct.upload_url(clip_id, mime)
+    except Exception as exc:
+        await ctx.uploaded_clips_repo.delete(ctx.db, clip_id)
+        raise HTTPException(503, f"Couldn't prepare the upload: {humanise(exc)}") from exc
+    return {"direct": True, "clip_id": clip_id, "upload_url": url, "mime": mime}
+
+
+async def _pending_upload(request: Request, clip_id: int) -> dict:
+    """The reserved, not-yet-completed upload row for clip_id, or 404."""
+    ctx = get_core_ctx(request)
+    row = await ctx.uploaded_clips_repo.get(ctx.db, clip_id) if is_uploaded(clip_id) else None
+    if row is None or await ctx.studio_sets_repo.count_sets_for_clip(ctx.db, clip_id) > 0:
+        raise HTTPException(404, f"no upload in progress for clip {clip_id}")
+    return row
+
+
+@router.post("/uploads/direct/{clip_id}/complete", status_code=status.HTTP_201_CREATED)
+async def complete_direct_upload(
+    request: Request,
+    clip_id: int,
+    poster: UploadFile | None = File(None),
+    set_id: int | None = Form(None),
+    hx_request: str | None = Header(None, alias="HX-Request"),
+):
+    """The browser's PUT finished: check the bucket has the file, register it
+    and add the clip to its set."""
+    direct = _direct_upload(request)
+    if direct is None:
+        raise HTTPException(409, "this app doesn't take direct uploads")
+    row = await _pending_upload(request, clip_id)
+    try:
+        await direct.complete(clip_id, mime=row["mime"], size_bytes=row["size_bytes"])
+    except UploadNotReceived as exc:
+        await _drop_pending(request, direct, clip_id)
+        raise HTTPException(409, f"Upload incomplete: {humanise(exc)}") from exc
+    return await _finish_upload(
+        request,
+        clip_id=clip_id,
+        set_id=set_id,
+        poster=poster,
+        name=row["original_filename"],
+        duration_secs=row["duration_secs"],
+        hx_request=hx_request,
+    )
+
+
+@router.delete("/uploads/direct/{clip_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def abort_direct_upload(request: Request, clip_id: int):
+    """The browser's PUT failed: drop the reserved clip and any partial blob."""
+    direct = _direct_upload(request)
+    if direct is None:
+        raise HTTPException(409, "this app doesn't take direct uploads")
+    await _pending_upload(request, clip_id)
+    await _drop_pending(request, direct, clip_id)
+    return Response(status_code=204)
+
+
+async def _drop_pending(request: Request, direct, clip_id: int) -> None:
+    """Delete a reserved upload: whatever reached the bucket, then its row."""
+    ctx = get_core_ctx(request)
+    try:
+        await direct.discard(clip_id)
+    except Exception:  # noqa: BLE001 — best-effort; the row still goes
+        log.warning("could not delete the partial upload of clip %s", clip_id, exc_info=True)
+    await ctx.uploaded_clips_repo.delete(ctx.db, clip_id)
 
 
 # ── runs ────────────────────────────────────────────────────────────────────
@@ -323,6 +462,15 @@ async def get_run(request: Request, run_id: int):
     except LookupError as exc:
         raise HTTPException(404, str(exc)) from exc
     return run.model_dump()
+
+
+@router.get("/clips/{clip_id}/run-versions")
+async def run_versions_for_clip(request: Request, clip_id: int) -> list[int]:
+    """Prompt version ids with a finished (ok) run on this clip, most recent
+    first. Drives the dots in the lab's version menus and which version
+    "+ Compare" opens."""
+    ctx = get_core_ctx(request)
+    return await ctx.studio_runs_repo.versions_run_on_clip(ctx.db, clip_id=clip_id)
 
 
 @router.get("/runs")

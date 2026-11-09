@@ -4,6 +4,7 @@ AIInputStore adapter."""
 
 import base64
 import hashlib
+from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
 
@@ -24,6 +25,15 @@ def _local_md5_b64(path: Path) -> str:
         for chunk in iter(lambda: f.read(_HASH_CHUNK), b""):
             h.update(chunk)
     return base64.b64encode(h.digest()).decode()
+
+
+@dataclass(frozen=True)
+class BlobMeta:
+    """What GCS reports about a blob, without downloading it."""
+
+    size: int
+    content_type: str | None
+    md5: str | None
 
 
 class GcsService:
@@ -117,24 +127,48 @@ class GcsService:
         """V4 signed URL for a gs:// handle (e.g. an UploadedRef.handle).
 
         Blocking (may call the IAM credentials API) -- callers in async
-        context must wrap in asyncio.to_thread. With a key file
-        (GOOGLE_APPLICATION_CREDENTIALS, local dev) the library signs
-        directly; on Cloud Run ADC has no private key, so fall back to
-        IAM signBlob (needs roles/iam.serviceAccountTokenCreator on the
-        runtime SA -- see deploy/README.md).
+        context must wrap in asyncio.to_thread.
         """
         bucket_name, _, blob_name = gs_uri.removeprefix("gs://").partition("/")
         blob = self._client.bucket(bucket_name).blob(blob_name)
-        expiration = timedelta(seconds=expires_s)
-        try:
-            return blob.generate_signed_url(version="v4", expiration=expiration)
-        except AttributeError:
-            # ADC without a private key (Cloud Run): sign via IAM.
-            credentials, _ = google.auth.default()
-            credentials.refresh(google.auth.transport.requests.Request())
-            return blob.generate_signed_url(
-                version="v4",
-                expiration=expiration,
-                service_account_email=credentials.service_account_email,
-                access_token=credentials.token,
-            )
+        return _sign(blob, expiration=timedelta(seconds=expires_s))
+
+    def signed_upload_url(self, clip_id: int, mime: str, *, expires_s: int) -> str:
+        """V4 signed URL that lets a browser PUT one clip's bytes straight
+        into its blob, so large uploads never pass through Cloud Run (whose
+        HTTP/1 request limit is 32 MiB). The signature covers the method and
+        Content-Type: the browser must PUT with exactly `mime`. Blocking."""
+        blob = self._bucket.blob(self._blob_name(clip_id))
+        return _sign(
+            blob,
+            expiration=timedelta(seconds=expires_s),
+            method="PUT",
+            content_type=mime,
+        )
+
+    def blob_meta(self, clip_id: int) -> BlobMeta | None:
+        """Size, content type and md5 of the clip's blob; None when absent.
+        A metadata read, no download. Blocking."""
+        blob = self._bucket.get_blob(self._blob_name(clip_id))
+        if blob is None:
+            return None
+        return BlobMeta(size=int(blob.size or 0), content_type=blob.content_type, md5=blob.md5_hash)
+
+
+def _sign(blob, **kwargs) -> str:
+    """Sign a V4 URL for `blob`. With a key file (GOOGLE_APPLICATION_CREDENTIALS,
+    local dev) the library signs directly; on Cloud Run ADC has no private key,
+    so fall back to IAM signBlob (needs roles/iam.serviceAccountTokenCreator on
+    the runtime SA -- see deploy/README.md). Blocking."""
+    try:
+        return blob.generate_signed_url(version="v4", **kwargs)
+    except AttributeError:
+        # ADC without a private key (Cloud Run): sign via IAM.
+        credentials, _ = google.auth.default()
+        credentials.refresh(google.auth.transport.requests.Request())
+        return blob.generate_signed_url(
+            version="v4",
+            service_account_email=credentials.service_account_email,
+            access_token=credentials.token,
+            **kwargs,
+        )

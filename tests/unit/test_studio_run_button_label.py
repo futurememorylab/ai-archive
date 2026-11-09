@@ -51,7 +51,7 @@ def test_running_renders_elapsed():
             active_version_num=3,
             elapsed_label="0:05",
         )
-        == "⟳ Running… 0:05"
+        == "Running… 0:05"
     )
 
 
@@ -66,7 +66,7 @@ def test_running_renders_with_minute_elapsed():
             active_version_num=3,
             elapsed_label="1:30",
         )
-        == "⟳ Running… 1:30"
+        == "Running… 1:30"
     )
 
 
@@ -81,7 +81,7 @@ def test_cancelling_overrides_running():
             active_version_num=3,
             elapsed_label="0:05",
         )
-        == "⟳ Cancelling…"
+        == "Cancelling…"
     )
 
 
@@ -203,7 +203,7 @@ def test_bulk_running_shows_progress():
             bulk_done=2,
             bulk_total=4,
         )
-        == "⟳ Running… 2/4"
+        == "Running… 2/4"
     )
 
 
