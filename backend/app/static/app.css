@@ -396,6 +396,14 @@ a { color: inherit; text-decoration: none; }
 .vlist tbody tr.vrow { cursor: default; }
 .vlist tbody tr.vrow[onclick] { cursor: pointer; }
 .vlist tbody tr.vrow:hover { background: var(--hover); }
+/* Clip pickers: the ↗ link right after the clip name opens it in a new tab. */
+.vlist .open-tab {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex: none; width: 22px; height: 22px; margin-left: 4px;
+  border-radius: var(--r-1);
+  color: var(--text-3); text-decoration: none;
+}
+.vlist .open-tab:hover { color: var(--accent); background: var(--surface-2); }
 /* Explicit widths (border-box, so they include the 12px cell padding).
    The Clip name column has no width — it absorbs the remaining space on
    both lists. All compact data columns share one width so the two lists
@@ -427,6 +435,7 @@ a { color: inherit; text-decoration: none; }
 .vlist .namecell { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .vlist .name-wrap { display: flex; flex-direction: column; min-width: 0; }
 .vlist .name { overflow: hidden; text-overflow: ellipsis; }
+.vlist .name-line { display: flex; align-items: center; min-width: 0; }
 .vlist .name-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
 .vlist .empty { text-align: center; color: var(--text-3); padding: 32px 0; }
 
@@ -629,6 +638,7 @@ a { color: inherit; text-decoration: none; }
 
 .timeline {
   position: relative;
+  touch-action: none;   /* a drag on the timeline scrubs; don't let the browser pan */
   height: 36px;
   background: var(--bg-2);
   border: 1px solid var(--line);
@@ -1195,6 +1205,18 @@ button.tag:disabled { cursor: default; opacity: 0.65; }
 .model-picker .btn .dot {
   width: 6px; height: 6px; border-radius: 50%; background: var(--info);
 }
+/* Read-only model chip on the compare card: looks like the picker, no menu. */
+.model-picker .btn[aria-disabled="true"] { cursor: default; }
+.model-picker .btn[aria-disabled="true"]:hover { background: transparent; color: var(--text-2); }
+
+/* Small running spinner sized to the text around it (Run button, run slot). */
+.spin-ring {
+  display: inline-block; flex: none; vertical-align: -2px;
+  width: 1em; height: 1em; box-sizing: border-box;
+  border: 2px solid currentColor; border-top-color: transparent;
+  border-radius: 50%;
+  animation: shutdown-spin 0.8s linear infinite;
+}
 
 
 /* ─── JSON editor + syntax ───────────────────────────────────────────── */
@@ -1570,8 +1592,12 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
 
 .studio-hdr .hdr-titles {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 8px;
+}
+.studio-hdr .hdr-label {
+  font-size: 13px;
+  color: var(--text-2);
 }
 
 .studio-hdr .grow {
@@ -2049,19 +2075,31 @@ html.app-busy, html.app-busy * { cursor: progress !important; }
   font-weight: 600;
   color: var(--text);
 }
+/* Outlined so it reads as a control: researchers didn't spot the old
+   borderless title as the place to change the prompt. */
 .studio-hdr .hdr-title-trigger {
   appearance: none;
-  background: transparent;
-  border: 0;
-  padding: 4px 8px;
-  border-radius: 4px;
-  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line-3);
+  min-height: var(--btn-h);
+  padding: 0 10px 0 12px;
+  border-radius: var(--r-2);
+  display: inline-flex; align-items: center; gap: 8px;
   cursor: pointer;
   color: inherit;
 }
-.studio-hdr .hdr-title-trigger:hover { background: var(--surface-2); }
-.studio-hdr .hdr-title-trigger.open { background: var(--surface-2); }
-.studio-hdr .hdr-title-trigger .caret { font-size: 11px; color: var(--text-3); }
+.studio-hdr .hdr-title-trigger:hover { background: var(--surface-2); border-color: var(--accent); }
+.studio-hdr .hdr-title-trigger.open { background: var(--surface-2); border-color: var(--accent); }
+.studio-hdr .hdr-title-trigger .caret { font-size: 12px; color: var(--text-2); }
+
+/* Version menus: a dot on versions that have results for the focused clip. */
+.pc-run-dot {
+  width: 7px; height: 7px; flex: none;
+  border-radius: 50%;
+  background: var(--info);
+  visibility: hidden;
+}
+.pc-run-dot.on { visibility: visible; }
 
 /* ── Studio: archive picker modal ──────────────────────────────────────── */
 
@@ -2687,8 +2725,7 @@ body.studio-resizing {
   color: var(--text-2); font-size: 12px;
   text-decoration: line-through; text-decoration-color: var(--text-4); }
 .ri-editor .txt, .ri-editor .txt-area { width: 100%; }
-.ri-card-top .cat { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent-true);
-  border: 1px solid color-mix(in oklab, var(--accent-true) 32%, var(--line)); border-radius: 4px; padding: 1px 6px; }
+.ri-card-top .cat { font-size: 11px; color: var(--text-3); }
 .ri-card-top .ri-tc { color: var(--text-3); font-size: 11.5px; font-family: var(--f-mono); }
 .ri-card-top .ident { color: var(--text-2); font-size: 11.5px; font-family: var(--f-mono); }
 .ri-name { font-size: 13.5px; font-weight: 500; color: var(--text); line-height: 1.4; text-wrap: pretty; cursor: pointer; }

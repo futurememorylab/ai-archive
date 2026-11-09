@@ -60,3 +60,11 @@ def test_cors_allows_reading_and_seeking():
     assert {"Content-Range", "Accept-Ranges", "Content-Length", "Content-Type"} <= set(
         rule["responseHeader"]
     )
+
+
+def test_cors_allows_browser_uploads():
+    # Studio uploads PUT straight to the bucket on a signed URL (Cloud Run
+    # refuses requests over 32 MB); the browser sends the file's Content-Type.
+    rule = _rule()
+    assert "PUT" in rule["method"]
+    assert "Content-Type" in rule["responseHeader"]

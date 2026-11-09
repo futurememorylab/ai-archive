@@ -50,3 +50,19 @@ def test_draft_marker_seeks_right_after_annotating():
 
     results = run_scenarios(["clip-annotate-seek-draft"], record=False, port=free_port())
     assert results[0]["ok"], results[0]["error"]
+
+
+@pytest.mark.timeout(180)
+def test_studio_lab_compare_scenario():
+    """Lab: New draft, result dots, and compare + Diff working right after a
+    version switch (the swapped cards used to react to every click twice)."""
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("ffmpeg required to seed the proxy video")
+    if not _chromium_available():
+        pytest.skip("chromium not installed (run: playwright install chromium)")
+
+    from tests.walkthrough.app_server import free_port
+    from tests.walkthrough.run import run_scenarios
+
+    results = run_scenarios(["studio-lab-compare"], record=False, port=free_port())
+    assert results[0]["ok"], results[0]["error"]

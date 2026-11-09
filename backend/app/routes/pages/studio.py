@@ -4,12 +4,15 @@ Subsequent tasks add HTMX partial endpoints (folders, clips, archive
 picker, run output, player).
 """
 
+import json
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
+from backend.app.context import CoreCtx
 from backend.app.deps import get_core_ctx
+from backend.app.models.prompt import PromptVersion
 from backend.app.routes.pages.prompts import _model_options
 from backend.app.routes.pages.templates import templates
 from backend.app.uploaded_ids import is_uploaded
@@ -463,28 +466,17 @@ async def _load_studio_panels(
     return run, panels, fps
 
 
-@router.get("/studio/_prompt_card", response_class=HTMLResponse)
-async def _studio_prompt_card(
+async def _render_prompt_card(
     request: Request,
+    ctx: CoreCtx,
+    *,
     side: Literal["cur", "cmp"],
-    prompt_version_id: int,
-    clip_id: int | None = None,
+    version: PromptVersion,
+    clip_id: int | None,
 ):
-    """Renders one prompt-card. Used by HTMX swaps from the version chip
-    and by the initial cmp materialization.
-
-    404 on missing version. With clip_id, the Output tab pre-loads the
-    run partial; without, the Output tab shows the focus-a-clip
-    empty-state.
-    """
-    ctx = get_core_ctx(request)
-    archive = _archive(request)
-    try:
-        version = await ctx.prompts_repo.get_version(ctx.db, prompt_version_id)
-    except LookupError as exc:
-        raise HTTPException(404, f"version {prompt_version_id} not found") from exc
-
-    # Load the prompt's full version list for the picker dropdown (Task 8 uses it).
+    """One prompt-card response for `version` (shared by the version-chip
+    swap and the lab's "New draft" action)."""
+    # Load the prompt's full version list for the picker dropdown.
     _, versions = await ctx.prompts_repo.get_with_versions(ctx.db, version.prompt_id)
 
     run = None
@@ -492,7 +484,7 @@ async def _studio_prompt_card(
     fps = 25.0
     if clip_id is not None:
         run, panels, fps = await _load_studio_panels(
-            ctx, version=version, clip_id=clip_id, archive=archive
+            ctx, version=version, clip_id=clip_id, archive=_archive(request)
         )
 
     version_dict = version.model_dump()
@@ -512,6 +504,51 @@ async def _studio_prompt_card(
             "clip": {"fps": fps},
         },
     )
+
+
+@router.get("/studio/_prompt_card", response_class=HTMLResponse)
+async def _studio_prompt_card(
+    request: Request,
+    side: Literal["cur", "cmp"],
+    prompt_version_id: int,
+    clip_id: int | None = None,
+):
+    """Renders one prompt-card. Used by HTMX swaps from the version chip
+    and by the initial cmp materialization.
+
+    404 on missing version. With clip_id, the Output tab pre-loads the
+    run partial; without, the Output tab shows the focus-a-clip
+    empty-state.
+    """
+    ctx = get_core_ctx(request)
+    try:
+        version = await ctx.prompts_repo.get_version(ctx.db, prompt_version_id)
+    except LookupError as exc:
+        raise HTTPException(404, f"version {prompt_version_id} not found") from exc
+    return await _render_prompt_card(request, ctx, side=side, version=version, clip_id=clip_id)
+
+
+@router.post("/studio/_new_draft", response_class=HTMLResponse)
+async def _studio_new_draft(request: Request, from_version_id: int):
+    """The lab's "New draft" action: copy `from_version_id` into a new
+    editable draft of the same prompt and answer with the cur prompt-card
+    showing it, so researchers can edit without leaving the lab.
+
+    No clip: a new draft has no results yet, and the card's Output pane
+    loads the focused clip itself once the swap lands."""
+    ctx = get_core_ctx(request)
+    try:
+        source = await ctx.prompts_repo.get_version(ctx.db, from_version_id)
+    except LookupError as exc:
+        raise HTTPException(404, f"version {from_version_id} not found") from exc
+    new_id = await ctx.prompts_repo.create_version(
+        ctx.db, source.prompt_id, from_version_id=from_version_id
+    )
+    version = await ctx.prompts_repo.get_version(ctx.db, new_id)
+    response = await _render_prompt_card(request, ctx, side="cur", version=version, clip_id=None)
+    message = f"New draft v{version.version_num} made from v{source.version_num}."
+    response.headers["HX-Trigger"] = json.dumps({"toast": {"message": message, "level": "success"}})
+    return response
 
 
 @router.get("/studio/_compare", response_class=HTMLResponse)

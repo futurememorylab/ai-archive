@@ -1,11 +1,11 @@
 """Walkthrough scenario: review an AI draft and publish it, watching provenance.
 
-Exercises the #123 writeback redesign end to end: the draft proposals read as
-AI · draft, a shared field (decade) reads as an AI · suggestion with a Copy
-button and no keep checkbox, and after Accept & apply the published panel shows
-the new marker as AI (orange pill) (orange) while the human and legacy markers
-survive untouched (grey). The draft carries no how-to box, and the re-run
-warning is armed only while proposals are still open.
+Exercises the #123 writeback redesign end to end: the draft proposals carry no
+per-item pill (the panel is the draft), a shared field (decade) reads as an
+AI · suggestion with a Copy button and no keep checkbox, and after Accept &
+apply the published panel shows the new marker as AI (orange pill) (orange)
+while the human and legacy markers survive untouched (grey). The draft carries
+no how-to box, and the re-run warning is armed only while proposals are still open.
 """
 
 from __future__ import annotations
@@ -16,8 +16,8 @@ SLUG = "review-edit-annotation"
 TOPIC = "Clip page"
 TITLE = "Review an AI draft and publish it"
 DESCRIPTION = (
-    "An operator opens a clip with a pending AI draft, sees the proposals badged "
-    "AI · draft and the shared decade field offered as a copy-only suggestion, "
+    "An operator opens a clip with a pending AI draft, sees the AI proposals "
+    "and the shared decade field offered as a copy-only suggestion, "
     "then publishes — the new marker turns orange (AI (orange pill)) while the "
     "human and legacy markers stay grey and untouched."
 )
@@ -59,15 +59,17 @@ def run(wt):
         "Re-running would warn while proposals are open",
         lambda p: expect(p.locator(".detail")).to_have_attribute("data-rerun-confirm", "true"),
     )
-    # The Description tab lists the AI proposals, each badged AI · draft (blue).
+    # The Description tab lists the AI proposals. They are all drafts, so no
+    # card repeats an "AI · draft" pill; the category is plain text.
     wt.step(
         "Open the Description tab",
         lambda p: p.locator("#draft-aside").get_by_role("button", name="Description").click(),
     )
     wt.step(
-        "See the proposal badged AI · draft",
+        "See the proposals without a per-scene AI · draft pill",
         lambda p: (
-            p.locator("#draft-aside").get_by_text("AI · draft").first.wait_for(state="visible")
+            p.locator("#draft-aside .ri-marker").first.wait_for(state="visible"),
+            expect(p.locator("#draft-aside .ri-marker .pill")).to_have_count(0),
         ),
     )
     wt.step(

@@ -16,12 +16,19 @@
 <header class="studio-hdr">
   <span class="exp-icn">{% include "icons/_flask.svg" %}</span>
 
-  <div class="hdr-titles">
+  {# "Prompt:" label + an outlined picker button so it reads as the place to
+     change the prompt (researchers missed the old plain-text title). The
+     header also keeps the store's list of versions with results for the
+     focused clip fresh (the dots in the version menus). #}
+  <div class="hdr-titles"
+       x-effect="$store.studio.focusedClipId; $store.studio.runsFinished;
+                 $store.studio.refreshRunVersions()">
+    <span class="hdr-label">Prompt:</span>
     {% if selected_prompt %}
       <div class="hdr-tpicker" x-data="popover()"
            @click.outside="close()" @keydown.escape.window="close()">
         <button class="hdr-title hdr-title-trigger" :class="open && 'open'"
-                @click="toggle()" title="switch prompt">
+                @click="toggle()" title="Switch prompt">
           <span class="hdr-title-text">{{ selected_prompt.name }}</span>
           <span class="caret">▾</span>
         </button>
@@ -85,6 +92,10 @@
             :disabled="(!focusedClipId && $store.studio.selectedClipIds.length === 0) || cancelling || $store.studio.bulkRunning || doneFlashUntilMs > 0"
             @click="runOrCancel()"
             :title="(focusedClipId || $store.studio.selectedClipIds.length) ? '' : 'Click a clip to focus it, or check clips to run several'">
+      {# A drawn spinner, not a "⟳" glyph: the glyph rendered tiny next to
+         the text in some fonts. #}
+      <span class="spin-ring" aria-hidden="true" x-cloak
+            x-show="$store.studio.running || $store.studio.bulkRunning || $store.studio.cancelling"></span>
       <span x-text="runButtonLabel()">▶ Run on this clip · v{{ active_version.version_num }}</span>
     </button>
   {% else %}

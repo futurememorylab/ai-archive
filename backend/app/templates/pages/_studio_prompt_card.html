@@ -21,6 +21,15 @@
   <div class="pc-hdr">
     {% include "pages/_studio_version_picker.html" %}
     {% if side == 'cur' %}
+      {# "New draft": copy the shown version into a new editable draft without
+         leaving the lab. The response is this card showing the new draft.
+         Disabled while there are unsaved edits, which the copy would miss. #}
+      <button type="button" class="btn sm" data-new-draft
+              hx-post="/studio/_new_draft?from_version_id={{ active_version.id }}"
+              hx-target="closest .studio-prompt-card" hx-swap="outerHTML"
+              hx-disabled-elt="this"
+              :disabled="hasChanges"
+              :title="hasChanges ? 'Save your changes first' : 'Make an editable copy of v{{ active_version.version_num }}'">+ New draft</button>
       {# Model picker — lives in the card's own scope (no nested x-data), so
          a change flows into the card's `hasChanges`/`save()` exactly like the
          prompt screen. Editable only for a draft (`canEdit`); picking a model
@@ -58,6 +67,14 @@
               x-show="compareVersionId === null"
               @click="openCompare()">+ Compare</button>
     {% else %}
+      {# The compare version's model, read only (same chip as the cur side's
+         picker, minus the menu) so the two runs' models can be told apart. #}
+      <span class="model-picker" data-cmp-model title="Model this version runs with">
+        <span class="btn sm ghost" aria-disabled="true">
+          <span class="dot"></span>
+          <span>{{ active_version.model }}</span>
+        </span>
+      </span>
       <span class="grow"></span>
       {# Shared Diff toggle (store.compareDiff) — drives the Prompt word-diff
          and the Output aligned table alike, so both tabs read side-by-side by

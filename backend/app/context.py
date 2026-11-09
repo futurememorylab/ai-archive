@@ -80,6 +80,7 @@ from backend.app.repositories.write_log import WriteLogRepo
 from backend.app.services.cache_actions import CacheActions
 from backend.app.services.cache_inspector import CacheInspector
 from backend.app.services.connection_monitor import ConnectionMonitor
+from backend.app.services.direct_upload import DirectUpload, build_direct_upload
 from backend.app.services.enum_service import EnumService
 from backend.app.services.events import EventBus
 from backend.app.services.idle_disconnector import IdleDisconnector
@@ -288,6 +289,7 @@ class LiveCtx:
     job_runner: JobRunner | None = None
     idle_disconnector: IdleDisconnector | None = None
     vpn_supervisor: VpnSupervisor | None = None
+    direct_upload: DirectUpload | None = None
 
     # --- thin delegators to the composed CoreCtx -------------------
     # Live-route handlers touch both core fields (db, repos) and live
@@ -1026,4 +1028,11 @@ async def _build_sync_subsystem(
         job_runner=job_runner,
         idle_disconnector=idle_disconnector,
         vpn_supervisor=vpn_supervisor,
+        direct_upload=build_direct_upload(
+            settings,
+            gcs=arch.gcs_service,
+            ai_store=arch.ai_store,
+            files_repo=core.ai_store_files_repo,
+            db_provider=lambda: core.db,
+        ),
     )
