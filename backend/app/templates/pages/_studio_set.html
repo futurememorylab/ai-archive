@@ -7,7 +7,7 @@
 {% endif %}
 {% if set_source == 'uploaded' %}
   {# Uploaded sets ingest via a per-set dropzone — the upload analogue of the
-     archive picker. JS (uploadClips in studio.js) posts each file to this set. #}
+     archive picker. JS (uploadClips in studio.js, studioUpload.js) sends each file to this set. #}
   <div x-data="uploadClips({{ set_id }})">
     <div class="studio-dropzone"
          :class="dragging && 'drag'"
@@ -21,7 +21,7 @@
       <div class="dz-title">Drop video files or click to upload</div>
       <div class="dz-sub">mp4 / webm only</div>
       <template x-if="busy">
-        <div class="dz-progress" x-text="`Uploading ${doneCount}/${totalCount}…`"></div>
+        <div class="dz-progress" x-text="`Uploading ${doneCount}/${totalCount}…` + (percent != null ? ` ${percent}%` : '')"></div>
       </template>
     </div>
   </div>

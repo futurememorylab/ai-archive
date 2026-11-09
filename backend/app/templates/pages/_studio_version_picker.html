@@ -5,6 +5,12 @@
    popover() behaviour + canonical .popover-panel/.menu classes directly
    rather than the ui.menu macro. See docs/design-language.md.
 
+   A dot marks the versions that already have results for the focused clip
+   (`$store.studio.runVersionIds`, refreshed on clip focus and after each
+   run), so researchers can see which versions they can compare.
+   data-version-num / data-state let the store's openCompare() pick from the
+   live list (it is re-rendered with every card swap, so a new draft is in it).
+
    Required scope from the enclosing card:
      active_version, versions, side, clip_id (optional)
 #}
@@ -23,10 +29,15 @@
       <button type="button"
               class="menu-item{% if v.id == active_version.id %} is-current{% endif %}"
               data-version-pick="{{ v.id }}"
+              data-version-num="{{ v.version_num }}"
+              data-state="{{ v.state }}"
               hx-get="/studio/_prompt_card?side={{ side }}&prompt_version_id={{ v.id }}{% if clip_id %}&clip_id={{ clip_id }}{% endif %}"
               hx-target="closest .studio-prompt-card"
               hx-swap="outerHTML"
               @click="close()">
+        <span class="pc-run-dot" data-run-dot
+              :class="$store.studio.runVersionIds.includes({{ v.id }}) && 'on'"
+              title="Has results for this clip"></span>
         <span class="menu-lbl">v{{ v.version_num }}</span>
         {{ ui.prompt_state_chip(v.state) }}
       </button>

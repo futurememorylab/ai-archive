@@ -24,6 +24,26 @@ let _studioEstimateKey = '';
 // single CatDV seat and Gemini quota. See spec §5.
 const BULK_RUN_CONCURRENCY = 2;
 
+// Which version "+ Compare" opens. Candidates come from the cur card's
+// version menu, which is re-rendered with every card swap, so it includes a
+// draft made in the lab since the page loaded. Prefer the version most
+// recently run on this clip (so "run one version, run another, compare"
+// shows those two), then a draft, then production, then anything else.
+function _pickCompareVersion(curId, runVersionIds) {
+  const others = [...document.querySelectorAll(
+    '.studio-prompt-card[data-side="cur"] [data-version-pick]'
+  )].map(el => ({
+    id: Number(el.dataset.versionPick),
+    version_num: Number(el.dataset.versionNum),
+    state: el.dataset.state,
+  })).filter(v => v.id !== curId);
+  const byId = new Map(others.map(v => [v.id, v]));
+  return runVersionIds.map(id => byId.get(id)).find(Boolean)
+    || others.find(v => v.state === 'draft')
+    || others.find(v => v.state === 'production')
+    || others[0];
+}
+
 document.addEventListener('alpine:init', () => {
   Alpine.store('studio', {
     ...window.studioRunButton(),
@@ -236,15 +256,26 @@ document.addEventListener('alpine:init', () => {
     },
 
     refreshPlayer() {
+      // Re-render the player + its timeline rows. Called on clip focus,
+      // version / compare changes and when a run ends (so new scenes show
+      // without a reload). Same clip: keeps the playback position.
       const slot = document.querySelector('[data-studio-player-slot]');
       if (!slot || !this.focusedClipId) return;
+      const clipId = this.focusedClipId;
       const params = new URLSearchParams();
-      params.set('clip_id', this.focusedClipId);
+      params.set('clip_id', clipId);
       if (this.activeVersionId)  params.set('version_id', this.activeVersionId);
       if (this.compareVersionId) params.set('compare_id', this.compareVersionId);
       fetch(`/studio/_player?${params.toString()}`)
         .then(r => r.text())
-        .then(html => { slot.innerHTML = html; });
+        .then(html => {
+          const old = slot.querySelector('.studio-player');
+          const sameClip = old && Number(old.dataset.clipId) === clipId;
+          const at = sameClip ? old.querySelector('video')?.currentTime || 0 : 0;
+          slot.innerHTML = html;
+          // The new player's Alpine init runs on the observer's microtask.
+          if (at > 0) setTimeout(() => this.seekFocusedClip(at), 0);
+        });
     },
 
     seekFocusedClip(secs) {
@@ -318,19 +349,22 @@ document.addEventListener('alpine:init', () => {
           { level: 'success' },
         );
         this.pendingRunSwap++;  // nudge the focused-clip output to refresh
+        this.runsFinished++;
+        this.refreshPlayer();
       } finally {
         this.bulkRunning = false;
       }
     },
 
     async openCompare() {
-      const versions = window.__studioVersions || [];
-      const cur = this.activeVersionId;
-      const drafts = versions.filter(v => v.id !== cur && v.state === 'draft');
-      const prods  = versions.filter(v => v.id !== cur && v.state === 'production');
-      const others = versions.filter(v => v.id !== cur);
-      const pick = (drafts[0] || prods[0] || others[0]);
-      if (!pick) return;
+      const pick = _pickCompareVersion(this.activeVersionId, this.runVersionIds);
+      if (!pick) {
+        Alpine.store('toast').push(
+          'This prompt has only one version. Make a new draft to compare.',
+          { level: 'info' },
+        );
+        return;
+      }
       this.compareVersionId = pick.id;
       this.compareVersionNum = pick.version_num;
       this.compareDiff = false;  // open in side-by-side; Diff is opt-in

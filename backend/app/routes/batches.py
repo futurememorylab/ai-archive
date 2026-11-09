@@ -167,6 +167,7 @@ async def batches_picker(
             "cache_label": "Cache",
             "colspan": 6,
             "empty_msg": "No clips match.",
+            "row_select": True,
         },
     )
 

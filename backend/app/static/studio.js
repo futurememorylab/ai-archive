@@ -303,6 +303,7 @@ document.addEventListener('alpine:init', () => {
     busy: false,
     doneCount: 0,
     totalCount: 0,
+    percent: null,  // this file's progress when it goes straight to the bucket
 
     onDrop(evt) {
       this.dragging = false;
@@ -391,21 +392,12 @@ document.addEventListener('alpine:init', () => {
     async uploadOne(file) {
       const meta = { duration: null, width: null, height: null };
       const poster = await this.capturePoster(file, meta);
-      const fd = new FormData();
-      fd.append('file', file, file.name);
-      fd.append('set_id', String(this.setId));
-      if (poster) fd.append('poster', poster, 'poster.jpg');
-      if (meta.duration != null) fd.append('duration_secs', String(meta.duration));
-      if (meta.width != null) fd.append('width', String(meta.width));
-      if (meta.height != null) fd.append('height', String(meta.height));
-      const res = await fetch('/api/studio/uploads', {
-        method: 'POST', headers: {'HX-Request': 'true'}, body: fd,
-      });
-      if (!res.ok) {
-        let detail = `HTTP ${res.status}`;
-        try { detail = (await res.json()).detail || detail; } catch (e) { /* non-JSON */ }
-        throw new Error(detail);
-      }
+      this.percent = null;
+      try {
+        await window.studioUpload.send(file, meta, poster, this.setId, (f) => {
+          this.percent = Math.round(f * 100);
+        });
+      } finally { this.percent = null; }
       Alpine.store('toast').push(`Uploaded ${file.name}.`, { level: 'success' });
     },
   }));

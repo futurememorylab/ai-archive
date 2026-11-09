@@ -24,6 +24,9 @@
                   instead of inline in the name cell (default False).
      show_select  render the select-all + per-row checkbox column (default
                   True). The Batches page's read-only clip list passes False.
+     row_select   clicking a row ticks its checkbox instead of following
+                  row_href (default False). The clip pickers pass True: they
+                  sit in a modal, so leaving the page would lose the work.
 
    show_cache/thumb_col default to the original layout, so existing callers
    that don't pass them (batch picker, cache inventory) render unchanged.
@@ -31,6 +34,7 @@
 {% set show_cache = show_cache | default(true) %}
 {% set thumb_col = thumb_col | default(false) %}
 {% set show_select = show_select | default(true) %}
+{% set row_select = row_select | default(false) and show_select %}
 <table class="vlist">
   <thead>
     <tr>
@@ -47,11 +51,17 @@
            onload="this.classList.add('thumb--ready');"
            onerror="this.classList.add('thumb--empty'); this.removeAttribute('src');">{% endset %}
     {% set name_block %}<span class="name-wrap">
-        <span class="name">{{ row.name }}</span>
+        {#- In a picker (row_select) a row click ticks the row, so the clip page
+            opens from a ↗ right after the name, in a new tab. stopPropagation
+            so that click doesn't also tick the row. -#}
+        {% if row_select and row.row_href %}<span class="name-line"><span class="name">{{ row.name }}</span><a class="open-tab" href="{{ row.row_href }}" target="_blank" rel="noopener"
+           onclick="event.stopPropagation()" title="Open clip in a new tab" aria-label="Open {{ row.name }} in a new tab">↗</a></span>
+        {%- else %}<span class="name">{{ row.name }}</span>{% endif %}
         {% if row.name_sub %}<span class="name-sub mono">{{ row.name_sub }}</span>{% endif %}
       </span>{% endset %}
     <tr class="vrow{% if row.row_class %} {{ row.row_class }}{% endif %}"
-        {% if row.row_href %}onclick="location.href='{{ row.row_href }}'"{% endif %}>
+        {% if row_select %}onclick="this.querySelector('.row-check').click()"
+        {% elif row.row_href %}onclick="location.href='{{ row.row_href }}'"{% endif %}>
       {% if show_select %}
       <td class="col-sel" onclick="event.stopPropagation()">
         <input type="checkbox" class="row-check" name="clip_keys"

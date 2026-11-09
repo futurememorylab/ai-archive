@@ -18,6 +18,12 @@ if ! cors="$(gcloud storage buckets describe "$BUCKET" --format='json(cors_confi
 fi
 
 status=0
+# Studio uploads PUT straight to the bucket (Cloud Run refuses requests over
+# 32 MB), so the policy must allow PUT as well as reading.
+if ! grep -qF '"PUT"' <<<"$cors"; then
+  echo "::error::$BUCKET's CORS doesn't allow PUT, so Studio uploads fail. Run: gcloud storage buckets update $BUCKET --cors-file=deploy/gcs-cors.json"
+  status=1
+fi
 for service in "$@"; do
   # A service answers on two URLs (project-number and hash forms); check both.
   urls="$(gcloud run services describe "$service" --region="$REGION" \
@@ -30,5 +36,5 @@ for service in "$@"; do
     fi
   done
 done
-[ "$status" = 0 ] && echo "CORS on $BUCKET covers: $*"
+[ "$status" = 0 ] && echo "CORS on $BUCKET covers uploads and: $*"
 exit "$status"

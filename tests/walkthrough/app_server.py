@@ -29,6 +29,7 @@ from tests.walkthrough.fakes import (
     FakeArchive,
     LocalFileResolver,
     StubThumbnailService,
+    bucket_fake,
     build_clips,
     build_second_catalog_clips,
     gemini_fake,
@@ -167,6 +168,17 @@ class WalkthroughApp:
             ai_store=live.ai_store,
             gcs=live._gcs_service,
             proxy_cache_repo=core.proxy_cache_repo,
+            db_provider=lambda: core.db,
+        )
+
+        # Studio uploads go straight to a (fake) bucket, as on Cloud Run; the
+        # scenario routes the browser's PUT to bucket_fake().
+        from backend.app.services.direct_upload import DirectUpload
+
+        live.direct_upload = DirectUpload(
+            gcs=bucket_fake(),
+            files_repo=core.ai_store_files_repo,
+            store_id=f"gcs:{bucket_fake().bucket_name}",
             db_provider=lambda: core.db,
         )
 
