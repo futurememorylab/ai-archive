@@ -1,3 +1,5 @@
+from typing import Any
+
 from backend.app.models.prompt import TargetMap
 from backend.app.services.target_map import expand
 
@@ -107,8 +109,13 @@ def test_expand_unwraps_value_evidence_pattern():
 # --- #173: scene timing sanity (Šikl feedback) ---------------------------
 
 
+def _pv(item) -> dict[str, Any]:
+    assert isinstance(item.proposed_value, dict)
+    return item.proposed_value
+
+
 def _scenes(items):
-    pvs = [it.proposed_value for it in items]
+    pvs = [_pv(it) for it in items]
     return [(pv["name"], pv["in"]["secs"], pv["out"]["secs"]) for pv in pvs]
 
 
@@ -140,8 +147,8 @@ def test_expand_markers_drops_backwards_out_when_nothing_to_repair_with():
     tm = _tm({"scenes": {"kind": "markers"}})
     items = expand(structured, tm, annotation_id=1, catdv_clip_id=42)
     assert len(items) == 1
-    assert items[0].proposed_value["in"]["secs"] == 90.0
-    assert "out" not in items[0].proposed_value
+    assert _pv(items[0])["in"]["secs"] == 90.0
+    assert "out" not in _pv(items[0])
 
 
 def test_expand_markers_trims_overlap_with_next_scene():
@@ -189,7 +196,7 @@ def test_expand_markers_keeps_other_marker_fields_when_repairing():
     }
     tm = _tm({"scenes": {"kind": "markers"}})
     items = expand(structured, tm, annotation_id=1, catdv_clip_id=42, clip_duration_secs=20.0)
-    pv = items[0].proposed_value
+    pv = _pv(items[0])
     assert (pv["description"], pv["category"], pv["out"]["secs"]) == ("d", "Město", 20.0)
 
 
@@ -203,7 +210,7 @@ def test_expand_markers_leaves_point_markers_alone():
     }
     tm = _tm({"events": {"kind": "markers"}})
     items = expand(structured, tm, annotation_id=1, catdv_clip_id=42, clip_duration_secs=20.0)
-    assert [("out" in it.proposed_value) for it in items] == [False, False]
+    assert [("out" in _pv(it)) for it in items] == [False, False]
 
 
 def test_expand_markers_point_marker_does_not_cut_a_range():
@@ -215,7 +222,7 @@ def test_expand_markers_point_marker_does_not_cut_a_range():
     }
     tm = _tm({"scenes": {"kind": "markers"}})
     items = expand(structured, tm, annotation_id=1, catdv_clip_id=42, clip_duration_secs=30.0)
-    assert items[0].proposed_value["out"]["secs"] == 20.0
+    assert _pv(items[0])["out"]["secs"] == 20.0
 
 
 def test_expand_markers_same_start_runs_to_next_distinct_start():
