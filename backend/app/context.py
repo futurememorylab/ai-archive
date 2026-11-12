@@ -32,6 +32,8 @@ from typing import TYPE_CHECKING, NamedTuple
 import aiosqlite
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from backend.app.services.catdv_client import CatdvClient
     from backend.app.services.gcs import GcsService
     from backend.app.services.gemini import GeminiService
@@ -573,18 +575,8 @@ async def _build_archive_subsystem(
     Lazy imports here avoid pulling httpx / google libs when
     init_external=False (tests, CLI tools).
     """
-    import asyncio
-    import logging
-
-    from backend.app.services.catdv_client import (
-        CatdvAuthError,
-        CatdvBusyError,
-        CatdvClient,
-    )
     from backend.app.services.gcs import GcsService
     from backend.app.services.gemini import GeminiService
-    from backend.app.services.proxy_resolver import build_resolver
-    from backend.app.services.thumbnail_service import ThumbnailService
 
     settings = core.settings
     use_catdv = settings.archive_provider == "catdv"
@@ -594,105 +586,12 @@ async def _build_archive_subsystem(
     login_failed = False
     catdv: CatdvClient | None = None
 
-    # Bridge GOOGLE_APPLICATION_CREDENTIALS from the .env-loaded Settings
-    # object back into os.environ before constructing any Google client
-    # (GcsService and GeminiService both call google.auth.default()).
-    # pydantic-settings parses .env into the Settings instance only; the
-    # google-auth SDK reads ADC sources from os.environ directly. Without
-    # this bridge, ADC silently falls through to the user's gcloud creds
-    # at ~/.config/gcloud/application_default_credentials.json, whose
-    # OAuth refresh token expires hourly and then breaks every annotate
-    # call with `invalid_grant: Bad Request`.
-    if settings.google_application_credentials:
-        import os
-
-        os.environ.setdefault(
-            "GOOGLE_APPLICATION_CREDENTIALS",
-            str(settings.google_application_credentials),
-        )
+    _bridge_google_credentials(settings)
 
     if use_catdv and not forced_offline:
-        catdv = CatdvClient(
-            base_url=settings.catdv_base_url,
-            username=settings.catdv_username or "",
-            password=settings.catdv_password or "",
-            session_store=CatdvSessionStore(lambda: core.db),
-        )
-        await catdv.__aenter__()
-        if connect_mode == "auto":
-            # CatdvClient.__aenter__ only opens the httpx pool; auth is
-            # lazy. Force one round-trip so an unreachable host or bad
-            # credentials degrade us to offline cleanly at startup
-            # instead of half-booting and tripping the first request.
-            #
-            # Bound this probe with catdv_startup_login_timeout_s: the client's
-            # own 60s timeout is sized for large downloads, but a silently
-            # unreachable host (VPN drop, server off) would otherwise stall every
-            # restart for that full window. A timeout here is transport-like, so
-            # it lands in the generic `except` below — client kept alive, booted
-            # offline, recoverable via the Reconnect button.
-            try:
-                await asyncio.wait_for(
-                    catdv.login(),
-                    timeout=settings.catdv_startup_login_timeout_s,
-                )
-            except CatdvAuthError as exc:
-                # Bad credentials — retry won't help. Tear down the client
-                # so the monitor cannot misread "client present" as
-                # "reauthable" later.
-                from backend.app.services.errors import humanise
+        catdv, login_failed = await _open_catdv(core, connect_mode)
 
-                logging.getLogger(__name__).warning(
-                    "CatDV login rejected at startup (%s); booting offline",
-                    humanise(exc),
-                )
-                await catdv.__aexit__(None, None, None)
-                catdv = None
-                login_failed = True
-            except CatdvBusyError as exc:
-                # Seat limit reached — recoverable. Keep the client alive so
-                # ConnectionMonitor.retry_now() can re-probe once the stale
-                # session times out or the admin frees the seat.
-                from backend.app.services.errors import humanise
-
-                logging.getLogger(__name__).warning(
-                    "CatDV seat limit reached at startup (%s); booting offline — "
-                    "click Reconnect once a seat frees up",
-                    humanise(exc),
-                )
-                login_failed = True
-            except Exception as exc:  # noqa: BLE001 — transport / DNS / parse
-                # Network-side failure. Could be VPN flap, server stop, or a
-                # non-JSON 5xx body (the seat-limit web servlet sometimes
-                # answers with HTML). Keep the client alive for retry.
-                # Route through humanise() so httpx exceptions with empty
-                # str() (e.g. ConnectError on VPN down) don't log as "()".
-                from backend.app.services.errors import humanise
-
-                logging.getLogger(__name__).warning(
-                    "CatDV unreachable at startup (%s); booting offline — "
-                    "click Reconnect once the server is reachable",
-                    humanise(exc),
-                )
-                login_failed = True
-        # Manual mode: client is built but stays logged out until the
-        # operator clicks Connect (POST /api/connection/connect).
-
-    # The is_online provider reads the monitor's state once the sync
-    # subsystem constructs it (via the shared holder). We delegate to the
-    # monitor instead of latching `login_failed` here, so a successful
-    # retry_now() (e.g. after a seat frees up) actually flips the app back
-    # to online for routes and services.
-    def _is_online(forced=forced_offline):
-        if forced:
-            return False
-        monitor = monitor_holder["monitor"]
-        if monitor is None:
-            return True
-        from backend.app.services.connection_monitor import ConnectionState
-
-        return monitor.current_state() == ConnectionState.online
-
+    is_online = _is_online_provider(forced_offline, monitor_holder)
     archive = build_archive_provider(
         settings,
         catdv_client=catdv,
@@ -701,7 +600,7 @@ async def _build_archive_subsystem(
         clip_list_cache_repo=core.clip_list_cache_repo,
         poster_cache_repo=core.poster_cache_repo,
         db_provider=lambda: core.db,
-        is_online_provider=_is_online if use_catdv else None,
+        is_online_provider=is_online if use_catdv else None,
     )
     gcs_service = GcsService(settings.gcs_bucket_name, settings.instance_id)
     ai_store = build_ai_input_store(
@@ -714,78 +613,15 @@ async def _build_archive_subsystem(
         project=settings.gcp_project_id,
         location=settings.gcp_location,
     )
-    proxy_resolver: ProxyResolver | None
-    if use_catdv and (forced_offline or login_failed):
-        proxy_resolver = build_resolver(
-            source="cache-only",
-            catdv_client=None,
-            cache_dir=settings.data_dir / "cache" / "proxies",
-            proxy_cache_repo=core.proxy_cache_repo,
-            db_provider=lambda: core.db,
-        )
-    elif use_catdv:
-        media_store_map = None
-        if settings.proxy_source == "filesystem":
-            from backend.app.services.media_store_map import (
-                fetch_media_store_map,
-            )
-
-            media_store_map = await fetch_media_store_map(catdv)
-        proxy_resolver = build_resolver(
-            source=settings.proxy_source,
-            catdv_client=catdv,
-            cache_dir=settings.data_dir / "cache" / "proxies",
-            archive=archive,
-            media_store_map=media_store_map,
-            proxy_cache_repo=core.proxy_cache_repo,
-            db_provider=lambda: core.db,
-        )
-    else:
-        # FS adapter has media_is_local=True; the workspace
-        # manager skips the proxy-resolver step entirely.
-        proxy_resolver = None
-
-    # Thumbnail cache: plain JPEG files alongside the proxy cache. Pass the
-    # CatDV client only when we actually have one (online or seat-recoverable);
-    # in cache-only / fs modes the service still serves already-cached files.
-    # is_online_provider gates network fetches: when the connection monitor
-    # reports offline, cache misses are terminal (no network attempts).
+    proxy_resolver: ProxyResolver | None = None
     thumbnail_service: ThumbnailService | None = None
     if use_catdv:
-        # Orphan thumbs on /cache (clips with bytes in proxy_cache /
-        # ai_store_files but no clip_cache row) used to stall up to 60 s
-        # each on `archive.get_clip()` whenever CatDV was reachable-but-slow
-        # or during the 30 s blind spot between failure and the connection
-        # monitor flipping to offline. Without a clip_cache row, posterID is
-        # unknowable — short-circuit before the network call.
-        async def _has_clip_metadata(clip_id: int) -> bool:
-            row = await core.clip_cache_repo.get_row(
-                core.db,
-                provider_id=archive.id,
-                provider_clip_id=str(clip_id),
-            )
-            return row is not None
-
-        durable_thumb_store = None
-        if settings.media_cache == "ai_store":
-            from backend.app.services.thumbnail_store import GcsThumbnailStore
-
-            durable_thumb_store = GcsThumbnailStore(gcs_service)
-
-        async def _poster_id(clip_id: int) -> int | None:
-            return await core.poster_cache_repo.get_poster_id(
-                core.db, provider_id=archive.id, provider_clip_id=str(clip_id)
-            )
-
-        thumbnail_service = ThumbnailService(
-            cache_dir=settings.data_dir / "cache" / "thumbs",
-            archive=archive,
-            catdv=catdv,
-            is_online_provider=_is_online,
-            metadata_cached_provider=_has_clip_metadata,
-            durable_store=durable_thumb_store,
-            poster_id_provider=_poster_id,
+        proxy_resolver = await _build_catdv_proxy_resolver(
+            core, archive, catdv, offline=forced_offline or login_failed
         )
+        thumbnail_service = _build_thumbnail_service(core, archive, catdv, gcs_service, is_online)
+    # Otherwise the FS adapter has media_is_local=True; the workspace
+    # manager skips the proxy-resolver step entirely.
 
     return _ArchiveSubsystem(
         archive=archive,
@@ -796,6 +632,211 @@ async def _build_archive_subsystem(
         proxy_resolver=proxy_resolver,
         thumbnail_service=thumbnail_service,
         flags=_OnlineFlags(forced_offline=forced_offline, login_failed=login_failed, manual=manual),
+    )
+
+
+def _bridge_google_credentials(settings: Settings) -> None:
+    """Bridge GOOGLE_APPLICATION_CREDENTIALS from Settings into os.environ.
+
+    Must run before constructing any Google client (GcsService and
+    GeminiService both call google.auth.default()). pydantic-settings
+    parses .env into the Settings instance only; the google-auth SDK reads
+    ADC sources from os.environ directly. Without this bridge, ADC silently
+    falls through to the user's gcloud creds at
+    ~/.config/gcloud/application_default_credentials.json, whose OAuth
+    refresh token expires hourly and then breaks every annotate call with
+    `invalid_grant: Bad Request`.
+    """
+    if settings.google_application_credentials:
+        os.environ.setdefault(
+            "GOOGLE_APPLICATION_CREDENTIALS",
+            str(settings.google_application_credentials),
+        )
+
+
+async def _open_catdv(core: CoreCtx, connect_mode: str) -> tuple[CatdvClient | None, bool]:
+    """Build the CatDV client; in auto mode, probe a login at startup.
+
+    Returns the client (None when the credentials were rejected) and
+    whether the startup login failed.
+    """
+    from backend.app.services.catdv_client import CatdvClient
+
+    settings = core.settings
+    catdv = CatdvClient(
+        base_url=settings.catdv_base_url,
+        username=settings.catdv_username or "",
+        password=settings.catdv_password or "",
+        session_store=CatdvSessionStore(lambda: core.db),
+    )
+    await catdv.__aenter__()
+    if connect_mode != "auto":
+        # Manual mode: client is built but stays logged out until the
+        # operator clicks Connect (POST /api/connection/connect).
+        return catdv, False
+    return await _startup_login(catdv, settings.catdv_startup_login_timeout_s)
+
+
+async def _startup_login(catdv: CatdvClient, timeout_s: float) -> tuple[CatdvClient | None, bool]:
+    """Probe one CatDV login at boot; degrade to offline on any failure."""
+    import logging
+
+    from backend.app.services.catdv_client import CatdvAuthError, CatdvBusyError
+    from backend.app.services.errors import humanise
+
+    # CatdvClient.__aenter__ only opens the httpx pool; auth is
+    # lazy. Force one round-trip so an unreachable host or bad
+    # credentials degrade us to offline cleanly at startup
+    # instead of half-booting and tripping the first request.
+    #
+    # Bound this probe with catdv_startup_login_timeout_s: the client's
+    # own 60s timeout is sized for large downloads, but a silently
+    # unreachable host (VPN drop, server off) would otherwise stall every
+    # restart for that full window. A timeout here is transport-like, so
+    # it lands in the generic `except` below — client kept alive, booted
+    # offline, recoverable via the Reconnect button.
+    log = logging.getLogger(__name__)
+    try:
+        await asyncio.wait_for(catdv.login(), timeout=timeout_s)
+    except CatdvAuthError as exc:
+        # Bad credentials — retry won't help. Tear down the client
+        # so the monitor cannot misread "client present" as
+        # "reauthable" later.
+        log.warning("CatDV login rejected at startup (%s); booting offline", humanise(exc))
+        await catdv.__aexit__(None, None, None)
+        return None, True
+    except CatdvBusyError as exc:
+        # Seat limit reached — recoverable. Keep the client alive so
+        # ConnectionMonitor.retry_now() can re-probe once the stale
+        # session times out or the admin frees the seat.
+        log.warning(
+            "CatDV seat limit reached at startup (%s); booting offline — "
+            "click Reconnect once a seat frees up",
+            humanise(exc),
+        )
+        return catdv, True
+    except Exception as exc:  # noqa: BLE001 — transport / DNS / parse
+        # Network-side failure. Could be VPN flap, server stop, or a
+        # non-JSON 5xx body (the seat-limit web servlet sometimes
+        # answers with HTML). Keep the client alive for retry.
+        # Route through humanise() so httpx exceptions with empty
+        # str() (e.g. ConnectError on VPN down) don't log as "()".
+        log.warning(
+            "CatDV unreachable at startup (%s); booting offline — "
+            "click Reconnect once the server is reachable",
+            humanise(exc),
+        )
+        return catdv, True
+    return catdv, False
+
+
+def _is_online_provider(
+    forced_offline: bool, monitor_holder: dict[str, ConnectionMonitor | None]
+) -> Callable[[], bool]:
+    """The is_online provider that the archive and thumbnail service read."""
+
+    # The is_online provider reads the monitor's state once the sync
+    # subsystem constructs it (via the shared holder). We delegate to the
+    # monitor instead of latching `login_failed` here, so a successful
+    # retry_now() (e.g. after a seat frees up) actually flips the app back
+    # to online for routes and services.
+    def _is_online() -> bool:
+        if forced_offline:
+            return False
+        monitor = monitor_holder["monitor"]
+        if monitor is None:
+            return True
+        from backend.app.services.connection_monitor import ConnectionState
+
+        return monitor.current_state() == ConnectionState.online
+
+    return _is_online
+
+
+async def _build_catdv_proxy_resolver(
+    core: CoreCtx, archive: ArchiveProvider, catdv: CatdvClient | None, *, offline: bool
+) -> ProxyResolver:
+    """The proxy resolver for the CatDV provider: cache-only while offline."""
+    from backend.app.services.proxy_resolver import build_resolver
+
+    settings = core.settings
+    cache_dir = settings.data_dir / "cache" / "proxies"
+    if offline:
+        return build_resolver(
+            source="cache-only",
+            catdv_client=None,
+            cache_dir=cache_dir,
+            proxy_cache_repo=core.proxy_cache_repo,
+            db_provider=lambda: core.db,
+        )
+    media_store_map = None
+    if settings.proxy_source == "filesystem":
+        from backend.app.services.media_store_map import (
+            fetch_media_store_map,
+        )
+
+        media_store_map = await fetch_media_store_map(catdv)
+    return build_resolver(
+        source=settings.proxy_source,
+        catdv_client=catdv,
+        cache_dir=cache_dir,
+        archive=archive,
+        media_store_map=media_store_map,
+        proxy_cache_repo=core.proxy_cache_repo,
+        db_provider=lambda: core.db,
+    )
+
+
+def _build_thumbnail_service(
+    core: CoreCtx,
+    archive: ArchiveProvider,
+    catdv: CatdvClient | None,
+    gcs_service: GcsService,
+    is_online: Callable[[], bool],
+) -> ThumbnailService:
+    """The thumbnail cache for the CatDV provider."""
+    from backend.app.services.thumbnail_service import ThumbnailService
+
+    settings = core.settings
+    # Thumbnail cache: plain JPEG files alongside the proxy cache. Pass the
+    # CatDV client only when we actually have one (online or seat-recoverable);
+    # in cache-only mode the service still serves already-cached files.
+    # is_online_provider gates network fetches: when the connection monitor
+    # reports offline, cache misses are terminal (no network attempts).
+
+    # Orphan thumbs on /cache (clips with bytes in proxy_cache /
+    # ai_store_files but no clip_cache row) used to stall up to 60 s
+    # each on `archive.get_clip()` whenever CatDV was reachable-but-slow
+    # or during the 30 s blind spot between failure and the connection
+    # monitor flipping to offline. Without a clip_cache row, posterID is
+    # unknowable — short-circuit before the network call.
+    async def _has_clip_metadata(clip_id: int) -> bool:
+        row = await core.clip_cache_repo.get_row(
+            core.db,
+            provider_id=archive.id,
+            provider_clip_id=str(clip_id),
+        )
+        return row is not None
+
+    durable_thumb_store = None
+    if settings.media_cache == "ai_store":
+        from backend.app.services.thumbnail_store import GcsThumbnailStore
+
+        durable_thumb_store = GcsThumbnailStore(gcs_service)
+
+    async def _poster_id(clip_id: int) -> int | None:
+        return await core.poster_cache_repo.get_poster_id(
+            core.db, provider_id=archive.id, provider_clip_id=str(clip_id)
+        )
+
+    return ThumbnailService(
+        cache_dir=settings.data_dir / "cache" / "thumbs",
+        archive=archive,
+        catdv=catdv,
+        is_online_provider=is_online,
+        metadata_cached_provider=_has_clip_metadata,
+        durable_store=durable_thumb_store,
+        poster_id_provider=_poster_id,
     )
 
 
