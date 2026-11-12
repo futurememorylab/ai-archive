@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import subprocess
 from pathlib import Path
@@ -230,3 +231,45 @@ def test_shipped_trigger_list_is_valid_and_points_at_real_files():
             have = gate.symbol_sources((root / path).read_text())
             missing = [s for s in t["symbols"] if s not in have]
             assert not missing, f"trigger {t['name']!r}: {missing} not in {path}"
+
+
+def test_pr_body_prefers_the_live_description_when_a_token_is_set(tmp_path, monkeypatch):
+    """A re-run replays the old event; the gate reads the current body from the API."""
+    event = tmp_path / "event.json"
+    url = "https://api.github.com/repos/o/r/pulls/7"
+    event.write_text(json.dumps({"pull_request": {"url": url, "body": "old"}}))
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
+    monkeypatch.setenv("GH_TOKEN", "t")
+    seen = {}
+
+    class Resp:
+        def __enter__(self):
+            return io.BytesIO(b'{"body": "No-ADR: edited later"}')
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, timeout):
+        seen["url"], seen["auth"] = req.full_url, req.get_header("Authorization")
+        return Resp()
+
+    monkeypatch.setattr(gate.urllib.request, "urlopen", fake_urlopen)
+    assert gate.pr_body(None) == "No-ADR: edited later"
+    assert seen == {"url": url, "auth": "Bearer t"}
+
+
+def test_pr_body_falls_back_to_the_event_when_the_api_fails_or_url_is_foreign(
+    tmp_path, monkeypatch
+):
+    event = tmp_path / "event.json"
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
+    monkeypatch.setenv("GH_TOKEN", "t")
+
+    def boom(req, timeout):
+        raise OSError("down")
+
+    monkeypatch.setattr(gate.urllib.request, "urlopen", boom)
+    event.write_text(json.dumps({"pull_request": {"url": "https://api.github.com/x", "body": "a"}}))
+    assert gate.pr_body(None) == "a"
+    event.write_text(json.dumps({"pull_request": {"url": "https://evil.example/x", "body": "b"}}))
+    assert gate.pr_body(None) == "b"

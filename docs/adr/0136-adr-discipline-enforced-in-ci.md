@@ -56,8 +56,10 @@ is the required `lint` / `test` CI jobs.
 
 - About one PR in three trips a trigger (measured over the last 60 merges).
   Most need only a one-line `No-ADR:` reason; the reason is the record.
-- The `No-ADR:` line is read from the PR description at CI time. Editing the
-  description doesn't re-run CI; push a commit or re-run the job.
+- The `No-ADR:` line is read from the PR description at CI time, from the
+  API when the job has a token (a re-run replays the original event, so
+  the payload alone would miss an edit). Editing the description doesn't
+  start CI by itself; re-run the `lint` job or push a commit.
 - The gate is a prompt, not a proof: a determined author can write a weak
   reason. The Claude review and Peter's merge are the backstop.
 - Invariant 28 records that the ADR rules are enforced in CI.

@@ -28,6 +28,7 @@ import re
 import subprocess
 import sys
 import tomllib
+import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -253,10 +254,32 @@ def pr_body(body_file: str | None) -> str:
     if body_file:
         return Path(body_file).read_text(encoding="utf-8")
     event = os.environ.get("GITHUB_EVENT_PATH")
-    if event and Path(event).exists():
-        payload = json.loads(Path(event).read_text(encoding="utf-8"))
-        return (payload.get("pull_request") or {}).get("body") or ""
-    return ""
+    if not (event and Path(event).exists()):
+        return ""
+    pr = json.loads(Path(event).read_text(encoding="utf-8")).get("pull_request") or {}
+    return _live_body(pr.get("url")) or pr.get("body") or ""
+
+
+def _live_body(api_url: str | None) -> str | None:
+    """The PR description as it is now, so a re-run sees an edited description.
+
+    A re-run job replays the original event payload; with GH_TOKEN set this
+    reads the current body from the PR's own API URL (from that payload).
+    None when there's no token or the request fails, so the payload is used.
+    """
+    token = os.environ.get("GH_TOKEN")
+    api = os.environ.get("GITHUB_API_URL", "https://api.github.com")
+    if not (token and api_url and api_url.startswith(api + "/")):
+        return None
+    req = urllib.request.Request(
+        api_url,
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return json.load(resp).get("body") or ""
+    except (OSError, ValueError):
+        return None
 
 
 def verdict(hits: dict[str, list[str]], changes: list[Change], body: str) -> tuple[bool, str]:
