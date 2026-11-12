@@ -281,43 +281,26 @@ async def clips_list(
     catalog_id = active_catalog_id(request, ctx.settings)
     cache_f = normalize_cache(cache)
     anno_f = normalize_anno(anno)
-    # `batch` arrives as a comma-separated query string of job ids: the
-    # indicator links to every per-kind job of one bulk action at once, the
-    # dropdown submits a single id, and the "Any" option submits empty.
-    batch_ids = [int(b) for b in (batch or "").split(",") if b.strip().isdigit()]
-    # Canonical (sorted) form so it matches the grouped dropdown option values.
-    batch_query = ",".join(str(b) for b in sorted(batch_ids))
-    # The dropdown's selected-state only makes sense for a single id.
-    batch_id = batch_ids[0] if len(batch_ids) == 1 else None
+    batch_ids, batch_query, batch_id = _parse_batch_param(batch)
     host_local_proxies = getattr(getattr(ctx, "proxy_resolver", None), "is_host_local", False)
-
-    # `?refresh=1` lets the user bypass the list cache when they suspect
-    # upstream changed. Wipe every cached page for this catalog so the next
-    # list_clips() hits CatDV and we don't serve a stale neighbour page.
-    if refresh:
-        await ctx.clip_list_cache_repo.invalidate_catalog(
-            ctx.db, provider_id="catdv", catalog_id=catalog_id
-        )
 
     # In host-local mode `cache=local` matches every clip — collapse to "any"
     # so the standard CatDV-paginated path is used. `cache=none` keeps its
     # filter status (resolve_filters short-circuits to empty downstream).
     effective_cache_f = "any" if (host_local_proxies and cache_f == "local") else cache_f
 
-    try:
-        clip_rows, total, cache_fetched_at = await query_clip_page(
-            ctx,
-            catalog_id=catalog_id,
-            q=q,
-            offset=offset,
-            limit=limit,
-            cache_f=cache_f,
-            anno_f=anno_f,
-            batch_ids=batch_ids,
-            host_local_proxies=host_local_proxies,
-        )
-    except ProviderError as exc:
-        raise HTTPException(502, f"archive error: {exc}") from exc
+    clip_rows, total, cache_fetched_at = await _load_clip_page(
+        ctx,
+        refresh=bool(refresh),
+        catalog_id=catalog_id,
+        q=q,
+        offset=offset,
+        limit=limit,
+        cache_f=cache_f,
+        anno_f=anno_f,
+        batch_ids=batch_ids,
+        host_local_proxies=host_local_proxies,
+    )
 
     jobs = await ctx.jobs_repo.list_jobs(ctx.db, limit=50)
     prev_offset, next_offset = page_offsets(offset, limit, total)
@@ -345,6 +328,55 @@ async def clips_list(
         "cache_age": _humanize_age(cache_fetched_at),
     }
 
+    ctx_dict["batch_running"] = await _add_batch_columns(ctx, clip_rows, batch_ids)
+    await _add_review_and_publish_columns(ctx, clip_rows)
+
+    template = (
+        "pages/_clips_tbody.html"
+        if request.headers.get("HX-Request") == "true"
+        else "pages/clips.html"
+    )
+    return templates.TemplateResponse(request, template, ctx_dict)
+
+
+def _parse_batch_param(batch: str | None) -> tuple[list[int], str, int | None]:
+    """Parse `?batch=`: the job ids, their canonical query form, the single id."""
+    # `batch` arrives as a comma-separated query string of job ids: the
+    # indicator links to every per-kind job of one bulk action at once, the
+    # dropdown submits a single id, and the "Any" option submits empty.
+    batch_ids = [int(b) for b in (batch or "").split(",") if b.strip().isdigit()]
+    # Canonical (sorted) form so it matches the grouped dropdown option values.
+    batch_query = ",".join(str(b) for b in sorted(batch_ids))
+    # The dropdown's selected-state only makes sense for a single id.
+    batch_id = batch_ids[0] if len(batch_ids) == 1 else None
+    return batch_ids, batch_query, batch_id
+
+
+async def _load_clip_page(ctx, *, refresh: bool, catalog_id: str, **query):
+    """One page of clip rows; an archive error becomes a 502."""
+    # `?refresh=1` lets the user bypass the list cache when they suspect
+    # upstream changed. Wipe every cached page for this catalog so the next
+    # list_clips() hits CatDV and we don't serve a stale neighbour page.
+    if refresh:
+        await ctx.clip_list_cache_repo.invalidate_catalog(
+            ctx.db, provider_id="catdv", catalog_id=catalog_id
+        )
+    try:
+        return await query_clip_page(ctx, catalog_id=catalog_id, **query)
+    except ProviderError as exc:
+        raise HTTPException(502, f"archive error: {exc}") from exc
+
+
+def _any_running(status_map: dict) -> bool:
+    """Whether any batch item is still queued or in flight."""
+    return any(s in _RUNNING_ITEM_STATUSES for s in status_map.values())
+
+
+async def _add_batch_columns(ctx, rows: list[dict], batch_ids: list[int]) -> bool:
+    """Add the viewed batch's run status and cost to each clip row in place.
+
+    Returns whether any item of the batch is still running.
+    """
     # When viewing a batch, surface each clip's per-item run status (queued /
     # processing / done / failed) from the job's items, merged across all the
     # per-kind jobs of the bulk action.
@@ -352,7 +384,7 @@ async def clips_list(
     # While any item is still in-flight, the per-clip pills change underneath a
     # static page — flag it so the tbody self-polls and refreshes the pills
     # without a manual reload. Stops automatically once the batch settles.
-    ctx_dict["batch_running"] = any(s in _RUNNING_ITEM_STATUSES for s in batch_status_map.values())
+    batch_running = _any_running(batch_status_map)
 
     # Actual billable cost per clip for this batch: one batched aggregate
     # over the batch's job ids, summed per clip in SQL (a clip may appear
@@ -361,7 +393,15 @@ async def clips_list(
     if batch_ids:
         batch_cost_map = await ctx.run_telemetry_repo.cost_totals_by_clip(ctx.db, batch_ids)
 
-    # Annotate each row with its pending-draft counts and batch job id.
+    for row in rows:
+        row["batch_status"] = _batch_status_view(batch_status_map.get(row["id"]))
+        bc = batch_cost_map.get(row["id"])
+        row["batch_cost_usd"] = bc if bc else None
+    return batch_running
+
+
+async def _add_review_and_publish_columns(ctx, rows: list[dict]) -> None:
+    """Add pending-draft counts, batch job id and name, and publish status to each row."""
     pending_rows = await ctx.review_items_repo.list_pending_clips(ctx.db, limit=2000, offset=0)
     pmap = {r["catdv_clip_id"]: r for r in pending_rows}
     batch_names = await ctx.jobs_repo.batch_names_for_jobs(
@@ -373,16 +413,13 @@ async def clips_list(
     # signal comes from pending_operations (the durable write queue — the same
     # source the topbar chip uses, so they always agree); clip_versions is
     # consulted only for the live version number. See services/publish_status.py.
-    clip_ids = [row["id"] for row in ctx_dict["clips"]]
+    clip_ids = [row["id"] for row in rows]
     live_nums = await ctx.clip_versions_repo.live_version_num_by_clip(ctx.db, clip_ids)
     pending_by_clip = await ctx.pending_ops_repo.count_pending_by_clip(
         ctx.db, provider_id="catdv", clip_ids=[str(c) for c in clip_ids]
     )
 
-    for row in ctx_dict["clips"]:
-        row["batch_status"] = _batch_status_view(batch_status_map.get(row["id"]))
-        bc = batch_cost_map.get(row["id"])
-        row["batch_cost_usd"] = bc if bc else None
+    for row in rows:
         p = pmap.get(row["id"])
         row["review_tip"] = _review_tip(p)
         row["batch"] = p["job_id"] if p else None
@@ -398,13 +435,6 @@ async def clips_list(
         )
         row["publish_state"] = ps_state
         row["publish_version_num"] = ps_num
-
-    template = (
-        "pages/_clips_tbody.html"
-        if request.headers.get("HX-Request") == "true"
-        else "pages/clips.html"
-    )
-    return templates.TemplateResponse(request, template, ctx_dict)
 
 
 async def _filtered_page(
@@ -803,10 +833,10 @@ async def batch_statuses_fragment(request: Request, batch: str = ""):
     heavier queries every few seconds). DB-only; polled by #bstatus-poll while
     the batch is running, and tells the poller to stop once it settles."""
     ctx = get_core_ctx(request)
-    job_ids = [int(b) for b in batch.split(",") if b.strip().isdigit()]
+    job_ids, _, _ = _parse_batch_param(batch)
     status_map = await ctx.jobs_repo.clip_status_by_jobs(ctx.db, job_ids)
     cells = {cid: _batch_status_view(s) for cid, s in status_map.items()}
-    running = any(s in _RUNNING_ITEM_STATUSES for s in status_map.values())
+    running = _any_running(status_map)
     return templates.TemplateResponse(
         request,
         "pages/_batch_status_cells.html",
