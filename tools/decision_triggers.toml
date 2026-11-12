@@ -1,0 +1,114 @@
+# Decision-sensitive paths for tools/decision_trigger_gate.py.
+#
+# A PR that trips any trigger below must either add or change a file under
+# docs/adr/, or carry a line `No-ADR: <reason>` in its description. The
+# admission bar for an ADR is in docs/decisions.md; most PRs that trip a
+# trigger still won't need one, and the reason line records why.
+#
+# Each [[trigger]] has a `name`, a `why` (printed when it fires), a `kind`
+# and the fields that kind takes. Globs are fnmatch-style: `*` also crosses
+# `/`. Kinds:
+#
+#   added       a new file matching `paths` (renames don't count)
+#   modified    any change (add, edit, delete, rename) to a file in `paths`
+#   lines       an added or removed line matching the regex `pattern` in a
+#               file in `paths`
+#   symbols     the source of a named function/method in `paths` changed,
+#               or it was added or removed; `symbols` holds dotted names
+#               like "CatdvClient.login" (Python files only)
+#   toml_keys   the value at one of the dotted `keys` in a TOML file differs
+#   removed_routes  a FastAPI route (method + prefix + path) that exists on
+#               the base branch is gone from every file in `paths`
+
+[[trigger]]
+name = "new migration"
+why = "schema changes are expensive to reverse (decisions.md admission bar 2)"
+kind = "added"
+paths = ["backend/migrations/*"]
+
+[[trigger]]
+name = "deploy workflow"
+why = "cloud topology, scaling and promotion rules (invariants 21, 22)"
+kind = "modified"
+paths = [
+  ".github/workflows/deploy.yml",
+  "deploy/*.sh",
+  "deploy/*.yaml",
+  "deploy/*.yml",
+  "deploy/*.json",
+]
+
+[[trigger]]
+name = "dependencies"
+why = "a new or changed runtime/dev dependency is a cross-cutting choice"
+kind = "toml_keys"
+paths = ["pyproject.toml"]
+keys = ["project.dependencies", "project.optional-dependencies"]
+
+[[trigger]]
+name = "layer contracts"
+why = "`.importlinter` defines the layer boundaries (invariant 2)"
+kind = "modified"
+paths = [".importlinter"]
+
+[[trigger]]
+name = "model catalog"
+why = "Gemini model entries: region availability and rate cards (invariants 19, 26)"
+kind = "lines"
+paths = ["backend/app/enums/registry.py"]
+pattern = '_m\(|gemini-'
+
+[[trigger]]
+name = "archive writeback payload"
+why = "the app writes only what it owns; the rule lives in the payload builders (invariant 9b)"
+kind = "modified"
+paths = ["backend/app/archive/providers/catdv/payload.py"]
+
+[[trigger]]
+name = "filesystem writeback"
+why = "the app writes only what it owns; the rule lives in the payload builders (invariant 9b)"
+kind = "symbols"
+paths = ["backend/app/archive/providers/fs/adapter.py"]
+symbols = [
+  "FilesystemArchiveProvider.apply_changes",
+  "_require_owned_fs_target",
+  "_desired_markers",
+  "_to_ai_marker",
+]
+
+[[trigger]]
+name = "CatDV session handling"
+why = "the one-seat CatDV license (invariant 10)"
+kind = "symbols"
+paths = ["backend/app/services/catdv_client.py"]
+symbols = [
+  "SessionStore",
+  "CatdvClient.login",
+  "CatdvClient._adopt_stored_session",
+  "CatdvClient.logout",
+  "CatdvClient.__aexit__",
+]
+
+[[trigger]]
+name = "CatDV session store"
+why = "the CatDV session id at rest (invariant 10)"
+kind = "symbols"
+paths = ["backend/app/repositories/app_meta.py"]
+symbols = ["CatdvSessionStore"]
+
+[[trigger]]
+name = "auth and access control"
+why = "the app's default-deny gate is the sole authorization authority (invariant 23)"
+kind = "modified"
+paths = [
+  "backend/app/auth/*",
+  "backend/app/routes/pages/access.py",
+  "backend/app/routes/pages/admin_access.py",
+  "backend/app/repositories/user_roles.py",
+]
+
+[[trigger]]
+name = "removed route"
+why = "a removed endpoint is a public-contract change (decisions.md admission bar 2)"
+kind = "removed_routes"
+paths = ["backend/app/routes/*.py"]
