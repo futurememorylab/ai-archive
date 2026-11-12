@@ -49,6 +49,13 @@ repos:
         pass_filenames: false
         files: ^(backend/app/static/.*\.js|\.frontend-size-baseline\.json)$
 
+      - id: adr-lint
+        name: ADR log lint (headers, index, supersessions, canon refs)
+        entry: .venv/bin/python tools/adr_lint.py
+        language: system
+        pass_filenames: false
+        files: ^(docs/adr/.*|docs/decisions\.md|docs/architecture-invariants\.md|\.adr-lint-baseline\.json)$
+
       - id: duplicate-code
         name: pylint duplicate-code
         entry: .venv/bin/pylint backend --disable=all --enable=duplicate-code --min-similarity-lines=14

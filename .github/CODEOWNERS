@@ -12,6 +12,13 @@
 /.frontend-size-baseline.json @peterhora
 /tools/frontend_size_gate.py @peterhora
 
+# ADR discipline (ADR 0136)
+/.adr-lint-baseline.json @peterhora
+/tools/adr_lint.py @peterhora
+/tools/decision_trigger_gate.py @peterhora
+/tools/decision_triggers.toml @peterhora
+/tests/unit/test_invariants_enforced_by.py @peterhora
+
 # Type-check baseline
 /.basedpyright/baseline.json @peterhora
 

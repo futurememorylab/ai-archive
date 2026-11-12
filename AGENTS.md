@@ -26,6 +26,8 @@ ruff check . && ruff format --check .            # lint + format (CI-gated)
 lint-imports                                     # layer contracts (CI-gated)
 python tools/erosion_gate.py --path backend --baseline .erosion-baseline.json --max-cc 30 --base-ref origin/main
 python tools/frontend_size_gate.py               # static/*.js: files <= 500 lines, functions <= 80
+python tools/adr_lint.py                         # ADR headers, index, supersessions, canon refs
+python tools/decision_trigger_gate.py --base-ref origin/main --pr-body-file body.md
 pre-commit install                               # run the same gates on every commit
 ```
 
@@ -123,6 +125,13 @@ comes back. When one fails, read its docstring; it explains the rule.
   decision sets or changes an invariant, is expensive to reverse, or
   binds future PRs. Most PRs don't need one. An invariant change also
   updates `docs/architecture-invariants.md`.
+- A PR that touches a path in `tools/decision_triggers.toml` (migrations,
+  deploy, dependencies, `.importlinter`, model catalog, writeback payloads,
+  CatDV session code, auth, removed routes) fails CI unless it adds or
+  changes an ADR or its description has `No-ADR: <reason>` (the PR
+  template's **Decisions** section). Superseding an ADR means marking the
+  old one superseded and pointing it forward (`tools/adr_lint.py`).
+  claude.ai Project and Cowork instructions: `docs/onboarding/project-instructions.md`.
 
 ## Git
 

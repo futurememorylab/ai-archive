@@ -385,9 +385,13 @@ define the quality gates (baselines, the erosion and frontend size gates,
 `AGENTS.md`, `pyproject.toml`) are owned by a human in `.github/CODEOWNERS`. A PR that
 improves a measured value lowers its baseline in the same PR; raising a
 baseline or threshold is a reviewed human decision, never part of a
-feature PR.
+feature PR. The ADR rules hold in CI whatever tool wrote the change: every
+ADR is headed, indexed and supersession-linked, and a PR touching a
+decision-sensitive path adds an ADR or says `No-ADR: <reason>`.
 *Enforced by:* `.claude/hooks/protect_gate_files.py`, which blocks agent
 edits to every path in `.github/CODEOWNERS` until Peter OKs them. Code
 Owner review on `main` is off: agent PRs are opened under Peter's account,
-and GitHub doesn't let an author approve their own PR.
-*ADRs:* 0129.
+and GitHub doesn't let an author approve their own PR. In CI:
+`tools/adr_lint.py`, `tools/decision_trigger_gate.py`,
+`tests/unit/test_invariants_enforced_by.py`.
+*ADRs:* 0129, 0136.
