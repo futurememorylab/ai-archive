@@ -73,6 +73,7 @@ that's what makes the review actually happen.
 |---|---|---|
 | 2026-06-24 | 0114 | Initial synthesis. Extracted `architecture-invariants.md` (26 invariants) from the first 114 ADRs. Tagged every ADR with a `Lifespan` (62 Invariant / 42 Feature / 6 Lesson / 2 Superseded). Bannered the write-back (0091–0098), versions (0099–0101) and timeline-band (0106–0107) chains forward to their invariant; marked 0043 `Superseded` by 0112 and 0074 `Lesson` (root cause corrected by 0076). No ADR content was rewritten — history preserved. Spec-fold backlog recorded below. |
 | 2026-10-12 | 0126 | Covered 0115–0126 (12 ADRs in ~10 PRs, above the raised bar). Promoted into existing invariants: 0115 → #8 (cancel/drain), 0118 → #9 (version-transition chokepoint), 0119 + 0121 → #26 (cost never silently $0; resolution validity). 0125/0126 were already on the page (#8, #9a). Tagged the untagged headers: 0116, 0120, 0122, 0123, 0124 `Feature` (calibration, budget, admin catalog); 0117 `Lesson` (charset bug, not a repair problem). Shortened the 0114–0126 index titles to their ADR headings. Fixed #27 for the free-port walkthrough change. |
+| 2026-11-12 | 0135 | SDLC-audit pass over 0127–0130 and the PRs since #120. Tagged 0127 and 0128 `Lifespan: Invariant` (9b, 20). Recorded five decisions that shipped without an ADR, dated today and marked "recorded after the fact": 0131 (#126 multiple catalogs), 0132 (#132 service-wide `--max=1`), 0133 (#134 CatDV session id persisted and adopted), 0134 (#161 Remove AI clears AI-owned fields), 0135 (#165 direct-to-bucket Studio uploads). Collapsed the Live chain: 0016, 0018, 0112 `Superseded` by 0130 (0043 now points at invariant 25). Bannered 0090, 0097, 0100, 0101 as partly superseded by 0127/0128. Invariant-page changes for 10, 9b, 19a, 21, 26 and the model-region rule in `AGENTS.md` are proposed in the PR for Peter (gate files, ADR 0129). |
 
 ### Spec-fold backlog (from the 2026-06-24 pass)
 
@@ -110,7 +111,7 @@ historical record. Candidate clusters, largest first:
 | 0013 | 2026-05-22 | [Clip list filters: Cache + Annotations dropdowns, local-first resolution](./adr/0013-clip-list-filters-cache-annotations-dropdowns.md) |
 | 0014 | 2026-05-22 | [Local-filesystem proxy resolution (deploy on the CatDV host)](./adr/0014-local-filesystem-proxy-resolution.md) |
 | 0015 | 2026-05-22 | [Offline fallback: auto-degrade + manual reconnect](./adr/0015-offline-fallback-auto-degrade-manual-reconnect.md) |
-| 0016 | 2026-05-23 | [Gemini Live clip assistant: browser-direct + Developer API](./adr/0016-gemini-live-clip-assistant-browser-direct.md) — *superseded by 0130* |
+| 0016 | 2026-05-23 | [Gemini Live clip assistant: browser-direct + Developer API](./adr/0016-gemini-live-clip-assistant-browser-direct.md) — *Superseded by 0130* |
 | 0017 | 2026-05-23 | [Offline mode: keep Annotate available when proxy is cached; marker nav follows active scope](./adr/0017-offline-mode-annotate-available-marker-nav-scope.md) |
 | 0018 | 2026-05-23 | [Gemini Live clip assistant: browser-direct WSS, separate view-model](./adr/0018-gemini-live-clip-assistant-wss-view-model.md) — *superseded by 0130* |
 | 0019 | 2026-05-23 | [Tier 1 tooling: ruff format, basedpyright with baseline, pre-commit](./adr/0019-tier1-tooling-ruff-basedpyright-precommit.md) |
@@ -120,6 +121,7 @@ historical record. Candidate clusters, largest first:
 | 0023 | 2026-05-25 | [Boot-time login failures keep the CatDV client alive for retry](./adr/0023-boot-login-failures-keep-client-for-retry.md) |
 | 0024 | 2026-05-25 | [Browser-triggered graceful shutdown (shutdown button)](./adr/0024-shutdown-button.md) |
 | 0025 | 2026-05-25 | [Unified video-list component + CatDV poster thumbnails](./adr/0025-video-list-thumbnails-and-shared-component.md) |
+| 0026–0027 | 2026-05-26 | *Retired, not reused: the first Prompt Studio ADRs (0026 decisions, 0027 post-merge deviations) were removed with the PR #9 revert (1065546, 14dc801). Prompt Studio was later redone as 0033+.* |
 | 0028 | 2026-05-26 | [Image (still) clip support via original-media fetch](./adr/0028-image-clip-support-via-original-media.md) |
 | 0029 | 2026-05-26 | [Image annotation prompt + prompt media_kind](./adr/0029-image-annotation-prompt-and-media-kind.md) |
 | 0030 | 2026-05-26 | [UI responsiveness: local assets, click feedback, cache scroll](./adr/0030-ui-responsiveness-local-assets-feedback-scroll.md) |
@@ -223,3 +225,8 @@ historical record. Candidate clusters, largest first:
 | 0128 | 2026-10-17 | [Remove the version-switching surface (activate / restore routes, `reactivate`, `RestoreService`); versions are still recorded on apply](./adr/0128-remove-version-switching-surface.md) — *supersedes the switching half of 0100 and 0101* |
 | 0129 | 2026-10-17 | [Quality gates only tighten; gate files are human-owned (`.github/CODEOWNERS`)](./adr/0129-quality-gates-only-tighten.md) |
 | 0130 | 2026-10-18 | [Replace Gemini Live voice with a text chat on Vertex: the server answers each turn via `GeminiService.chat` (`gemini-3.8-flash`, one billing route, no API key in the browser or deploy)](./adr/0130-clip-chat-on-vertex-replaces-live.md) — *supersedes 0016, 0018, 0109, 0110, 0112* |
+| 0131 | 2026-11-12 | [Multiple CatDV catalogs: a per-browser active catalog (`active_catalog` cookie, `catalogs` cache table in migration 0030; clip ids are server-wide, so only list surfaces are catalog-scoped)](./adr/0131-multiple-catdv-catalogs-per-browser.md) — *recorded after the fact for #126* |
+| 0132 | 2026-11-12 | [Cap Cloud Run at one instance service-wide (`--max=1`), not only per revision](./adr/0132-cloud-run-service-wide-max-one-instance.md) — *recorded after the fact for #132; refines 0066/0077* |
+| 0133 | 2026-11-12 | [Persist the CatDV session id in `app_meta` and let a new instance adopt it (credential at rest in the Litestream replica: threat and acceptance)](./adr/0133-catdv-session-persisted-and-adopted.md) — *recorded after the fact for #134; refines 0023/0032/0041/0077* |
+| 0134 | 2026-11-12 | [Removing a clip's AI annotations clears the AI-owned fields (only those, only on the explicit action)](./adr/0134-remove-ai-clears-ai-owned-fields.md) — *recorded after the fact for #161; refines 0127* |
+| 0135 | 2026-11-12 | [Studio uploads go straight to the bucket on a signed PUT URL; `DirectUpload` registers `ai_store_files` itself (md5-in-`sha256` known issue)](./adr/0135-studio-direct-upload-signed-put.md) — *recorded after the fact for #165; refines 0061/0081/0082* |

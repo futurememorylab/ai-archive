@@ -32,7 +32,7 @@ flowchart TB
 
     subgraph Cloud
         GCS[google-cloud-storage]
-        GG[google-genai → Vertex AI + Gemini Developer API]
+        GG[google-genai → Vertex AI]
         SM[google-cloud-secret-manager]
     end
 
@@ -62,7 +62,7 @@ flowchart TB
 | **pydantic** | Domain models (`backend/app/models/`) and structured-output schemas for Gemini. |
 | **pydantic-settings** | Reads `.env` into a typed `Settings` model (`backend/app/settings.py`). |
 | **sse-starlette** | Server-Sent Events for live job/connection updates to the browser. |
-| **google-genai** | Gemini SDK; talks to both Vertex AI (batch annotation) and the Developer API (Live audio). |
+| **google-genai** | Gemini SDK, Vertex AI only: annotation, Prompt Studio runs and the clip chat, all with the app's service account (no API key). |
 | **google-cloud-storage** | GCS uploads — the production `AIInputStore`. |
 | **google-cloud-secret-manager** | Production secrets (CatDV creds) on the CatDV server. |
 | **python-json-logger** | Structured logs. |
@@ -101,12 +101,14 @@ output. The richest JS in the app is the vanilla-JS video player widget
   in dev, loopback in prod).
 - **Google Cloud Storage** — bucket holds the H.264 web proxies handed
   to Vertex.
-- **Vertex AI** (`europe-west3`) — the production Gemini endpoint for
-  batch annotation jobs.
-- **Gemini Developer API**
-  (`generativelanguage.googleapis.com`) — separate API key, used **only**
-  by the optional Live clip assistant. See
-  [ADR 0016](../adr/0016-gemini-live-clip-assistant-browser-direct.md).
+- **Vertex AI** — the only Gemini endpoint: annotation, Prompt Studio
+  runs and the clip chat (server-side, streamed to the browser; see
+  [ADR 0130](../adr/0130-clip-chat-on-vertex-replaces-live.md)). One
+  service account, one bill, no API key anywhere. Prod and staging set
+  `GCP_LOCATION=global` because the default chat model
+  (`gemini-3.8-flash`) isn't served in `europe-west3`; Cloud Run, the
+  buckets and the database stay in `europe-west3`. The old Gemini Live
+  voice assistant (Developer API, ADR 0016) was removed.
 
 ## Python version
 

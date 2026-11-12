@@ -4,6 +4,8 @@
 **Status:** Accepted — supersedes parts of [0099](./0099-clip-version-history-publish-snapshots.md)
 **Lifespan:** Invariant
 
+> **Synthesis note (2026-11-12):** Partly superseded by **0128**: the re-activation ("Make live") switching surface was removed. Dropping the provenance field and the error-classification parts still hold. See **Invariants 9 and 20**.
+
 ## Context
 
 Operator QA of the clip-version-history feature (ADR 0099) surfaced a cluster of

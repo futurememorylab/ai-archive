@@ -4,6 +4,8 @@
 **Status:** Accepted
 **Lifespan:** Invariant
 
+> **Synthesis note (2026-11-12):** Partly superseded by **0127**: the app no longer writes `notes`/`bigNotes` or any field outside `AI_OWNED_FIELDS`, so the routing rule here only matters for what the payload builder refuses. See **Invariant 9b**.
+
 ## Context
 
 The write-back path (`WriteQueue` → `SyncEngine` → `CatdvArchiveAdapter.apply_changes`

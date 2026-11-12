@@ -1,6 +1,6 @@
 # ADR 0128 — Remove the version-switching surface (activate / restore)
 
-Date: 2026-10-17 · Status: accepted · Supersedes the switching half of 0100 and 0101
+Date: 2026-10-17 · Status: accepted · Lifespan: Invariant (20) · Supersedes the switching half of 0100 and 0101
 
 ## Context
 

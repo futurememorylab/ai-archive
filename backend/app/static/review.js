@@ -26,7 +26,6 @@ function reviewMixin(clipId) {
       // Reloading a page whose draft was already applied must not show a stale
       // "syncing…" forever — reconcile the message against the real queue once.
       if (this.appliedCount > 0) this._checkSyncOnce();
-      // Wire delegated Restore / Restore-and-publish handlers on the history panel.
       // Wire the suggestion Copy buttons (shared fields the app never writes;
       // #123). Delegated so it also covers rows swapped in by _refreshPublished.
       this._initCopyButtons();

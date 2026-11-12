@@ -4,6 +4,8 @@
 **Status:** Accepted
 **Lifespan:** Invariant
 
+> **Synthesis note (2026-11-12):** Partly superseded by **0127**: appends to human fields are gone (the AI summary is replaced, not appended), so accumulation no longer applies to any target the app writes. See **Invariant 9b**.
+
 ## Context
 
 `build_put_payload` translates a clip's queued `ChangeOp`s into one CatDV PUT
