@@ -18,7 +18,6 @@ def client(monkeypatch, tmp_path):
 
     importlib.reload(main_mod)
     with TestClient(main_mod.app) as c:
-        c.db_path = tmp_path / "app.db"  # pyright: ignore[reportAttributeAccessIssue]  # starlette 1.x TestClient
         yield c
 
 
@@ -108,14 +107,14 @@ def test_version_menu_has_result_dots(client):
     assert "has results for this clip" not in html  # no legend, just the dots
 
 
-def test_run_versions_lists_versions_with_finished_runs(client):
+def test_run_versions_lists_versions_with_finished_runs(client, tmp_path):
     _, v1 = _make_prompt(client)
     assert client.get("/api/studio/clips/77/run-versions").json() == []
     r = client.post("/api/studio/runs", json={"prompt_version_id": v1, "clip_id": 77})
     run_id = r.json()["run_id"]
     # Still pending: no dot yet.
     assert client.get("/api/studio/clips/77/run-versions").json() == []
-    with sqlite3.connect(client.db_path) as conn:
+    with sqlite3.connect(tmp_path / "app.db") as conn:
         conn.execute("UPDATE studio_run SET status = 'ok' WHERE id = ?", (run_id,))
     assert client.get("/api/studio/clips/77/run-versions").json() == [v1]
     assert client.get("/api/studio/clips/78/run-versions").json() == []
