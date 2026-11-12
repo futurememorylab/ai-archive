@@ -4,6 +4,8 @@
 - **Status:** Accepted
 - **Lifespan:** Feature
 
+> **Synthesis note (2026-11-12):** Partly superseded by **0036**: the standalone `/review` page was folded into the clips list. The review/accept model itself still holds.
+
 ## Context
 
 Gemini annotation jobs already produced drafts: an `Annotation` plus one
