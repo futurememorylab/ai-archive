@@ -153,3 +153,13 @@ def test_write_baseline_refuses_to_add_entries(tmp_path):
 def test_the_repo_passes_against_its_baseline():
     """The real ADR log is clean apart from the grandfathered list."""
     assert adr_lint.main(["--root", str(REPO_ROOT)]) == 0
+
+
+def test_years_are_not_adr_numbers_and_invariant_lists_are_all_checked(tmp_path):
+    page = "**1. Rule.** See Invariants 1 and 7, invariant 1, 9.\n*ADRs:* 0001 (2026-06 note).\n"
+    root = _repo(tmp_path, {"0001": _ok(), "0002": _ok() + "Supersedes the 2026-06 design.\n"},
+                 invariants=page)  # fmt: skip
+    assert set(adr_lint.violations(root)) == {
+        "invariants-ref:Invariant 7",
+        "invariants-ref:Invariant 9",
+    }

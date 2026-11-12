@@ -54,12 +54,11 @@ def resolves(token: str) -> bool:
     for root in SEARCH_ROOTS:
         hits = sorted(root.glob(path)) if "*" in path else [root / path]
         hits = [h for h in hits if h.exists()]
-        if not hits:
-            continue
-        if not symbol:
+        if hits and not symbol:
             return True
         rx = re.compile(rf"(?m)^\s*(?:async\s+)?(?:def|class)\s+{re.escape(symbol)}\b")
-        return any(h.is_file() and rx.search(h.read_text(encoding="utf-8")) for h in hits)
+        if any(h.is_file() and rx.search(h.read_text(encoding="utf-8")) for h in hits):
+            return True
     return False
 
 

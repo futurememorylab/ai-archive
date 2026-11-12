@@ -85,9 +85,10 @@ class Repo:
         """File content at the head revision ('' if absent)."""
         return self._git("show", f"{self.head}:{path}", check=False)
 
-    def changed_lines(self, path: str) -> list[str]:
-        """Added and removed lines of one file, without the +/- marker."""
-        diff = self._git("diff", "-U0", self.base, self.head, "--", path)
+    def changed_lines(self, path: str, old_path: str) -> list[str]:
+        """Added and removed lines of one file (rename-aware), without the +/- marker."""
+        paths = [old_path, path] if old_path != path else [path]
+        diff = self._git("diff", "-M", "-U0", self.base, self.head, "--", *paths)
         return [
             line[1:]
             for line in diff.splitlines()
@@ -126,7 +127,7 @@ def fire_lines(trigger: dict, repo: Repo, changes: list[Change]) -> list[str]:
     rx = re.compile(trigger["pattern"])
     out = []
     for c in _touched(trigger, changes):
-        hits = [ln.strip() for ln in repo.changed_lines(c.path) if rx.search(ln)]
+        hits = [ln.strip() for ln in repo.changed_lines(c.path, c.old_path) if rx.search(ln)]
         out += [f"{c.path}: {h}" for h in hits]
     return out
 
@@ -244,8 +245,9 @@ def no_adr_reason(body: str) -> str | None:
     """The `No-ADR:` reason in a PR description, ignoring HTML comments and placeholders."""
     visible = re.sub(r"(?s)<!--.*?-->", "", body or "")
     for reason in _NO_ADR.findall(visible):
-        if reason.strip().lower() not in _PLACEHOLDERS:
-            return reason.strip()
+        reason = reason.strip()
+        if reason.lower() not in _PLACEHOLDERS and not reason.startswith("<"):
+            return reason
     return None
 
 

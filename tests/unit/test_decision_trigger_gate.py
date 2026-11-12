@@ -139,6 +139,13 @@ def test_lines_kind_needs_a_matching_changed_line(repo):
     assert _names(repo) == {"models"}
 
 
+def test_lines_kind_ignores_a_pure_rename(repo):
+    _commit(repo, {"registry.py": None, "registry2.py": BASE_FILES["registry.py"]})
+    r = gate.Repo("main")
+    trig = {"paths": ["registry*.py"], "pattern": "gemini-"}
+    assert gate.fire_lines(trig, r, r.changes()) == []
+
+
 def test_symbols_kind_only_fires_for_named_functions(repo):
     _commit(repo, {"client.py": BASE_FILES["client.py"].replace("return 2", "return 3")})
     assert _names(repo) == set()
@@ -186,6 +193,7 @@ def test_deleting_an_adr_does_not_satisfy_the_gate(repo):
         ("<!-- No-ADR: <reason> -->\n", None),
         ("No-ADR: <reason>\n", None),
         ("No-ADR:\n", None),
+        ("No-ADR: <why this is not a decision, in one line>\n", None),
         ("", None),
     ],
 )

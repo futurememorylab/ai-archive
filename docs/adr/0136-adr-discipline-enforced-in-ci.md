@@ -61,5 +61,6 @@ is the required `lint` / `test` CI jobs.
   the payload alone would miss an edit). Editing the description doesn't
   start CI by itself; re-run the `lint` job or push a commit.
 - The gate is a prompt, not a proof: a determined author can write a weak
-  reason. The Claude review and Peter's merge are the backstop.
+  reason, and any edit under `docs/adr/` (even a typo fix in an old ADR)
+  counts as "changes an ADR". The Claude review and Peter's merge are the backstop.
 - Invariant 28 records that the ADR rules are enforced in CI.

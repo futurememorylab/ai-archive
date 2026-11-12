@@ -44,13 +44,15 @@ SYNTHESIS_LAG = 20
 REBASELINE_HINT = "Run `python tools/adr_lint.py --write-baseline` and commit the shorter list."
 
 _ADR_FILE = re.compile(r"^(\d{4})-.+\.md$")
-_NUM = r"(?<![\d.])(\d{4})(?!\d)"
+_NUM = r"(?<![\d.])(0\d{3})(?!\d)"  # ADR numbers, not years
 _SUPERSEDES = re.compile(r"(?i)\bsupersedes\b")
 _SPAN_END = re.compile(r"(?i);|·|\n\s*\n|superseded by")
 _PARTLY = re.compile(r"(?i)\bpart(?:ly|ially)\s+superseded\b")
 _INDEX_LINK = re.compile(r"\]\(\./adr/([^)\s]+)\)")
 _INVARIANT_HEAD = re.compile(r"(?m)^\*\*(\d+[a-z]?)\.\s")
-_INVARIANT_REF = re.compile(r"(?i)\binvariants?\s+#?(\d+[a-z]?)\b")
+_INVARIANT_REF = re.compile(
+    r"(?i)\binvariants?\s+#?(\d+[a-z]?(?:(?:\s*,\s*|\s+and\s+)#?\d+[a-z]?)*)\b"
+)
 _ADR_REF = re.compile(r"\bADR\s+(\d{4})\b")
 
 
@@ -185,7 +187,8 @@ def check_invariants_page(root: Path, adrs: dict[str, Adr]) -> dict[str, str]:
     for num in sorted(_cited_adrs(page) - set(adrs)):
         out[f"invariants-ref:ADR {num}"] = f"{INVARIANTS} cites ADR {num}, which does not exist"
     heads = set(_INVARIANT_HEAD.findall(page))
-    for ref in sorted(set(_INVARIANT_REF.findall(page)) - heads):
+    refs = {r for group in _INVARIANT_REF.findall(page) for r in re.findall(r"\d+[a-z]?", group)}
+    for ref in sorted(refs - heads):
         out[f"invariants-ref:Invariant {ref}"] = (
             f"{INVARIANTS} cites invariant {ref}, which has no `**{ref}.` entry"
         )
@@ -217,9 +220,9 @@ def check_synthesis(root: Path, adrs: dict[str, Adr]) -> dict[str, str]:
     }
 
 
-def violations(root: Path) -> dict[str, str]:
+def violations(root: Path, adrs: dict[str, Adr] | None = None) -> dict[str, str]:
     """Every rule violation in the repo at `root`, keyed by a stable id."""
-    adrs = load_adrs(root)
+    adrs = load_adrs(root) if adrs is None else adrs
     out: dict[str, str] = {}
     out.update(check_headers(adrs))
     out.update(check_index(root, adrs))
@@ -242,7 +245,10 @@ def evaluate(found: dict[str, str], grandfathered: list[str]) -> list[str]:
 def _write_baseline(path: Path, found: dict[str, str], old: list[str], allow_raise: bool) -> int:
     added = sorted(set(found) - set(old))
     if added and path.exists() and not allow_raise:
-        print("ERROR: refusing to grandfather new violations:\n  " + "\n  ".join(added))
+        print(
+            "ERROR: refusing to grandfather new violations:\n  " + "\n  ".join(added),
+            file=sys.stderr,
+        )
         return 1
     path.write_text(json.dumps({"grandfathered": sorted(found)}, indent=2) + "\n")
     print(f"Baseline written to {path} ({len(found)} grandfathered)")
@@ -261,8 +267,9 @@ def main(argv: list[str] | None = None) -> int:
     root = Path(args.root)
     base_path = root / args.baseline
     old = json.loads(base_path.read_text())["grandfathered"] if base_path.exists() else []
-    found = violations(root)
-    print(f"Checked {len(load_adrs(root))} ADRs: {len(found)} violations, {len(old)} grandfathered")
+    adrs = load_adrs(root)
+    found = violations(root, adrs)
+    print(f"Checked {len(adrs)} ADRs: {len(found)} violations, {len(old)} grandfathered")
     if args.write_baseline:
         return _write_baseline(base_path, found, old, args.allow_raise)
     failures = evaluate(found, old)
