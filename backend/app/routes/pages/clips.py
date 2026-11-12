@@ -1,7 +1,6 @@
 """Clip-facing HTML pages: list, detail, draft partial, and live-history."""
 
 import logging
-import time
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Request
@@ -359,28 +358,13 @@ async def _load_clip_page(ctx, *, refresh: bool, catalog_id: str, **query):
     # upstream changed. Wipe every cached page for this catalog so the next
     # list_clips() hits CatDV and we don't serve a stale neighbour page.
     if refresh:
-        t0 = time.monotonic()
         await ctx.clip_list_cache_repo.invalidate_catalog(
             ctx.db, provider_id="catdv", catalog_id=catalog_id
         )
-        logger.info(
-            "refresh: invalidate_catalog took %.3fs (catalog=%s)",
-            time.monotonic() - t0,
-            catalog_id,
-        )
-    t0 = time.monotonic()
     try:
-        page = await query_clip_page(ctx, catalog_id=catalog_id, **query)
+        return await query_clip_page(ctx, catalog_id=catalog_id, **query)
     except ProviderError as exc:
         raise HTTPException(502, f"archive error: {exc}") from exc
-    if refresh:
-        logger.info(
-            "refresh: query_clip_page took %.3fs (catalog=%s total=%d)",
-            time.monotonic() - t0,
-            catalog_id,
-            page[1],
-        )
-    return page
 
 
 def _any_running(status_map: dict) -> bool:

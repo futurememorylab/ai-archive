@@ -1,6 +1,6 @@
 # ADR 0127 — The app writes only what it owns (AI-category markers + `popis.ai`)
 
-Date: 2026-10-14 · Status: accepted · Issue:
+Date: 2026-10-14 · Status: accepted · Lifespan: Invariant (9b) · Issue:
 futurememorylab/ai-archive#123 (related #43)
 
 Spec: `docs/specs/2026-10-14-writeback-redesign-ai-markers-design.md`.

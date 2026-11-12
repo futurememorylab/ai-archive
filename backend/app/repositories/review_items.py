@@ -150,8 +150,8 @@ class ReviewItemsRepo:
     async def clear_unapplied_for_clip(self, conn: aiosqlite.Connection, clip_id: int) -> int:
         """Delete all review_items for a clip that have not yet been applied.
 
-        Used by RestoreService to clear the working draft before re-seeding it
-        from a published version's snapshot. Applied items are preserved as a
+        Used by the clip-annotate path so a re-run replaces the working draft
+        instead of appending to it. Applied items are preserved as a
         historical record.
         """
         cur = await conn.execute(

@@ -4,6 +4,8 @@
 **Status:** Accepted — refines [0100](./0100-publishing-audit-drop-provenance-and-reactivate-switching.md)
 **Lifespan:** Invariant
 
+> **Synthesis note (2026-11-12):** Partly superseded by **0127** (`ReplaceAIMarkers` replaced `ReconcileMarkers`' `drop_secs`) and **0128** (version switching removed). See **Invariants 9b and 20**.
+
 ## Context
 
 ADR 0100 (A3) re-based version switching onto `PublishService.reactivate`: "Make

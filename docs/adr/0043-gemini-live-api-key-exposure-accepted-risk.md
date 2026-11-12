@@ -4,7 +4,7 @@
 **Status:** Superseded
 **Lifespan:** Superseded
 
-> **Synthesis note (2026-06-24):** Fully superseded by **0112** (server-minted ephemeral tokens — the raw key never reaches the browser). The "1007 / key not valid" framing here was a wrong endpoint+version triad, not a Google limit. See **Invariant 24** in [`docs/architecture-invariants.md`](../architecture-invariants.md).
+> **Synthesis note (2026-06-24):** Fully superseded by **0112** (server-minted ephemeral tokens — the raw key never reaches the browser). The "1007 / key not valid" framing here was a wrong endpoint+version triad, not a Google limit. Clip chat no longer uses an API key at all (0130). See **Invariant 25** in [`docs/architecture-invariants.md`](../architecture-invariants.md).
 
 ## Context
 

@@ -2,7 +2,9 @@
 
 - **Date:** 2026-05-23
 - **Status:** Accepted — Superseded by [0130](./0130-clip-chat-on-vertex-replaces-live.md)
-- **Lifespan:** Invariant
+- **Lifespan:** Superseded
+
+> **Synthesis note (2026-11-12):** Gemini Live was removed; clip chat now runs server-side on Vertex. See **0130** and **Invariant 25** in [`docs/architecture-invariants.md`](../architecture-invariants.md).
 
 ## Context
 

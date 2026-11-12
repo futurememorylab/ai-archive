@@ -2,7 +2,9 @@
 
 **Date:** 2026-06-22
 **Status:** Accepted — supersedes [0043](./0043-gemini-live-api-key-exposure-accepted-risk.md); Superseded by [0130](./0130-clip-chat-on-vertex-replaces-live.md)
-**Lifespan:** Invariant
+**Lifespan:** Superseded
+
+> **Synthesis note (2026-11-12):** Gemini Live and its ephemeral tokens were removed; the browser now holds no Google credential at all. See **0130** and **Invariant 25** in [`docs/architecture-invariants.md`](../architecture-invariants.md).
 
 ## Context
 
