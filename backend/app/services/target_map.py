@@ -2,42 +2,105 @@
 TargetMap into ReviewItems (markers / fields / notes), with clamping of
 out-of-range timestamps."""
 
+import logging
+from bisect import bisect_right
 from typing import Any
 
 from backend.app.models.annotation import ReviewItem
 from backend.app.models.prompt import TargetEntry, TargetMap
 
+log = logging.getLogger(__name__)
+
+
+def _secs(part: Any) -> float | None:
+    """`part["secs"]` as a float, or None when missing / non-numeric."""
+    if not isinstance(part, dict) or "secs" not in part:
+        return None
+    try:
+        return float(part["secs"])
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_marker(m: Any, duration_secs: float | None) -> tuple[float, float | None] | None:
+    """(in, out) for one raw marker, clamped to [0, duration]; None drops it.
+
+    Drops markers without a usable `in.secs` (earlier versions passed them
+    through and renderers defaulted them to phantom markers at 0.0), whose
+    `in.secs` is past the clip end, or whose `out.secs` is non-numeric.
+    A missing `out` makes a point marker. A negative `in` becomes 0 and an
+    overshooting `out` becomes the clip end."""
+    if not isinstance(m, dict):
+        return None
+    in_secs = _secs(m.get("in"))
+    if in_secs is None:
+        return None
+    in_secs = max(in_secs, 0.0)
+    if duration_secs is not None and in_secs >= duration_secs:
+        return None
+    out_part = m.get("out")
+    if not isinstance(out_part, dict) or "secs" not in out_part:
+        return in_secs, None
+    out_secs = _secs(out_part)
+    if out_secs is None:
+        return None
+    if duration_secs is not None:
+        out_secs = min(out_secs, duration_secs)
+    return in_secs, out_secs
+
+
+def _repaired_out(in_secs: float, out_secs: float | None, next_in: float | None) -> float | None:
+    """Fix an `out` that ends at/before its own `in` (#173: "07:32 – 07:03")
+    or runs past `next_in`: the next later range marker's `in`, or the clip
+    end. A backwards `out` is not trusted: the marker runs to `next_in`, or
+    loses its `out` when there is nothing later to run to."""
+    if out_secs is None:
+        return None
+    if out_secs <= in_secs or (next_in is not None and out_secs > next_in):
+        return next_in
+    return out_secs
+
+
+def _next_start(starts: list[float], in_secs: float, end: float | None) -> float | None:
+    """First of the sorted `starts` strictly after `in_secs`, else `end`
+    (`_parse_marker` already keeps every `in` before the clip end)."""
+    i = bisect_right(starts, in_secs)
+    return starts[i] if i < len(starts) else end
+
+
+def _with_secs(m: dict, in_secs: float, out_secs: float | None) -> dict:
+    """Copy of `m` with the given in/out secs; drops `out` when None."""
+    m = {**m, "in": {**m["in"], "secs": in_secs}}
+    if out_secs is None:
+        m.pop("out", None)
+    else:
+        m["out"] = {**m["out"], "secs": out_secs}
+    return m
+
 
 def _filter_markers(markers: list, duration_secs: float | None) -> list:
-    """Drop markers without a usable `in.secs` (missing dict, missing
-    `secs` key, or non-numeric value) or whose `in.secs` is past the
-    clip end. Clamp `out.secs` to the clip end when it overshoots.
+    """Validate and repair a Gemini marker list before it becomes a draft.
 
-    Earlier versions passed missing-secs markers through; downstream
-    renderers then defaulted `in_secs` to 0.0 and produced phantom
-    markers at the clip start, so drop them at the boundary instead."""
+    Gemini's timestamps are not trustworthy (#173): markers come back out
+    of order, overlapping, with `out` before `in`, or past the clip end.
+    Drop what can't be placed (`_parse_marker`), sort by `in`, then make
+    every `out` end after its own `in` and no later than the next later
+    range marker's `in` (`_repaired_out`). Point markers (no `out`) stay
+    point markers and don't cut ranges. Scenes that share a start can't be
+    told apart and are left overlapping each other."""
+    parsed = [(p, m) for m in markers if (p := _parse_marker(m, duration_secs)) is not None]
+    parsed.sort(key=lambda pm: pm[0][0])
+    # Only range markers bound each other; a point marker overlaps nothing.
+    starts = [i for (i, o), _ in parsed if o is not None]
     out: list = []
-    for m in markers:
-        if not isinstance(m, dict):
-            continue
-        in_part = m.get("in")
-        if not isinstance(in_part, dict) or "secs" not in in_part:
-            continue
-        try:
-            in_secs = float(in_part["secs"])
-        except (TypeError, ValueError):
-            continue
-        if duration_secs is not None and in_secs >= duration_secs:
-            continue
-        out_part = m.get("out")
-        if isinstance(out_part, dict) and "secs" in out_part:
-            try:
-                out_secs = float(out_part["secs"])
-            except (TypeError, ValueError):
-                continue
-            if duration_secs is not None and out_secs > duration_secs:
-                m = {**m, "out": {**out_part, "secs": duration_secs}}
-        out.append(m)
+    repaired = 0
+    for (in_secs, out_secs), m in parsed:
+        next_in = _next_start(starts, in_secs, duration_secs)
+        fixed = _repaired_out(in_secs, out_secs, next_in)
+        repaired += fixed != out_secs
+        out.append(_with_secs(m, in_secs, fixed))
+    if repaired:
+        log.warning("repaired %d marker out-point(s) (backwards or overlapping)", repaired)
     return out
 
 
