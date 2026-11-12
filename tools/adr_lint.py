@@ -66,6 +66,12 @@ class Adr:
     fields: dict[str, str]
 
 
+def _nums_until(text: str, end_rx: re.Pattern[str] | str) -> list[str]:
+    """ADR numbers in `text` up to the first match of `end_rx` (or to the end)."""
+    end = re.search(end_rx, text)
+    return re.findall(_NUM, text[: end.start()] if end else text)
+
+
 def header_region(text: str) -> str:
     """Everything before the first `## ` section: title, headers, banners."""
     m = re.search(r"(?m)^## ", text)
@@ -130,9 +136,7 @@ def superseded_by(adr: Adr) -> set[str]:
     """ADR numbers this ADR's header says it supersedes (wholly or in part)."""
     nums: set[str] = set()
     for m in _SUPERSEDES.finditer(adr.header):
-        rest = adr.header[m.end() :]
-        end = _SPAN_END.search(rest)
-        nums.update(re.findall(_NUM, rest[: end.start()] if end else rest))
+        nums.update(_nums_until(adr.header[m.end() :], _SPAN_END))
     nums.discard(adr.num)
     return nums
 
@@ -174,9 +178,7 @@ def _cited_adrs(page: str) -> set[str]:
     """ADR numbers in `*ADRs:*` paragraphs and `ADR NNNN` mentions."""
     nums = set(_ADR_REF.findall(page))
     for m in re.finditer(r"\*ADRs:\*", page):
-        rest = page[m.end() :]
-        end = re.search(r"\n\s*\n", rest)
-        nums.update(re.findall(_NUM, rest[: end.start()] if end else rest))
+        nums.update(_nums_until(page[m.end() :], r"\n\s*\n"))
     return nums
 
 
