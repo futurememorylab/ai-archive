@@ -84,8 +84,10 @@ Detail: `docs/onboarding/05-catdv-license-discipline.md`.
   options in a template, `<select>` or JS array.
 - **List-of-keys repository reads** use `repositories/_batch.py::chunked_in_clause`
   and get a query-count test (`tests/_helpers/query_count.py`).
-- **Gemini/Vertex model names**: confirm the model exists in the target
-  region (`europe-west3`) before adding it.
+- **Gemini/Vertex model names**: confirm the model is served at the Vertex
+  location the deployments use (`GCP_LOCATION` in `deploy/*.env.yaml`,
+  `global` today) before adding it. Cloud Run and the buckets stay in
+  `europe-west3`; only the Gemini endpoint is global.
 
 The guard tests in `tests/unit/test_*guard*.py`, `test_no_*.py`,
 `test_*single*.py`, `test_templates_shared.py` and

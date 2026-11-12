@@ -82,9 +82,12 @@ DB-lookups (no network).
 content-aware (not presence-only), so a reused clip id can't serve an
 orphaned blob; uploads are reference-counted and orphan-GC'd on set
 removal; large transfers over the cloud tunnel resume by Range and verify
-completeness before an upload is considered done.
+completeness before an upload is considered done. The one writer of
+`ai_store_files` outside the `AIInputStore` port is the cloud Studio direct
+upload (`services/direct_upload.py`): the browser PUTs to a signed URL and
+the app registers the blob only after checking its size and type.
 *Enforced by:* convention; `repositories/ai_store_files.py`.
-*ADRs:* 0070, 0081, 0082, 0087.
+*ADRs:* 0070, 0081, 0082, 0087, 0135.
 
 ## Context & wiring
 
@@ -140,12 +143,14 @@ marker passes through byte-identical, the AI set is replaced wholesale
 (`ReplaceAIMarkers`, freshest op wins), and a field/note op outside
 `AI_OWNED_FIELDS` raises `FatalProviderError` rather than a silent write. The
 write queue emits only owned ops (shared fields become copy-only suggestions);
-snapshots keep each value under its real target and a field is never cleared.
+snapshots keep each value under its real target. A non-AI-owned field is
+never cleared; removing AI annotations (the explicit Remove AI action)
+clears only AI-owned fields.
 *Enforced by:* `tests/unit/test_writeback_ownership_guard.py`,
 `tests/unit/test_catdv_payload.py`, `tests/integration/test_fs_adapter.py`,
 `tests/contract/test_archive_provider.py`.
 *ADRs:* 0127 (supersedes 0101's `drop_secs`, and the field-overwrite of
-0090/0097).
+0090/0097); 0134 (Remove AI clears the AI-owned fields).
 
 **9a. Writes on the shared connection are serialized at the connection.**
 The shared `aiosqlite.Connection` is wrapped in `WriteSerializedConnection`
@@ -167,14 +172,18 @@ connection; `context.py` wraps it); `tests/unit/test_write_serialized_connection
 *ADRs:* 0126.
 
 **10. Clip seat discipline (CatDV 2-seat limit → assume 1).** One in-flight
-CatDV session; graceful `SIGTERM` shutdown runs `lifespan` →
-`ctx.aclose()` → `DELETE /session` to release the seat. `kill -9` leaks the
-`JSESSIONID`. uvicorn's graceful-shutdown is bounded so open streams can't
+CatDV session per deployment; graceful `SIGTERM` shutdown runs `lifespan` →
+`ctx.aclose()` → `DELETE /session` to release the seat. The session id is
+kept in `app_meta` (`CatdvSessionStore`, Litestream-replicated) and a new
+process adopts it if CatDV still accepts it, so an instance swap that
+can't log out spends no second seat; a clean logout clears it. `kill -9`
+still leaks the `JSESSIONID` until it is adopted or times out. uvicorn's graceful-shutdown is bounded so open streams can't
 hold the seat. Boot-time login is bounded by a short separate timeout and
 keeps the client alive for retry on failure.
 *Enforced by:* convention (see `CLAUDE.md` → CatDV session discipline) +
 the bounded-timeout code paths.
-*ADRs:* 0023, 0024, 0032, 0041.
+*ADRs:* 0023, 0024, 0032, 0041, 0133 (session id at rest: threat and
+acceptance).
 
 ## Error handling
 
@@ -270,6 +279,16 @@ template, `<select>`, or JS array. Backend reads via
 `get_args(<Literal>)`; `enums/registry.py`.
 *ADRs:* 0080.
 
+**19a. The active catalog is per browser; clip ids are catalog-free.**
+List surfaces (clips list, `/api/catdv/clips`, new batches and workspaces)
+read the catalog from `services/active_catalog.py::active_catalog_id` (the
+`active_catalog` cookie, else `CATDV_CATALOG_ID`), never from the setting
+directly. CatDV clip ids are server-wide, so clip detail, Studio, drafts and
+write-back are keyed by clip id alone. The catalog list is a cached layer
+(`catalogs` table) that degrades to stale rows offline.
+*Enforced by:* convention; `tests/integration/test_active_catalog*.py`.
+*ADRs:* 0131.
+
 **20. Versioned prompts are immutable once promoted.** A Prompt has many
 Versions; at most one is `production`; `production`/`archived` versions are
 immutable (partial unique index + `PromptsRepo`). Annotation output is
@@ -284,13 +303,17 @@ unique index.
 ## Cloud, deploy & access
 
 **21. Cloud Run runs one instance with Litestream-persisted SQLite.**
-Pinned to a single instance (`maxScale=1`); SQLite is replicated to GCS via
+Pinned to a single instance service-wide: every deploy passes
+`--max-instances=1` (per revision) **and** `--max=1` (across revisions), so
+two instances never share the WireGuard identity, the CatDV seat or the
+Litestream writer. SQLite is replicated to GCS via
 Litestream (`--no-cpu-throttling` so it flushes under scale-to-zero).
 Scale-to-zero releases the CatDV seat and VPN gracefully on the way down.
 A single write connection on the request critical path — guard against
 Litestream checkpoint lock contention.
-*Enforced by:* convention; `docs/DEPLOY.md`.
-*ADRs:* 0066, 0077.
+*Enforced by:* convention; the flags in `.github/workflows/deploy.yml` and
+`deploy/deploy-staging.sh`; `docs/DEPLOY.md`.
+*ADRs:* 0066, 0077, 0132.
 
 **22. Deploys promote one image by tag.** Push to `main` → builds and
 deploys *staging* (SHA-tagged single build). A `v*` tag promotes that
@@ -332,8 +355,9 @@ on every turn. Each turn's tokens and cost go to `run_telemetry`.
 
 **26. Run telemetry is local-first.** Usage/cost is captured locally first
 with a deferred cloud pipeline; cost surfaces use total-spend semantics
-and a shared `usd` filter. Model names are verified available in the
-target region (e.g. `europe-west3`) before being added to a dropdown.
+and a shared `usd` filter. Model names are verified available at the
+Vertex location the deployments use (`GCP_LOCATION`, `global` on prod and
+staging) before being added to the catalog.
 Cost is never silently $0: unknown pricing stays `NULL` and is shown as
 missing, every catalog model has a seed rate card, and a run never sends a
 media resolution the model rejects for that media kind (HIGH is images-only).
