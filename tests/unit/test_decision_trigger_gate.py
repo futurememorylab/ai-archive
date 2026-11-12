@@ -281,3 +281,20 @@ def test_pr_body_falls_back_to_the_event_when_the_api_fails_or_url_is_foreign(
     assert gate.pr_body(None) == "a"
     event.write_text(json.dumps({"pull_request": {"url": "https://evil.example/x", "body": "b"}}))
     assert gate.pr_body(None) == "b"
+
+
+def test_shipped_list_flags_ai_input_store_changes():
+    """#165 (signed-URL uploads writing ai_store_files) would have needed an ADR."""
+    (trig,) = [
+        t for t in gate.load_triggers(gate.DEFAULT_TRIGGERS)
+        if t["name"] == "AI input store / cloud storage"
+    ]  # fmt: skip
+    for path in (
+        "backend/app/services/direct_upload.py",
+        "backend/app/services/gcs.py",
+        "backend/app/services/upload_cleanup.py",
+    ):
+        change = gate.Change("M", path, path)
+        assert gate.fire_modified(trig, None, [change]) == [path]  # type: ignore[arg-type]
+    other = gate.Change("M", "backend/app/services/gemini.py", "backend/app/services/gemini.py")
+    assert gate.fire_modified(trig, None, [other]) == []  # type: ignore[arg-type]

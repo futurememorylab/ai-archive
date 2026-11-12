@@ -108,6 +108,16 @@ paths = [
 ]
 
 [[trigger]]
+name = "AI input store / cloud storage"
+why = "the AIInputStore port, the cache layers and content-aware uploads (invariants 3, 4, 6)"
+kind = "modified"
+paths = [
+  "backend/app/services/direct_upload.py",
+  "backend/app/services/gcs.py",
+  "backend/app/services/upload_cleanup.py",
+]
+
+[[trigger]]
 name = "removed route"
 why = "a removed endpoint is a public-contract change (decisions.md admission bar 2)"
 kind = "removed_routes"
