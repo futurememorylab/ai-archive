@@ -51,9 +51,8 @@ diagnostic dispatch before switching — don't assume the doc string alone.
      (confirmed in a real run's log — PR/issue writes used those, not the
      `gh` CLI), not an explicit MCP connector.
 
-2. **Recreate only if the routine is missing.** The `create` body shape is
-   now documented (see the `schedule` skill) — this replaces the old
-   "ask the operator to build it in the claude.ai web UI" step entirely:
+2. **Recreate only if the routine is missing**, with this `create` body
+   (shape documented in the `schedule` skill):
    ```json
    {
      "name": "implement-issue",
@@ -63,7 +62,7 @@ diagnostic dispatch before switching — don't assume the doc string alone.
        "ccr": {
          "environment_id": "env_011CUK5wJZB5zuqK2n9asWVV",
          "session_context": {
-           "model": "claude-opus-4-8[1m]",
+           "model": "claude-opus-5-5",
            "sources": [{"git_repository": {"url": "https://github.com/futurememorylab/ai-archive"}}],
            "allowed_tools": ["Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebFetch", "WebSearch", "Task"]
          },

@@ -24,11 +24,10 @@ The catdv-annotator backend talks to a CatDV Enterprise server that has only **2
 
    Tell the user the existing PID and health status, and stop. Ask before killing it.
 
-3. **If nothing is running**, activate the project venv and start the server. Use the local venv (`.venv/bin/python`), never system Python:
+3. **If nothing is running**, start the server with the project's launcher from the repository root. `run.sh` uses the local `.venv`, exports `.env` into the process environment, and reads the bind host and port from `.env`:
 
    ```bash
-   cd /Users/peterhora/github/catdv-annotator
-   .venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8765 --reload
+   DEV_RELOAD=1 ./run.sh
    ```
 
    Run it via `run_in_background: true` so it doesn't block the conversation, then capture the PID.
@@ -40,9 +39,9 @@ The catdv-annotator backend talks to a CatDV Enterprise server that has only **2
 ## Hard rules
 
 - **Never run parallel installs, venv copies, or server restarts.** They contend for the same resources and break the CatDV seat discipline. Serialize everything.
-- **Never use `kill -9`** to stop this server. Use `/bin/kill -TERM <pid>` so FastAPI's `lifespan` runs `ctx.aclose()` and releases the CatDV seat. See the project `CLAUDE.md` for the full shutdown procedure.
+- **Never use `kill -9`** to stop this server. Use `/bin/kill -TERM <pid>` so FastAPI's `lifespan` runs `ctx.aclose()` and releases the CatDV seat. The `server-stop` skill has the full shutdown procedure.
 - **One diagnostic pass, not a loop.** If the health check or log tail doesn't give a clear answer in 2–3 commands, stop and read the user's request again or read the code — don't ping/curl in a tight loop.
-- **502 with "Maximum:2"** means a CatDV seat is stuck. Don't keep retrying — wait it out or ask the admin. See `CLAUDE.md` → "When a 502 says Maximum:2".
+- **502 with "Maximum:2"** means a CatDV seat is stuck. Don't keep retrying — wait it out or ask the admin. See `AGENTS.md` → "CatDV license seat".
 
 ## Why this matters
 
