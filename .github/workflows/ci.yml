@@ -19,6 +19,9 @@ concurrency:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read  # the decision gate reads the current PR description
     env:
       # On a PR the ratchets compare against the merge-base with the target
       # branch; on a push to main there is nothing to compare with.
@@ -42,6 +45,13 @@ jobs:
         run: python tools/erosion_gate.py --path backend --baseline .erosion-baseline.json --max-cc 30 ${BASE_REF:+--base-ref "$BASE_REF"}
       - name: Frontend size gate (static/*.js)
         run: python tools/frontend_size_gate.py
+      - name: ADR log lint (headers, index, supersessions, canon refs)
+        run: python tools/adr_lint.py
+      - name: Decision-trigger gate (an ADR or a No-ADR line)
+        if: env.BASE_REF != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python tools/decision_trigger_gate.py --base-ref "$BASE_REF"
       - name: Type check (basedpyright, baselined)
         run: basedpyright backend tests
       - name: Type baseline may only shrink

@@ -4,6 +4,8 @@
 **Status:** Accepted
 **Lifespan:** Invariant
 
+> **Synthesis note (2026-11-12):** Partly superseded by **0082**: uploads are always pushed to the AI store; the upload-gating part here no longer holds. See **Invariant 24**.
+
 ## Context
 
 Phase 4 of the Cloud Run deployment shipped GCS *read* (signed-URL

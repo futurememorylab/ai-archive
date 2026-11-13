@@ -37,6 +37,22 @@ If the decision only shapes one screen or fixes one bug, it is **not** an
 ADR — it's a spec or a PR note. "Would a future contributor ask *why*?" is
 necessary but not sufficient; the bar above is the test.
 
+### What CI checks
+
+These rules are mechanical, so they hold whichever tool wrote the change
+(ADR 0136):
+
+- `tools/adr_lint.py`: every ADR has `Date` / `Status` / `Lifespan`
+  headers and an index row here; index links resolve; a superseded ADR is
+  marked and points forward to its successor; ADR and invariant numbers on
+  the invariants page resolve; the synthesis log is at most 20 ADRs behind.
+- `tools/decision_trigger_gate.py`: a PR touching a path in
+  `tools/decision_triggers.toml` adds or changes an ADR, or says
+  `No-ADR: <reason>` in its description (the PR template's **Decisions**
+  section).
+- `tests/unit/test_invariants_enforced_by.py`: every *Enforced by:* file
+  on the invariants page exists; convention-only invariants only shrink.
+
 ### ADR template additions
 
 Every ADR header carries a **`Lifespan:`** classifier so the synthesis
@@ -230,3 +246,4 @@ historical record. Candidate clusters, largest first:
 | 0133 | 2026-11-12 | [Persist the CatDV session id in `app_meta` and let a new instance adopt it (credential at rest in the Litestream replica: threat and acceptance)](./adr/0133-catdv-session-persisted-and-adopted.md) — *recorded after the fact for #134; refines 0023/0032/0041/0077* |
 | 0134 | 2026-11-12 | [Removing a clip's AI annotations clears the AI-owned fields (only those, only on the explicit action)](./adr/0134-remove-ai-clears-ai-owned-fields.md) — *recorded after the fact for #161; refines 0127* |
 | 0135 | 2026-11-12 | [Studio uploads go straight to the bucket on a signed PUT URL; `DirectUpload` registers `ai_store_files` itself (md5-in-`sha256` known issue)](./adr/0135-studio-direct-upload-signed-put.md) — *recorded after the fact for #165; refines 0061/0081/0082* |
+| 0136 | 2026-11-12 | [ADR discipline is enforced in CI: `adr_lint.py`, the decision-trigger gate (`No-ADR:` or an ADR) and the enforced-by guard](./adr/0136-adr-discipline-enforced-in-ci.md) — *refines 0129* |

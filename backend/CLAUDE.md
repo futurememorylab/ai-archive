@@ -27,5 +27,23 @@ change that makes one of them possible, quoting the file and line.
 - **Raw errors shown to users.** User-facing error text must go through
   `services/errors.py::humanise`.
 
+## Decisions and the canon
+
+Also flag, as a serious problem:
+
+- **A decision without an ADR.** The diff changes behaviour that
+  `docs/decisions.md` says needs an ADR (a new invariant or a change to
+  one, a schema or public-contract change, a cloud-topology choice, a new
+  dependency, CatDV session handling, access control, the archive write
+  rules) and the PR neither adds an ADR nor gives a `No-ADR:` reason that
+  holds up. CI only checks that the line exists; judge whether the reason
+  is true. The trigger list is `tools/decision_triggers.toml`.
+- **A contradicted invariant.** The diff breaks a rule in
+  `docs/architecture-invariants.md` without an ADR that supersedes it.
+  Name the invariant number and quote the line.
+- **A half-marked supersession.** A new ADR replaces an older one but the
+  older one isn't marked superseded and pointing forward
+  (`tools/adr_lint.py` catches the mechanical part).
+
 Don't flag style, naming or missing tests here; ruff, the erosion gate and
 CI cover those.
