@@ -12,6 +12,7 @@ clip (ADR 0046).
 """
 
 from dataclasses import dataclass
+from functools import partial
 
 from backend.app.media_kind import classify_media_kind
 from backend.app.services.pricing import compute_cost, rate_cards
@@ -68,6 +69,7 @@ class _KindStats:
     p90: float | None
     n: int  # sample count behind the chosen level
     level: int  # 1 = prompt-level history, 2 = model-level, 3 = seeds
+    input_ratio: float | None = None  # calibrated tokens/sec; None → seed
 
 
 def _pct(values: list[float], q: float) -> float:
@@ -83,6 +85,131 @@ def _image_tiles(width: int | None, height: int | None) -> int:
     return max(1, -(-width // 768)) * max(1, -(-height // 768))
 
 
+_EMPTY_ESTIMATE = RunEstimate(
+    tokens_in=0,
+    tokens_out_p50=0,
+    tokens_out_p90=0,
+    cost_usd_p50=None,
+    cost_usd_p90=None,
+    confidence="rough",
+    n_samples=0,
+    n_clips=0,
+)
+
+
+def _resolution_for_kind(media_resolution: str | None, kind: str) -> str | None:
+    """Resolution a clip of ``kind`` actually runs at under ``media_resolution``.
+
+    Mirror the run's per-clip downgrade (services/resolution.py is the
+    single source of truth): HIGH is image-only, so a video/audio clip
+    under a HIGH-resolution prompt actually RUNS at medium. Read the
+    matching-resolution history so the estimate doesn't drift from the
+    charge. media_resolution=None (estimator caller didn't supply one)
+    passes through and matches the repo's "any resolution" lookup.
+    """
+    if media_resolution is not None and not resolution_valid_for_kind(media_resolution, kind):
+        return "medium"
+    return media_resolution
+
+
+async def _kind_history(
+    conn,
+    repo,
+    *,
+    kind: str,
+    model: str,
+    p_hash: str,
+    media_resolution: str | None,
+) -> _KindStats:
+    """Output stats and calibrated input ratio (None when too little history)
+    for one media kind: prompt-level history first, then model-level."""
+    kind_resolution = _resolution_for_kind(media_resolution, kind)
+    input_ratio = None
+    if kind != "image":
+        ratios = await repo.recent_input_ratios(
+            conn, model=model, media_kind=kind, media_resolution=kind_resolution
+        )
+        if len(ratios) >= _MIN_SAMPLES:
+            input_ratio = _pct(ratios, 0.5)
+    rates = await repo.recent_output_rates(
+        conn,
+        model=model,
+        media_kind=kind,
+        prompt_hash=p_hash,
+        media_resolution=kind_resolution,
+    )
+    level = 1
+    if len(rates) < _MIN_SAMPLES:
+        rates = await repo.recent_output_rates(
+            conn, model=model, media_kind=kind, media_resolution=kind_resolution
+        )
+        level = 2
+    if len(rates) < _MIN_SAMPLES:
+        return _KindStats(p50=None, p90=None, n=0, level=3, input_ratio=input_ratio)
+    return _KindStats(
+        p50=_pct(rates, 0.5),
+        p90=_pct(rates, 0.9),
+        n=len(rates),
+        level=level,
+        input_ratio=input_ratio,
+    )
+
+
+def _clip_tokens(c: ClipEstimateInput, st: _KindStats) -> tuple[float, float, float, float]:
+    """(media input tokens, audio share of them, output p50, output p90) for one clip."""
+    if c.media_kind == "image":
+        media_in = float(_image_tiles(c.width, c.height) * IMAGE_TILE_TOKENS)
+        scale, seed = 1.0, SEED_OUTPUT_TOKENS_PER_IMAGE
+    else:
+        scale, seed = float(c.duration_secs or 0.0), SEED_OUTPUT_TOKENS_PER_SEC
+        k = st.input_ratio
+        if k is None:
+            k = SEED_INPUT_TOKENS_PER_SEC.get(c.media_kind, 300.0)
+        media_in = scale * k
+    audio_in = media_in if c.media_kind == "audio" else 0.0
+    out_p50 = scale * (st.p50 if st.p50 is not None else seed)
+    out_p90 = scale * (st.p90 if st.p90 is not None else seed * 2)
+    return media_in, audio_in, out_p50, out_p90
+
+
+def _confidence(stats: dict[str, _KindStats]) -> tuple[str, int]:
+    """Confidence label and sample count; reflects the weakest kind in the batch."""
+    worst_level = max(st.level for st in stats.values())
+    n_samples = min(st.n for st in stats.values())
+    if worst_level == 1 and n_samples >= _GOOD_SAMPLES:
+        return "good", n_samples
+    if worst_level <= 2 and n_samples >= _MIN_SAMPLES:
+        return "fair", n_samples
+    return "rough", n_samples
+
+
+def _estimate_cost(
+    model: str,
+    *,
+    tokens_in: float,
+    text_tokens: float,
+    audio_media_tokens: float,
+    out_tokens: float,
+) -> float | None:
+    if model not in rate_cards():
+        return None
+    # Approximate the modality split: media tokens at the video rate
+    # bucket (correct for video/image; audio clips are billed higher —
+    # route their share through the audio bucket).
+    # audio_media_tokens was accumulated using the calibrated rate during
+    # the clip loop — using it here avoids a negative video bucket when
+    # the calibrated rate is below the seed.
+    usage = TokenUsage(
+        tokens_in=int(tokens_in),
+        tokens_in_text=int(text_tokens),
+        tokens_in_video=max(0, int(tokens_in - text_tokens - audio_media_tokens)),
+        tokens_in_audio=int(audio_media_tokens),
+        tokens_out=int(out_tokens),
+    )
+    cost, _version = compute_cost(usage, model)
+    return cost
+
+
 async def estimate_clips(
     conn,
     repo,
@@ -95,121 +222,46 @@ async def estimate_clips(
     media_resolution: str | None = None,
 ) -> RunEstimate:
     if not clips:
-        return RunEstimate(
-            tokens_in=0,
-            tokens_out_p50=0,
-            tokens_out_p90=0,
-            cost_usd_p50=None,
-            cost_usd_p90=None,
-            confidence="rough",
-            n_samples=0,
-            n_clips=0,
-        )
+        return _EMPTY_ESTIMATE
 
     p_hash = prompt_hash_override or _prompt_hash(prompt_body)
     prompt_tokens = (len(prompt_body) + len(str(schema))) / CHARS_PER_TOKEN
 
     # One repo round per distinct media kind, NOT per clip. Percentiles are
     # resolved here once per kind — the clip loop only does arithmetic.
-    kinds = {c.media_kind for c in clips}
-    input_ratio: dict[str, float] = {}
     stats: dict[str, _KindStats] = {}
-    for kind in kinds:
-        # Mirror the run's per-clip downgrade (services/resolution.py is the
-        # single source of truth): HIGH is image-only, so a video/audio clip
-        # under a HIGH-resolution prompt actually RUNS at medium. Read the
-        # matching-resolution history so the estimate doesn't drift from the
-        # charge. media_resolution=None (estimator caller didn't supply one)
-        # passes through and matches the repo's "any resolution" lookup.
-        kind_resolution = media_resolution
-        if media_resolution is not None and not resolution_valid_for_kind(media_resolution, kind):
-            kind_resolution = "medium"
-        if kind != "image":
-            ratios = await repo.recent_input_ratios(
-                conn, model=model, media_kind=kind, media_resolution=kind_resolution
-            )
-            if len(ratios) >= _MIN_SAMPLES:
-                input_ratio[kind] = _pct(ratios, 0.5)
-        rates = await repo.recent_output_rates(
-            conn,
-            model=model,
-            media_kind=kind,
-            prompt_hash=p_hash,
-            media_resolution=kind_resolution,
+    for kind in {c.media_kind for c in clips}:
+        stats[kind] = await _kind_history(
+            conn, repo, kind=kind, model=model, p_hash=p_hash, media_resolution=media_resolution
         )
-        level = 1
-        if len(rates) < _MIN_SAMPLES:
-            rates = await repo.recent_output_rates(
-                conn, model=model, media_kind=kind, media_resolution=kind_resolution
-            )
-            level = 2
-        if len(rates) >= _MIN_SAMPLES:
-            stats[kind] = _KindStats(
-                p50=_pct(rates, 0.5), p90=_pct(rates, 0.9), n=len(rates), level=level
-            )
-        else:
-            stats[kind] = _KindStats(p50=None, p90=None, n=0, level=3)
 
-    tokens_in = prompt_tokens * len(clips)
+    text_tokens = prompt_tokens * len(clips)
+    tokens_in = text_tokens
     out_p50 = 0.0
     out_p90 = 0.0
     audio_media_tokens = 0.0
     for c in clips:
-        st = stats[c.media_kind]
-        if c.media_kind == "image":
-            tokens_in += _image_tiles(c.width, c.height) * IMAGE_TILE_TOKENS
-            out_p50 += st.p50 if st.p50 is not None else SEED_OUTPUT_TOKENS_PER_IMAGE
-            out_p90 += st.p90 if st.p90 is not None else SEED_OUTPUT_TOKENS_PER_IMAGE * 2
-        else:
-            dur = float(c.duration_secs or 0.0)
-            k = input_ratio.get(
-                c.media_kind,
-                SEED_INPUT_TOKENS_PER_SEC.get(c.media_kind, 300.0),
-            )
-            tokens_in += dur * k
-            if c.media_kind == "audio":
-                audio_media_tokens += dur * k
-            out_p50 += dur * (st.p50 if st.p50 is not None else SEED_OUTPUT_TOKENS_PER_SEC)
-            out_p90 += dur * (st.p90 if st.p90 is not None else SEED_OUTPUT_TOKENS_PER_SEC * 2)
+        media_in, audio_in, p50, p90 = _clip_tokens(c, stats[c.media_kind])
+        tokens_in += media_in
+        audio_media_tokens += audio_in
+        out_p50 += p50
+        out_p90 += p90
 
-    # Confidence reflects the weakest kind in the batch.
-    worst_level = max(st.level for st in stats.values())
-    n_samples = min(st.n for st in stats.values())
+    confidence, n_samples = _confidence(stats)
 
-    if worst_level == 1 and n_samples >= _GOOD_SAMPLES:
-        confidence = "good"
-    elif worst_level <= 2 and n_samples >= _MIN_SAMPLES:
-        confidence = "fair"
-    else:
-        confidence = "rough"
-
-    def _cost(out_tokens: float) -> float | None:
-        if model not in rate_cards():
-            return None
-        # Approximate the modality split: media tokens at the video rate
-        # bucket (correct for video/image; audio clips are billed higher —
-        # route their share through the audio bucket).
-        # audio_media_tokens was accumulated using the calibrated rate during
-        # the clip loop — using it here avoids a negative video bucket when
-        # the calibrated rate is below the seed.
-        usage = TokenUsage(
-            tokens_in=int(tokens_in),
-            tokens_in_text=int(prompt_tokens * len(clips)),
-            tokens_in_video=max(
-                0, int(tokens_in - prompt_tokens * len(clips) - audio_media_tokens)
-            ),
-            tokens_in_audio=int(audio_media_tokens),
-            tokens_out=int(out_tokens),
-        )
-        cost, _version = compute_cost(usage, model)
-        return cost
-
+    cost = partial(
+        _estimate_cost,
+        model,
+        tokens_in=tokens_in,
+        text_tokens=text_tokens,
+        audio_media_tokens=audio_media_tokens,
+    )
     return RunEstimate(
         tokens_in=int(tokens_in),
         tokens_out_p50=int(out_p50),
         tokens_out_p90=int(out_p90),
-        cost_usd_p50=_cost(out_p50),
-        cost_usd_p90=_cost(out_p90),
+        cost_usd_p50=cost(out_tokens=out_p50),
+        cost_usd_p90=cost(out_tokens=out_p90),
         confidence=confidence,
         n_samples=n_samples,
         n_clips=len(clips),
